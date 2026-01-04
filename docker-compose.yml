@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  orchestrator:
+    build: ./services/orchestrator
+    container_name: purple-axiom-orchestrator
+    volumes:
+      - ./configs/caldera:/caldera/conf
+      - ./data/scenarios:/data/scenarios
+    networks:
+      - purple-axiom-net
+    ports:
+      - "8888:8888"
+
+  telemetry:
+    build: ./services/telemetry
+    container_name: purple-axiom-telemetry
+    volumes:
+      - ./configs/otel:/etc/otel
+      - ./data/raw:/data/raw
+    networks:
+      - purple-axiom-net
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+
+  normalizer:
+    build: ./services/normalizer
+    container_name: purple-axiom-normalizer
+    volumes:
+      - ./data/raw:/data/raw
+      - ./data/normalized:/data/normalized
+    networks:
+      - purple-axiom-net
+    depends_on:
+      - telemetry
+
+  evaluator:
+    build: ./services/evaluator
+    container_name: purple-axiom-evaluator
+    volumes:
+      - ./configs/sigma:/sigma/rules
+      - ./data/normalized:/data/normalized
+      - ./data/results:/data/results
+    networks:
+      - purple-axiom-net
+    depends_on:
+      - normalizer
+
+  reporter:
+    build: ./services/reporter
+    container_name: purple-axiom-reporter
+    volumes:
+      - ./data/results:/data/results
+      - ./reports:/reports
+    networks:
+      - purple-axiom-net
+    ports:
+      - "8080:8080"
+    depends_on:
+      - evaluator
+
+networks:
+  purple-axiom-net:
+    driver: bridge
+
+volumes:
+  caldera-data:
+  telemetry-data:
+  normalized-data:
+  results-data:

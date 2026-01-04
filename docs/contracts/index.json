@@ -1,0 +1,33 @@
+{
+  "contract_version": "0.1.0",
+  "schemas": [
+    {
+      "name": "manifest.schema.json",
+      "purpose": "Run-level manifest (runs/<run_id>/manifest.json)."
+    },
+    {
+      "name": "ground_truth.schema.json",
+      "purpose": "Per-line schema for ground_truth.jsonl."
+    },
+    {
+      "name": "ocsf_event_envelope.schema.json",
+      "purpose": "Minimal required OCSF + provenance for normalized events."
+    },
+    {
+      "name": "detection_instance.schema.json",
+      "purpose": "Per-line schema for detections.jsonl."
+    },
+    {
+      "name": "summary.schema.json",
+      "purpose": "Scoring summary for scoring/summary.json."
+    },
+    {
+      "name": "mapping_coverage.schema.json",
+      "purpose": "Optional mapping coverage stats for normalized/mapping_coverage.json."
+    }
+  ],
+  "notes": [
+    "Most schemas are strict (additionalProperties=false) and provide an 'extensions' object for forward-compatible additions.",
+    "OCSF envelope is permissive (additionalProperties=true) to allow full OCSF payloads and vendor extensions while requiring provenance."
+  ]
+}

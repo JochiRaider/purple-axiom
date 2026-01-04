@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/detection_instance.schema.json",
+  "title": "Purple Axiom Detection Instance (JSONL)",
+  "description": "Schema for a single line/object in detections.jsonl.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "rule_id",
+    "run_id",
+    "first_seen_utc",
+    "last_seen_utc",
+    "matched_event_ids"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "rule_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rule_title": {
+      "type": "string"
+    },
+    "rule_source": {
+      "type": "string",
+      "description": "e.g., sigma"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "scenario_id": {
+      "type": "string"
+    },
+    "technique_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^T\\d{4}(?:\\.\\d{3})?$"
+      },
+      "uniqueItems": true
+    },
+    "first_seen_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_seen_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "matched_event_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^(?:evt_)?[A-Fa-f0-9]{64}$"
+      },
+      "uniqueItems": true
+    },
+    "match_quality": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "partial",
+        "weak"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional evaluator-specific evidence (field matches, selectors, etc.)."
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

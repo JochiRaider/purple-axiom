@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/summary.schema.json",
+  "title": "Purple Axiom Scoring Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "scenario_id",
+    "coverage"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_version": {
+      "type": "string"
+    },
+    "rule_set_version": {
+      "type": "string",
+      "description": "Git SHA, tag, or semver for the ruleset evaluated."
+    },
+    "pipeline_version": {
+      "type": "string",
+      "description": "Overall pipeline version stamp."
+    },
+    "started_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "techniques_executed",
+        "techniques_covered",
+        "coverage_pct"
+      ],
+      "properties": {
+        "techniques_executed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "techniques_covered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage_pct": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 100.0
+        },
+        "by_technique": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "technique_id",
+              "executed",
+              "covered"
+            ],
+            "properties": {
+              "technique_id": {
+                "type": "string",
+                "pattern": "^T\\d{4}(?:\\.\\d{3})?$"
+              },
+              "executed": {
+                "type": "boolean"
+              },
+              "covered": {
+                "type": "boolean"
+              },
+              "detections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "latency_ms": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "latency_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "p50": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p90": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p95": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "fidelity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exact": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "partial": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "weak": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category"
+        ],
+        "properties": {
+          "technique_id": {
+            "type": "string",
+            "pattern": "^T\\d{4}(?:\\.\\d{3})?$"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "missing_telemetry",
+              "mapping_gap",
+              "rule_logic_gap",
+              "other"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "mapping_coverage_summary": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional condensed mapping coverage statistics."
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

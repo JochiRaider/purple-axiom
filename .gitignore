@@ -51,7 +51,7 @@ data/
 # Reports
 reports/
 *.html
-*.json
+#*.json
 
 # Secrets
 .env

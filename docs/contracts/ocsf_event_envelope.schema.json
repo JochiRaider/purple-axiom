@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/ocsf_event_envelope.schema.json",
+  "title": "Purple Axiom OCSF Event Envelope (Minimal Required Fields)",
+  "description": "Validates the required provenance and a minimal OCSF-compatible core. Allows additional OCSF fields and vendor extensions.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "time",
+    "class_uid",
+    "metadata"
+  ],
+  "properties": {
+    "time": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Event time in milliseconds since Unix epoch (UTC)."
+    },
+    "time_dt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "class_uid": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "category_uid": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "type_uid": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "severity_id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "event_id",
+        "run_id",
+        "scenario_id",
+        "collector_version",
+        "normalizer_version",
+        "source_type"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "pattern": "^(?:evt_)?[A-Fa-f0-9]{64}$"
+        },
+        "run_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collector_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalizer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_event_id": {
+          "type": "string",
+          "description": "Native/source event identifier (e.g., Windows RecordId)."
+        },
+        "ingest_time_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "host": {
+          "type": "string"
+        },
+        "pipeline": {
+          "type": "string"
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "hostname": {
+          "type": "string"
+        },
+        "uid": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "ips": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "user": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "process": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "raw": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional preserved raw/vendor fields for traceability."
+    }
+  }
+}

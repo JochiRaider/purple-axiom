@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/manifest.schema.json",
+  "title": "Purple Axiom Run Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "status",
+    "started_at_utc",
+    "scenario",
+    "versions",
+    "inputs",
+    "targets"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract version for this manifest schema."
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failed",
+        "partial"
+      ]
+    },
+    "started_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "scenario_version",
+        "runner_type",
+        "techniques"
+      ],
+      "properties": {
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Semver or date-based version per docs/spec/030_scenarios.md."
+        },
+        "runner_type": {
+          "type": "string",
+          "enum": [
+            "atomic",
+            "caldera",
+            "custom"
+          ]
+        },
+        "techniques": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^T\\d{4}(?:\\.\\d{3})?$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "plan_path": {
+          "type": "string",
+          "description": "Optional path to the scenario plan file used for this run (relative or absolute)."
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purple_axiom",
+        "ocsf_version",
+        "normalizer_version"
+      ],
+      "properties": {
+        "purple_axiom": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ocsf_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "otel_collector_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "osquery_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runner_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalizer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sigma_compiler_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pipeline_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Convenience alias for the full pipeline version stamp."
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "range_yaml_sha256"
+      ],
+      "properties": {
+        "range_yaml_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "otel_config_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "mapping_profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "sigma_rule_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "runner_inputs_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "os",
+          "role"
+        ],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "os": {
+            "type": "string",
+            "enum": [
+              "windows",
+              "linux",
+              "macos",
+              "other"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "endpoint",
+              "server",
+              "domain_controller",
+              "workstation",
+              "other"
+            ]
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "ip_addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ground_truth_path": {
+          "type": "string"
+        },
+        "raw_dir": {
+          "type": "string"
+        },
+        "normalized_dir": {
+          "type": "string"
+        },
+        "detections_dir": {
+          "type": "string"
+        },
+        "scoring_dir": {
+          "type": "string"
+        },
+        "report_dir": {
+          "type": "string"
+        },
+        "checksums_path": {
+          "type": "string"
+        },
+        "signature_path": {
+          "type": "string"
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved for forward-compatible additions; must be a JSON object.",
+      "additionalProperties": true
+    }
+  }
+}

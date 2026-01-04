@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/mapping_coverage.schema.json",
+  "title": "Purple Axiom Mapping Coverage Stats",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "profile",
+    "generated_at_utc",
+    "classes"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "classes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "class_uid",
+          "events_total",
+          "events_mapped",
+          "mapped_pct"
+        ],
+        "properties": {
+          "class_uid": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "class_name": {
+            "type": "string"
+          },
+          "events_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "events_mapped": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mapped_pct": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 100.0
+          },
+          "unknown_fields": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "unknown_event_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

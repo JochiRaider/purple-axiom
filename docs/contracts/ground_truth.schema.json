@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/ground_truth.schema.json",
+  "title": "Purple Axiom Ground Truth Timeline Entry (JSONL)",
+  "description": "Schema for a single line/object in ground_truth.jsonl.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "timestamp_utc",
+    "run_id",
+    "scenario_id",
+    "scenario_version",
+    "target_asset_id",
+    "action_type",
+    "technique_id",
+    "cleanup_status"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_asset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action_type": {
+      "type": "string",
+      "enum": [
+        "caldera_ability",
+        "atomic_test",
+        "custom"
+      ]
+    },
+    "technique_id": {
+      "type": "string",
+      "pattern": "^T\\d{4}(?:\\.\\d{3})?$"
+    },
+    "test_id": {
+      "type": "string",
+      "description": "Atomic Red Team test identifier (if applicable)."
+    },
+    "ability_id": {
+      "type": "string",
+      "description": "Caldera ability identifier (if applicable)."
+    },
+    "command_summary": {
+      "type": "string",
+      "description": "Redacted-safe summary of the action command."
+    },
+    "command_sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "expected_telemetry": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_type"
+        ],
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "e.g., windows_eventlog, sysmon, osquery, otel"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "event_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "OCSF class names/uids expected."
+          },
+          "hints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": false
+          }
+        }
+      }
+    },
+    "cleanup_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failed",
+        "skipped"
+      ]
+    },
+    "cleanup_notes": {
+      "type": "string"
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runner_type": {
+          "type": "string",
+          "enum": [
+            "atomic",
+            "caldera",
+            "custom"
+          ]
+        },
+        "runner_version": {
+          "type": "string"
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

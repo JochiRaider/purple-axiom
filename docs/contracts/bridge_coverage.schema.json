@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/contracts/bridge_coverage.schema.json",
+  "title": "Purple Axiom Sigma-to-OCSF Bridge Coverage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "scenario_id",
+    "generated_at_utc",
+    "mapping_pack_ref",
+    "backend",
+    "totals"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mapping_pack_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mapping_pack_id",
+        "mapping_pack_version",
+        "mapping_pack_sha256"
+      ],
+      "properties": {
+        "mapping_pack_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_pack_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_pack_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend_id"
+      ],
+      "properties": {
+        "backend_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_version": {
+          "type": "string"
+        },
+        "dialect": {
+          "type": "string"
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_rules",
+        "routed_rules",
+        "executable_rules",
+        "non_executable_rules"
+      ],
+      "properties": {
+        "total_rules": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "routed_rules": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unrouted_rules": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "executable_rules": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "non_executable_rules": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback_used_rules": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "non_executable_reasons": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "by_logsource_category": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "total_rules"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "total_rules": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "routed_rules": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "executable_rules": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fallback_used_rules": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "top_unmapped_fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sigma_field",
+          "count"
+        ],
+        "properties": {
+          "sigma_field": {
+            "type": "string",
+            "minLength": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "maxItems": 100
+    },
+    "top_unrouted_categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "count"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "maxItems": 100
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

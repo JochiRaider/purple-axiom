@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/contracts/bridge_mapping_pack.schema.json",
+  "title": "Purple Axiom Sigma-to-OCSF Bridge Mapping Pack Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "scenario_id",
+    "generated_at_utc",
+    "ocsf_version",
+    "mapping_pack_id",
+    "mapping_pack_version",
+    "mapping_pack_sha256",
+    "router_table_ref",
+    "field_aliases",
+    "fallback_policy"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ocsf_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mapping_pack_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mapping_pack_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mapping_pack_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "router_table_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "router_table_id",
+        "router_table_sha256"
+      ],
+      "properties": {
+        "router_table_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "router_table_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "router_table": {
+      "description": "Optional embedded router table for single-file reproducibility.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "field_aliases": {
+      "type": "object",
+      "description": "Field alias map scoped by Sigma logsource.category.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "expr"
+              ],
+              "properties": {
+                "expr": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "ocsf_path",
+                    "raw_path",
+                    "computed",
+                    "backend_expr"
+                  ]
+                },
+                "notes": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "fallback_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_raw_fallback"
+      ],
+      "properties": {
+        "allow_raw_fallback": {
+          "type": "boolean"
+        },
+        "allowed_raw_prefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "raw."
+          ]
+        },
+        "require_source_type_predicates": {
+          "type": "boolean",
+          "default": true
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "backend_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backend_id": {
+          "type": "string"
+        },
+        "backend_version": {
+          "type": "string"
+        },
+        "dialect": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

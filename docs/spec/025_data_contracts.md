@@ -41,7 +41,13 @@ Schemas live in:
 - `docs/contracts/ocsf_event_envelope.schema.json`
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
-- `docs/contracts/mapping_coverage.schema.json` (optional)
+- `docs/contracts/mapping_profile_snapshot.schema.json`
+- `docs/contracts/mapping_coverage.schema.json`
+- `docs/contracts/bridge_router_table.schema.json`
+- `docs/contracts/bridge_mapping_pack.schema.json`
+- `docs/contracts/bridge_compiled_plan.schema.json`
+- `docs/contracts/bridge_coverage.schema.json`
+
 
 Each schema includes a `contract_version` constant. The contract version is bumped only when the contract meaningfully changes (new required fields, semantics changes, or validation tightening).
 
@@ -270,6 +276,39 @@ Key semantics:
 - `metadata.source_event_id` SHOULD be populated when the source provides a meaningful native identifier (example: Windows `EventRecordID`).
 - For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id`.
 
+### 3a) Normalization mapping profile snapshot (`normalized/mapping_profile_snapshot.json`)
+
+Purpose:
+- Records the exact normalization mapping material used to produce the OCSF event store for this run.
+- Enables deterministic replay and CI drift detection (mapping inputs are pinned and hashed).
+
+Validation:
+- Must validate against `mapping_profile_snapshot.schema.json` when present.
+
+Key semantics (normative):
+- The snapshot MUST be immutable within a run bundle and MUST be treated as Tier 0 provenance.
+- The snapshot MUST include stable SHA-256 hashes over the mapping material so that mapping drift is detectable even when filenames are unchanged.
+- The snapshot MUST record upstream origins when derived from external projects (example: Security Lake transformation library custom source mappings).
+
+Minimum fields (normative):
+- `mapping_profile_id`, `mapping_profile_version`, `mapping_profile_sha256`
+- `ocsf_version`
+
+Hashing (normative):
+- `mapping_material_sha256` is SHA-256 over the canonical JSON serialization of the embedded `mapping_material` object (or, if only `mapping_files[]` are provided, over the canonical JSON list of `{path,sha256}` entries).
+- `mapping_profile_sha256` is SHA-256 over a canonical JSON object containing only stable inputs:
+  - `ocsf_version`
+  - `mapping_profile_id`
+  - `mapping_profile_version`
+  - `source_profiles[]` projected to `{source_type, profile, mapping_material_sha256}`
+- The hash basis MUST NOT include run-specific fields (`run_id`, `scenario_id`, `generated_at_utc`) so mapping drift can be detected across runs.
+
+- `source_profiles[]`:
+  - `source_type` (example: `windows-sysmon`)
+  - `mapping_material_sha256`
+  - either `mapping_material` (embedded) OR `mapping_files[]` (references), or both
+
+
 ### 4) Detections (`detections/detections.jsonl`)
 
 Purpose:
@@ -315,7 +354,89 @@ Purpose:
 - Supports failure classification, debugging, and prioritization.
 
 Validation:
-- Must validate against `mapping_coverage.schema.json` if present.
+- Must validate against `mapping_coverage.schema.json` when present.
+
+Key semantics (normative when produced):
+- Coverage MUST reference the exact mapping profile used via `mapping_profile_sha256` (from `normalized/mapping_profile_snapshot.json`).
+- Coverage MUST include totals and per-source-type breakdowns sufficient to detect regressions:
+  - total events observed, mapped, unmapped, and dropped
+  - per `source_type` totals and per `class_uid` totals
+  - missing core field counts for each tracked class (see `055_ocsf_field_tiers.md`)
+
+### 7) Bridge router table snapshot (`bridge/router_table.json`)
+
+Purpose:
+- Freezes the Sigma `logsource` routing behavior used for this run.
+- Enables deterministic compilation of Sigma rules into OCSF-scoped plans.
+
+Validation:
+- Must validate against `bridge_router_table.schema.json` when present.
+
+Key semantics (normative when produced):
+- The router table MUST map Sigma `logsource.category` to one or more OCSF `class_uid` filters.
+- The router table MUST be versioned and hashed (`router_table_sha256`) so routing drift is detectable.
+
+Hashing (normative):
+- `router_table_sha256` is SHA-256 over a canonical JSON object containing only stable inputs:
+  - `ocsf_version`
+  - `router_table_id`
+  - `router_table_version`
+  - `routes[]` (full route objects)
+- The hash basis MUST NOT include `generated_at_utc`.
+
+
+### 8) Bridge mapping pack snapshot (`bridge/mapping_pack_snapshot.json`)
+
+Purpose:
+- Freezes the full Sigma-to-OCSF bridge inputs used for this run (router + field alias map + fallback policy).
+- Serves as the authoritative provenance source for Sigma compilation and evaluation.
+
+Validation:
+- Must validate against `bridge_mapping_pack.schema.json` when present.
+
+Key semantics (normative when produced):
+- The mapping pack MUST reference the router table by id + SHA-256 and SHOULD embed it for single-file reproducibility.
+- The mapping pack MUST define the effective `raw.*` fallback policy (enabled/disabled, constraints) used for compilation.
+
+Hashing (normative):
+- `mapping_pack_sha256` is SHA-256 over a canonical JSON object containing only stable inputs:
+  - `ocsf_version`
+  - `router_table_ref`
+  - `field_aliases`
+  - `fallback_policy`
+  - `backend_defaults` (if present)
+- The hash basis MUST NOT include run-specific fields (`run_id`, `scenario_id`, `generated_at_utc`).
+
+
+### 9) Bridge compiled plans (`bridge/compiled_plans/<rule_id>.plan.json`)
+
+Purpose:
+- Stores the deterministic, backend-specific compilation output for each Sigma rule evaluated in this run.
+- Provides machine-checkable reasons for non-executable rules (routing failure, unmapped fields, unsupported modifiers).
+
+Validation:
+- Each plan file must validate against `bridge_compiled_plan.schema.json` when present.
+
+Key semantics (normative when produced):
+- Plans MUST be keyed by stable `rule_id` and MUST include `rule_sha256` (hash of canonical Sigma rule content) for drift detection.
+- Plans MUST declare `executable: true|false` and, when false, MUST include `non_executable_reason`.
+
+### 10) Bridge coverage (`bridge/coverage.json`)
+
+Purpose:
+- Summarizes bridge success and failure modes for the run:
+  - routed vs unrouted rules
+  - executable vs non-executable rules
+  - fallback usage
+  - top unmapped fields and top unrouted categories
+
+Validation:
+- Must validate against `bridge_coverage.schema.json` when present.
+
+Key semantics (normative when produced):
+- Coverage MUST reference the mapping pack used via `mapping_pack_sha256`.
+- Coverage MUST be sufficient to attribute detection gaps to `bridge_gap` vs `normalization_gap` vs `telemetry_gap`.
+
 
 ## Cross-artifact invariants
 

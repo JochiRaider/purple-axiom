@@ -6,6 +6,7 @@
   "type": "object",
   "additionalProperties": true,
   "required": [
+    "contract_version",
     "time",
     "class_uid",
     "metadata"
@@ -40,6 +41,7 @@
       "type": "object",
       "additionalProperties": true,
       "required": [
+        "uid",
         "event_id",
         "run_id",
         "scenario_id",
@@ -50,7 +52,13 @@
       "properties": {
         "event_id": {
           "type": "string",
-          "pattern": "^(?:evt_)?[A-Fa-f0-9]{64}$"
+          "pattern": "^pa:eid:v1:[A-Fa-f0-9]{32}$",
+          "description": "Purple Axiom deterministic event identifier (pa:eid:v1:<128-bit-hex>). MUST equal metadata.uid (enforced at runtime)."
+        },
+        "uid": {
+          "type": "string",
+          "pattern": "^pa:eid:v1:[A-Fa-f0-9]{32}$",
+          "description": "OCSF metadata.uid; MUST equal metadata.event_id (enforced at runtime)."
         },
         "run_id": {
           "type": "string",
@@ -73,18 +81,111 @@
           "minLength": 1
         },
         "source_event_id": {
-          "type": "string",
-          "description": "Native/source event identifier (e.g., Windows RecordId)."
+          "description": "Native/source event identifier when meaningful (e.g., Windows EventRecordID).",
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
         },
-        "ingest_time_utc": {
+        "observed_time_utc": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "When the event was observed by the collector (diagnostic only; excluded from metadata.event_id)."
+        },
+        "ingest_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Optional ingestion-attempt identifier (debug only; never used for joins)."
+        },
+        "identity_tier": {
+          "type": "integer",
+          "enum": [
+            1,
+            2,
+            3
+          ],
+          "description": "Identity tier used to compute metadata.event_id (1=native id, 2=cursor, 3=fingerprint)."
+        },
+        "time_precision": {
+          "type": "string",
+          "enum": [
+            "s",
+            "ms",
+            "us",
+            "ns"
+          ],
+          "description": "Precision of the event time field, as emitted by the source/collector."
+        },
+        "origin": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Optional identity inputs captured from the source system (recommended for auditability and EVTX reprocessing).",
+          "properties": {
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Originating host/computer from the event payload."
+            },
+            "channel": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Windows channel/log name or equivalent stream name."
+            },
+            "record_id": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\d+$"
+                }
+              ],
+              "description": "Windows EventRecordID / record number when available."
+            },
+            "provider": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provider_guid": {
+              "type": "string",
+              "pattern": "^\\{?[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\\}?$"
+            },
+            "event_id": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Source-native event ID/type code when meaningful (e.g., Windows EventID)."
+            }
+          }
         },
         "host": {
           "type": "string"
         },
         "pipeline": {
           "type": "string"
+        }
+      },
+      "dependentSchemas": {
+        "origin": {
+          "properties": {
+            "origin": {
+              "required": [
+                "host",
+                "channel"
+              ]
+            }
+          }
         }
       }
     },
@@ -128,6 +229,50 @@
       "type": "object",
       "additionalProperties": true,
       "description": "Optional preserved raw/vendor fields for traceability."
+    },
+    "contract_version": {
+      "type": "string",
+      "const": "0.2.0",
+      "description": "Contract version stamp for this event envelope."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "metadata": {
+            "properties": {
+              "source_type": {
+                "const": "windows_eventlog"
+              }
+            },
+            "required": [
+              "source_type"
+            ]
+          }
+        },
+        "required": [
+          "metadata"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metadata": {
+            "required": [
+              "source_event_id"
+            ],
+            "properties": {
+              "origin": {
+                "required": [
+                  "host",
+                  "channel",
+                  "record_id"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

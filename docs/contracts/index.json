@@ -1,5 +1,5 @@
 {
-  "contract_version": "0.1.0",
+  "contract_version": "0.2.0",
   "schemas": [
     {
       "name": "manifest.schema.json",
@@ -31,3 +31,4 @@
     "OCSF envelope is permissive (additionalProperties=true) to allow full OCSF payloads and vendor extensions while requiring provenance."
   ]
 }
+

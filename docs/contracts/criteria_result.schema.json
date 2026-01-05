@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/contracts/criteria_result.schema.json",
+  "title": "Purple Axiom Criteria Evaluation Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "scenario_id",
+    "action_id",
+    "action_key",
+    "status",
+    "signals",
+    "cleanup"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action_key": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "criteria_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "criteria_pack_id": {
+          "type": "string"
+        },
+        "criteria_pack_version": {
+          "type": "string"
+        },
+        "criteria_entry_id": {
+          "type": "string"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "skipped"
+      ]
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "signal_id",
+          "status",
+          "matched_count"
+        ],
+        "properties": {
+          "signal_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "skipped"
+            ]
+          },
+          "matched_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sample_event_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invoked",
+        "verification_status"
+      ],
+      "properties": {
+        "invoked": {
+          "type": "boolean"
+        },
+        "verification_status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "skipped",
+            "not_applicable"
+          ]
+        },
+        "results_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

@@ -85,8 +85,7 @@ Purple Axiom is designed for **isolated lab environments** and emphasizes detect
 
 Each run produces a **run bundle** at `runs/<run_id>/`. The **manifest** is the authoritative index of what exists and which versions/config hashes were used.
 
-```
-
+```text
 runs/<run_id>/
 manifest.json
 ground_truth.jsonl
@@ -161,6 +160,7 @@ Purple Axiom is intended to fail closed on contract violations:
 Designed extension points include:
 
 * New runners beyond Caldera/Atomic
+* New lab providers (manual, Ludus, Terraform, other)
 * New telemetry sources (endpoint, network, EDR exports)
 * New mapping profiles or OCSF versions
 * New rule engines beyond Sigma
@@ -169,6 +169,7 @@ Designed extension points include:
 
 * Charter: `docs/spec/000_charter.md` 
 * Scope and non-goals: `docs/spec/010_scope.md` 
+* Lab providers: `docs/spec/015_lab_providers.md`
 * Architecture: `docs/spec/020_architecture.md` 
 * Scenario model: `docs/spec/030_scenarios.md` 
 * Telemetry pipeline: `docs/spec/040_telemetry_pipeline.md` 

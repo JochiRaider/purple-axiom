@@ -1,8 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://purple-axiom.local/schemas/ground_truth.schema.json",
-  "title": "Purple Axiom Ground Truth Timeline Entry (JSONL)",
-  "description": "Schema for a single line/object in ground_truth.jsonl.",
+  "$id": "https://purple-axiom.local/contracts/ground_truth.schema.json",
+  "title": "Purple Axiom Ground Truth Action",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,14 +10,18 @@
     "run_id",
     "scenario_id",
     "scenario_version",
-    "target_asset_id",
-    "action_type",
+    "action_id",
+    "action_key",
+    "engine",
+    "engine_test_id",
     "technique_id",
-    "cleanup_status"
+    "target_asset_id",
+    "command_summary",
+    "parameters",
+    "cleanup"
   ],
   "properties": {
     "contract_version": {
-      "type": "string",
       "const": "0.1.0"
     },
     "timestamp_utc": {
@@ -27,7 +30,7 @@
     },
     "run_id": {
       "type": "string",
-      "format": "uuid"
+      "minLength": 1
     },
     "scenario_id": {
       "type": "string",
@@ -37,116 +40,134 @@
       "type": "string",
       "minLength": 1
     },
-    "target_asset_id": {
+    "action_id": {
       "type": "string",
       "minLength": 1
     },
-    "action_type": {
+    "action_key": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "engine": {
       "type": "string",
       "enum": [
-        "caldera_ability",
-        "atomic_test",
+        "atomic",
+        "caldera",
         "custom"
       ]
+    },
+    "engine_test_id": {
+      "type": "string",
+      "minLength": 1
     },
     "technique_id": {
       "type": "string",
       "pattern": "^T\\d{4}(?:\\.\\d{3})?$"
     },
-    "test_id": {
+    "target_asset_id": {
       "type": "string",
-      "description": "Atomic Red Team test identifier (if applicable)."
+      "minLength": 1
     },
-    "ability_id": {
-      "type": "string",
-      "description": "Caldera ability identifier (if applicable)."
-    },
-    "command_summary": {
-      "type": "string",
-      "description": "Redacted-safe summary of the action command."
-    },
-    "command_sha256": {
-      "type": "string",
-      "pattern": "^[A-Fa-f0-9]{64}$"
-    },
-    "duration_ms": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "exit_code": {
-      "type": "integer"
-    },
-    "expected_telemetry": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "source_type"
-        ],
-        "properties": {
-          "source_type": {
-            "type": "string",
-            "minLength": 1,
-            "description": "e.g., windows_eventlog, sysmon, osquery, otel"
-          },
-          "channels": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "uniqueItems": true
-          },
-          "event_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "uniqueItems": true
-          },
-          "classes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "uniqueItems": true,
-            "description": "OCSF class names/uids expected."
-          },
-          "hints": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "uniqueItems": false
-          }
-        }
-      }
-    },
-    "cleanup_status": {
-      "type": "string",
-      "enum": [
-        "success",
-        "failed",
-        "skipped"
-      ]
-    },
-    "cleanup_notes": {
-      "type": "string"
-    },
-    "runner": {
+    "resolved_target": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "runner_type": {
+        "hostname": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "provider_asset_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "command_summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resolved_inputs_sha256"
+      ],
+      "properties": {
+        "input_args_redacted": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "input_args_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "resolved_inputs_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        }
+      }
+    },
+    "criteria_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "criteria_pack_id": {
+          "type": "string"
+        },
+        "criteria_pack_version": {
+          "type": "string"
+        },
+        "criteria_entry_id": {
+          "type": "string"
+        }
+      }
+    },
+    "expected_telemetry_hints": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invoked",
+        "status",
+        "verification"
+      ],
+      "properties": {
+        "invoked": {
+          "type": "boolean"
+        },
+        "status": {
           "type": "string",
           "enum": [
-            "atomic",
-            "caldera",
-            "custom"
+            "success",
+            "failed",
+            "skipped",
+            "not_applicable"
           ]
         },
-        "runner_version": {
-          "type": "string"
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failed",
+                "skipped",
+                "not_applicable"
+              ]
+            },
+            "results_ref": {
+              "type": "string"
+            }
+          }
         }
       }
     },

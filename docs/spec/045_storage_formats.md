@@ -37,17 +37,34 @@ Purpose:
 Location:
 - `runs/<run_id>/raw/evidence/` (recommended convention)
 
+Additional evidence location (runner artifacts):
+- `runs/<run_id>/runner/`
+
 Format:
 - Source-native where it materially improves fidelity or reprocessing:
   - Windows EVTX (optional, see Windows section)
   - PCAP (if added later)
   - Tool-native output files
-
+  - Runner transcripts and executor metadata:
+    - per-action stdout/stderr transcripts
+    - executor metadata (exit codes, durations, executor version)
+    - cleanup verification results
+    
 Retention:
 - Optional, policy-controlled (lab disk budgets vary).
 
 Purpose:
 - Max fidelity, reprocessing insurance, forensic traceability.
+
+Runner evidence notes:
+- Executor transcripts (stdout/stderr) and executor metadata are treated as Tier 1 evidence, not Tier 0 logs.
+- Transcripts MUST follow the same redaction policy as other evidence artifacts (see `090_security_safety.md`).
+- Recommended per-action layout:
+  - `runner/actions/<action_id>/stdout.txt`
+  - `runner/actions/<action_id>/stderr.txt`
+  - `runner/actions/<action_id>/executor.json`
+  - `runner/actions/<action_id>/cleanup_verification.json`
+- Executor-level evidence for defensible debugging when orchestration logs are incomplete.
 
 ### Tier 2: Analytics (structured, long-term)
 Location:
@@ -69,6 +86,7 @@ Purpose:
 
 ### Always JSON (small, contract-driven)
 - `manifest.json`
+- `criteria/manifest.json`
 - `scoring/summary.json`
 - `normalized/mapping_coverage.json`
 - `report/report.json`
@@ -78,6 +96,8 @@ Rationale:
 
 ### JSONL (small to medium, event-like but not huge)
 - `ground_truth.jsonl`
+- `criteria/criteria.jsonl`
+- `criteria/results.jsonl`
 - `detections/detections.jsonl`
 - `scoring/joins.jsonl` (if used early)
 

@@ -35,6 +35,9 @@ Schemas live in:
 
 - `docs/contracts/manifest.schema.json`
 - `docs/contracts/ground_truth.schema.json`
+- `docs/contracts/criteria_pack_manifest.schema.json`
+- `docs/contracts/criteria_entry.schema.json`
+- `docs/contracts/criteria_result.schema.json`
 - `docs/contracts/ocsf_event_envelope.schema.json`
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
@@ -48,8 +51,11 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 
 - `manifest.json` (single JSON object)
 - `ground_truth.jsonl` (JSONL)
+- `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw/` (telemetry as collected, plus source-native evidence where applicable)
+- `runner/` (runner evidence: transcripts, executor metadata, cleanup verification)
 - `normalized/` (normalized event store and mapping coverage)
+- `bridge/` (Sigma-to-OCSF bridge artifacts: mapping pack snapshot, compiled plans, bridge coverage)
 - `detections/` (detections emitted by evaluators)
 - `scoring/` (joins and summary metrics)
 - `report/` (HTML and JSON report outputs)
@@ -65,6 +71,7 @@ Purpose:
 - Provides run-level provenance and reproducibility metadata.
 - Pins versions and input hashes for deterministic replay.
 - Lists target assets (lab endpoints) and optional artifact paths.
+- Records lab provider identity and the resolved inventory snapshot used for the run.
 
 Validation:
 - Must validate against `manifest.schema.json`.
@@ -76,6 +83,11 @@ Key semantics:
   - `partial`: pipeline produced some outputs but one or more stages failed
   - `failed`: run failed early or outputs are not usable
 - `inputs.*_sha256` are SHA-256 hashes of the exact configs used.
+
+Recommended manifest additions (normative in schema when implemented):
+- `lab.provider` (string): `manual | ludus | terraform | other`
+- `lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot
+- `lab.assets` (array): resolved assets used by the run (or pointer to `logs/lab_inventory_snapshot.json`)
 
 ### 2) Ground truth timeline (`ground_truth.jsonl`)
 
@@ -92,8 +104,62 @@ Validation:
 Key semantics:
 - `timestamp_utc` is the start time of the action (UTC).
 - `command_summary` must be safe and redacted; store `command_sha256` for integrity.
-- `expected_telemetry` lists hints used by scoring to classify failures (missing telemetry vs mapping gap vs rule logic gap).
-- `cleanup_status` is required and is always surfaced in reporting.
+- Ground truth MUST include stable action identity:
+  - `action_id` (unique within the run)
+  - `action_key` (stable join key across runs for equivalent executions)
+- `expected_telemetry_hints` MAY be present as coarse hints, but validation MUST prefer criteria evaluation when available.
+- Cleanup is modeled as a staged lifecycle (invoke -> verify) and is always surfaced in reporting.
+- Ground truth SHOULD include resolved target identity (hostname/ip/provider ref) so that the run remains interpretable even if the provider inventory changes later.
++### 2a) Criteria pack snapshot (`criteria/criteria.jsonl` + `criteria/manifest.json`)
+
+Purpose:
+- Externalizes “expected telemetry” away from Atomic YAML and away from ground truth authoring.
+- Allows environment-specific expectations to be versioned and curated without changing execution definitions.
+
+Format:
+- `criteria/manifest.json` (single JSON object, pinned in run manifest)
+- `criteria/criteria.jsonl` (JSONL; each line is one criteria entry)
+
+Validation:
+- `criteria/manifest.json` must validate against `criteria_pack_manifest.schema.json`.
+- Each line of `criteria/criteria.jsonl` must validate against `criteria_entry.schema.json`.
+
+Key semantics:
+- Criteria entries are keyed by stable identifiers (minimum):
+  - `engine` (atomic|caldera|custom)
+  - `technique_id`
+  - `engine_test_id` (Atomic GUID / Caldera ability ID)
+- Criteria entries define expected signals in terms of normalized OCSF predicates (example: class_uid + optional constraints) and time windows relative to the action start.
+
+### 2b) Criteria evaluation results (`criteria/results.jsonl`)
+
+Purpose:
+- Records whether expected signals were observed for each executed action.
+- Provides the authoritative source for “missing telemetry” classification when criteria exist.
+
+Format:
+- JSON Lines. Each line is one evaluated action.
+
+Validation:
+- Each line must validate against `criteria_result.schema.json`.
+
+Key semantics:
+- Results reference `action_id` and `action_key` from ground truth.
+- Results include a status (`pass|fail|skipped`) plus evidence references (example: counts of matching events, sample event_ids, query plans used).
+
+### 2c) Runner evidence (`runner/`)
+
+Purpose:
+- Captures executor-level artifacts needed for defensible debugging and repeatability.
+
+Minimum contents (recommended):
+- `runner/actions/<action_id>/stdout.txt`
+- `runner/actions/<action_id>/stderr.txt`
+- `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type/version, timestamps)
+- `runner/actions/<action_id>/cleanup_verification.json` (checks + results)
+
+Validation:
+- `executor.json` and `cleanup_verification.json` SHOULD be schema validated when present.
 
 ### 3) Normalized events (`normalized/ocsf_events.*`)
 
@@ -108,17 +174,21 @@ Validation:
 Required envelope (minimum):
 - `time` (ms since epoch, UTC)
 - `class_uid`
-- `metadata.event_id` (stable, deterministic identifier)
+- `metadata.event_id` (stable, deterministic identifier; see `ADR-0002-event-identity-and-provenance.md`)
 - `metadata.run_id`
 - `metadata.scenario_id`
 - `metadata.collector_version`
 - `metadata.normalizer_version`
 - `metadata.source_type`
+- `metadata.source_event_id` (native upstream ID when meaningful; example: Windows `EventRecordID`)
+- `metadata.identity_tier` (1|2|3; see ADR-0002)
 
 Key semantics:
 - The OCSF event payload may include additional fields (full OCSF and vendor extensions). The contract enforces minimum provenance only.
-- `metadata.event_id` must be stable across re-runs when the source event and normalization inputs are identical.
-- `metadata.source_event_id` should be populated when the source provides a meaningful native identifier (example: Windows RecordId).
+- `metadata.event_id` MUST be stable across re-runs when the source event and normalization inputs are identical.
+- `metadata.event_id` MUST be computed without using ingest/observation time (at-least-once delivery and collector restarts are expected).
+- `metadata.source_event_id` SHOULD be populated when the source provides a meaningful native identifier (example: Windows `EventRecordID`).
+- For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id`.
 
 ### 4) Detections (`detections/detections.jsonl`)
 
@@ -135,6 +205,16 @@ Key semantics:
 - `rule_id` is stable for the rule and should not change across runs unless the rule itself changes.
 - `matched_event_ids` must reference `metadata.event_id` values from the normalized store.
 - `first_seen_utc` and `last_seen_utc` are event-time, not ingest-time.
+
+Recommended (for reproducibility and gap attribution):
+- Populate `rule_source = "sigma"` when the evaluator is Sigma-based.
+- Store Sigma-to-OCSF bridge provenance under `extensions.bridge`:
+  - `mapping_pack_id` and `mapping_pack_version` (router + field aliases)
+  - `backend` (example: duckdb-sql, tenzir, other)
+  - `compiled_at_utc`
+  - `fallback_used` (boolean) when any `raw.*` fields were required
+  - `unmapped_sigma_fields` (array) when compilation required dropping selectors or failing the rule
+- Store the original Sigma `logsource` under `extensions.sigma.logsource` (verbatim), when available.
 
 ### 5) Scoring summary (`scoring/summary.json`)
 
@@ -167,6 +247,7 @@ Required invariants:
    - `normalized.metadata.run_id` for every event
    - `detections.run_id` for every detection
    - `summary.run_id`
+   - `criteria.results.run_id` for every criteria result (when present)
 2. `manifest.scenario.scenario_id` must match:
    - `ground_truth.scenario_id` for every line
    - `normalized.metadata.scenario_id` for every event (unless explicitly multi-scenario)
@@ -177,6 +258,8 @@ Required invariants:
    - `metadata.event_id` must be unique within a run bundle for normalized events.
 5. Referential integrity:
    - `detections.matched_event_ids` must exist in the normalized store for that run.
+   - `criteria.results.action_id` must reference an `action_id` present in `ground_truth.jsonl` (when present).
+   - `criteria.results.action_key` must equal the corresponding ground truth `action_key` (when present).
 6. Deterministic ordering requirements (for diffability):
    - When writing JSONL outputs, lines are sorted deterministically (see storage spec).
    - When writing Parquet, within-file ordering is deterministic (see storage spec).

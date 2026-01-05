@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/contracts/criteria_entry.schema.json",
+  "title": "Purple Axiom Criteria Entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "entry_id",
+    "engine",
+    "technique_id",
+    "engine_test_id",
+    "expected_signals"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "entry_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "engine": {
+      "type": "string",
+      "enum": [
+        "atomic",
+        "caldera",
+        "custom"
+      ]
+    },
+    "technique_id": {
+      "type": "string",
+      "pattern": "^T\\d{4}(?:\\.\\d{3})?$"
+    },
+    "engine_test_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "selectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "string",
+          "enum": [
+            "windows",
+            "linux",
+            "macos",
+            "bsd",
+            "other"
+          ]
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executor": {
+          "type": "string"
+        }
+      }
+    },
+    "time_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "before_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5
+        },
+        "after_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 120
+        }
+      }
+    },
+    "expected_signals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "signal_id",
+          "predicate"
+        ],
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "predicate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "class_uid"
+            ],
+            "properties": {
+              "class_uid": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "constraints": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "field",
+                    "op"
+                  ],
+                  "properties": {
+                    "field": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "one_of",
+                        "exists",
+                        "contains"
+                      ]
+                    },
+                    "value": {}
+                  }
+                }
+              }
+            }
+          },
+          "min_count": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 1
+          },
+          "max_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "within_seconds": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "cleanup_verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "check_id",
+              "type"
+            ],
+            "properties": {
+              "check_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "command",
+                  "file_absent",
+                  "process_absent",
+                  "registry_absent",
+                  "service_state"
+                ]
+              },
+              "target": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warn",
+                  "error"
+                ],
+                "default": "error"
+              }
+            }
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

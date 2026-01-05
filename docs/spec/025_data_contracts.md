@@ -92,25 +92,105 @@ Recommended manifest additions (normative in schema when implemented):
 ### 2) Ground truth timeline (`ground_truth.jsonl`)
 
 Purpose:
-- Records what activity was executed, when, where, and with what expected telemetry.
+- Records what activity was executed, when, where, and with what expectations.
 - Serves as the canonical basis for scoring and failure classification.
 
 Format:
-- JSON Lines. Each line is one executed action.
+- JSON Lines. Each line is one executed action (one runner step with an observable effect).
 
 Validation:
 - Each line must validate against `ground_truth.schema.json`.
 
+Generation source (normative):
+- The runner MUST derive ground truth entries from a structured execution record produced at runtime (for example, an ATTiRe-style JSON execution log for Atomic).
+- The runner MUST write the structured execution record under `runner/actions/<action_id>/` and treat `ground_truth.jsonl` as a derived, stable join layer.
+
 Key semantics:
 - `timestamp_utc` is the start time of the action (UTC).
-- `command_summary` must be safe and redacted; store `command_sha256` for integrity.
-- Ground truth MUST include stable action identity:
-  - `action_id` (unique within the run)
-  - `action_key` (stable join key across runs for equivalent executions)
-- `expected_telemetry_hints` MAY be present as coarse hints, but validation MUST prefer criteria evaluation when available.
+
+### Stable action identity: `action_id` and `action_key`
+
+- `action_id` MUST be unique within a run. It is not stable across runs and MUST NOT be used for cross-run comparisons.
+- `action_key` MUST be a stable join key for equivalent executions across runs.
+
+`action_key` (v1) MUST be computed as:
+- `sha256(canonical_json(action_key_basis_v1))`
+
+Where `action_key_basis_v1` MUST include, at minimum:
+- `v`: 1
+- `engine`
+- `technique_id`
+- `engine_test_id`
+- `parameters.resolved_inputs_sha256`
+
+And SHOULD include a stable target selector when available (to distinguish materially different host profiles without binding to an ephemeral `target_asset_id`):
+- `resolved_target.os_family`
+- `resolved_target.role`
+- `resolved_target.labels` (sorted)
+
+Canonical JSON:
+- Implementations SHOULD use JSON Canonicalization Scheme (RFC 8785, JCS) for cross-language determinism.
+- If JCS is not used, implementations MUST at least enforce: UTF-8 encoding, lexicographic key sorting, and no insignificant whitespace.
+
+### Inputs and reproducible hashing
+
+`parameters.input_args_redacted`:
+- Runner inputs with secrets removed or replaced with references (never store plaintext secrets).
+
+`parameters.input_args_sha256` (optional):
+- Hash of canonical JSON of the redacted input arguments object (`input_args_redacted`), after normalization of key ordering.
+- Purpose: detect runner invocation drift independent of template resolution.
+
+`parameters.resolved_inputs_sha256` (required):
+- Hash of canonical JSON of the resolved inputs used for execution after variable interpolation and defaults are applied, with secrets still redacted or represented as references.
+- Purpose: stable basis for `action_key` and for cross-run regression comparisons.
+
+### Command summary, redaction, and command integrity
+
+`command_summary`:
+- MUST be safe and redacted.
+- MUST be derived from a tokenized command representation (executable + argv tokens) produced by the runner, not from ad-hoc string parsing.
+- MUST be produced under a versioned redaction policy that is pinned in run artifacts (policy id and policy hash).
+
+Redaction policy (normative):
+- The runner MUST apply a deterministic redaction policy that includes:
+  - a flag/value model for common secret-bearing arguments (for example: `--token`, `-Password`, `-EncodedCommand`)
+  - regex-based redaction for high-risk token patterns (JWT-like strings, long base64 blobs, long hex keys, connection strings)
+  - deterministic truncation rules (fixed max token length and fixed max summary length)
+
+`extensions.command_sha256`:
+- OPTIONAL integrity hash for the executed command, computed over a redacted canonical command object.
+- MUST NOT be used as part of `action_key` (it is an integrity aid, not identity).
+
+`extensions.command_sha256` (v1) MUST be computed as:
+- Build `command_material_v1_redacted`:
+  - `v`: 1
+  - `executor`: normalized executor name (for example: `powershell`, `cmd`, `bash`)
+  - `executable`: normalized basename (for example: `powershell.exe`)
+  - `argv_redacted`: argv tokens after applying the redaction policy (preserve token order)
+  - OPTIONAL: `cwd`, `stdin_present`, `env_refs` (names only; never values)
+- Compute `sha256(canonical_json(command_material_v1_redacted))` and encode as 64 hex characters.
+
+Invariants:
+- If `parameters.resolved_inputs_sha256` is unchanged and the runner redaction policy is unchanged, `extensions.command_sha256` SHOULD remain stable for the same executor implementation.
+- A change in redaction policy MUST be reflected in `extensions.redaction_policy_id` and/or `extensions.redaction_policy_sha256` so that hash drift is explainable.
+
+### Expected telemetry hints and criteria references
+
+- `criteria_ref` SHOULD be present when a criteria entry is selected for the action.
+- `expected_telemetry_hints` MAY be present as coarse hints, but evaluation MUST prefer criteria evaluation when available.
+
+Population rules:
+- If a criteria entry is selected for the action, the runner MUST populate:
+  - `criteria_ref` (pack id/version + entry id)
+  - `expected_telemetry_hints` as a lossy projection of the selected criteria entry (for example: expected OCSF class_uids and preferred sources).
+- If no criteria entry is selected, the runner MAY populate `expected_telemetry_hints` from a separate telemetry hints pack or from lab instrumentation defaults.
+
+Cleanup:
 - Cleanup is modeled as a staged lifecycle (invoke -> verify) and is always surfaced in reporting.
-- Ground truth SHOULD include resolved target identity (hostname/ip/provider ref) so that the run remains interpretable even if the provider inventory changes later.
-+### 2a) Criteria pack snapshot (`criteria/criteria.jsonl` + `criteria/manifest.json`)
+- Ground truth SHOULD include resolved target identity (hostname, IPs, and/or stable labels) so action intent remains interpretable even if provider inventory changes later.
+
+### 2a) Criteria pack snapshot (`criteria/criteria.jsonl` + `criteria/manifest.json`)
 
 Purpose:
 - Externalizes “expected telemetry” away from Atomic YAML and away from ground truth authoring.

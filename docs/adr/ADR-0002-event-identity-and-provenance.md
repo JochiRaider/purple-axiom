@@ -77,8 +77,10 @@ Use only when neither Tier 1 nor Tier 2 inputs exist. Identity is a fingerprint 
 Tier 3 MUST record `metadata.identity_tier = 3` for auditability.
 
 ### Canonicalization rules
-To ensure cross-implementation determinism, `identity_basis_canonical` MUST be serialized using canonical JSON:
+To ensure cross-implementation determinism, implementations SHOULD use JSON Canonicalization Scheme (RFC 8785, JCS) for serializing identity bases prior to hashing.
 
+If JCS is not used, `identity_basis_canonical` MUST at least be serialized using canonical JSON:
+ 
 - UTF-8 encoding
 - Sorted keys (lexicographic)
 - No insignificant whitespace

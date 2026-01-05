@@ -95,17 +95,31 @@ Regardless of backend, the evaluator MUST produce `detection_instance` rows in `
 
 ## Bridge artifacts in the run bundle
 
-Recommended paths under `runs/<run_id>/bridge/`:
-- `mapping_pack.json` (or YAML): exact router + alias map used for this run
-- `compiled/`:
-  - `rules/<rule_id>.plan.json` (intermediate representation) OR `<rule_id>.sql`
-- `bridge_summary.json`:
-  - routed_rules, unrouted_rules
-  - field coverage stats (mapped vs unmapped field references)
-  - fallback usage stats
-  - top unmapped fields and top unrouted categories
+When Sigma evaluation is enabled, the bridge SHOULD emit a small, contract-validated set of artifacts under `runs/<run_id>/bridge/` so routing, compilation, and coverage are mechanically testable:
 
-These artifacts are not required for minimal operation, but are strongly recommended for reproducibility and regression tracking.
+- `router_table.json` (required)
+  - Snapshot of `logsource` routing (Sigma category to OCSF scope).
+  - Schema: `bridge_router_table.schema.json`.
+
+- `mapping_pack_snapshot.json` (required)
+  - Snapshot of the full bridge inputs (router + alias map + fallback policy).
+  - Schema: `bridge_mapping_pack.schema.json`.
+  - `mapping_pack_sha256` MUST be computed over stable mapping inputs and MUST NOT include run-specific fields.
+
+- `compiled_plans/`
+  - `compiled_plans/<rule_id>.plan.json` (required for each evaluated rule)
+  - Deterministic compilation output for the chosen backend (SQL or IR), including non-executable reasons.
+  - Schema: `bridge_compiled_plan.schema.json` per file.
+
+- `coverage.json` (required)
+  - Summary metrics and top failure modes (unrouted categories, unmapped fields, fallback usage).
+  - Schema: `bridge_coverage.schema.json`.
+
+These artifacts are intentionally small and diffable, and they enable CI to distinguish:
+- telemetry gaps (no events)
+- normalization gaps (missing required/core fields)
+- bridge gaps (unrouted categories, unmapped fields, unsupported modifiers)
+- rule logic gaps (compiled and executed but did not match expected activity)
 
 ## Bridge provenance in detections
 

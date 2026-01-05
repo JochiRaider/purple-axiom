@@ -30,6 +30,39 @@
 - `metadata.normalizer_version`
 - `metadata.source_type`
 
+
+## Run bundle artifacts (normalized/)
+
+When normalization is enabled and produces an OCSF event store, the normalizer MUST emit:
+
+- `normalized/ocsf_events.parquet` (or `normalized/ocsf_events.jsonl` for small fixtures)
+- `normalized/mapping_profile_snapshot.json` (required)
+- `normalized/mapping_coverage.json` (required)
+
+### Mapping profile snapshot
+
+Purpose:
+- Pin the exact mapping inputs (configuration and transforms) used to normalize source telemetry into OCSF.
+
+Requirements (normative):
+- MUST validate against `mapping_profile_snapshot.schema.json`.
+- MUST record the pinned `ocsf_version` and a `mapping_profile_sha256` (hash over mapping material).
+- `mapping_profile_sha256` MUST be computed over stable mapping inputs and MUST NOT include run-specific fields.
+- MUST include per-source-type mapping material hashes, so changes are detectable without parsing large raw datasets.
+
+### Mapping coverage
+
+Purpose:
+- Provide machine-checkable coverage metrics for:
+  - event class routing (`class_uid`)
+  - missing core fields (per class)
+  - unmapped or dropped events
+
+Requirements (normative):
+- MUST validate against `mapping_coverage.schema.json`.
+- MUST reference the mapping profile via `mapping_profile_sha256` so coverage is attributable to mapping changes vs telemetry changes.
+
+
 ## “Core entities” guidance (best practice)
 - Ensure high-query entities are normalized consistently:
   - device/host identity

@@ -125,7 +125,30 @@
     },
     "expected_telemetry_hints": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": true,
+      "properties": {
+        "ocsf_class_uids": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "preferred_sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
     },
     "cleanup": {
       "type": "object",
@@ -173,7 +196,30 @@
     },
     "extensions": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": true,
+      "properties": {
+        "command_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "command_hash_basis": {
+          "type": "string",
+          "enum": [
+            "command_material_v1_redacted"
+          ]
+        },
+        "redaction_policy_id": {
+          "type": "string"
+        },
+        "redaction_policy_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "command_bytes_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        }
+      }
     }
   }
 }

@@ -41,7 +41,13 @@ Schemas live in:
 - `docs/contracts/ocsf_event_envelope.schema.json`
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
-- `docs/contracts/mapping_coverage.schema.json` (optional)
+- `docs/contracts/mapping_profile_snapshot.schema.json`
+- `docs/contracts/mapping_coverage.schema.json`
+- `docs/contracts/bridge_router_table.schema.json`
+- `docs/contracts/bridge_mapping_pack.schema.json`
+- `docs/contracts/bridge_compiled_plan.schema.json`
+- `docs/contracts/bridge_coverage.schema.json`
+
 
 Each schema includes a `contract_version` constant. The contract version is bumped only when the contract meaningfully changes (new required fields, semantics changes, or validation tightening).
 
@@ -92,25 +98,105 @@ Recommended manifest additions (normative in schema when implemented):
 ### 2) Ground truth timeline (`ground_truth.jsonl`)
 
 Purpose:
-- Records what activity was executed, when, where, and with what expected telemetry.
+- Records what activity was executed, when, where, and with what expectations.
 - Serves as the canonical basis for scoring and failure classification.
 
 Format:
-- JSON Lines. Each line is one executed action.
+- JSON Lines. Each line is one executed action (one runner step with an observable effect).
 
 Validation:
 - Each line must validate against `ground_truth.schema.json`.
 
+Generation source (normative):
+- The runner MUST derive ground truth entries from a structured execution record produced at runtime (for example, an ATTiRe-style JSON execution log for Atomic).
+- The runner MUST write the structured execution record under `runner/actions/<action_id>/` and treat `ground_truth.jsonl` as a derived, stable join layer.
+
 Key semantics:
 - `timestamp_utc` is the start time of the action (UTC).
-- `command_summary` must be safe and redacted; store `command_sha256` for integrity.
-- Ground truth MUST include stable action identity:
-  - `action_id` (unique within the run)
-  - `action_key` (stable join key across runs for equivalent executions)
-- `expected_telemetry_hints` MAY be present as coarse hints, but validation MUST prefer criteria evaluation when available.
+
+### Stable action identity: `action_id` and `action_key`
+
+- `action_id` MUST be unique within a run. It is not stable across runs and MUST NOT be used for cross-run comparisons.
+- `action_key` MUST be a stable join key for equivalent executions across runs.
+
+`action_key` (v1) MUST be computed as:
+- `sha256(canonical_json(action_key_basis_v1))`
+
+Where `action_key_basis_v1` MUST include, at minimum:
+- `v`: 1
+- `engine`
+- `technique_id`
+- `engine_test_id`
+- `parameters.resolved_inputs_sha256`
+
+And SHOULD include a stable target selector when available (to distinguish materially different host profiles without binding to an ephemeral `target_asset_id`):
+- `resolved_target.os_family`
+- `resolved_target.role`
+- `resolved_target.labels` (sorted)
+
+Canonical JSON:
+- Implementations SHOULD use JSON Canonicalization Scheme (RFC 8785, JCS) for cross-language determinism.
+- If JCS is not used, implementations MUST at least enforce: UTF-8 encoding, lexicographic key sorting, and no insignificant whitespace.
+
+### Inputs and reproducible hashing
+
+`parameters.input_args_redacted`:
+- Runner inputs with secrets removed or replaced with references (never store plaintext secrets).
+
+`parameters.input_args_sha256` (optional):
+- Hash of canonical JSON of the redacted input arguments object (`input_args_redacted`), after normalization of key ordering.
+- Purpose: detect runner invocation drift independent of template resolution.
+
+`parameters.resolved_inputs_sha256` (required):
+- Hash of canonical JSON of the resolved inputs used for execution after variable interpolation and defaults are applied, with secrets still redacted or represented as references.
+- Purpose: stable basis for `action_key` and for cross-run regression comparisons.
+
+### Command summary, redaction, and command integrity
+
+`command_summary`:
+- MUST be safe and redacted.
+- MUST be derived from a tokenized command representation (executable + argv tokens) produced by the runner, not from ad-hoc string parsing.
+- MUST be produced under a versioned redaction policy that is pinned in run artifacts (policy id and policy hash).
+
+Redaction policy (normative):
+- The runner MUST apply a deterministic redaction policy that includes:
+  - a flag/value model for common secret-bearing arguments (for example: `--token`, `-Password`, `-EncodedCommand`)
+  - regex-based redaction for high-risk token patterns (JWT-like strings, long base64 blobs, long hex keys, connection strings)
+  - deterministic truncation rules (fixed max token length and fixed max summary length)
+
+`extensions.command_sha256`:
+- OPTIONAL integrity hash for the executed command, computed over a redacted canonical command object.
+- MUST NOT be used as part of `action_key` (it is an integrity aid, not identity).
+
+`extensions.command_sha256` (v1) MUST be computed as:
+- Build `command_material_v1_redacted`:
+  - `v`: 1
+  - `executor`: normalized executor name (for example: `powershell`, `cmd`, `bash`)
+  - `executable`: normalized basename (for example: `powershell.exe`)
+  - `argv_redacted`: argv tokens after applying the redaction policy (preserve token order)
+  - OPTIONAL: `cwd`, `stdin_present`, `env_refs` (names only; never values)
+- Compute `sha256(canonical_json(command_material_v1_redacted))` and encode as 64 hex characters.
+
+Invariants:
+- If `parameters.resolved_inputs_sha256` is unchanged and the runner redaction policy is unchanged, `extensions.command_sha256` SHOULD remain stable for the same executor implementation.
+- A change in redaction policy MUST be reflected in `extensions.redaction_policy_id` and/or `extensions.redaction_policy_sha256` so that hash drift is explainable.
+
+### Expected telemetry hints and criteria references
+
+- `criteria_ref` SHOULD be present when a criteria entry is selected for the action.
+- `expected_telemetry_hints` MAY be present as coarse hints, but evaluation MUST prefer criteria evaluation when available.
+
+Population rules:
+- If a criteria entry is selected for the action, the runner MUST populate:
+  - `criteria_ref` (pack id/version + entry id)
+  - `expected_telemetry_hints` as a lossy projection of the selected criteria entry (for example: expected OCSF class_uids and preferred sources).
+- If no criteria entry is selected, the runner MAY populate `expected_telemetry_hints` from a separate telemetry hints pack or from lab instrumentation defaults.
+
+Cleanup:
 - Cleanup is modeled as a staged lifecycle (invoke -> verify) and is always surfaced in reporting.
-- Ground truth SHOULD include resolved target identity (hostname/ip/provider ref) so that the run remains interpretable even if the provider inventory changes later.
-+### 2a) Criteria pack snapshot (`criteria/criteria.jsonl` + `criteria/manifest.json`)
+- Ground truth SHOULD include resolved target identity (hostname, IPs, and/or stable labels) so action intent remains interpretable even if provider inventory changes later.
+
+### 2a) Criteria pack snapshot (`criteria/criteria.jsonl` + `criteria/manifest.json`)
 
 Purpose:
 - Externalizes “expected telemetry” away from Atomic YAML and away from ground truth authoring.
@@ -190,6 +276,39 @@ Key semantics:
 - `metadata.source_event_id` SHOULD be populated when the source provides a meaningful native identifier (example: Windows `EventRecordID`).
 - For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id`.
 
+### 3a) Normalization mapping profile snapshot (`normalized/mapping_profile_snapshot.json`)
+
+Purpose:
+- Records the exact normalization mapping material used to produce the OCSF event store for this run.
+- Enables deterministic replay and CI drift detection (mapping inputs are pinned and hashed).
+
+Validation:
+- Must validate against `mapping_profile_snapshot.schema.json` when present.
+
+Key semantics (normative):
+- The snapshot MUST be immutable within a run bundle and MUST be treated as Tier 0 provenance.
+- The snapshot MUST include stable SHA-256 hashes over the mapping material so that mapping drift is detectable even when filenames are unchanged.
+- The snapshot MUST record upstream origins when derived from external projects (example: Security Lake transformation library custom source mappings).
+
+Minimum fields (normative):
+- `mapping_profile_id`, `mapping_profile_version`, `mapping_profile_sha256`
+- `ocsf_version`
+
+Hashing (normative):
+- `mapping_material_sha256` is SHA-256 over the canonical JSON serialization of the embedded `mapping_material` object (or, if only `mapping_files[]` are provided, over the canonical JSON list of `{path,sha256}` entries).
+- `mapping_profile_sha256` is SHA-256 over a canonical JSON object containing only stable inputs:
+  - `ocsf_version`
+  - `mapping_profile_id`
+  - `mapping_profile_version`
+  - `source_profiles[]` projected to `{source_type, profile, mapping_material_sha256}`
+- The hash basis MUST NOT include run-specific fields (`run_id`, `scenario_id`, `generated_at_utc`) so mapping drift can be detected across runs.
+
+- `source_profiles[]`:
+  - `source_type` (example: `windows-sysmon`)
+  - `mapping_material_sha256`
+  - either `mapping_material` (embedded) OR `mapping_files[]` (references), or both
+
+
 ### 4) Detections (`detections/detections.jsonl`)
 
 Purpose:
@@ -235,7 +354,89 @@ Purpose:
 - Supports failure classification, debugging, and prioritization.
 
 Validation:
-- Must validate against `mapping_coverage.schema.json` if present.
+- Must validate against `mapping_coverage.schema.json` when present.
+
+Key semantics (normative when produced):
+- Coverage MUST reference the exact mapping profile used via `mapping_profile_sha256` (from `normalized/mapping_profile_snapshot.json`).
+- Coverage MUST include totals and per-source-type breakdowns sufficient to detect regressions:
+  - total events observed, mapped, unmapped, and dropped
+  - per `source_type` totals and per `class_uid` totals
+  - missing core field counts for each tracked class (see `055_ocsf_field_tiers.md`)
+
+### 7) Bridge router table snapshot (`bridge/router_table.json`)
+
+Purpose:
+- Freezes the Sigma `logsource` routing behavior used for this run.
+- Enables deterministic compilation of Sigma rules into OCSF-scoped plans.
+
+Validation:
+- Must validate against `bridge_router_table.schema.json` when present.
+
+Key semantics (normative when produced):
+- The router table MUST map Sigma `logsource.category` to one or more OCSF `class_uid` filters.
+- The router table MUST be versioned and hashed (`router_table_sha256`) so routing drift is detectable.
+
+Hashing (normative):
+- `router_table_sha256` is SHA-256 over a canonical JSON object containing only stable inputs:
+  - `ocsf_version`
+  - `router_table_id`
+  - `router_table_version`
+  - `routes[]` (full route objects)
+- The hash basis MUST NOT include `generated_at_utc`.
+
+
+### 8) Bridge mapping pack snapshot (`bridge/mapping_pack_snapshot.json`)
+
+Purpose:
+- Freezes the full Sigma-to-OCSF bridge inputs used for this run (router + field alias map + fallback policy).
+- Serves as the authoritative provenance source for Sigma compilation and evaluation.
+
+Validation:
+- Must validate against `bridge_mapping_pack.schema.json` when present.
+
+Key semantics (normative when produced):
+- The mapping pack MUST reference the router table by id + SHA-256 and SHOULD embed it for single-file reproducibility.
+- The mapping pack MUST define the effective `raw.*` fallback policy (enabled/disabled, constraints) used for compilation.
+
+Hashing (normative):
+- `mapping_pack_sha256` is SHA-256 over a canonical JSON object containing only stable inputs:
+  - `ocsf_version`
+  - `router_table_ref`
+  - `field_aliases`
+  - `fallback_policy`
+  - `backend_defaults` (if present)
+- The hash basis MUST NOT include run-specific fields (`run_id`, `scenario_id`, `generated_at_utc`).
+
+
+### 9) Bridge compiled plans (`bridge/compiled_plans/<rule_id>.plan.json`)
+
+Purpose:
+- Stores the deterministic, backend-specific compilation output for each Sigma rule evaluated in this run.
+- Provides machine-checkable reasons for non-executable rules (routing failure, unmapped fields, unsupported modifiers).
+
+Validation:
+- Each plan file must validate against `bridge_compiled_plan.schema.json` when present.
+
+Key semantics (normative when produced):
+- Plans MUST be keyed by stable `rule_id` and MUST include `rule_sha256` (hash of canonical Sigma rule content) for drift detection.
+- Plans MUST declare `executable: true|false` and, when false, MUST include `non_executable_reason`.
+
+### 10) Bridge coverage (`bridge/coverage.json`)
+
+Purpose:
+- Summarizes bridge success and failure modes for the run:
+  - routed vs unrouted rules
+  - executable vs non-executable rules
+  - fallback usage
+  - top unmapped fields and top unrouted categories
+
+Validation:
+- Must validate against `bridge_coverage.schema.json` when present.
+
+Key semantics (normative when produced):
+- Coverage MUST reference the mapping pack used via `mapping_pack_sha256`.
+- Coverage MUST be sufficient to attribute detection gaps to `bridge_gap` vs `normalization_gap` vs `telemetry_gap`.
+
 
 ## Cross-artifact invariants
 

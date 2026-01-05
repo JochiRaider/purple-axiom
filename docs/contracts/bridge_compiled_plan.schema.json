@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/contracts/bridge_compiled_plan.schema.json",
+  "title": "Purple Axiom Sigma-to-OCSF Bridge Compiled Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "scenario_id",
+    "generated_at_utc",
+    "mapping_pack_ref",
+    "backend",
+    "rule",
+    "compilation"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mapping_pack_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mapping_pack_id",
+        "mapping_pack_version",
+        "mapping_pack_sha256"
+      ],
+      "properties": {
+        "mapping_pack_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_pack_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_pack_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend_id"
+      ],
+      "properties": {
+        "backend_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_version": {
+          "type": "string"
+        },
+        "dialect": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "rule_sha256",
+        "logsource"
+      ],
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "rule_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "logsource": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category"
+          ],
+          "properties": {
+            "category": {
+              "type": "string",
+              "minLength": 1
+            },
+            "product": {
+              "type": "string"
+            },
+            "service": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "compilation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executable",
+        "routed_scope",
+        "field_resolution"
+      ],
+      "properties": {
+        "executable": {
+          "type": "boolean"
+        },
+        "non_executable_reason": {
+          "type": "string",
+          "enum": [
+            "unroutable_logsource",
+            "unmapped_field",
+            "unsupported_modifier",
+            "backend_error",
+            "other"
+          ]
+        },
+        "routed_scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "class_uids"
+          ],
+          "properties": {
+            "class_uids": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "field_resolution": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sigma_field",
+              "resolution"
+            ],
+            "properties": {
+              "sigma_field": {
+                "type": "string",
+                "minLength": 1
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "mapped",
+                  "raw_fallback",
+                  "unmapped"
+                ]
+              },
+              "expr": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "fallback_used": {
+          "type": "boolean",
+          "default": false
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_type"
+      ],
+      "properties": {
+        "plan_type": {
+          "type": "string",
+          "enum": [
+            "sql",
+            "ir"
+          ]
+        },
+        "sql": {
+          "type": "string"
+        },
+        "ir": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "plan_type": {
+                "const": "sql"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "sql"
+            ]
+          },
+          "else": {
+            "required": [
+              "ir"
+            ]
+          }
+        }
+      ]
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

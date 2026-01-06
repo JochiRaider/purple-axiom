@@ -1,3 +1,4 @@
+<!-- docs/spec/015_lab_providers.md -->
 # Lab Providers and Inventory Resolution
 
 ## Purpose

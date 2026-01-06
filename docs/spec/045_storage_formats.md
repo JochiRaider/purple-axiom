@@ -1,3 +1,4 @@
+<!-- docs/spec/045_storage_formats.md -->
 # Storage formats
 
 This document defines how Purple Axiom writes run artifacts to disk, with a focus on long-term, queryable storage. The default target for long-term event storage is Parquet.

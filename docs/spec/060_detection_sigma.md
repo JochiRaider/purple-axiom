@@ -1,3 +1,4 @@
+<!-- docs/spec/060_detection_sigma.md -->
 # Detection Rules (Sigma)
 
 ## Purpose

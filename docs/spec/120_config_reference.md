@@ -1,3 +1,4 @@
+<!-- docs/spec/120_config_reference.md -->
 # Configuration Reference
 
 This document defines the configuration surface for Purple Axiom. Configuration is intended to be:

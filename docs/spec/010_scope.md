@@ -1,3 +1,4 @@
+<!-- docs/spec/010_scope.md -->
 # Scope and Non-Goals
 
 ## In-scope

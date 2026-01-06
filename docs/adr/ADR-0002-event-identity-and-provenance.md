@@ -1,3 +1,4 @@
+<!-- docs/adr/ADR-0002-event-identity-and-provenance.md -->
 # ADR-0002: Event identity and provenance
 
 ## Status

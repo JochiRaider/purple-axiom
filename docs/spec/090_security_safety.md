@@ -1,3 +1,4 @@
+<!-- docs/spec/090_security_safety.md -->
 # Security and safety
 
 Purple Axiom intentionally runs adversary emulation. The project must be safe to run in a lab and must fail closed when controls are violated.

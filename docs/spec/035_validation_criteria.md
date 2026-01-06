@@ -1,3 +1,4 @@
+<!-- docs/spec/035_validation_criteria.md -->
 # Validation Criteria Packs
 
 Purple Axiom externalizes “expected telemetry” and cleanup verification expectations into **criteria packs**.

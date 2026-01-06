@@ -1,3 +1,4 @@
+<!-- docs/adr/ADR-0001-project-naming-and-versioning.md -->
 # ADR-0001: Project naming and versioning
 
 ## Status

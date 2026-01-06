@@ -1,3 +1,4 @@
+<!-- docs/spec/050_normalization_ocsf.md -->
 # Normalization to OCSF
 
 ## Canonical model

@@ -1,3 +1,4 @@
+<!-- docs/spec/040_telemetry_pipeline.md -->
 # Telemetry pipeline
 
 Purple Axiom treats telemetry as an input dataset that must be (a) reproducible and (b) analyzable without vendor lock-in. The telemetry stage is therefore optimized for:

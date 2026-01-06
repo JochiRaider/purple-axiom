@@ -1,3 +1,4 @@
+<!-- docs/contracts/README.md -->
 # Purple Axiom Contracts (JSON Schemas)
 
 Contract version: `0.1.0`

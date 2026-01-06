@@ -1,3 +1,4 @@
+<!-- docs/spec/000_charter.md -->
 # Project Charter: Continuous Purple-Team Range
 
 ## Summary

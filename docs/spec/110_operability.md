@@ -1,3 +1,4 @@
+<!-- docs/spec/110_operability.md -->
 # Operability
 
 Purple Axiom is intended to run continuously, unattended, on local lab infrastructure. Operability requirements focus on:

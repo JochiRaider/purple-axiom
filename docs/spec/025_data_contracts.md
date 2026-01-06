@@ -1,3 +1,4 @@
+<!-- docs/spec/025_data_contracts.md -->
 # Data contracts
 
 This document defines the data contracts for Purple Axiom run artifacts. The goal is to make runs reproducible, diffable, and CI-validatable, while preserving enough provenance to support defensible detection evaluation.

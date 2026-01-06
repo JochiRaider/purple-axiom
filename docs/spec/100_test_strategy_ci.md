@@ -1,3 +1,4 @@
+<!-- docs/spec/100_test_strategy_ci.md -->
 # Test Strategy and CI
 
 ## Unit tests

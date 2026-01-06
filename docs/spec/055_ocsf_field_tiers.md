@@ -1,3 +1,4 @@
+<!-- docs/spec/055_ocsf_field_tiers.md -->
 # OCSF Field Tiers: Core vs Extended
 
 This spec defines how Purple Axiom classifies OCSF fields into **Core** and **Extended** tiers, and how unmapped or source-specific data is retained. The goal is to make the normalizer implementable as an MVP, while ensuring outputs remain useful for detection scoring, investigation workflows, and long-term storage.

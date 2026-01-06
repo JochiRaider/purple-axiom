@@ -13,7 +13,7 @@
   "properties": {
     "contract_version": {
       "type": "string",
-      "const": "0.2.0"
+      "const": "0.1.0"
     },
     "run_id": {
       "type": "string",

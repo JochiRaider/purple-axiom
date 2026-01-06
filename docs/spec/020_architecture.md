@@ -1,3 +1,4 @@
+<!-- docs/spec/020_architecture.md -->
 # Architecture
 
 ## High-level flow

@@ -30,6 +30,28 @@ Policy:
 - For every `windowseventlog` receiver instance, set `raw: true`.
 - Treat the raw XML as the canonical payload for later parsing and determinism.
 
+### Manifest independence and publisher metadata failures
+
+Windows Event Log “rendering” (human-readable message strings) depends on provider metadata and OS state and can fail when publisher metadata cannot be opened or message resources are unavailable. Purple Axiom MUST NOT treat rendered strings as required inputs for parsing, identity, or normalization.
+
+Normative requirements:
+- The normalizer MUST be able to parse required identity fields from raw event XML alone:
+  - provider name (and GUID when present)
+  - channel
+  - EventID
+  - EventRecordID
+  - Computer
+  - TimeCreated
+- The pipeline MUST NOT require the presence of `RenderingInfo` or any formatted `Message` field.
+- A collector MAY attempt to attach rendered message strings for operator convenience, but these strings:
+  - MUST be treated as non-authoritative,
+  - MUST be nullable,
+  - MUST NOT participate in `metadata.event_id` generation or any stable hashing.
+
+Failure classification (telemetry stage):
+- If the receiver cannot open publisher metadata (example: “Failed to open publisher handle”), the event MUST still be captured if raw XML is available.
+- If raw XML is not available for a Windows Event Log record, telemetry validation for that asset MUST fail closed (see §4).
+
 ### Receiver instance model
 
 Create one receiver instance per channel (or per channel group), using stable names:
@@ -112,3 +134,49 @@ Before the telemetry stage is treated as "green", validate each Windows endpoint
    - Emit a large script block and confirm max-length and sidecar policies behave as expected.
 
 The results of these validations should be recorded as part of a run bundle under `logs/telemetry_validation.json`.
+
+## 5) Payload limits and binary handling (Windows Event Log)
+
+### Definitions
+
+- **Raw event XML**: the canonical event payload captured in raw/unrendered mode.
+- **Binary event data**: event payload elements that represent binary blobs (for example `<Binary>` / BinaryEventData in the event schema) and large encoded payload fields embedded in XML. This commonly appears as hex strings (sometimes base64) in the XML view.
+
+### Configuration surface
+
+These limits are Purple Axiom staging policy (not upstream OTel config) and MUST be applied during raw Parquet writing and any optional sidecar extraction:
+
+- `telemetry.payload_limits.max_event_xml_bytes` (default: 1_048_576)
+- `telemetry.payload_limits.max_field_chars` (default: 262_144)
+- `telemetry.payload_limits.max_binary_bytes` (default: 262_144)
+- `telemetry.payload_limits.sidecar.enabled` (default: true)
+- `telemetry.payload_limits.sidecar.dir` (default: `raw/evidence/blobs/wineventlog/`)
+
+### Required behavior
+
+1) Raw event XML promotion rules (analytics tier)
+- The raw Windows Event Log Parquet dataset MUST include:
+  - `event_xml` (string, MAY be truncated)
+  - `event_xml_sha256` (string, SHA-256 of the full UTF-8 byte sequence of the pre-truncation XML payload)
+  - `event_xml_truncated` (bool)
+- If `event_xml` exceeds `max_event_xml_bytes`, the pipeline MUST:
+  - set `event_xml_truncated=true`,
+  - inline only the first `max_event_xml_bytes` bytes (UTF-8) as `event_xml`,
+  - compute and store `event_xml_sha256` from the full pre-truncation payload,
+  - optionally write the full payload to sidecar (see below).
+
+2) Binary extraction rules (optional but mechanically testable)
+- If the raw XML contains a binary-like field value (hex or base64) and its decoded length is <= `max_binary_bytes`, the pipeline MAY:
+  - decode it to bytes,
+  - write the decoded bytes to sidecar,
+  - record `binary_ref` and `binary_sha256` (SHA-256 of decoded bytes) in the raw Parquet row.
+- If the decoded length would exceed `max_binary_bytes`, the pipeline MUST:
+  - NOT write decoded bytes to sidecar,
+  - record a deterministic summary instead (at minimum `binary_present=true` and `binary_oversize=true`).
+
+3) Sidecar blob store (when enabled)
+- When `sidecar.enabled=true`, sidecar payloads MUST be keyed deterministically by `(run_id, metadata.event_id, field_path)`:
+  - `runs/<run_id>/<sidecar.dir>/<metadata.event_id>/<field_path_hash>.<ext>`
+- `field_path_hash` MUST be SHA-256 of the UTF-8 bytes of `field_path` and encoded as lowercase hex.
+- Sidecar writes MUST respect redaction posture:
+  - When `security.redaction.enabled=false`, sidecar payloads MUST follow the same withhold/quarantine rules as other evidence-tier artifacts (see `090_security_safety.md`).

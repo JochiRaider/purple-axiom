@@ -71,8 +71,12 @@ A telemetry stage is only considered "validated" for an asset when a validation 
 
 - raw Windows Event Log events captured in raw/unrendered mode
 - stable parsing of required identity fields (channel, provider, record id)
+- successful parsing when rendered message strings are missing (manifest/publisher metadata failures must not be fatal)
 - no unbounded growth under exporter throttling
 - footprint within configured budgets at target event rate
+- payload limits enforced and observable:
+  - oversized `event_xml` produces `event_xml_truncated=true` plus `event_xml_sha256`
+  - binary fields honor `max_binary_bytes` and produce deterministic `binary_present/binary_oversize` signals
 
 The validator writes a summary to `runs/<run_id>/logs/telemetry_validation.json` and the manifest SHOULD include a pointer to it.
 

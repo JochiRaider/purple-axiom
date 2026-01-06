@@ -176,6 +176,27 @@ To support reproducible diffs and regression tests:
 Notes:
 - Deterministic ordering is an implementation requirement. Parquet itself does not guarantee row order semantics, but stable ordering improves repeatability and debugging.
 
+## Sidecar blob store (payload overflow and binary extraction)
+
+Purple Axiom uses a sidecar blob convention for payloads that are too large or unsuitable to inline into Parquet (oversized XML, decoded binary fields).
+
+When enabled:
+- Sidecar payloads live under Tier 1 evidence:
+  - `runs/<run_id>/raw/evidence/blobs/wineventlog/`
+- Sidecar objects MUST be addressed deterministically by:
+  - `metadata.event_id` (directory)
+  - `field_path_hash` (filename stem, SHA-256 of UTF-8 field path)
+
+Example:
+- `runs/<run_id>/raw/evidence/blobs/wineventlog/<metadata.event_id>/<field_path_hash>.bin`
+- `runs/<run_id>/raw/evidence/blobs/wineventlog/<metadata.event_id>/<field_path_hash>.xml`
+
+Parquet rows MUST carry enough reference metadata to retrieve the sidecar payload:
+- `sidecar_ref` (string, relative path under the run bundle root)
+- `sidecar_sha256` (string)
+
+If redaction is disabled (`security.redaction.enabled=false`), sidecar payload retention MUST follow the same withhold/quarantine rules as other evidence-tier artifacts.
+
 ### Schema evolution
 
 - Additive changes are preferred (new nullable columns).
@@ -259,8 +280,21 @@ Do not convert EVTX to plain text as the primary path. Plain text loses structur
 Option A (preferred when using OTel Windows Event Log receiver):
 - Collect structured events from the receiver.
 - Write them into a raw Windows event Parquet table with stable columns:
-  - channel, provider, event_id, record_id, computer, level, keywords, task, opcode, message (optional), xml (optional), and any structured data fields.
-- Preserve raw XML only if needed. It can be large.
+  - channel, provider, event_id, record_id, computer, level, keywords, task, opcode
+  - rendered_message (optional, nullable; non-authoritative)
+  - event_xml (required, MAY be truncated)
+  - event_xml_sha256 (required)
+  - event_xml_truncated (required)
+  - payload_overflow_ref (optional; relative sidecar path when overflow is written)
+  - payload_overflow_sha256 (optional)
+  - binary_present (optional, default false)
+  - binary_oversize (optional, default false)
+  - binary_ref (optional; relative sidecar path when decoded bytes are written)
+  - binary_sha256 (optional)
+
+Manifest and locale notes:
+- Rendered message strings MAY be missing when provider metadata/manifests are unavailable.
+- This MUST NOT block ingestion or normalization; raw XML remains canonical.
 
 Option B (when you explicitly export EVTX):
 - Export EVTX as evidence-tier.

@@ -104,6 +104,15 @@ Common keys:
 Notes:
 - OTel Collector configuration shape is owned by upstream OTel. Purple Axiom only references the path and hashes it.
 
+Additional Purple Axiom staging policy (applies during raw Parquet writing and optional sidecar extraction):
+- `payload_limits` (optional)
+  - `max_event_xml_bytes` (optional, default: 1048576)
+  - `max_field_chars` (optional, default: 262144)
+  - `max_binary_bytes` (optional, default: 262144)
+  - `sidecar` (optional)
+    - `enabled` (optional, default: true)
+    - `dir` (optional, default: `raw/evidence/blobs/wineventlog/`)
+
 ### `normalization`
 Controls raw-to-OCSF transformation and the normalized store written under `normalized/`.
 

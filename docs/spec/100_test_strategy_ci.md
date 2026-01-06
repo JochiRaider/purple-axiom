@@ -4,6 +4,7 @@
 ## Unit tests
 - Canonicalization tests: RFC 8785 (JCS) vectors + Purple Axiom hash-basis fixtures (byte-for-byte).
 - Redaction tests: policy fixture vectors (argv redaction, regex redaction, truncation determinism, post-checks).
+- Windows Event Log raw XML tests: identity-field extraction without RenderingInfo; binary field detection; payload limit truncation + SHA-256.
 - Redaction posture tests: `security.redaction.enabled=false` MUST produce deterministic placeholders or quarantine-only outputs and MUST label the run as unredacted in metadata.
 - Mapping unit tests: raw input -> expected OCSF output
 - OCSF schema regression tests: representative normalized fixtures MUST validate against the pinned OCSF version used by v0.1.
@@ -14,6 +15,7 @@
 ## Integration tests
 - “Golden run” fixture: deterministic scenario + captured telemetry to validate end-to-end outputs.
 - “Scenario suite” fixture: a small, representative set of techniques used as a regression pack.
+- Telemetry fixture: raw Windows event XML corpus including missing rendered messages and at least one event containing binary-like payload data.
 - Baseline comparison: compare current run outputs to a pinned baseline run bundle.
 - OCSF migration fixture: when bumping the pinned `ocsf_version`, CI MUST re-normalize a fixed raw telemetry fixture set and compare to reviewed “golden” normalized outputs.
 

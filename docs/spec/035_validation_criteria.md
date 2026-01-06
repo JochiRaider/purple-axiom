@@ -61,9 +61,48 @@ Deterministic selection:
 
 1. Filter entries that match (engine, technique_id, engine_test_id).
 2. Among matches, prefer entries with the greatest selector specificity (most selector keys present and satisfied).
-3. Break ties by `entry_id` lexical sort.
+3. Break ties by `entry_id` lexical sort (normative order defined below).
 
 If no entry matches, criteria evaluation emits `criteria_unavailable` for the action.
+
+### Tie-breaking order for `entry_id` (normative)
+
+When multiple entries remain tied after steps (1) and (2), the evaluator MUST select the entry
+with the smallest `entry_id` under the following **bytewise lexical ordering**:
+
+1. Let `B(entry_id)` be the **UTF-8** encoding of the JSON string value of `entry_id`:
+   - UTF-8 only (no BOM).
+   - **Case-sensitive** (no case folding).
+   - **No locale** or collation rules.
+   - **No Unicode normalization** is applied (no NFC/NFD/NFKC/NFKD). The exact codepoint
+     sequence in the JSON string is what is compared.
+2. Compare byte sequences `B(a)` and `B(b)` lexicographically by **unsigned byte value**
+   (`0x00`..`0xFF`), left to right.
+3. If one byte sequence is a strict prefix of the other, the shorter sequence sorts first.
+
+Rationale: this yields cross-language deterministic ordering without locale dependence.
+
+Pack authoring guidance (non-normative):
+- `entry_id` SHOULD be restricted to ASCII (for example `[A-Za-z0-9._/-]`) to avoid visually
+  confusable identifiers and normalization surprises.
+
+### Required conformance tests (tie-breaking)
+
+CI MUST include at least the following fixture cases for selection determinism:
+
+1. **Case sensitivity**
+   - Two criteria entries are identical in (engine, technique_id, engine_test_id) and selector specificity,
+     differing only in `entry_id`:
+     - `entry_id = "A"`
+     - `entry_id = "a"`
+   - Expected selection: `"A"` (because `0x41 < 0x61` in UTF-8).
+
+2. **No Unicode normalization**
+   - Two criteria entries are identical in (engine, technique_id, engine_test_id) and selector specificity,
+     differing only in `entry_id`:
+     - `entry_id = "e\u0301"` (LATIN SMALL LETTER E + COMBINING ACUTE ACCENT)
+     - `entry_id = "\u00e9"` (LATIN SMALL LETTER E WITH ACUTE)
+   - Expected selection: `"e\u0301"` (because UTF-8 bytes begin with `0x65 ...` vs `0xC3 ...`).
 
 ## Criteria entry model
 

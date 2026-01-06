@@ -95,6 +95,8 @@ Recommended manifest additions (normative in schema when implemented):
 - `lab.provider` (string): `manual | ludus | terraform | other`
 - `lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot
 - `lab.assets` (array): resolved assets used by the run (or pointer to `logs/lab_inventory_snapshot.json`)
+- `normalization.ocsf_version` (string): pinned OCSF version used by the normalizer for this run.
+  - When `normalized/mapping_profile_snapshot.json` is present, `normalization.ocsf_version` SHOULD match `mapping_profile_snapshot.ocsf_version`.
 
 ### 2) Ground truth timeline (`ground_truth.jsonl`)
 

@@ -10,6 +10,39 @@
 - Record the pinned OCSF version and enabled profiles/extensions in run provenance (manifest + normalized event metadata).
 - Provide migration notes when updating the pinned OCSF version (field moves, enum changes, class reclassification).
 
+## Pinned OCSF version (v0.1)
+
+Purple Axiom v0.1 MUST pin the OCSF schema version to:
+
+- `ocsf_version = "1.3.0"`
+
+Conformance requirements (v0.1):
+- Every run MUST record the effective `ocsf_version` used for normalization in run provenance.
+  - Minimum: `normalized/mapping_profile_snapshot.json.ocsf_version`.
+  - RECOMMENDED: also record in `manifest.json` (see `025_data_contracts.md` recommended manifest additions).
+- When Sigma-to-OCSF Bridge artifacts are present, the bridge mapping pack MUST declare the same `ocsf_version`
+  as the normalizer output for that run. A mismatch MUST be treated as an incompatible configuration (fail closed).
+
+## OCSF schema update and migration policy
+
+Cadence (project policy):
+- The pinned OCSF version SHOULD be reviewed quarterly.
+- The pinned OCSF version MUST NOT change silently. A version bump MUST be an explicit, reviewed change
+  (PR that updates specs, fixtures, and CI gates).
+
+Required steps for changing the pinned OCSF version (normative):
+1. Update the pinned `ocsf_version` in:
+   - `docs/spec/050_normalization_ocsf.md` (this section)
+   - `docs/spec/120_config_reference.md` (examples and any stated defaults)
+   - `README.md` (examples)
+2. Update normalization mapping material so produced events remain valid against the new pinned version:
+   - Update mapping profile(s) and refresh `normalized/mapping_profile_snapshot.json` semantics as needed.
+3. Update bridge mapping packs as needed:
+   - Router tables and field aliases MUST be evaluated for field moves/renames and enum changes.
+4. Migration testing MUST be added/updated (see `docs/spec/100_test_strategy_ci.md`):
+   - A fixed raw telemetry fixture set MUST be re-normalized under the new pinned version.
+   - Expected outputs MUST be captured as “golden” artifacts, with diffs reviewed.
+
 ## Mapping strategy (industry-aligned)
 - Preserve source fidelity:
   - retain original/raw payload (or a redacted-safe representation) for audit/forensics

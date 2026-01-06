@@ -111,6 +111,9 @@ Common keys:
 - `ocsf_version` (required): pinned OCSF version string (example: `1.3.0`)
 - `mapping_profiles` (optional): list of profile identifiers (example: `windows`, `linux`, `dns`)
 - `source_type_mapping` (optional): map of raw source identifiers to `metadata.source_type`
+
+Notes (v0.1):
+- Purple Axiom v0.1 pins `ocsf_version = "1.3.0"`. OCSF schema update/migration policy is defined in `050_normalization_ocsf.md`.
 - `strict_mode` (default: true)
   - When true, normalization failures produce a run-level failure unless explicitly allowlisted.
 - `raw_preservation` (optional)

@@ -134,7 +134,7 @@ telemetry:
     config_path: configs/otel-collector.yaml
 
 normalization:
-  ocsf_version: "1.x.x"
+  ocsf_version: "1.3.0"
   mapping_profiles: ["default"]
 
 detection:

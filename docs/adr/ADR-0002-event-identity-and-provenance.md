@@ -78,17 +78,21 @@ Use only when neither Tier 1 nor Tier 2 inputs exist. Identity is a fingerprint 
 Tier 3 MUST record `metadata.identity_tier = 3` for auditability.
 
 ### Canonicalization rules
-To ensure cross-implementation determinism, implementations SHOULD use JSON Canonicalization Scheme (RFC 8785, JCS) for serializing identity bases prior to hashing.
+To ensure cross-implementation determinism, implementations MUST use
+JSON Canonicalization Scheme (RFC 8785, JCS) for serializing identity bases prior to hashing.
 
-If JCS is not used, `identity_basis_canonical` MUST at least be serialized using canonical JSON:
- 
-- UTF-8 encoding
-- Sorted keys (lexicographic)
-- No insignificant whitespace
-- Numbers rendered in base-10 without leading zeros
-- Strings normalized:
-  - trim surrounding whitespace
-  - lowercase for host/channel/provider identifiers
+Normative definition:
+- `identity_basis_canonical = canonical_json_bytes(identity_basis)` where `canonical_json_bytes`
+  is RFC 8785 output (UTF-8; deterministic property order; minimal form; no BOM; no trailing newline).
+
+Fallback policy:
+- Implementations MUST vendor or invoke a known-good RFC 8785 implementation.
+- Substituting a non-JCS “canonical JSON” serializer is not permitted unless it passes the
+  JCS fixture suite byte-for-byte.
+
+Pre-hash normalization (Tier 1 Windows, optional but deterministic if used):
+- If applied, restrict to ASCII-safe transforms only:
+  - `origin.host`, `origin.channel`, `origin.provider`: trim ASCII whitespace; lowercase ASCII.
 
 ### Timestamp handling
 Store two timestamps when available:

@@ -42,22 +42,23 @@ Each executed action MUST include two identifiers:
 - `action_id` (unique within a run): used to correlate all per-run artifacts.
 - `action_key` (stable across runs): used as the deterministic join key for regression comparisons.
 
-`action_key` MUST be computed from a canonical JSON object with the following minimum fields:
+`action_key` MUST be computed from `action_key_basis_v1` (see `025_data_contracts.md`)
+canonicalized using `canonical_json_bytes(...)` as defined by RFC 8785 (JCS).
 
 - `engine` (atomic|caldera|custom)
 - `technique_id`
 - `engine_test_id` (Atomic test GUID / Caldera ability id / equivalent canonical id)
-- `target_asset_id`
-- `resolved_inputs_sha256` (hash of resolved inputs; not the raw inputs)
+- `parameters.resolved_inputs_sha256` (hash of resolved inputs; not the raw inputs)
 
 Then:
 
-- `action_key = sha256(canonical_json_bytes)`
+- `action_key = sha256(canonical_json_bytes(action_key_basis_v1))`
 
 Notes:
 
 - `action_key` MUST NOT incorporate `run_id` or timestamps.
 - `action_key` SHOULD NOT embed secrets; use hashes for resolved inputs and store redacted inputs separately.
+- Canonicalization MUST follow RFC 8785; do not use native JSON serializers.
 
 ## Criteria linkage (expected telemetry)
 
@@ -91,6 +92,13 @@ Expected telemetry is externalized into criteria packs (see `035_validation_crit
 - action_type (caldera_ability | atomic_test | custom)
 - technique_id (ATT&CK)
 - command_summary (redacted-safe summary)
+  - When `security.redaction.enabled: true`, `command_summary` MUST be produced under the effective redaction policy and MUST be redacted-safe (see `docs/adr/ADR-0003-redaction-policy.md`).
+  - When `security.redaction.enabled: false`, `command_summary` in the standard ground truth artifact MUST be either:
+    - omitted, or
+    - set to a deterministic placeholder (example: `<WITHHELD:REDACTION_DISABLED>`).
+  - Unredacted command summaries MAY be stored only in a quarantined unredacted evidence location when explicitly enabled by config.
+  - MUST be deterministic given the same tokenized command input and the same effective policy.
+  - SHOULD be accompanied by policy provenance in `extensions` (policy id/version/sha256) so drift is explainable.
 - parameters (seed)
   - input_args_redacted (optional)
   - input_args_sha256 (optional)
@@ -140,6 +148,13 @@ Ground truth is emitted as JSONL, one action per line.
     "ip": "192.0.2.10"
   },
   "command_summary": "powershell.exe -NoProfile ... (redacted)",
+  "extensions": {
+    "redaction": {
+      "policy_id": "pa-redaction",
+      "policy_version": "1.0.0",
+      "policy_sha256": "sha256hex..."
+    }
+  },
   "parameters": {
     "input_args_redacted": {
       "command": "whoami"

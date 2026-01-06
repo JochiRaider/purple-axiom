@@ -135,9 +135,33 @@ And SHOULD include a stable target selector when available (to distinguish mater
 - `resolved_target.role`
 - `resolved_target.labels` (sorted)
 
-Canonical JSON:
-- Implementations SHOULD use JSON Canonicalization Scheme (RFC 8785, JCS) for cross-language determinism.
-- If JCS is not used, implementations MUST at least enforce: UTF-8 encoding, lexicographic key sorting, and no insignificant whitespace.
+Canonical JSON (normative):
+- Any occurrence of `canonical_json(...)` in this spec MUST mean:
+  - `canonical_json_bytes(value)` = the exact UTF-8 byte sequence produced by
+    JSON Canonicalization Scheme (RFC 8785, JCS).
+- Inputs to `canonical_json_bytes` MUST satisfy the RFC 8785 constraints (I-JSON subset),
+  including (non-exhaustive): finite numbers only (no NaN/Infinity), unique object member names,
+  and valid Unicode strings.
+- Implementations MUST NOT substitute “native/default JSON serialization” for JCS.
+- Hashing primitive:
+  - `sha256_hex = lower_hex( sha256( canonical_json_bytes(value) ) )`
+  - No BOM, no trailing newline; hash is over bytes only.
+
+Failure policy (normative):
+- If a value cannot be canonicalized per RFC 8785, the pipeline MUST fail closed for any
+  artifact depending on the affected hash.
+
+Fallback when a full JCS library is unavailable:
+- Implementations MUST vendor or invoke a known-good RFC 8785 implementation (preferred).
+- For **PA JCS Integer Profile** hash bases only, an implementation MAY use a simplified encoder
+  that is provably identical to JCS for this restricted data model:
+  - Numbers MUST be signed integers within IEEE-754 “safe integer” range
+    (|n| ≤ 9,007,199,254,740,991).
+  - No floating point numbers are permitted.
+  - Object keys MUST be strings, unique, and sorted lexicographically by Unicode scalar value.
+  - Strings MUST be emitted using standard JSON escaping rules with minimal escaping.
+  - No insignificant whitespace; UTF-8; no BOM; no trailing newline.
+- Any fallback encoder MUST pass the JCS fixture tests under `tests/fixtures/jcs/` byte-for-byte.
 
 ### Inputs and reproducible hashing
 
@@ -160,10 +184,18 @@ Canonical JSON:
 - MUST be produced under a versioned redaction policy that is pinned in run artifacts (policy id and policy hash).
 
 Redaction policy (normative):
-- The runner MUST apply a deterministic redaction policy that includes:
+- The runner MUST support a deterministic redaction policy as specified in `docs/adr/ADR-0003-redaction-policy.md`.
+- The runner MUST apply the effective policy when `security.redaction.enabled: true`.
+- When `security.redaction.enabled: false`, the runner MUST NOT emit unredacted secrets into standard long-term artifacts. It MUST either withhold sensitive fields (deterministic placeholders) or write them only to a quarantined unredacted evidence location when explicitly enabled by config.
+- The applied posture (`enabled` vs `disabled`) MUST be recorded in run metadata so downstream tooling does not assume redacted-safe content.
+
+When redaction is enabled, the policy MUST include:
   - a flag/value model for common secret-bearing arguments (for example: `--token`, `-Password`, `-EncodedCommand`)
   - regex-based redaction for high-risk token patterns (JWT-like strings, long base64 blobs, long hex keys, connection strings)
   - deterministic truncation rules (fixed max token length and fixed max summary length)
+  - The normative policy definition (including “redacted-safe”, fail-closed behavior, limits, and required test vectors) is defined in:
+    - `docs/adr/ADR-0003-redaction-policy.md`
+  - Runs SHOULD snapshot the effective policy into the run bundle (recommended: `runs/<run_id>/security/redaction_policy_snapshot.json`) and record its sha256 in run provenance.
 
 `extensions.command_sha256`:
 - OPTIONAL integrity hash for the executed command, computed over a redacted canonical command object.

@@ -1,3 +1,4 @@
+<!-- README.md -->
 # Purple Axiom
 
 **Ground-truth detection engineering through continuous adversary emulation**

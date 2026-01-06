@@ -59,7 +59,10 @@ Purpose:
 
 Runner evidence notes:
 - Executor transcripts (stdout/stderr) and executor metadata are treated as Tier 1 evidence, not Tier 0 logs.
-- Transcripts MUST follow the same redaction policy as other evidence artifacts (see `090_security_safety.md`).
+- Redaction is optional per run (see `090_security_safety.md` and `docs/adr/ADR-0003-redaction-policy.md`):
+  - When `security.redaction.enabled: true`, transcripts MUST be redacted-safe prior to promotion into standard long-term artifacts.
+  - When `security.redaction.enabled: false`, transcripts MUST be withheld from standard long-term artifacts unless explicitly written to a quarantined unredacted location.
+- If transcripts cannot be made redacted-safe (fail-closed), they MUST be withheld and replaced with deterministic placeholders (policy provenance must still be recorded).
 - Recommended per-action layout:
   - `runner/actions/<action_id>/stdout.txt`
   - `runner/actions/<action_id>/stderr.txt`
@@ -215,6 +218,11 @@ Permissive payload:
 You are split on EVTX. The recommended approach is to treat EVTX as evidence-tier optional, and Parquet as analytics-tier required.
 
 ### Recommendation
+
+Redaction interaction (normative):
+- EVTX is a binary evidence format and is not redacted in-place by the baseline policy.
+- Therefore, EVTX MUST NOT be retained by default. Retention MUST require explicit operator intent (config-driven) and MUST be treated as sensitive evidence.
+- When EVTX is retained, the run report and manifest SHOULD clearly indicate that an unredacted binary evidence artifact exists and where it is stored.
 
 1. Always store a structured representation of Windows Event Logs as Parquet for consistency and analytics.
 2. Optionally retain EVTX in `raw/evidence/` when you need:

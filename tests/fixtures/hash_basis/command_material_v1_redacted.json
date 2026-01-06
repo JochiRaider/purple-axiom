@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "executor": "powershell",
+  "executable": "powershell.exe",
+  "argv_redacted": ["-NoProfile", "-EncodedCommand", "<redacted_base64>"],
+  "cwd": "C:\\Windows\\System32",
+  "stdin_present": false,
+  "env_refs": ["PATH", "TEMP"]
+}

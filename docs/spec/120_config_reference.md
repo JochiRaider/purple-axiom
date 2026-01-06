@@ -204,6 +204,9 @@ Common keys:
 - `redaction` (optional)
   - `enabled` (default: true)
   - `policy_ref` (optional): reference to a redaction policy file
+  - Notes:
+    - `reporting.redaction` controls report rendering. It MUST NOT be interpreted as the pipeline redaction enablement switch.
+    - Pipeline redaction enablement is controlled by `security.redaction.enabled`.
 
 ### `operability` (optional)
 Controls operational safety and runtime behavior (see also `110_operability.md`).
@@ -222,6 +225,21 @@ Common keys:
 Controls security boundaries and hardening (see also `090_security_safety.md`).
 
 Common keys:
+- `redaction` (optional)
+  - `enabled` (default: true)
+    - When `true`, the pipeline applies the effective redaction policy and promotes only redacted-safe artifacts into standard long-term locations.
+    - When `false`, the run is explicitly unredacted and the pipeline MUST withhold sensitive evidence from standard long-term locations unless quarantined.
+  - `policy_ref` (optional): reference to a redaction policy file (format defined in `docs/adr/ADR-0003-redaction-policy.md`)
+  - `limits` (optional)
+    - `max_token_chars` (optional)
+    - `max_summary_chars` (optional)
+    - `max_field_chars` (optional)
+  - `disabled_behavior` (optional, default: `withhold_from_long_term`): `withhold_from_long_term | quarantine_unredacted`
+    - `withhold_from_long_term`: write deterministic placeholders in standard artifact locations
+    - `quarantine_unredacted`: write unredacted evidence only to a quarantined location excluded from default packaging/export
+  - `allow_unredacted_evidence_storage` (optional, default: false)
+    - When `true` and `disabled_behavior: quarantine_unredacted`, the pipeline MAY persist unredacted evidence to the quarantine path.
+  - `unredacted_dir` (optional, default: `unredacted/`): relative directory under the run bundle root for quarantined evidence
 - `secrets`
   - `provider` (optional): `env | file | keychain | custom`
   - `refs` (optional): map of named secret refs

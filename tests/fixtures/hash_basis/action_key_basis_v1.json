@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "engine": "atomic",
+  "technique_id": "T1059.001",
+  "engine_test_id": "123e4567-e89b-12d3-a456-426614174000",
+  "parameters": {
+    "resolved_inputs_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+}

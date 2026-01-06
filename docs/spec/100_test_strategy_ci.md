@@ -2,6 +2,9 @@
 # Test Strategy and CI
 
 ## Unit tests
+- Canonicalization tests: RFC 8785 (JCS) vectors + Purple Axiom hash-basis fixtures (byte-for-byte).
+- Redaction tests: policy fixture vectors (argv redaction, regex redaction, truncation determinism, post-checks).
+- Redaction posture tests: `security.redaction.enabled=false` MUST produce deterministic placeholders or quarantine-only outputs and MUST label the run as unredacted in metadata.
 - Mapping unit tests: raw input -> expected OCSF output
 - Rule compilation tests: Sigma -> evaluation plan
 - Lab provider parser tests: provider inventory export -> canonical `lab.assets` list

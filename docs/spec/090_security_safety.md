@@ -64,7 +64,21 @@ The pipeline must support a configurable redaction policy for:
 - PII fields commonly present in endpoint telemetry
 - large payloads (example: script blocks) when policies require truncation
 
-Redaction must be logged and surfaced in reports; hashes should be retained for integrity/dedupe when fields are truncated.
+Normative definition:
+- The redaction policy format and “redacted-safe” definition are specified in `docs/adr/ADR-0003-redaction-policy.md`.
+
+Enablement (option, per run):
+- Redaction application MUST be controlled by config `security.redaction.enabled`.
+  - When `true`, artifacts promoted to long-term storage MUST be redacted-safe.
+  - When `false`, the run MUST be explicitly labeled as unredacted in the run manifest and reports.
+
+Disabled semantics (required when `security.redaction.enabled: false`):
+- The pipeline MUST NOT silently store unredacted evidence in the standard long-term artifact locations.
+- The pipeline MUST choose one of the following deterministic behaviors (config-controlled):
+  - Withhold-from-long-term (default): write deterministic placeholders in standard locations.
+  - Quarantine-unredacted: write unredacted evidence only to a quarantined location that is excluded from default packaging/export.
+
+Redaction MUST be logged and surfaced in reports; hashes SHOULD be retained for integrity/dedupe when fields are truncated or withheld.
 
 Runner transcripts:
 - Executor stdout/stderr transcripts captured under `runner/` are evidence-tier artifacts and must be subject to the same redaction policy as raw telemetry.

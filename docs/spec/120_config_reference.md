@@ -93,7 +93,13 @@ Common keys:
   - `enabled` (default: true)
   - `config_path` (required when enabled): path to OTel Collector config file
   - `channels` (optional): list of sources/channels to enable (implementation-defined)
-  - `bookmarks` (optional): reset or resume policy (implementation-defined)
+  - `bookmarks` (optional): resume policy for sources that support cursoring
+    - `mode` (default: `auto`): `auto | resume | reset`
+      - `auto`: resume if a checkpoint exists, otherwise reset
+      - `resume`: require checkpoint; if missing/corrupt, fall back to reset and mark checkpoint loss
+      - `reset`: ignore checkpoints and start at run window start (plus skew tolerance)
+    - `checkpoint_dir` (optional): defaults to `runs/<run_id>/logs/telemetry_checkpoints/`
+    - `flush_interval_seconds` (default: 5)
 - `sources` (optional)
   - Additional non-OTel sources (example: `osquery`, `pcap`, `netflow`)
   - Each source should include:
@@ -120,6 +126,11 @@ Common keys:
 - `ocsf_version` (required): pinned OCSF version string (example: `1.3.0`)
 - `mapping_profiles` (optional): list of profile identifiers (example: `windows`, `linux`, `dns`)
 - `source_type_mapping` (optional): map of raw source identifiers to `metadata.source_type`
+- `dedupe` (optional)
+  - `enabled` (default: true)
+  - `scope` (default: `per_run`): `per_run` (v0.1 only)
+  - `index_dir` (optional): defaults to `runs/<run_id>/logs/dedupe_index/`
+  - `conflict_policy` (default: `warn`): `warn | fail_closed`
 
 Notes (v0.1):
 - Purple Axiom v0.1 pins `ocsf_version = "1.3.0"`. OCSF schema update/migration policy is defined in `050_normalization_ocsf.md`.
@@ -143,6 +154,15 @@ Common keys:
 - `criteria_pack` (optional)
   - `pack_id` (required when enabled): identifier for the criteria pack
   - `pack_version` (optional, recommended): pinned version for reproducibility
+    - Determinism requirement:
+      - For CI/regression runs, `pack_version` SHOULD be set explicitly.
+    - If `pack_version` is omitted:
+      - The implementation MUST resolve a version deterministically using SemVer ordering:
+        1. Enumerate available `<pack_id>/<pack_version>/` directories across `paths`.
+        2. Parse candidate versions as SemVer.
+        3. Select the highest SemVer version.
+        4. If no candidates parse as SemVer, fail closed.
+      - The resolved `pack_version` MUST be recorded in run provenance (manifest + report).
   - `paths` (optional): one or more search paths (directories) that contain criteria packs
   - `entry_selectors` (optional): constraints to pick the most specific entry when multiple match
     - `os`

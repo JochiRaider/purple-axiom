@@ -96,6 +96,31 @@ The agent configuration SHOULD include:
 
 Purple Axiom does not prescribe exact values. Instead, the repo includes a validation harness (see below) that measures events/sec, CPU, and memory for your lab scale.
 
+### Checkpointing and replay semantics (required)
+
+At-least-once delivery implies duplicates and replay. This is expected and MUST be handled without breaking determinism goals.
+
+#### Definitions
+
+- **Collector checkpoint**: persisted receiver cursor/state used to resume ingestion after restart (example: Windows `EventRecordID`-based bookmarks).
+- **Checkpoint loss**: missing, corrupt, or reset checkpoint state that causes the collector to re-emit previously exported events.
+
+#### Required behavior
+
+1) Durable checkpoint persistence (collector)
+- For sources that support stable cursors (example: Windows Event Log), the collector configuration MUST enable durable state storage for checkpoints.
+- The checkpoint storage directory MUST be explicitly configured to a stable location on durable disk (not an ephemeral temp directory).
+- If the collector is deployed in a container, the checkpoint directory MUST be mounted to a persistent volume.
+
+2) Loss and replay handling (pipeline)
+- If a collector checkpoint is lost, the collector MAY replay historical events.
+- The pipeline MUST accept replays and MUST rely on downstream dedupe keyed by `metadata.event_id` to prevent duplicate normalized events.
+- The pipeline MUST record checkpoint-loss and replay indicators in run-scoped logs (see §4).
+
+3) Restart policy (operator-visible)
+- Restarting collectors and gateways MUST be treated as a normal operational action.
+- A restart MUST NOT require manual cleanup of raw stores or normalized stores to recover correctness.
+
 ## 3) Injecting `run_id` / `scenario_id`
 
 There are two supported strategies.
@@ -126,6 +151,9 @@ Before the telemetry stage is treated as "green", validate each Windows endpoint
    - Verify they arrive in the raw store with `raw: true` payloads intact.
 2. **Determinism**
    - Restart the collector mid-stream; confirm no schema changes and that downstream `event_id` generation remains stable.
+   - Simulate checkpoint loss (delete or move the collector checkpoint directory); restart the collector; confirm that:
+     - events may replay into the raw store, and
+     - downstream dedupe prevents duplicate normalized events (uniqueness by `metadata.event_id` is preserved).
 3. **Backpressure**
    - Throttle the exporter/disk; confirm bounded queue behavior (drops are explicit and counted).
 4. **Footprint**
@@ -134,6 +162,16 @@ Before the telemetry stage is treated as "green", validate each Windows endpoint
    - Emit a large script block and confirm max-length and sidecar policies behave as expected.
 
 The results of these validations should be recorded as part of a run bundle under `logs/telemetry_validation.json`.
+
+Minimum required fields for `logs/telemetry_validation.json`:
+- `asset_id` (string)
+- `collector_restart_test` (object)
+  - `passed` (bool)
+- `checkpoint_loss_test` (object)
+  - `passed` (bool)
+  - `checkpoint_loss_observed` (bool)
+  - `replay_observed` (bool)
+  - `dedupe_preserved_uniqueness` (bool)
 
 ## 5) Payload limits and binary handling (Windows Event Log)
 

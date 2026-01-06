@@ -409,6 +409,9 @@ Validation:
 
 Key semantics (normative when produced):
 - The router table MUST map Sigma `logsource.category` to one or more OCSF `class_uid` filters.
+- When a `logsource.category` maps to multiple `class_uid` values, the mapping represents a **union scope** for evaluation (boolean OR / `IN (...)` semantics), not an ambiguity (see `065_sigma_to_ocsf_bridge.md`).
+- For determinism and stable hashing/diffs:
+  - multi-class `class_uid` sets MUST be emitted in ascending numeric order.
 - The router table MUST be versioned and hashed (`router_table_sha256`) so routing drift is detectable.
 
 Hashing (normative):

@@ -9,16 +9,31 @@
 - Mapping unit tests: raw input -> expected OCSF output
 - OCSF schema regression tests: representative normalized fixtures MUST validate against the pinned OCSF version used by v0.1.
 - Rule compilation tests: Sigma -> evaluation plan
+- Bridge router multi-class routing tests:
+  - Given a `logsource.category` routed to multiple `class_uid` values, compilation MUST scope evaluation to the union (`IN (...)` / OR semantics).
+  - The routed `class_uid` set MUST be emitted in ascending numeric order (deterministic output).
 - Lab provider parser tests: provider inventory export -> canonical `lab.assets` list
 - Scenario selection tests: target selectors -> resolved target set (using a fixed inventory snapshot fixture)
-
+- Criteria pack versioning tests:
+  - `criteria/packs/<pack_id>/<pack_version>/manifest.json.pack_version` MUST match the directory `pack_version`.
+  - If multiple search paths contain the same `(pack_id, pack_version)`, CI MUST fail unless the pack snapshots are byte-identical
+    (manifest + criteria content hashes match).
+- Criteria drift detection tests:
+  - Given a criteria pack manifest upstream `(engine, source_ref, source_tree_sha256)` and a runner provenance that differs,
+    the evaluator MUST set criteria drift to detected and MUST mark affected actions `status=skipped` with a deterministic drift reason field.
+     
 ## Integration tests
 - “Golden run” fixture: deterministic scenario + captured telemetry to validate end-to-end outputs.
 - “Scenario suite” fixture: a small, representative set of techniques used as a regression pack.
 - Telemetry fixture: raw Windows event XML corpus including missing rendered messages and at least one event containing binary-like payload data.
 - Baseline comparison: compare current run outputs to a pinned baseline run bundle.
 - OCSF migration fixture: when bumping the pinned `ocsf_version`, CI MUST re-normalize a fixed raw telemetry fixture set and compare to reviewed “golden” normalized outputs.
-
+- Checkpoint-loss replay fixture:
+  - Run normalization on a fixed raw telemetry fixture.
+  - Delete/move `runs/<run_id>/logs/telemetry_checkpoints/` and restart normalization over the same inputs.
+  - Assert: (1) normalized store remains unique by `metadata.event_id`, (2) `dedupe_duplicates_dropped_total > 0`,
+    and (3) normalized outputs are deterministic relative to the baseline fixture.
+    
 ## CI gates (seed)
 - Schema validation of produced OCSF events
 - Pinned-version consistency checks (fail closed):

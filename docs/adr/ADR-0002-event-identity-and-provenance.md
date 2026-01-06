@@ -107,12 +107,67 @@ Rules:
 ### Deduplication and replay
 Normalization and storage MUST be idempotent w.r.t. `metadata.event_id`.
 
-- If multiple events with the same `metadata.event_id` appear in a run, the normalizer MUST treat later instances as duplicates.
-- The normalized event store MUST contain at most one canonical row per `metadata.event_id`.
-- The pipeline SHOULD emit duplicate counters for observability and troubleshooting (for example: `duplicates_dropped_total` per source_type/channel).
+At-least-once delivery is expected: duplicates and replays can occur due to collector retries,
+transport retries, restarts, or operator-initiated reprocessing.
+
+Downstream deduplication is required. For this reason, `metadata.event_id` MUST be stable across
+replays, and dedupe MUST be based on `metadata.event_id`.
+
+### Deduplication scope and window (normative)
+
+- **Scope:** Deduplication MUST be enforced for the normalized event store within a single run bundle
+  (example: `runs/<run_id>/normalized/ocsf_events/`).
+- **Non-goal:** The project does not require `metadata.event_id` to be globally unique across run
+  bundles. Replays across different runs MAY intentionally produce the same `metadata.event_id`.
+- **Window:** The deduplication window MUST be the full run window (unbounded within the run), i.e.,
+  dedupe MUST consider all previously-emitted normalized events for the run, not only “recent” events.
+
+### Dedupe index persistence (normative)
+
+To make at-least-once delivery compatible with deterministic outputs:
+
+- The normalizer MUST maintain a **durable dedupe index** for the run, keyed by `metadata.event_id`.
+- The dedupe index MUST be persisted to disk inside the run bundle under `runs/<run_id>/logs/`
+  (example: `runs/<run_id>/logs/dedupe_index/ocsf_events.*`).
+- The dedupe index MUST survive process restarts for the same `run_id`.
+- If the dedupe index is missing/corrupt on restart, but the normalized store already contains rows,
+  the normalizer MUST rebuild the dedupe index by scanning `metadata.event_id` from the existing
+  normalized store before appending any new rows.
+
+### Non-identical duplicates (normative)
+
+If two instances share the same `metadata.event_id` but are not byte-equivalent after removing
+volatile pipeline fields:
+
+- The normalizer MUST treat this as a **dedupe conflict** (a data-quality signal).
+- The normalizer MUST select the canonical instance deterministically by choosing the instance with
+  the lowest `sha256_hex(canonical_json(instance_without_volatile_fields))`.
+- The normalizer MUST increment a `dedupe_conflicts_total` counter and record details in
+  `runs/<run_id>/logs/` (without writing sensitive payloads into long-term artifacts).
 
 ### Collector restarts and checkpoints (Windows)
 Windows collectors SHOULD persist read state using bookmarks/checkpoints to minimize duplicates on restart. Duplicates can still occur; identity and dedupe rules above remain authoritative.
+
+### Checkpoint persistence (normative)
+
+To reduce replay volume while preserving at-least-once correctness:
+
+- The telemetry pipeline MUST persist **per-stream checkpoints** for sources that support a stable
+  upstream cursor (example: Windows `EventRecordID`).
+- Checkpoints MUST be stored inside the run bundle under `runs/<run_id>/logs/telemetry_checkpoints/`.
+  The default layout SHOULD be:
+  - `runs/<run_id>/logs/telemetry_checkpoints/<source_type>/<asset_id>/<stream_id>.json`
+- Checkpoint updates MUST be atomic (write temp file, fsync, rename).
+- The pipeline MUST flush checkpoints at least once every `N` events or `T` seconds (configurable).
+
+### Checkpoint loss / corruption (normative)
+
+If a checkpoint is missing or corrupt at restart:
+
+- The pipeline MUST fall back to replaying from the start of the run window (subject to configured
+  clock-skew tolerance), and MUST rely on the dedupe index to prevent duplicates in normalized output.
+- The pipeline MUST record that checkpoint loss occurred in run-scoped logs and summary metrics
+  (example: `telemetry_checkpoint_lost=true`, `telemetry_checkpoint_loss_total += 1`).
 
 ### EVTX reprocessing invariants
 When reprocessing from EVTX:

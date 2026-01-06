@@ -39,10 +39,21 @@ An OCSF query scope:
 - required: one or more OCSF class filters (preferred: `class_uid` or class name)
 - optional: producer predicates (examples: `metadata.source_type`, `metadata.product.name`, `raw.channel`, `raw.provider`)
 
+Multi-class routing semantics (normative):
+- A route that produces multiple `class_uid` values is a valid, fully-determined route.
+- The evaluator MUST evaluate the rule against the **union** of all routed classes.
+  - Equivalent semantics: `class_uid IN (<uids...>)` or `(class_uid = u1 OR class_uid = u2 OR ...)`.
+  - The evaluator MUST NOT pick an arbitrary single class when multiple classes are routed.
+- For determinism and diffability, the router MUST emit multi-class `class_uid` sets in ascending numeric order.
+- Backend implementations MAY realize union semantics via:
+  - a single query with `class_uid IN (...)`, or
+  - multiple per-class subqueries combined as a deterministic UNION of results.
+  
 ### Rules
 - Route primarily on `logsource.category`.
 - Use `product/service` only to **narrow** when necessary.
-- If routing cannot be determined, the rule is **non-executable** (fail-closed).
+- If routing cannot be determined (no matching route), the rule is **non-executable** (fail-closed).
+- Routing to multiple classes MUST NOT be treated as “undetermined routing”.
 
 ### Mapping packs
 Adopt SigmaHQ’s OCSF routing where possible, then constrain to your pinned OCSF version and enabled profiles.
@@ -58,6 +69,11 @@ Translate Sigma field references into OCSF JSONPaths (or evaluator-specific colu
 
 ### Structure
 Field aliases SHOULD be scoped by router result (at minimum by `logsource.category`), because field meaning varies by event family.
+
+Multi-class aliasing note (recommended):
+- When a `logsource.category` routes to multiple `class_uid` values, field aliases SHOULD be scoped such that alias resolution remains unambiguous.
+  - Recommended: scope by `(logsource.category, class_uid)` (even if materialized internally), or
+  - ensure the alias mapping for that category is valid for all routed classes used in evaluation.
 
 Recommended structure (conceptual):
 - `aliases[logsource.category][sigma_field] -> ocsf_path_or_expr`

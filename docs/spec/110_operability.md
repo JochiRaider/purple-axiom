@@ -65,6 +65,22 @@ Practices:
 - Prefer explicit drops with counters over unbounded memory growth.
 - Ensure downstream dedupe can tolerate duplicates created by collector restart/retry.
 
+## Checkpointing and dedupe observability (normative)
+
+To support debugging and CI verification, implementations MUST emit the following counters/gauges
+per run (at minimum into `runs/<run_id>/logs/` and optionally into metrics backends):
+
+- `telemetry_checkpoints_written_total`
+- `telemetry_checkpoint_loss_total`
+- `dedupe_duplicates_dropped_total`
+- `dedupe_conflicts_total`
+
+Implementations SHOULD also record:
+
+- dedupe index location and size (bytes)
+- checkpoint directory location
+- replay start mode used on restart (`resume` vs `reset` fallback)
+
 ## Telemetry validation (gating)
 
 A telemetry stage is only considered "validated" for an asset when a validation run produces:

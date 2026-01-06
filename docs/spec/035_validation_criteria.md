@@ -31,6 +31,49 @@ Optional (non-contractual):
 - `criteria/packs/<pack_id>/<pack_version>/README.md`
 - `criteria/packs/<pack_id>/<pack_version>/CHANGELOG.md`
 
+## Pack control workflow (versioning + operational ownership)
+
+This section defines how criteria packs are **versioned**, how a specific pack is **selected** for a run,
+and how pack changes are managed so operational handoff is deterministic.
+
+### Pack identity
+
+- `pack_id` MUST be a stable identifier for a logical criteria pack (example: `default`, `windows-enterprise`, `lab-small`).
+- `pack_version` MUST be a **SemVer** string (`MAJOR.MINOR.PATCH`).
+  - Pre-release identifiers MAY be used for development (`-alpha.1`), but production CI SHOULD pin only stable versions.
+
+### Immutability and change discipline
+
+- A released pack version (a concrete `<pack_id>/<pack_version>/` directory) MUST be treated as **immutable**:
+  - Editing `criteria.jsonl` or `manifest.json` in-place for an already-released version SHOULD NOT be done.
+  - Any change that affects evaluation semantics MUST produce a new `pack_version`.
+- Version bumps:
+  - PATCH: predicate/threshold tweaks, selector refinements, cleanup check tuning that preserves intent.
+  - MINOR: additive coverage (new entries/signals), broader selector support, new optional fields.
+  - MAJOR: breaking semantics (status meaning changes, operator set changes, required-field changes, widespread entry id changes).
+
+### Selection and pinning
+
+Determinism requirement:
+- For any run that is intended to be diffable/regression-tested, the effective criteria pack MUST be pinned by:
+  - `pack_id`, and
+  - a concrete `pack_version`.
+
+If `pack_version` is not provided (non-recommended):
+- The implementation MUST resolve a version **deterministically** using SemVer ordering:
+  1. Enumerate available `<pack_id>/<pack_version>/` directories across the configured search paths.
+  2. Parse candidate versions as SemVer.
+  3. Select the **highest** SemVer version.
+  4. If no candidates parse as SemVer, fail closed (do not “guess” lexicographically).
+  5. If the same `(pack_id, pack_version)` appears in multiple search paths, fail closed unless they are byte-identical
+     (as proven by `criteria_sha256` and `manifest_sha256` matching).
+- The resolved `pack_version` MUST be recorded in run provenance (manifest + report).
+
+### Recommended source control practice (non-normative)
+
+- The repo MAY tag pack releases (example tag pattern: `criteria/<pack_id>/v<pack_version>`).
+- CI SHOULD prevent changes to existing released pack version directories.
+
 ## Run bundle snapshot
 
 Each run snapshots the selected criteria pack into the run bundle so results remain reproducible even if the repo changes:
@@ -40,6 +83,86 @@ Each run snapshots the selected criteria pack into the run bundle so results rem
 - `runs/<run_id>/criteria/results.jsonl`
 
 The run manifest pins the pack identity and hashes.
+
+## Drift detection (execution definitions vs criteria expectations)
+
+Criteria packs are intentionally decoupled from execution definitions (Atomic YAML, Caldera abilities, etc.).
+That decoupling introduces a controlled failure mode: **criteria drift**.
+
+### Definitions
+
+- **Execution definition**: the upstream content that defines *what* the runner executed for an `(engine, technique_id, engine_test_id)`.
+  - Atomic: the Atomic YAML test definition associated with the Atomic GUID.
+  - Caldera: the ability definition (or operation plan material) associated with the ability ID.
+- **Criteria drift**: the execution definition changed, but the criteria pack entry used for evaluation was not updated
+  (or was updated against a different upstream revision).
+
+### Required provenance fields for drift detection
+
+To make drift detection implementable and testable without heuristic parsing:
+
+1) Criteria pack manifest provenance (pack authoring time)
+- `criteria/packs/<pack_id>/<pack_version>/manifest.json` MUST record, for each supported engine, an upstream provenance record:
+  - `upstreams[]` (array), each element:
+    - `engine` (string; `atomic | caldera | custom`)
+    - `source_ref` (string; a stable revision identifier)
+      - Examples:
+        - Atomic: git commit SHA of the Atomic Red Team repo checkout used to author the pack, or a content-addressed snapshot id.
+        - Caldera: git commit SHA of the Caldera content repo / abilities repo used to author the pack.
+    - `source_tree_sha256` (string; sha256 over a deterministic file list + file sha256 values; see below)
+
+Deterministic tree hash basis (normative):
+- `source_tree_sha256` MUST be computed as:
+  - Build `tree_basis_v1`:
+    - `v: 1`
+    - `engine`
+    - `files[]`: sorted array of `{ path, sha256 }`
+      - `path` MUST be repo-relative, normalized to `/` separators.
+      - `sha256` MUST be lower-hex SHA-256 of the file bytes.
+      - The `files[]` array MUST be sorted by `path` using bytewise UTF-8 lexical ordering (same ordering rules as `entry_id`).
+  - `source_tree_sha256 = sha256_hex( canonical_json_bytes(tree_basis_v1) )`
+
+2) Runner provenance (run time)
+- The runner MUST record the execution-definition provenance for the engine being used, using the same structure
+  (`engine`, `source_ref`, `source_tree_sha256`) in run provenance (manifest `extensions` or equivalent run metadata).
+
+Rationale: this allows drift detection without requiring the evaluator to locate and parse upstream repos at evaluation time.
+
+### Drift detection algorithm (normative)
+
+Before evaluating any actions for a run, the criteria evaluator MUST compute `criteria_drift_status`:
+
+1. Load the selected pack snapshot manifest from the run bundle.
+2. Read the run’s runner-recorded provenance for the active engine.
+3. Compare `(engine, source_ref, source_tree_sha256)`:
+   - If all match: `criteria_drift_status = "none"`.
+   - If `source_ref` differs OR `source_tree_sha256` differs: `criteria_drift_status = "detected"`.
+   - If either side is missing required provenance: `criteria_drift_status = "unknown"`.
+
+### Required behavior on drift (normative)
+
+When `criteria_drift_status = "detected"`:
+- The evaluator MUST surface drift in run outputs (report + machine-readable provenance).
+- Per-action criteria evaluation MUST NOT silently claim “fail” for missing signals when drift is detected.
+  Instead, actions MUST be marked as `skipped` with a drift reason recorded in a deterministic field location.
+
+Recording drift in results (normative, minimal-impact):
+- Each affected `criteria/results.jsonl` line MUST include:
+  - `status: "skipped"`
+  - an explanation under a deterministic extension location:
+    - `extensions.criteria.drift`:
+      - `status`: `"detected"`
+      - `engine`
+      - `expected_source_ref` / `expected_source_tree_sha256` (from pack manifest)
+      - `actual_source_ref` / `actual_source_tree_sha256` (from runner provenance)
+
+When `criteria_drift_status = "unknown"`:
+- The evaluator SHOULD proceed, but MUST surface an explicit warning in run outputs.
+- The evaluator MAY choose to treat this as `detected` when `validation.evaluation.fail_mode = fail_closed`.
+
+Scoring integration (normative intent):
+- Drift-related skips MUST classify as `criteria_misconfigured` (or an equivalent explicit “criteria drift” sub-reason)
+  so “missing telemetry” is not incorrectly attributed when expectations were authored against different execution content.
 
 ## Matching model
 

@@ -107,6 +107,21 @@ Common keys:
     - `config_path` or equivalent
     - `output_path` under `raw/`
 
+  - `osquery` (optional)
+    - `enabled` (default: false)
+    - `config_path` (optional): path to an osquery configuration file (deployment is runner/provider-defined). If present, the effective config SHOULD be snapshotted into the run bundle for provenance.
+    - `results_log_path` (recommended): absolute path on the endpoint to the osquery results log (the NDJSON results file).
+      - This SHOULD be explicit in lab configs to avoid OS/package default ambiguity.
+    - `log_format` (default: `event_ndjson`): `event_ndjson | batch_json`
+      - `event_ndjson` is the v0.1 canonical format (one JSON object per line).
+      - `batch_json` is reserved; if used, ingestion requires multiline framing and MUST have explicit conformance tests.
+    - `otel_ingest` (optional)
+      - `enabled` (default: true): when true, the operator MUST configure the OTel Collector to tail `results_log_path` (typically via the `filelog` receiver) and tag records such that `metadata.source_type = "osquery"` can be set during normalization.
+      - `receiver_id` (optional): logical receiver id in the OTel config (example: `filelog/osquery`) for traceability.
+    - `output_path` (required): destination directory under the run bundle `raw/` where osquery raw logs are staged (example: `raw/osquery/`)
+
+See `042_osquery_integration.md` for format requirements, OTel receiver examples, normalization routing, and fixtures.
+
 Notes:
 - OTel Collector configuration shape is owned by upstream OTel. Purple Axiom only references the path and hashes it.
 
@@ -328,6 +343,12 @@ telemetry:
     osquery:
       enabled: false
       config_path: configs/osquery.conf
+      # Absolute path on the endpoint. Keep explicit to avoid OS/package default ambiguity.
+      results_log_path: "/var/log/osquery/osqueryd.results.log"
+      log_format: event_ndjson
+      otel_ingest:
+        enabled: true
+        receiver_id: filelog/osquery      
       output_path: raw/osquery/
 
 normalization:

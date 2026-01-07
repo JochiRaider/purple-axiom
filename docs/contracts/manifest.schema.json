@@ -249,8 +249,22 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Reserved for forward-compatible additions; must be a JSON object.",
-      "additionalProperties": true
+      "description": "Reserved for forward-compatible additions; namespace keys map to structured extension objects.",
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": {
+          "type": "object",
+          "description": "Namespaced extension payload.",
+          "properties": {
+            "v": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Optional schema version for this namespace."
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

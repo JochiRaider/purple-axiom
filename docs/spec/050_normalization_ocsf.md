@@ -64,7 +64,23 @@ Required steps for changing the pinned OCSF version (normative):
 - `metadata.normalizer_version`
 - `metadata.source_type`
 
+## osquery normalization (v0.1)
 
+osquery is a query engine rather than a single semantic event stream. Normalization MUST therefore be driven by the osquery scheduled query name:
+
+- The normalizer MUST set `metadata.source_type = "osquery"` for all osquery-derived events.
+- Routing MUST be based on the osquery `name` field (hereafter `query_name`) using a declarative routing table captured in `normalized/mapping_profile_snapshot.json`.
+- v0.1 routing defaults (mapping profile MAY override explicitly):
+  - `process_events` → Process Activity (`class_uid: 1007`)
+  - `file_events` → File System Activity (`class_uid: 1001`)
+  - `socket_events` → Network Activity (`class_uid: 4001`)
+
+Unrouted behavior:
+- The normalizer MUST NOT guess a `class_uid` for an unknown `query_name`.
+- Unknown `query_name` rows MUST be preserved in `raw/` and MUST be counted in `normalized/mapping_coverage.json` as unrouted/unmapped.
+
+Implementation details and conformance fixtures are specified in `042_osquery_integration.md`.
+ 
 ## Run bundle artifacts (normalized/)
 
 When normalization is enabled and produces an OCSF event store, the normalizer MUST emit:

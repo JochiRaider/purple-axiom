@@ -46,6 +46,7 @@ Format:
   - Windows EVTX (optional, see Windows section)
   - PCAP (if added later)
   - Tool-native output files
+  - osquery results logs (NDJSON) preserved under `runs/<run_id>/raw/osquery/` (see `042_osquery_integration.md`)
   - Runner transcripts and executor metadata:
     - per-action stdout/stderr transcripts
     - executor metadata (exit codes, durations, executor version)
@@ -118,7 +119,7 @@ Examples:
   - Windows event data
   - Sysmon exports
   - Linux syslog or journald exports
-  - osquery results
+  - osquery results (event format NDJSON; see `042_osquery_integration.md`)
 - Normalized OCSF events
 - Derived tables used in scoring (optional)
 

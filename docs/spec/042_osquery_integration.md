@@ -1,0 +1,244 @@
+<!-- docs/spec/042_osquery_integration.md -->
+# osquery integration (telemetry + normalization)
+
+This document defines the v0.1 integration path for osquery as a telemetry source:
+- Canonical continuous monitoring output format.
+- OpenTelemetry Collector ingestion.
+- Raw staging layout in the run bundle.
+- Minimal, deterministic normalization to OCSF, including routing semantics.
+
+## 1) Canonical osquery output format (continuous monitoring)
+
+### 1.1 Required: filesystem logger in event format NDJSON
+
+When osquery is enabled, collectors MUST ingest the osquery **scheduled query results log** emitted by `osqueryd` using the filesystem logger.
+
+Canonical format (v0.1):
+- One JSON object per line (NDJSON).
+- Each line MUST include:
+  - `name` (string): scheduled query name (query identifier for routing).
+  - `hostIdentifier` (string): host identifier configured in osquery.
+  - `unixTime` (string): epoch seconds as a string.
+  - `action` (string): `added | removed | snapshot`.
+- Each line MUST include exactly one of:
+  - `columns` (object): differential event payload for `action: added|removed`.
+  - `snapshot` (array of objects): snapshot payload for `action: snapshot`.
+
+Non-canonical forms:
+- Status logs (`INFO|WARNING|ERROR|FATAL`) are not part of the results stream and MUST NOT be mixed into the results log stream.
+- “Batch” result formats MAY be supported later, but are out of scope for v0.1 unless explicitly enabled and covered by fixtures.
+
+### 1.2 Timestamp handling
+
+- The normalizer MUST interpret `unixTime` as integer epoch seconds and derive:
+  - `time` (required envelope) as epoch milliseconds (`unixTime * 1000`).
+- The normalizer MUST treat `calendarTime` as non-authoritative and MUST NOT use it for identity or ordering.
+
+## 2) Raw staging in the run bundle
+
+When `telemetry.sources.osquery.enabled=true`, the pipeline MUST stage the source-native results log under:
+
+- `runs/<run_id>/raw/osquery/osqueryd.results.log`
+
+Notes:
+- This staged file is the canonical “evidence-tier” representation for osquery results.
+- The pipeline MAY also stage adjacent files (example: `osqueryd.*.log`) under the same directory, but they MUST be clearly separated from the results log.
+
+## 3) OpenTelemetry Collector ingestion
+
+### 3.1 Collection model
+
+The preferred ingestion model is:
+- osquery writes NDJSON results to the local filesystem.
+- The OTel Collector tails the results file via the `filelog` receiver.
+- The collector parses JSON and exports logs via OTLP (local file/OTLP and optional gateway), consistent with the canonical topology in `040_telemetry_pipeline.md`.
+
+### 3.2 Minimal `filelog` receiver example
+
+This example is intentionally minimal and is designed to:
+- Tail osquery results.
+- Parse NDJSON into attributes.
+- Preserve the original line for forensic/debug use.
+
+```yaml
+receivers:
+  filelog/osquery:
+    include:
+      # Linux default (package dependent)
+      - /var/log/osquery/osqueryd.results.log
+      # Windows example (explicit is strongly preferred)
+      - C:\\ProgramData\\osquery\\log\\osqueryd.results.log
+    start_at: beginning
+    include_file_path: true
+    operators:
+      - type: json_parser
+        parse_from: body
+      - type: move
+        from: attributes.name
+        to: attributes.osquery.query_name
+      - type: move
+        from: attributes.hostIdentifier
+        to: attributes.osquery.host_identifier
+      - type: move
+        from: attributes.unixTime
+        to: attributes.osquery.unix_time
+      - type: move
+        from: attributes.action
+        to: attributes.osquery.action
+```
+
+Required exporter tagging:
+- The collector (or downstream normalizer) MUST be able to set `metadata.source_type = "osquery"` for records originating from this receiver.
+
+Failure handling (v0.1):
+- If a line fails JSON parsing, the collector SHOULD emit it as an unstructured log record (retain the raw line) and the normalizer MUST account for it as an ingest/parse error (see §6).
+
+## 4) Derived raw Parquet (optional but recommended)
+
+The pipeline MAY convert staged NDJSON lines into a Parquet dataset under:
+
+- `runs/<run_id>/raw_parquet/osquery/`
+
+When emitted, the dataset MUST include (at minimum) the following columns:
+
+| Column | Type | Notes |
+|---|---|---|
+| `time` | int64 | Epoch ms derived from `unixTime` |
+| `query_name` | string | From `name` |
+| `host_identifier` | string | From `hostIdentifier` |
+| `action` | string | `added|removed|snapshot` |
+| `columns_json` | string (JSON) | Present for `added|removed`, else null |
+| `snapshot_json` | string (JSON) | Present for `snapshot`, else null |
+| `raw_json` | string (JSON) | The full original JSON object (canonical raw) |
+| `log.file.path` | string | If provided by the collector; else null |
+
+Determinism requirements:
+- `raw_json` MUST be the original parsed JSON object re-serialized via RFC 8785 (JCS) prior to hashing or stable joins (see ADR-0002).
+
+## 5) Normalization to OCSF
+
+### 5.1 Source type
+
+- The normalizer MUST set `metadata.source_type = "osquery"` for osquery-derived events.
+
+### 5.2 Routing by `query_name`
+
+Normalization MUST be routed by osquery `query_name` (the `name` field in the results log). The routing table MUST be captured in the mapping profile snapshot (`normalized/mapping_profile_snapshot.json`).
+
+v0.1 default routing:
+
+| `query_name` | OCSF target class | `class_uid` |
+|---|---|---:|
+| `process_events` | Process Activity | 1007 |
+| `file_events` | File System Activity | 1001 |
+| `socket_events` | Network Activity | 4001 |
+
+Rules:
+- The normalizer MUST NOT guess a `class_uid` for unknown `query_name` values.
+- Unknown `query_name` rows MUST be counted as unrouted/unmapped in `normalized/mapping_coverage.json`.
+- Implementations MAY provide an explicit allowlist of additional `query_name` routes via mapping profile material.
+
+### 5.3 Minimal mapping obligations (v0.1)
+
+For routed rows, the normalizer MUST:
+- Emit a valid OCSF envelope as defined in `docs/spec/050_normalization_ocsf.md` and `docs/spec/055_ocsf_field_tiers.md`.
+- Preserve the full source payload under an explicit `unmapped.osquery` object when fields cannot be mapped deterministically.
+
+Minimum `unmapped.osquery` contents:
+- `query_name`
+- `action`
+- `columns` (object) or `snapshot` (array), whichever was present
+- `raw_json` (the original object, or a redacted-safe representation)
+
+### 5.4 Event identity (required)
+
+`metadata.event_id` MUST be computed per ADR-0002 using an osquery identity basis with deterministic inputs.
+
+v0.1 identity basis (Tier 3, because osquery does not provide a stable record id):
+```json
+{
+  "source_type": "osquery",
+  "host_identifier": "<hostIdentifier>",
+  "query_name": "<name>",
+  "action": "<action>",
+  "unix_time": <unixTime_int>,
+  "payload": <columns_or_snapshot_canonical_json>
+}
+```
+
+Rules:
+- `payload` MUST be the canonical JSON object/array for `columns` or `snapshot` using RFC 8785 (JCS).
+- `calendarTime` MUST NOT be included.
+- For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id` (see `025_data_contracts.md`).
+
+## 6) Conformance fixtures and tests
+
+A conformant implementation MUST include fixture-driven tests with deterministic golden outputs.
+
+### 6.1 Required fixtures
+
+Add the following fixtures under `tests/fixtures/osquery/` (recommended convention):
+
+- `osqueryd.results.log` (NDJSON):
+  - At least 2 differential rows (`added`, `removed`) for `process_events`
+  - At least 1 snapshot row (`snapshot`) for `file_events`
+  - At least 1 row for an unknown `query_name` (to validate unrouted behavior)
+  - At least 1 invalid JSON line (to validate parse-error accounting)
+
+### 6.2 Required assertions
+
+At minimum, CI MUST assert:
+
+- **Parsing:**
+  - Valid JSON lines are ingested and available to normalization.
+  - Invalid JSON lines are counted as ingest/parse errors and do not produce normalized events.
+
+- **Routing:**
+  - Known `query_name` values map to the expected `class_uid`.
+  - Unknown `query_name` values do not produce normalized events and are recorded as unrouted/unmapped.
+
+- **Identity determinism:**
+  - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values (and `metadata.uid` when present).
+
+- **Raw preservation:**
+  - The staged `runs/<run_id>/raw/osquery/osqueryd.results.log` is present when osquery is enabled.
+  - Routed normalized events contain `unmapped.osquery.raw_json` (or an explicitly redacted-safe representation when redaction is enabled).
+
+## 7) Sample inputs and outputs (non-normative)
+
+### 7.1 Example osquery NDJSON lines
+
+```json
+{"name":"process_events","hostIdentifier":"win11-test-01","unixTime":"1736204345","action":"added","columns":{"pid":"4321","path":"C:\\\\Windows\\\\System32\\\\cmd.exe","cmdline":"cmd.exe /c whoami"}}
+{"name":"file_events","hostIdentifier":"win11-test-01","unixTime":"1736204347","action":"snapshot","snapshot":[{"target_path":"C:\\\\Temp\\\\example.txt","action":"CREATED"}]}
+{"name":"unknown_query","hostIdentifier":"win11-test-01","unixTime":"1736204349","action":"added","columns":{"foo":"bar"}}
+```
+
+### 7.2 Example normalized OCSF envelope (Process Activity)
+
+```json
+{
+  "time": 1736204345000,
+  "class_uid": 1007,
+  "metadata": {
+    "event_id": "2f5a0f4b2c1b4bd38c0d9b6f7e9a1c2d",
+    "uid": "2f5a0f4b2c1b4bd38c0d9b6f7e9a1c2d",
+    "run_id": "RUN_ID",
+    "scenario_id": "SCENARIO_ID",
+    "collector_version": "otelcol-contrib",
+    "normalizer_version": "purple-axiom-normalizer",
+    "source_type": "osquery"
+  },
+  "unmapped": {
+    "osquery": {
+      "query_name": "process_events",
+      "action": "added",
+      "columns": {
+        "pid": "4321",
+        "path": "C:\\\\Windows\\\\System32\\\\cmd.exe",
+        "cmdline": "cmd.exe /c whoami"
+      }
+    }
+  }
+}
+```

@@ -524,7 +524,13 @@ Compatibility expectations:
 
 Strict artifacts (manifest, ground truth, detections, summary) are intentionally `additionalProperties: false` with a single extension point:
 
-- `extensions`: object, free-form, reserved for forward-compatible additions.
+- `extensions`: object, reserved for forward-compatible additions and vendor-specific data.
+- Namespace keys MUST match `^[a-z][a-z0-9_]*$` (lowercase, digits, underscore). Dotted notation in docs (for example, `extensions.bridge.mapping_pack_version`) indicates nesting, not literal dots in keys.
+- Ownership: namespaces defined in this spec are project-reserved; vendors MUST use a unique namespace (for example, `extensions.acme` or `extensions.vendor_acme`) and MUST NOT reuse project-reserved namespaces.
+- Each namespace value SHOULD be an object; new fields SHOULD be added within a namespace object rather than as top-level scalars.
+- Legacy top-level scalar keys are permitted only when explicitly defined by this spec (for example, `extensions.command_sha256`, `extensions.redaction_policy_id`).
+- Optional versioning: namespace objects MAY include `v` (integer >= 1). Increment `v` when meanings change or a breaking change is introduced within that namespace; additive fields do not require a bump.
+- Deterministic ordering: emit namespace keys in lexicographic order; within each namespace, use a stable key order for diffability and hashing.
 
 Normalized events:
 - Are intentionally permissive to allow full OCSF payloads and source-specific structures.

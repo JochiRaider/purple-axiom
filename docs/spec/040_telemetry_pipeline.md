@@ -20,6 +20,18 @@ Purple Axiom treats telemetry as an input dataset that must be (a) reproducible 
 
 Purple Axiom assumes the agent tier exists even if a gateway is later added.
 
+### osquery results (optional telemetry source)
+
+osquery is supported as an optional telemetry source by ingesting **osqueryd scheduled query results** from the local filesystem logger:
+
+- The canonical continuous monitoring output format MUST be **event format NDJSON** (one JSON object per line).
+  - Differential rows use `action: "added" | "removed"` with a `columns` object.
+  - Snapshot rows use `action: "snapshot"` with a `snapshot` array.
+- Collection SHOULD be performed via the OTel Collector `filelog` receiver + JSON parsing operator.
+- When enabled, collectors MUST label records such that the normalizer can set `metadata.source_type = "osquery"`.
+
+Implementation details and conformance fixtures are specified in `042_osquery_integration.md`.
+
 ## 2) Windows Event Log collection (OTel Collector)
 
 ### Required invariant: collect raw, unrendered events

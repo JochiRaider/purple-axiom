@@ -193,6 +193,7 @@ At-least-once delivery implies duplicates and replay. This is expected and MUST 
 
 - **Collector checkpoint**: persisted receiver cursor/state used to resume ingestion after restart (example: Windows `EventRecordID`-based bookmarks).
 - **Checkpoint loss**: missing, corrupt, or reset checkpoint state that causes the collector to re-emit previously exported events.
+- **File offset checkpoint**: persisted mapping from `(file identity, byte offset)` used by `filelog`-style tailing receivers to resume ingestion after restart.
 
 #### Required behavior
 
@@ -200,15 +201,22 @@ At-least-once delivery implies duplicates and replay. This is expected and MUST 
 - For sources that support stable cursors (example: Windows Event Log), the collector configuration MUST enable durable state storage for checkpoints.
 - The checkpoint storage directory MUST be explicitly configured to a stable location on durable disk (not an ephemeral temp directory).
 - If the collector is deployed in a container, the checkpoint directory MUST be mounted to a persistent volume.
+- For file-tailed sources (example: osquery results via `filelog`), the receiver MUST enable durable offset tracking via a storage-backed checkpoint (file offsets MUST NOT be in-memory only).
+- If the offset checkpoint storage is reset (example: storage corruption recovery or manual deletion), this MUST be treated as checkpoint loss (see #2) and recorded as such.
 
 2) Loss and replay handling (pipeline)
 - If a collector checkpoint is lost, the collector MAY replay historical events.
 - The pipeline MUST accept replays and MUST rely on downstream dedupe keyed by `metadata.event_id` to prevent duplicate normalized events.
 - The pipeline MUST record checkpoint-loss and replay indicators in run-scoped logs (see §4).
+- For file-tailed sources with rotation, the pipeline MUST assume that “checkpoint loss” can manifest as either (a) replay duplication or (b) gaps if rotated segments become unreadable or are deleted before ingestion completes.
 
 3) Restart policy (operator-visible)
 - Restarting collectors and gateways MUST be treated as a normal operational action.
 - A restart MUST NOT require manual cleanup of raw stores or normalized stores to recover correctness.
+
+4) File-tailed source caveats (osquery NDJSON and similar)
+- osquery filesystem logger rotation may produce compressed rotated files; operators MUST ensure that the chosen rotation and retention scheme preserves a sufficient window of readable NDJSON for the collector to catch up after a restart or outage.
+- Telemetry validation MUST include a crash/restart + rotation continuity test for every enabled file-tailed source (see §4).
 
 ## 3) Injecting `run_id` / `scenario_id`
 
@@ -243,6 +251,10 @@ Before the telemetry stage is treated as "green", validate each Windows endpoint
    - Simulate checkpoint loss (delete or move the collector checkpoint directory); restart the collector; confirm that:
      - events may replay into the raw store, and
      - downstream dedupe prevents duplicate normalized events (uniqueness by `metadata.event_id` is preserved).
+   - If osquery (or any file-tailed source) is enabled, perform a crash/restart + rotation continuity test:
+     - generate a monotonic sequence in the source NDJSON stream,
+     - force at least one rotation boundary during the test window,
+     - confirm no sequence gaps in the raw store after restart (duplication is acceptable; loss is not).
 3. **Backpressure**
    - Throttle the exporter/disk; confirm bounded queue behavior (drops are explicit and counted).
 4. **Footprint**
@@ -261,6 +273,10 @@ Minimum required fields for `logs/telemetry_validation.json`:
   - `checkpoint_loss_observed` (bool)
   - `replay_observed` (bool)
   - `dedupe_preserved_uniqueness` (bool)
+- `file_tailed_continuity_test` (object, OPTIONAL; REQUIRED when any file-tailed source is enabled)
+  - `passed` (bool)
+  - `rotation_exercised` (bool)
+  - `sequence_gap_observed` (bool)
  
  Recommended additional fields (operator UX and regression tracking):
  - `performance_controls` (object)

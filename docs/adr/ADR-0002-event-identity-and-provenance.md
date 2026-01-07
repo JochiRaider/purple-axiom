@@ -77,6 +77,108 @@ Use only when neither Tier 1 nor Tier 2 inputs exist. Identity is a fingerprint 
 
 Tier 3 MUST record `metadata.identity_tier = 3` for auditability.
 
+### Linux identity basis (auditd / journald / syslog)
+
+This section defines minimal, stable identity bases for common Linux log sources so that
+`metadata.event_id` remains deterministic across collector restarts and reprocessing.
+
+Normative goals:
+- Prefer Tier 1 whenever the source includes a stable, source-native identifier.
+- Avoid Tier 3 fingerprinting for Linux text logs when a stable cursor can be persisted, because
+  timestamp precision and repeated message bodies commonly collide.
+
+#### Auditd (audit.log / audisp)
+
+The Linux audit subsystem emits a source-native event correlation identifier in the `msg` field.
+In typical `audit.log` records, this takes the form:
+
+`msg=audit(<epoch_seconds>.<fractional>:<serial>)`
+
+Multiple records (lines) that describe one audit event share the same `<epoch_seconds>.<fractional>:<serial>`
+pair, while record `type=...` distinguishes the per-record payload within that event.
+
+##### Tier selection (normative)
+
+1) **Audit event aggregation available (preferred)**
+   - If the ingestion path aggregates multiple audit records into one logical “audit event” object
+     prior to OCSF normalization, the normalizer MUST use a Tier 1 identity basis defined below.
+
+2) **No aggregation (each audit record is normalized independently)**
+   - If each audit record line is normalized as its own OCSF event, the normalizer MUST NOT use a Tier 1
+     basis that would collide across records within the same audit event.
+   - In this case, the normalizer MUST use Tier 2 with a stable stream cursor for the stored artifact:
+     - `stream.name`: stable identifier of the stored audit artifact (example: `audit.log`)
+     - `stream.cursor`: stable per-record cursor within that stored artifact (example: `line_index` in the
+       stored raw table, or byte offset of the line start), persisted as evidence.
+
+Rationale: many audit events emit multiple record types (SYSCALL, PATH, CWD, PROCTITLE, EOE, etc.)
+sharing the same `msg=audit(...)` identifier. A Tier 1 basis that omits a per-record discriminator would
+cause deterministic collisions when record lines are treated as independent events.
+
+##### Tier 1 identity basis for aggregated audit events (normative)
+
+When aggregating audit records into one logical audit event, the identity basis MUST be:
+
+- `source_type`: `linux_auditd`
+- `origin.host`: the emitting host identity (prefer a host value derived from the event origin, not the collector)
+- `origin.audit_node` (optional): the `node=...` value if present in the record; else omit
+- `origin.audit_msg_id`: the literal `audit(<epoch_seconds>.<fractional>:<serial>)` substring,
+  captured exactly as present in the raw record (no float parsing)
+
+Rules:
+- `origin.audit_msg_id` MUST be treated as an opaque string.
+  - Implementations MUST NOT parse it into floating point types.
+  - Implementations MUST NOT normalize fractional precision (no trimming or padding).
+- If `origin.audit_msg_id` cannot be extracted deterministically, the implementation MUST fall back to
+  Tier 2 (preferred, when a stable cursor exists) or Tier 3 (last resort), and MUST record the chosen
+  tier via `metadata.identity_tier`.
+
+#### Journald (systemd journal)
+
+Journald provides a stable per-entry cursor that can be used to resume iteration (“after cursor”),
+and is therefore suitable as Tier 1 identity input.
+
+##### Tier 1 identity basis (normative)
+
+- `source_type`: `journald`
+- `origin.host`: the emitting host identity
+- `origin.journald_cursor`: the journald cursor string as emitted by the source (`__CURSOR` or equivalent),
+  treated as an opaque string
+
+Rules:
+- The cursor MUST be captured exactly (opaque string); implementations MUST NOT attempt to interpret it.
+- When journald is collected as a stream, the pipeline SHOULD checkpoint the cursor as a per-stream
+  checkpoint under `runs/<run_id>/logs/telemetry_checkpoints/` per the checkpoint persistence rules in this ADR.
+
+#### Syslog (RFC3164/RFC5424 and file-tailed text)
+
+Plain syslog text frequently lacks a stable, source-native unique record identifier. Repeated,
+byte-identical messages in the same timestamp bucket are common.
+
+##### Tier selection (normative)
+
+- Preferred: obtain syslog via journald (Tier 1 via journald cursor), when feasible.
+- Otherwise: use Tier 2 if and only if a stable cursor exists for a stored artifact, and that cursor is
+  persisted as evidence.
+- Tier 3 fingerprinting MAY be used only when neither Tier 1 nor Tier 2 inputs exist, and SHOULD be
+  treated as lower confidence in coverage/operability reporting.
+
+##### Tier 2 identity basis (normative)
+
+When syslog is collected from a stored artifact (example: a captured syslog file that is included in the
+run bundle or raw store), the identity basis MUST be:
+
+- `source_type`
+- `origin.host`
+- `stream.name`: stable identifier of the stored artifact (example: `syslog`, `messages`, or a stable logical stream id)
+- `stream.cursor`: stable per-record cursor within that stored artifact (example: `line_index` in the stored raw table,
+  or byte offset of the line start), persisted as evidence
+
+Rules:
+- The cursor MUST be stable under reprocessing of the same stored artifact.
+- Implementations MUST NOT use an ephemeral collector read offset unless it is persisted with the stored artifact
+  and remains stable for that artifact under reprocessing.
+
 ### Canonicalization rules
 To ensure cross-implementation determinism, implementations MUST use
 JSON Canonicalization Scheme (RFC 8785, JCS) for serializing identity bases prior to hashing.

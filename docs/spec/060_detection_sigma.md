@@ -23,7 +23,7 @@ Sigma evaluation is a two-stage process:
 
 1) **Compile (bridge-aware)**
    - Select a bridge mapping pack (router + field aliases).
-   - Route the rule: `sigma.logsource` -> OCSF class filter (and optional producer/source predicates).
+   - Route the rule: `sigma.logsource` -> OCSF class filter (and optional producer/source predicates via `filters[]` OCSF filter objects; see `065_sigma_to_ocsf_bridge.md`).
    - Rewrite Sigma field references to OCSF JSONPaths (or SQL column expressions).
    - Produce a backend plan:
      - batch: SQL over Parquet (DuckDB recommended)

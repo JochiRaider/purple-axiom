@@ -37,7 +37,61 @@ Sigma `logsource` fields:
 ### Output
 An OCSF query scope:
 - required: one or more OCSF class filters (preferred: `class_uid` or class name)
-- optional: producer predicates (examples: `metadata.source_type`, `metadata.product.name`, `raw.channel`, `raw.provider`)
+- optional: producer/source predicates via `filters[]` expressed as OCSF filter objects (`{path, op, value}`; see below)
+
+### Producer predicates (`filters[]`)
+Producer predicates are an optional, structured narrowing mechanism for routing and evaluation. They exist to disambiguate
+producer-specific subsets within a routed class scope (example: Windows Event Log `Security` channel vs Sysmon, multiple
+tables within a data lake, or safe use of `raw.*` fallback under a clearly identified producer).
+
+#### Syntax (normative)
+When present, producer predicates MUST be expressed as an array of **OCSF filter objects** matching the shape used in:
+- `docs/contracts/bridge_router_table.schema.json` (`routes[].filters[]`)
+- `docs/contracts/bridge_compiled_plan.schema.json` (`compilation.routed_scope.filters[]`)
+
+Each filter object MUST have:
+- `path` (string): dot-delimited OCSF field path (examples: `metadata.source_type`, `raw.channel`, `raw.provider`)
+- `op` (string): one of `eq | neq | in | nin | exists | contains | prefix | suffix | regex`
+- `value` (any): required for all operators except `exists` (see semantics)
+- `notes` (string, optional)
+
+#### Semantics (normative)
+- The effective routed scope is:
+  - `class_uid IN routed_scope.class_uids` (union semantics; see below), AND
+  - all `filters[]` evaluate true (conjunction / logical AND).
+- If `filters[]` is omitted or empty, only the class scope applies.
+
+Path resolution and missing data:
+- If `path` is missing or resolves to null:
+  - `op=exists` MUST evaluate to false when `value` is omitted or true.
+  - `op=exists` MUST evaluate to true when `value` is false.
+  - All other operators MUST evaluate to false (fail-closed narrowing).
+
+Type and operator behavior:
+- Comparisons are type-strict. Implementations MUST NOT perform implicit type coercion.
+- `eq` / `neq`: JSON equality / inequality on the resolved value.
+- `in` / `nin`: `value` MUST be an array. If the resolved value is scalar, membership is tested against the array.
+  If the resolved value is an array, the predicate matches when any element is (not) in `value`.
+- `contains` / `prefix` / `suffix`: resolved value MUST be a string (or an array of strings, matched element-wise).
+- `regex`: resolved value MUST be a string (or an array of strings, matched element-wise). Patterns MUST be RE2-compatible.
+  `regex` is a search match unless the pattern is explicitly anchored.
+
+Determinism:
+- When emitting `filters[]`, the router MUST preserve the order as stored in the router table snapshot.
+- Mapping pack authors SHOULD order filters deterministically (RECOMMENDED: sort by `path`, then `op`, then canonical JSON of `value`).
+
+Example (router table route entry):
+```json
+{
+  "sigma_logsource": { "category": "process_creation", "product": "windows" },
+  "ocsf_scope": { "class_uids": [1007] },
+  "filters": [
+    { "path": "metadata.source_type", "op": "eq", "value": "windows_eventlog" },
+    { "path": "raw.channel", "op": "eq", "value": "Security" },
+    { "path": "raw.provider", "op": "eq", "value": "Microsoft-Windows-Security-Auditing" }
+  ]
+}
+```
 
 Multi-class routing semantics (normative):
 - A route that produces multiple `class_uid` values is a valid, fully-determined route.

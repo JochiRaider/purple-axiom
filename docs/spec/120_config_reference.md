@@ -296,7 +296,20 @@ Common keys:
 - `signing` (optional)
   - `enabled` (default: false)
   - `key_ref` (required when enabled): reference only
-
+    - v0.1 posture:
+      - Disabled by default for MVP.
+      - Strongly RECOMMENDED for compliance/audit/export workflows.
+    - When `enabled: true`, the pipeline MUST emit bundle integrity artifacts as specified in `025_data_contracts.md` ("Run bundle signing").
+    - If signing is enabled but cannot be completed (missing key material, invalid key format, signing I/O error), the pipeline MUST fail closed.
+  - `key_ref` (required when enabled): reference to signing private key material (never inline)
+  - `algorithm` (optional, default: `ed25519`)
+    - v0.1 supports `ed25519` only.
+  - `key_format` (optional, default: `ed25519_seed_base64`)
+    - `ed25519_seed_base64`: secret value is base64 for a 32-byte Ed25519 seed.
+    - Implementations MAY support additional formats (example: OpenSSH private key) but MUST still emit Ed25519 signatures.
+  - `trusted_key_ids` (optional): list of allowed `key_id` values for verification/export gating
+    - `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
+    
 ## Example `range.yaml`
 
 ```yaml

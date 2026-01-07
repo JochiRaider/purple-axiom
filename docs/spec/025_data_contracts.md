@@ -412,6 +412,9 @@ Validation:
 Key semantics (normative when produced):
 - The router table MUST map Sigma `logsource.category` to one or more OCSF `class_uid` filters.
 - When a `logsource.category` maps to multiple `class_uid` values, the mapping represents a **union scope** for evaluation (boolean OR / `IN (...)` semantics), not an ambiguity (see `065_sigma_to_ocsf_bridge.md`).
+- Routes MAY also include `filters[]` (producer/source predicates) expressed as OCSF filter objects (`{path, op, value}`) per `bridge_router_table.schema.json`.
+  - When present, `filters[]` MUST be interpreted as a conjunction (logical AND) applied in addition to the `class_uid` union scope.
+  - For determinism, `filters[]` SHOULD be emitted in a stable order (RECOMMENDED: sort by `path`, then `op`, then canonical JSON of `value`).
 - For determinism and stable hashing/diffs:
   - multi-class `class_uid` sets MUST be emitted in ascending numeric order.
 - The router table MUST be versioned and hashed (`router_table_sha256`) so routing drift is detectable.
@@ -505,9 +508,81 @@ Required invariants:
    - When writing JSONL outputs, lines are sorted deterministically (see storage spec).
    - When writing Parquet, within-file ordering is deterministic (see storage spec).
 
-Optional invariants (recommended when signatures are enabled):
-- `checksums.txt` includes hashes for all long-term artifacts.
-- `signature.ed25519` signs `checksums.txt` using a run signing key.
+## Optional invariants: run bundle signing
+
+Run bundle signing is **optional** in v0.1 and is controlled by `security.signing.enabled` (see `120_config_reference.md`).
+When enabled, signing provides integrity guarantees for the full run bundle without requiring a specific transport or storage backend.
+
+Normative requirements:
+
+- v0.1 signing MUST use **Ed25519** signatures.
+- The signing key MUST be provided by reference (`security.signing.key_ref`); private key material MUST NOT be written into the run bundle.
+- Signing MUST be the final step after all long-term artifacts are materialized.
+
+### Signing artifacts and locations
+
+When signing is enabled, the run bundle MUST include:
+
+- `security/checksums.txt`
+- `security/signature.ed25519`
+- `security/public_key.ed25519`
+
+The `security/` directory is reserved for security posture artifacts (redaction policy snapshots, signing artifacts, and related metadata).
+
+### Long-term artifact selection for checksumming
+
+`security/checksums.txt` MUST include every file under `runs/<run_id>/` except:
+
+- `logs/**` (volatile)
+- `unredacted/**` (quarantine, if present)
+- `security/checksums.txt` and `security/signature.ed25519` (to avoid self-reference)
+
+Path canonicalization:
+
+- Paths in `security/checksums.txt` MUST be relative to the run bundle root.
+- Paths MUST use forward slashes (`/`) as separators, even on Windows.
+- Path comparison and sorting MUST be case-sensitive and locale-independent.
+
+### `security/checksums.txt` format (normative)
+
+- Encoding: UTF-8.
+- Line endings: LF (`\n`).
+- One record per line:
+
+  `sha256_hex  relative_path`
+
+  Where:
+  - `sha256_hex` is 64 lowercase hex characters of `sha256(file_bytes)`.
+  - `relative_path` is the canonicalized relative path.
+
+- Ordering: lines MUST be sorted by `relative_path` using lexicographic order over UTF-8 bytes.
+
+### Public key and `key_id`
+
+- `security/public_key.ed25519` MUST contain the Ed25519 public key as base64 of the 32 raw public key bytes, followed by a single LF.
+- `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
+- Implementations SHOULD record `key_id` in run provenance (for example, `manifest.json` under an extensions namespace) to support downstream trust policies.
+
+### `security/signature.ed25519` format (normative)
+
+- The signature MUST be computed over the exact bytes of `security/checksums.txt`.
+- `security/signature.ed25519` MUST contain the signature as base64 of the 64 raw signature bytes, followed by a single LF.
+
+### Verification semantics
+
+Given a run bundle that includes `security/checksums.txt`, `security/signature.ed25519`, and `security/public_key.ed25519`, verification MUST:
+
+1. Parse and canonicalize `security/checksums.txt` exactly as specified above.
+2. Recompute sha256 for each referenced file and compare to `sha256_hex`.
+3. Verify the Ed25519 signature in `security/signature.ed25519` against the bytes of `security/checksums.txt` using the public key from `security/public_key.ed25519`.
+
+Verification outcomes:
+
+- **valid**: all checksums match and the signature verifies.
+- **invalid**: any checksum mismatch, missing referenced file, or signature verification failure.
+- **indeterminate**: required signing artifacts are missing or malformed.
+
+When `security.signing.enabled: true`, the pipeline MUST fail closed if verification would be `invalid` or `indeterminate` for the artifacts it just emitted.
 
 ## Versioning and compatibility policy
 
@@ -548,6 +623,6 @@ Recommended validation stages:
 1. Schema validation of each artifact (JSON and per-line JSONL).
 2. Cross-artifact invariants check.
 3. Storage invariants check (Parquet schema, partition structure, deterministic ordering).
-4. Optional signature verification.
+4. Optional signature verification (when signing artifacts are present).
 
 CI gates should fail closed on contract violations.

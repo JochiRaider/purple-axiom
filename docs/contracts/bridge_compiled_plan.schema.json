@@ -157,7 +157,35 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "additionalProperties": true
+                "additionalProperties": false,
+                "required": [
+                  "path",
+                  "op"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "eq",
+                      "neq",
+                      "in",
+                      "nin",
+                      "exists",
+                      "contains",
+                      "prefix",
+                      "suffix",
+                      "regex"
+                    ]
+                  },
+                  "value": {},
+                  "notes": {
+                    "type": "string"
+                  }
+                }
               }
             }
           }

@@ -96,6 +96,62 @@ These SHOULD be included when available, but are not contract-required.
 
 These fields SHOULD be populated across most events when the source provides them or they can be derived safely. They significantly improve correlation and detection evaluation.
 
+### Tier 1 coverage metric and run health gate
+
+Tier 1 fields remain **SHOULD** per event. However, the pipeline **MUST** compute a run-level Tier 1 coverage
+metric and apply a run health gate. This resolves the tension between "SHOULD" fields and scoring/UX
+assumptions that rely on their availability for pivots.
+
+#### Scope (what events are counted)
+
+The Tier 1 coverage computation **MUST** operate over the set of **in-scope normalized OCSF events**:
+
+1. Start with normalized OCSF events emitted for the run (for example, the contents of `normalized/ocsf_events.*`).
+2. Exclude events that fail OCSF schema validation (invalid events are not counted in the coverage denominator).
+3. If an execution window can be derived from the executed actions (ground truth timeline), then the in-scope set
+   **SHOULD** be restricted to events whose event timestamp falls within:
+   - `[min(action.start_time) - padding, max(action.end_time) + padding]`
+   - `padding` default: 30 seconds
+4. If an execution window cannot be derived, all normalized OCSF events for the run are in-scope.
+
+This scoping rule ensures the metric reflects executed techniques rather than ambient background telemetry.
+
+#### Presence semantics (what "present" means)
+
+For each Tier 1 field path and each in-scope event:
+
+- A field is **present** if the JSON key exists and its value is not `null`.
+- For strings, the value **MUST** be non-empty after trimming whitespace.
+- For arrays and objects, the value may be empty and still counts as present (existence is the pivot requirement).
+- Numeric zero and boolean `false` count as present.
+
+#### Coverage computation
+
+Let:
+- `E` be the set of in-scope normalized events
+- `F` be the Tier 1 field set defined in this document
+- `present(e, f)` be 1 if field `f` is present in event `e` by the rules above, else 0
+
+Then:
+
+`tier1_field_coverage_pct = ( Σ_{e in E} Σ_{f in F} present(e,f) ) / ( |E| * |F| )`
+
+If `|E| == 0`, the metric is **indeterminate** and `tier1_field_coverage_pct` **MUST** be recorded as `null`
+with a reason code (for example, `indeterminate_no_events`).
+
+#### Gate threshold
+
+The default Tier 1 coverage gate threshold is:
+
+- `min_tier1_field_coverage_pct = 0.80`
+
+The run health classification rules are defined in `070_scoring_metrics.md`. In summary:
+
+- If `tier1_field_coverage_pct < 0.80`, the run **MUST** be marked `partial`.
+- If indeterminate due to `|E| == 0`, the run **MUST** be marked `partial`.
+
+This gate is intentionally a run-level quality signal. It does not convert Tier 1 event-level SHOULD into MUST.
+
 ### Classification and severity
 
 | Field | Recommendation | Notes |

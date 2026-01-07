@@ -47,6 +47,15 @@ Common keys:
   - `cidrs`: list of CIDR ranges
   - `notes` (optional)
 
+Inventory artifact formats (normative subset):
+- `json`: Ansible inventory JSON static subset (RECOMMENDED). See `015_lab_providers.md` "Inventory artifact formats and adapter rules".
+- `ansible_yaml`: static Ansible YAML inventory subset (no dynamic inventory plugins).
+- `ansible_ini`: static Ansible INI inventory subset (no dynamic inventory scripts).
+
+Determinism requirements:
+- Implementations MUST convert the input inventory into `provider_inventory_canonical_v1` and MUST resolve `lab_inventory_snapshot.json` from that canonical model.
+- Unsupported constructs MUST fail closed (do not attempt best-effort parsing that could change across versions).
+
 Notes:
 - `lab.assets` remains the canonical, contract-level shape used throughout the pipeline.
 - When `provider != manual`, Purple Axiom resolves provider inventory into `lab.assets` at run start and records the snapshot and hash in the manifest.

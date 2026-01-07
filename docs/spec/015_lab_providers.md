@@ -81,10 +81,112 @@ Recommended minimal keys (see `120_config_reference.md`):
 - `lab.inventory.refresh`
 - `lab.inventory.snapshot_to_run_bundle`
 
+## Inventory artifact formats and adapter rules (normative)
+
+Purple Axiom consumes provider-exported inventory artifacts (`lab.inventory.*`) and converts them into a canonical
+intermediate model prior to resolving the run-scoped `lab_inventory_snapshot.json`.
+
+This section defines the *minimum*, deterministic subset required for v0.1. Provider adapters MAY support richer
+provider-native constructs, but any unsupported constructs MUST fail closed.
+
+### Canonical intermediate model: `provider_inventory_canonical_v1`
+
+The inventory adapter output MUST be a JSON object with:
+
+- `v` (int) MUST be `1`.
+- `hosts` (array) MUST be present and MUST contain at least one element.
+
+Each `hosts[]` element MUST be an object with:
+
+- `name` (string, required): inventory host identifier.
+- `ip` (string, optional): resolved management IP.
+- `groups` (array of strings, optional): unique group names.
+- `vars` (object, optional): allowlisted, non-secret connection metadata.
+
+Allowlisted `vars` keys (all others MUST be ignored and MUST NOT affect resolution or hashing):
+- `ansible_host`
+- `ansible_port`
+- `ansible_connection`
+- `ansible_user`
+- `ansible_shell_type`
+
+Secret suppression:
+- Any `vars` key matching `(?i)(pass|password|token|secret|private|key)` MUST be dropped.
+- If the adapter cannot determine whether a value is secret, it MUST drop the key.
+
+Canonicalization (normative):
+- `hosts[]` MUST be sorted by `name` using bytewise UTF-8 lexical ordering.
+- For each host, `groups[]` MUST be de-duplicated and sorted using bytewise UTF-8 lexical ordering.
+- `vars` MUST be reduced to the allowlist and then key-sorted for canonical JSON hashing.
+
+### Input format: `json` (Ansible inventory JSON, static subset)
+
+The input MUST be a JSON object compatible with static Ansible inventory exports, using:
+
+- group objects with optional `hosts[]`, `children[]`, and `vars{}`
+- `_meta.hostvars{}`
+
+Adapter extraction rules (normative):
+
+1. Enumerate all host names as the union of:
+   - keys of `_meta.hostvars`, and
+   - all hostnames referenced by any group `hosts[]`.
+2. For each host:
+   - `vars` is derived from `_meta.hostvars[host]` (if present) reduced to the allowlist.
+   - `ip` MUST be set to `vars.ansible_host` when present.
+3. Group membership:
+   - A host is a member of group `G` if it appears in `G.hosts[]` OR is reachable through `G.children[]` traversal.
+   - Cycles in the `children[]` graph MUST be detected; on any cycle, the adapter MUST fail closed.
+
+### Input format: `ansible_yaml` (static subset)
+
+The input MUST be a static Ansible YAML inventory using only the following fields:
+- `hosts` (map)
+- `children` (map)
+- `vars` (map)
+
+Adapters MUST produce the same `provider_inventory_canonical_v1` host list and group membership semantics as the `json`
+format.
+
+### Input format: `ansible_ini` (static subset)
+
+The input MUST be a static INI inventory using only:
+- group sections: `[group]`
+- children sections: `[group:children]`
+- vars sections: `[group:vars]` and `[all:vars]`
+
+Host variable precedence (normative):
+- `all:vars` merged first, then group vars, then host vars.
+- When multiple groups apply to one host, group vars MUST be applied in bytewise UTF-8 lexical order by group name.
+
+### Deterministic resolution into `lab.assets` (minimum requirements)
+
+When `lab.provider != manual`, resolution MUST:
+
+1. Build a host lookup map keyed by `hosts[].name`.
+   - Duplicate `name` values MUST cause a fail-closed error.
+2. For each `lab.assets[]` entry, select an inventory host by match key:
+   - If `lab.assets[].hostname` is present: match on that value.
+   - Else: match on `lab.assets[].asset_id`.
+   - The match MUST be exact and MUST yield exactly one host; otherwise, fail closed.
+3. Enrichment:
+   - If `lab.assets[].ip` is unset and the matched inventory host has `ip`, the resolved snapshot MUST set `ip`.
+   - Provider-native identifiers MAY be recorded in the snapshot as `provider_asset_ref`, but MUST NOT be required
+     for deterministic joining.
+
+### Minimum conformance fixtures (normative intent)
+
+Implementations MUST include fixtures that demonstrate deterministic adapter behavior:
+
+- One inventory fixture per supported format (`json`, `ansible_yaml`, `ansible_ini`) representing the same host set.
+- A golden `lab_inventory_snapshot.json` produced from those fixtures.
+- A golden `inventory_snapshot_sha256` computed over `canonical_json_bytes(lab_inventory_snapshot.json)`.
+
 ## Ludus (first implementation)
 Recommended approach:
 - Treat Ludus as an upstream system of record.
-- Consume Ludus-exported inventory artifacts (for example, an Ansible inventory file).
+- Consume a Ludus-exported inventory artifact using one of the supported `lab.inventory.format` adapters.
+  - For v0.1, `json` is RECOMMENDED for determinism (see "Inventory artifact formats and adapter rules").
 - Map inventory entries to canonical `lab.assets` records.
 
 Purple Axiom should not require Ludus APIs at runtime for the initial implementation.

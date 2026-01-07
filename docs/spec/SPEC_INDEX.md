@@ -29,6 +29,11 @@ files in `docs/spec/` so agents do not need to load every document to find the a
 | `110_operability.md` | Operability requirements and run-time expectations |
 | `120_config_reference.md` | Configuration surface area and defaults |
 
+## Other files in docs/spec
+
+- `AGENTS.md` (agent instructions for docs/spec)
+- `SPEC_INDEX.md` (this index)
+
 ## Common tasks (fast paths)
 
 | Need | Read first | Then (if needed) |

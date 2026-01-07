@@ -31,10 +31,36 @@ Recommended path:
 
 ### Canonical asset shape
 Regardless of provider, assets are normalized to:
-- `asset_id` (stable)
+- `asset_id` (stable, Purple Axiom logical ID)
 - `os`, `role`
 - optional `hostname`, `ip`, `tags`
 - optional `provider_asset_ref` (provider-native ID, when meaningful)
+
+### Asset identity and reassignment (determinism requirements)
+
+Purple Axiom distinguishes between:
+
+- `asset_id`: a **Purple Axiom logical identifier** that MUST remain stable across runs for a given range configuration.
+- `provider_asset_ref`: a **provider-native identifier** (optional) that MAY change as a consequence of provider behavior
+  (re-provisioning, ephemeral instance IDs, inventory regeneration).
+
+Normative requirements:
+
+- `asset_id` MUST NOT be derived from an ephemeral provider identifier (for example: cloud instance IDs, incremental
+  inventory indexes, or dynamically allocated VM IDs).
+- A provider implementation MUST resolve all targets to a stable `asset_id` namespace. This typically means one of:
+  - the operator defines `lab.assets` (with stable `asset_id`) in `range.yaml`, and the provider enriches those entries
+    with `hostname`/`ip`/`provider_asset_ref`, or
+  - the provider maintains an explicit, persisted mapping from provider-native identifiers to stable `asset_id`s.
+- If a provider cannot produce stable `asset_id`s for the resolved targets, it MUST fail closed at run start and MUST
+  NOT emit `ground_truth.jsonl` (because cross-run joins would be non-deterministic).
+
+Reassignment semantics (important for regression):
+
+- If an operator reuses an existing `asset_id` to refer to a materially different host profile, this is treated as a
+  **range configuration change**. The resulting `inventory_snapshot_sha256` SHOULD be expected to change, and downstream
+  regression comparisons that join on `target_asset_id` will no longer be semantically comparable unless explicitly
+  opted into by the operator (future config surface).
 
 ## Provider contract (conceptual)
 At run start:

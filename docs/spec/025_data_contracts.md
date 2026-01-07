@@ -131,11 +131,13 @@ Where `action_key_basis_v1` MUST include, at minimum:
 - `technique_id`
 - `engine_test_id`
 - `parameters.resolved_inputs_sha256`
+- `target_asset_id`
 
-And SHOULD include a stable target selector when available (to distinguish materially different host profiles without binding to an ephemeral `target_asset_id`):
-- `resolved_target.os_family`
-- `resolved_target.role`
-- `resolved_target.labels` (sorted)
+Target semantics (normative):
+- `target_asset_id` MUST be a **stable Purple Axiom logical asset id** (matching the `lab.assets[].asset_id` namespace)
+  and MUST NOT be a provider-mutable identifier (for example: ephemeral VM IDs or cloud instance IDs).
+- If a provider cannot resolve stable `asset_id`s for the run targets, the pipeline MUST fail closed before producing
+  any artifact that depends on `action_key`.
 
 Canonical JSON (normative):
 - Any occurrence of `canonical_json(...)` in this spec MUST mean:

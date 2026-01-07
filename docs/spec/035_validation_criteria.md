@@ -285,6 +285,65 @@ Each check:
 - `target` (optional object; type-specific)
 - `severity` (optional string; `info | warn | error`, default `error`)
 
+#### Check type: `file_absent` (Option B, minimum semantics)
+
+`file_absent` verifies that a filesystem path has **no resolvable directory entry** on the target system at verification time.
+This deliberately mirrors common cleanup commands (`rm -f <path>`, `Remove-Item <path>`) by treating the path itself as the
+artifact to remove, not the dereferenced target of a link.
+
+Target (type-specific, required):
+- `target.path` (string)
+  - MUST be interpreted as a **literal path**.
+  - Implementations MUST NOT perform glob expansion, environment-variable expansion, or `~` expansion.
+
+Non-goals (normative):
+- `file_absent` MUST NOT check timestamps, contents, or ACL correctness.
+- `file_absent` MUST NOT attempt to prove that an unlinked POSIX file is no longer held open by a process.
+  It only asserts that the directory entry at `target.path` is absent.
+
+Per-check status (normative):
+- `pass`: the path is absent (no directory entry exists at `target.path`).
+- `fail`: the path is present (a directory entry exists at `target.path`, including symlinks/reparse points).
+- `indeterminate`: the verifier cannot determine presence vs absence due to permissions, invalid path syntax, or other
+  non-presence-related errors.
+
+POSIX/Linux evaluation (normative):
+- The verifier MUST evaluate existence using `lstat`-equivalent semantics (the link object counts as present).
+  - If the `lstat(target.path)`-equivalent call succeeds: `status = fail`.
+  - If the call fails with `ENOENT` or `ENOTDIR`: `status = pass`.
+  - If the call fails with `EACCES` or `EPERM`: `status = indeterminate`.
+  - Any other error: `status = indeterminate`.
+
+Windows evaluation (normative):
+- The verifier MUST evaluate existence using a path attribute query that observes the path entry itself when the path is a
+  symbolic link, junction, or other reparse point.
+  - If the attribute query succeeds: `status = fail`.
+  - If the query fails with “not found” (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`): `status = pass`.
+  - If the query fails with `ERROR_ACCESS_DENIED` (or equivalent): `status = indeterminate`.
+  - If the query fails due to invalid path syntax (`ERROR_INVALID_NAME`, `ERROR_BAD_PATHNAME`, or equivalent):
+    `status = indeterminate`.
+  - Any other error: `status = indeterminate`.
+
+Deterministic stabilization window (optional, recommended):
+- `target.settle_timeout_ms` (optional int, default `0`)
+  - If `> 0`, the verifier SHOULD repeat the existence check on a fixed interval until `pass` or timeout.
+- `target.settle_interval_ms` (optional int, default `250`)
+  - If `settle_timeout_ms > 0`, the verifier MUST use a fixed interval and MUST report the attempt count deterministically:
+    `attempts = 1 + floor(settle_timeout_ms / settle_interval_ms)`.
+
+Required evidence recording (normative):
+- The runner MUST write a per-action `runner/actions/<action_id>/cleanup_verification.json` that includes, per check:
+  - `check_id`, `type`, `target` (echoed), `status` (`pass | fail | indeterminate | skipped`)
+  - `attempts` (int), `elapsed_ms` (int)
+  - `observed_error` (string or int) when `status = indeterminate` (OS-native error code or errno)
+  - `observed_kind` (optional string) when `status = fail` (implementation-defined, but stable)
+
+Minimum conformance fixtures (normative intent):
+- Linux: a dangling symlink at `target.path` MUST yield `status = fail` (because the link entry exists).
+- Linux: a deleted regular file at `target.path` MUST yield `status = pass`.
+- Windows: an existing file at `target.path` MUST yield `status = fail`.
+- Windows: an access-denied probe (directory ACL prevents attribute query) MUST yield `status = indeterminate`.
+
 MVP guidance:
 
 - Prefer `command` checks for early implementation, because they are portable across Windows/Linux if the runner is already remote-executing commands.
@@ -309,7 +368,7 @@ Minimum fields:
   - `sample_event_ids` (optional array of `metadata.event_id`)
 - `cleanup` (object)
   - `invoked` (bool)
-  - `verification_status` (`pass | fail | skipped | not_applicable`)
+  - `verification_status` (`pass | fail | indeterminate | skipped | not_applicable`)
   - `results_ref` (optional path under `runner/`)
 
 ## Design constraints

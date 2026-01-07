@@ -95,7 +95,8 @@ Over time, the target is to reduce fallback rate by expanding normalized fields.
 
 ## 3) Evaluator backend adapter
 
-### Batch backend (recommended default)
+### Batch backend (v0.1 default)
+- For v0.1, if `detection.sigma.bridge.backend` is omitted, the bridge MUST use `duckdb_sql` (DuckDB SQL over Parquet).
 - Compile Sigma -> SQL (after routing + aliasing)
 - Execute over OCSF Parquet using DuckDB
 - Return:
@@ -106,6 +107,34 @@ Over time, the target is to reduce fallback rate by expanding normalized fields.
 - Compile Sigma -> expression plan
 - Evaluate over a stream processor (example: Tenzir)
 - Emit matches in near real time
+
+### Decision criteria for adding Tenzir
+Tenzir support SHOULD be added only when there is an explicit requirement that
+the batch backend cannot satisfy.
+
+At least one of the following MUST be true to justify adding or enabling Tenzir:
+- **Latency**: detections MUST be emitted within a bounded interval (example:
+  1-10s) from event observation, during an active run.
+- **Streaming semantics**: the evaluator MUST support continuous evaluation over
+  live event streams (not only over stored Parquet).
+- **In-flow evaluation**: detections MUST be computed as part of the telemetry
+  flow (example: operator feedback or pre-storage reduction).
+
+### Backend conformance gates (CI)
+Any backend implementation (including `duckdb_sql` and `tenzir`) MUST satisfy the
+following conformance gates (validated via unit + integration tests; see
+`docs/spec/100_test_strategy_ci.md`).
+
+- **Golden equivalence (supported subset)**: for a pinned fixture corpus and a
+  pinned Sigma subset, backends MUST produce identical `matched event ids` per
+  rule. If a backend intentionally differs, the rule MUST be marked
+  non-executable with an explicit reason.
+- **Deterministic ordering**: any emitted list of `metadata.event_id` MUST be
+  sorted deterministically before writing `detections/detections.jsonl`.
+- **Backend provenance**: each `compiled_plans/<rule_id>.plan.json` MUST record
+  the backend identifier and backend version (or build metadata).
+- **Explained failure modes**: non-executable rules MUST include a stable,
+  machine-readable `reason_code` and a human-readable explanation.
 
 ### Backend contract
 Regardless of backend, the evaluator MUST produce `detection_instance` rows in `detections/detections.jsonl` and MUST be able to explain non-executable rules.

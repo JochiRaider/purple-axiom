@@ -8,6 +8,11 @@
 - Redaction posture tests: `security.redaction.enabled=false` MUST produce deterministic placeholders or quarantine-only outputs and MUST label the run as unredacted in metadata.
 - Mapping unit tests: raw input -> expected OCSF output
 - OCSF schema regression tests: representative normalized fixtures MUST validate against the pinned OCSF version used by v0.1.
+- Parquet schema evolution tests (normalized store):
+  - Given two Parquet fixtures for `normalized/ocsf_events/` where fixture B adds one new nullable column relative to fixture A,
+    readers MUST be able to scan both together using union-by-name semantics, and the missing column MUST read as NULL for fixture A rows.
+  - Given a deprecated column name and an `_schema.json` alias mapping, the query layer MUST resolve the canonical column name deterministically
+    (prefer first alias; fall through to next; then NULL if none exist).
 - Rule compilation tests: Sigma -> evaluation plan
 - Bridge router multi-class routing tests:
   - Given a `logsource.category` routed to multiple `class_uid` values, compilation MUST scope evaluation to the union (`IN (...)` / OR semantics).
@@ -27,6 +32,9 @@
 - “Scenario suite” fixture: a small, representative set of techniques used as a regression pack.
 - Telemetry fixture: raw Windows event XML corpus including missing rendered messages and at least one event containing binary-like payload data.
 - Baseline comparison: compare current run outputs to a pinned baseline run bundle.
+- Parquet historical-runs query fixture:
+  - Build two minimal run bundles with different `normalized/ocsf_events/_schema.json` + Parquet schemas (additive change only).
+  - Assert: the scoring/reporting query set completes successfully over both runs without requiring manual schema rewrites.
 - OCSF migration fixture: when bumping the pinned `ocsf_version`, CI MUST re-normalize a fixed raw telemetry fixture set and compare to reviewed “golden” normalized outputs.
 - Checkpoint-loss replay fixture:
   - Run normalization on a fixed raw telemetry fixture.

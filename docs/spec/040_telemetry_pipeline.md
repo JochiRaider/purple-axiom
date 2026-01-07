@@ -94,7 +94,84 @@ The agent configuration SHOULD include:
 - a bounded sending queue with retry (avoid drops on transient backpressure),
 - internal telemetry enabled (Prometheus endpoint for the agent itself).
 
-Purple Axiom does not prescribe exact values. Instead, the repo includes a validation harness (see below) that measures events/sec, CPU, and memory for your lab scale.
+Purple Axiom does not prescribe a single set of “correct” values for all labs. However, to support MVP deployments and to make “bounded queue behavior” mechanically testable, Purple Axiom DOES provide baseline starter values and a deterministic tuning methodology.
+
+#### Baseline starter values (reference config; MVP)
+
+The following values are RECOMMENDED as a starting point for a typical Windows endpoint agent collecting Windows Event Log + Sysmon and exporting off-host.
+
+- Memory limiter:
+  - `limit_mib: 512`
+  - `spike_limit_mib: 128`
+  - `check_interval: 1s`
+- Batch processor:
+  - `send_batch_size: 1024` (≈ “1000 events”)
+  - `timeout: 10s`
+- Exporter sending queue + retry (per exporter):
+  - `sending_queue.enabled: true`
+  - `sending_queue.queue_size: 4096`
+  - `sending_queue.num_consumers: 2`
+  - `retry_on_failure.enabled: true`
+  - `retry_on_failure.initial_interval: 1s`
+  - `retry_on_failure.max_interval: 30s`
+  - `retry_on_failure.max_elapsed_time: 300s`
+
+Notes:
+- These values are intentionally conservative for operator UX (low surprise) and determinism (explicit backpressure behavior).
+- If the endpoint is memory-constrained, operators SHOULD reduce `limit_mib` (example: 256) before increasing queue sizes.
+
+#### Reference snippet (illustrative; not a full collector config)
+
+```yaml
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    send_batch_size: 1024
+    timeout: 10s
+
+exporters:
+  otlp:
+    endpoint: "${env:OTLP_ENDPOINT}"
+    sending_queue:
+      enabled: true
+      queue_size: 4096
+      num_consumers: 2
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  pipelines:
+    logs:
+      processors: [memory_limiter, batch]
+      exporters: [otlp]
+```
+
+#### Tuning methodology (operator playbook; deterministic)
+
+When tuning, change one dimension at a time, in this order, and record the resulting config hash in run provenance:
+
+1) **Set the memory ceiling first (fail-closed for runaway growth)**
+   - Choose `limit_mib` such that the collector remains stable under sustained target EPS for 10 minutes.
+   - Acceptance target: memory limiter activation events may occur under stress, but the process MUST NOT exhibit unbounded growth.
+
+2) **Size the sending queue to a bounded “outage budget”**
+   - Decide the maximum export stall you want to tolerate without drops (example: 30–120 seconds).
+   - Choose `queue_size ≈ target_eps * tolerated_stall_seconds`.
+   - Requirement: the queue MUST be bounded; when full, drops MUST be explicit and counted (no silent unbounded buffering).
+
+3) **Tune batching to your EPS**
+   - Pick `send_batch_size` so that a batch represents roughly 0.5–2.0 seconds of traffic at target EPS.
+   - Keep `timeout` small enough to bound latency (10s is a reasonable starting point for MVP).
+
+4) **Validate under backpressure and restarts**
+   - Re-run the validation harness backpressure and restart tests (§4) after each tuning change.
+   - Operators SHOULD treat any tuning change that increases drops at steady-state EPS as a regression unless justified by tighter resource budgets.
 
 ### Checkpointing and replay semantics (required)
 
@@ -172,7 +249,17 @@ Minimum required fields for `logs/telemetry_validation.json`:
   - `checkpoint_loss_observed` (bool)
   - `replay_observed` (bool)
   - `dedupe_preserved_uniqueness` (bool)
-
+ 
+ Recommended additional fields (operator UX and regression tracking):
+ - `performance_controls` (object)
+   - `memory_limiter` (object): `limit_mib`, `spike_limit_mib`, `check_interval`
+   - `batch` (object): `send_batch_size`, `timeout`
+   - `sending_queue` (object): `queue_size`, `num_consumers`
+ - `observed` (object)
+   - `memory_limiter_activated` (bool)
+   - `exporter_queue_drops_observed` (bool)
+   - `exporter_send_failures_observed` (bool)
+   
 ## 5) Payload limits and binary handling (Windows Event Log)
 
 ### Definitions

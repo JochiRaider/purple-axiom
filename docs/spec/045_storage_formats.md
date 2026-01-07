@@ -199,9 +199,100 @@ If redaction is disabled (`security.redaction.enabled=false`), sidecar payload r
 
 ### Schema evolution
 
-- Additive changes are preferred (new nullable columns).
-- Avoid changing the meaning or type of existing columns.
-- For normalized OCSF events, required provenance columns must not change types across versions.
+This section defines how Parquet-backed datasets evolve over time as:
+- new OCSF fields are populated (additional columns),
+- mapping profiles expand,
+- field naming is corrected (rename-like changes), or
+- types need to change.
+
+#### Definitions
+
+- **Dataset**: a Parquet dataset directory such as `normalized/ocsf_events/` or `raw_parquet/windows_eventlog/`.
+- **Physical schema**: the column names and types stored in each Parquet file’s metadata.
+- **Logical schema**: the query-facing expectation for a dataset (required columns plus optional columns).
+- **Schema version**: a SemVer identifier for a dataset’s logical schema (not the Parquet format version).
+
+#### Writer requirements (normative)
+
+1) **Single-schema per dataset per run**
+- Within a single run bundle, all Parquet files under a dataset directory MUST share the same physical schema.
+  - Rationale: avoids per-run “schema merge” behavior that can be non-deterministic and expensive at read time.
+
+2) **Additive evolution is the default**
+- Adding columns is the preferred evolution mechanism.
+- Newly introduced columns MUST be **nullable**.
+- Writers MUST NOT rely on “column presence” to communicate meaning. Absence is treated as `NULL` on read.
+
+3) **No in-place semantic changes**
+- Writers MUST NOT change the meaning of an existing column name within the same schema MAJOR version.
+- If semantics must change, the writer MUST introduce a new column name and deprecate the old one (see below).
+
+4) **Type stability**
+- Writers MUST NOT change the physical type of an existing column within the same schema MAJOR version.
+- If a type change is necessary:
+  - Preferred: **widening** changes (for example, `int32 -> int64`) while preserving meaning.
+  - Otherwise: write to a new column name and deprecate the old one.
+
+#### Rename policy (how to handle “field renamed” in practice)
+
+Parquet itself is not a table format with first-class rename semantics. Purple Axiom therefore treats “rename” as a compatibility pattern, not an in-place operation:
+
+- A “rename” MUST be implemented as:
+  1. add the new column name (nullable),
+  2. mark the old column name as deprecated,
+  3. provide an explicit alias mapping for readers (required; see `_schema.json` below).
+
+During the deprecation window, writers SHOULD populate both:
+- the new column, and
+- the deprecated column (same value),
+unless doing so causes unacceptable storage overhead. If writers do not populate both, the alias mapping becomes mandatory for correctness of cross-run queries.
+
+#### Required dataset schema snapshot (`_schema.json`)
+
+To make historical runs queryable without guesswork, each Tier 2 Parquet dataset directory MUST include a schema snapshot:
+
+- Path: `runs/<run_id>/<dataset_dir>/_schema.json`
+  - Example: `runs/<run_id>/normalized/ocsf_events/_schema.json`
+
+The snapshot MUST be deterministic and MUST NOT include volatile fields (timestamps, hostnames, random IDs).
+
+Minimum fields (normative):
+- `schema_id` (string)
+  - Recommended: `pa.parquet.<dataset_kind>` (example: `pa.parquet.normalized.ocsf_events`)
+- `schema_version` (string; SemVer)
+- `columns` (array), each:
+  - `name` (string; canonical dotted path, for example `metadata.event_id`)
+  - `type` (string; Arrow-style scalar, for example `int64`, `string`, `timestamp_ms_utc`)
+  - `nullable` (bool)
+- `aliases` (object; optional but REQUIRED when any column has been deprecated/renamed)
+  - Keys are canonical column names.
+  - Values are ordered arrays of acceptable physical column names, most-preferred first.
+  - Example:
+    - `"actor.user.name": ["actor.user.name", "user.name"]`
+
+Deterministic ordering (normative):
+- `columns[]` MUST be sorted by `name` using bytewise UTF-8 lexical ordering (no locale, case-sensitive).
+- Each `aliases[<key>]` list MUST be in deterministic preference order.
+
+#### Querying historical runs (union + projection)
+
+Consumers of run bundles SHOULD assume that older runs may:
+- lack newly added columns (treat as `NULL`), and
+- contain deprecated column names (resolve via aliases).
+
+Requirements (normative for built-in query tooling):
+- When scanning multiple Parquet files or multiple run bundles with potentially different schemas, the reader MUST use “union by name” semantics so missing columns become `NULL` instead of failing the scan. 
+- Readers SHOULD rely on column projection to only load the columns needed for the query. 
+
+Reference patterns (non-normative examples):
+- DuckDB: `read_parquet(..., union_by_name=true)` 
+- Spark: enable schema merging when reading mutually compatible Parquet schemas. 
+- Arrow: unify fragment schemas into a dataset schema when needed. 
+
+#### Compatibility expectations for normalized OCSF datasets
+
+- The “minimum required columns” listed below are **contract-critical** and MUST remain present and type-stable across all schema versions for `normalized/ocsf_events/`.
+- New OCSF fields added over time MUST be introduced as additional nullable columns.
 
 ## Normalized OCSF Parquet schema (minimum required columns)
 

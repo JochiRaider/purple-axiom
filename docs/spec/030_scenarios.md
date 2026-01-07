@@ -49,6 +49,7 @@ canonicalized using `canonical_json_bytes(...)` as defined by RFC 8785 (JCS).
 - `technique_id`
 - `engine_test_id` (Atomic test GUID / Caldera ability id / equivalent canonical id)
 - `parameters.resolved_inputs_sha256` (hash of resolved inputs; not the raw inputs)
+- `target_asset_id` (stable Purple Axiom logical asset id; see `015_lab_providers.md`)
 
 Then:
 
@@ -59,6 +60,8 @@ Notes:
 - `action_key` MUST NOT incorporate `run_id` or timestamps.
 - `action_key` SHOULD NOT embed secrets; use hashes for resolved inputs and store redacted inputs separately.
 - Canonicalization MUST follow RFC 8785; do not use native JSON serializers.
+- `target_asset_id` MUST refer to the **stable** `lab.assets[].asset_id` namespace, not to a provider-mutable identifier.
+  If a provider cannot resolve stable `asset_id`s for targets, the run MUST fail closed (see `015_lab_providers.md`).
 
 ## Criteria linkage (expected telemetry)
 
@@ -80,11 +83,17 @@ Expected telemetry is externalized into criteria packs (see `035_validation_crit
   - roles (optional): match-any roles
   - os (optional): constrain to OS families
 - The resolved targets for a run are written into the run manifest and an inventory snapshot artifact.
+- v0.1 determinism constraint:
+  - Each executed action MUST resolve to exactly one `target_asset_id` in `ground_truth.jsonl`.
+  - If a selector matches multiple assets, the runner/provider MUST select deterministically using a stable ordering
+    over `lab.assets[].asset_id` (bytewise lexical ordering of UTF-8), and SHOULD record the selection rule in runner
+    evidence so the choice is explainable.
 
 ## Ground truth timeline schema (seed)
 - timestamp_utc
 - run_id, scenario_id, scenario_version
 - target_asset_id
+  - `target_asset_id` MUST be a stable Purple Axiom logical id (matching `lab.assets[].asset_id` in the inventory snapshot), not a provider-mutable identifier.
 - resolved_target (seed)
   - hostname (optional)
   - ip (optional)

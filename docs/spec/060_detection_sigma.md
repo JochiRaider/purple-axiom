@@ -26,7 +26,7 @@ Sigma evaluation is a two-stage process:
    - Route the rule: `sigma.logsource` -> OCSF class filter (and optional producer/source predicates via `filters[]` OCSF filter objects; see `065_sigma_to_ocsf_bridge.md`).
    - Rewrite Sigma field references to OCSF JSONPaths (or SQL column expressions).
    - Produce a backend plan:
-     - batch: SQL over Parquet (DuckDB recommended)
+     - batch: SQL over Parquet (DuckDB SQL MUST be the v0.1 default when `detection.sigma.bridge.backend` is omitted; see `065_sigma_to_ocsf_bridge.md`).
      - streaming: expression plan over in-memory/stream processors
 
 2) **Evaluate**

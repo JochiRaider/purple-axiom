@@ -53,6 +53,7 @@
   - run_id/scenario_id consistency
   - referential integrity (detections reference existing event_ids)
   - inventory snapshot hash matches manifest input hash
+  - when `operability.health.emit_health_files=true`, `runs/<run_id>/logs/health.json` MUST exist and MUST satisfy the minimum schema in `110_operability.md` (“Health files (normative, v0.1)”).
 - Regression gates (configurable thresholds):
   - technique coverage must not drop more than X relative to baseline
   - latency percentiles must not exceed Y

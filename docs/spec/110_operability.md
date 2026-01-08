@@ -96,6 +96,30 @@ A telemetry stage is only considered "validated" for an asset when a validation 
 
 The validator writes a summary to `runs/<run_id>/logs/telemetry_validation.json` and the manifest SHOULD include a pointer to it.
 
+## Health files (normative, v0.1)
+
+When `operability.health.emit_health_files=true`, the pipeline MUST write `runs/<run_id>/logs/health.json`.
+
+`health.json` MUST include, at minimum:
+- `run_id` (string)
+- `status` (`success | partial | failed`)
+- `stages` (array), where each entry includes:
+  - `stage` (string; stable identifier)
+  - `status` (`success | failed | skipped`)
+  - `fail_mode` (`fail_closed | warn_and_skip`)
+  - `reason_code` (optional string; stable token)
+
+Determinism requirements:
+- `stages[]` MUST be sorted by `stage` using UTF-8 byte order (no locale).
+- `health.json.status` MUST equal `manifest.status` for the same run.
+
+## Process exit codes (normative, v0.1)
+
+For a one-shot pipeline invocation, the process exit code MUST be:
+- `0` when `manifest.status=success`
+- `10` when `manifest.status=partial`
+- `20` when `manifest.status=failed`
+
 ## Incident-style debugging workflow
 
 When a run is `partial` or `failed`, prefer this order:

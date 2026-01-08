@@ -139,6 +139,9 @@ A controlled escape hatch is permitted for MVP:
   - the event is still within the correct OCSF class scope, and
   - provenance clearly identifies the producer/source
 - If fallback is used, it MUST be recorded (see “Bridge provenance in detections”).
+- Fallback enablement MUST be controlled by `detection.sigma.bridge.raw_fallback_enabled` (see `120_config_reference.md`).
+- If fallback is used, `extensions.bridge.fallback_used` MUST be `true` in emitted detection instances.
+- Any list of fallback-related fields (example: `extensions.bridge.unmapped_sigma_fields`) MUST be sorted by UTF-8 byte order (no locale).
 
 Over time, the target is to reduce fallback rate by expanding normalized fields.
 
@@ -146,6 +149,13 @@ Over time, the target is to reduce fallback rate by expanding normalized fields.
 - If a rule references an unmapped field and fallback is disabled, the rule is **non-executable**.
 - If a Sigma modifier cannot be expressed in the backend (example: complex regex semantics), the rule is **non-executable**.
 - Non-executable rules are reported with reasons and counts.
+
+Non-executable `reason_code` values (normative, v0.1):
+- `unmapped_field`
+- `raw_fallback_disabled`
+- `unsupported_modifier`
+- `backend_compile_error`
+- `backend_eval_error`
 
 ## 3) Evaluator backend adapter
 

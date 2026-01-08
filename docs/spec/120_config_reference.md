@@ -197,10 +197,12 @@ Common keys:
   - `time_window_after_seconds` (optional, default: 120)
   - `max_sample_event_ids` (optional, default: 20)
   - `fail_mode` (optional, default: `warn_and_skip`): `fail_closed | warn_and_skip`
+    - `fail_closed`: criteria-stage errors that prevent producing a complete `criteria/results.jsonl` MUST cause the criteria stage outcome to be `failed`.
+    - `warn_and_skip`: evaluator MUST still emit `criteria/results.jsonl` rows for all selected actions; actions that cannot be evaluated MUST be marked `status: "skipped"` with a stable `reason_code`.
 
 Notes:
 - Criteria evaluation SHOULD operate on the normalized OCSF store (not raw events).
-- When `fail_mode: fail_closed`, criteria evaluation errors cause the run to be marked `partial` or `failed`.
+- When `fail_mode: fail_closed`, criteria evaluation errors MUST produce a criteria stage outcome of `failed`, and `manifest.status` MUST be derived per `025_data_contracts.md` (“Status derivation”).
 
 ### `detection`
 Controls evaluation over normalized OCSF events and outputs to `detections/`.
@@ -216,7 +218,12 @@ Common keys:
     - `mapping_pack_version` (optional, recommended): pin for reproducibility
     - `backend` (default: `duckdb_sql`): `duckdb_sql | tenzir | other`
     - `fail_mode` (default: `fail_closed`): `fail_closed | warn_and_skip`
-    - `raw_fallback_enabled` (default: true)
+      - `fail_closed`: bridge/backend errors that prevent evaluating enabled rules (routing, compilation, backend execution) MUST cause the detection stage outcome to be `failed`.
+      - `warn_and_skip`: such errors MUST be recorded; affected rules MUST be marked non-executable with a stable `reason_code`. The detection stage outcome SHOULD be `success` unless the stage cannot produce outputs at all.
+     - `raw_fallback_enabled` (default: true)
+      - Controls whether rules may reference `raw.*` per `065_sigma_to_ocsf_bridge.md` (“Fallback policy (`raw.*`)”).
+      - When `false`, any rule requiring `raw.*` MUST be marked non-executable with `reason_code: "raw_fallback_disabled"`.
+      - When `true`, any fallback use MUST be accounted for via `extensions.bridge.fallback_used=true` in detection outputs.
     - `compile_cache_dir` (optional): path for cached compiled plans keyed by (rule hash, mapping pack version, backend version)
   - `limits` (optional)
     - `max_rules` (optional)
@@ -276,6 +283,8 @@ Common keys:
   - `max_disk_gb` (optional)
 - `health`
   - `emit_health_files` (default: true)
+    - When `true`, the pipeline MUST write `runs/<run_id>/logs/health.json` (minimum schema in `110_operability.md`, “Health files (normative, v0.1)”).
+    - When `false`, the pipeline MUST still compute `manifest.status` per `025_data_contracts.md` (“Status derivation”).
 
 ### `security` (optional)
 Controls security boundaries and hardening (see also `090_security_safety.md`).
@@ -304,7 +313,7 @@ Common keys:
   - `allowlist` (optional): list of CIDRs/domains when outbound is enabled
 - `signing` (optional)
   - `enabled` (default: false)
-  - `key_ref` (required when enabled): reference only
+  - `key_ref` (required when enabled): reference to signing private key material (never inline)
     - v0.1 posture:
       - Disabled by default for MVP.
       - Strongly RECOMMENDED for compliance/audit/export workflows.

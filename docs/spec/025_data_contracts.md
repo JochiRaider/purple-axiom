@@ -91,6 +91,15 @@ Key semantics:
   - `failed`: run failed early or outputs are not usable
 - `inputs.*_sha256` are SHA-256 hashes of the exact configs used.
 
+Status derivation (normative):
+- Implementations MUST compute an effective outcome for each enabled pipeline stage (a “stage outcome”).
+- A stage outcome MUST include: `stage` (stable identifier), `status` (`success | failed | skipped`), `fail_mode` (`fail_closed | warn_and_skip`), and an optional `reason_code` (stable token).
+- `manifest.status` MUST be derived from the set of stage outcomes:
+  - `failed` if any stage has `status=failed` and `fail_mode=fail_closed`
+  - else `partial` if any stage has `status=failed`
+  - else `success`
+- When `operability.health.emit_health_files=true`, stage outcomes MUST also be written to `runs/<run_id>/logs/health.json` (minimum schema in `110_operability.md`).
+ 
 Recommended manifest additions (normative in schema when implemented):
 - `lab.provider` (string): `manual | ludus | terraform | other`
 - `lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot

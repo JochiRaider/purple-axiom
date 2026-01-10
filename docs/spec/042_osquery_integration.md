@@ -90,6 +90,20 @@ receivers:
 ```
 **Durable offset tracking note (required):** This receiver example assumes the collector enables a storage extension (v0.1 reference: `file_storage` / filestorage) and points it at a durable on-disk directory. Loss/corruption/reset of that directory MUST be treated as checkpoint loss per `040_telemetry_pipeline.md` (replay/duplication is expected; gaps must be recorded).
 
+### 3.3 Rotation and compression constraints (required)
+
+- The `filelog` receiver MUST be able to read every rotated segment necessary to cover the
+  worst-case catch-up window (see `040_telemetry_pipeline.md` “Checkpointing and replay semantics”).
+- osquery filesystem logger rotation MAY produce Zstandard-compressed rotated files (`*.zst`).
+  The v0.1 pipeline MUST NOT assume that the `filelog` receiver can read `*.zst` segments.
+- Operators MUST ensure the osquery results rotation policy yields rotated history that is readable
+  by `filelog` for the full catch-up window. Acceptable strategies include:
+  - keep rotated segments uncompressed until after the catch-up window expires, or
+  - use gzip (`*.gz`) for rotated segments and configure `filelog` `compression: gzip`
+    (append-only; MUST NOT recompress-overwrite existing files).
+- If unreadable rotated segments lead to missing results, the validator MUST record the gap as a
+  telemetry failure (not silently ignored).
+
 Required exporter tagging:
 - The collector (or downstream normalizer) MUST be able to set `metadata.source_type = "osquery"` for records originating from this receiver.
 

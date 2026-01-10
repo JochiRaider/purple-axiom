@@ -315,6 +315,16 @@ At-least-once delivery implies duplicates and replay. This is expected and MUST 
 
 4) File-tailed source caveats (osquery NDJSON and similar)
 - osquery filesystem logger rotation may produce compressed rotated files; operators MUST ensure that the chosen rotation and retention scheme preserves a sufficient window of readable NDJSON for the collector to catch up after a restart or outage.
+- **osquery `.zst` rotation caveat (required):** If osquery filesystem logger rotation is enabled,
+  older rotated segments may be Zstandard-compressed (`*.zst`). The OTel `filelog` receiver
+  MUST NOT be assumed to read `*.zst` segments; v0.1 only assumes plain-text NDJSON and
+  optional gzip (`compression: gzip`).
+  - Operators MUST either:
+    - tune rotation/retention so the collector catch-up window never requires reading `*.zst`
+      (example: only the active file and `.1` exist during the run window + outage budget), or
+    - implement an explicit decompress-to-plain (or gzip) staging step prior to `filelog` tailing.
+  - If `*.zst` segments are the only available rotated history, any resulting gaps MUST be
+    recorded as telemetry gaps during validation.
 - The `filelog` receiver `include` patterns MUST cover both the active file and any rotated segments that remain readable during the worst-case catch-up window (outage budget + restart time). If rotated segments age out of the include glob before being read, loss is expected and MUST be treated as a telemetry gap.
 - If rotated segments are gzip-compressed, the collector MUST be configured with `compression: gzip` for those files and the compressed file MUST be append-only (recompress-overwrite patterns are not supported for correctness).
 - Telemetry validation MUST include a crash/restart + rotation continuity test for every enabled file-tailed source (see §4).

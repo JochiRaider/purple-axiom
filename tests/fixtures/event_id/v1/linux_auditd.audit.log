@@ -1,0 +1,3 @@
+node=linux-host-01 type=SYSCALL msg=audit(1700000000.123:456): arch=c000003e syscall=59 success=yes exit=0
+type=CWD msg=audit(1700000000.123:456):  cwd="/home/bob"
+type=EOE msg=audit(1700000000.123:456):

@@ -5,6 +5,7 @@
 - Canonicalization tests: RFC 8785 (JCS) vectors + Purple Axiom hash-basis fixtures (byte-for-byte).
 - Redaction tests: policy fixture vectors (argv redaction, regex redaction, truncation determinism, post-checks).
 - Windows Event Log raw XML tests: identity-field extraction without RenderingInfo; binary field detection; payload limit truncation + SHA-256.
+- Linux event identity basis tests: auditd/journald/syslog fixture vectors (Tier 1/Tier 2) + Tier 3 collision fixture under `tests/fixtures/event_id/v1/`.
 - Redaction posture tests: `security.redaction.enabled=false` MUST produce deterministic placeholders or quarantine-only outputs and MUST label the run as unredacted in metadata.
 - Mapping unit tests: raw input -> expected OCSF output
 - OCSF schema regression tests: representative normalized fixtures MUST validate against the pinned OCSF version used by v0.1.

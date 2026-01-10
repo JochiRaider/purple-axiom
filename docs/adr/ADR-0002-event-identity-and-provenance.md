@@ -140,7 +140,7 @@ and is therefore suitable as Tier 1 identity input.
 
 ##### Tier 1 identity basis (normative)
 
-- `source_type`: `journald`
+- `source_type`: `linux_journald`
 - `origin.host`: the emitting host identity
 - `origin.journald_cursor`: the journald cursor string as emitted by the source (`__CURSOR` or equivalent),
   treated as an opaque string
@@ -168,16 +168,37 @@ byte-identical messages in the same timestamp bucket are common.
 When syslog is collected from a stored artifact (example: a captured syslog file that is included in the
 run bundle or raw store), the identity basis MUST be:
 
-- `source_type`
-- `origin.host`
+- `source_type`: `linux_syslog`
+- `origin.host`: the emitting host identity
 - `stream.name`: stable identifier of the stored artifact (example: `syslog`, `messages`, or a stable logical stream id)
-- `stream.cursor`: stable per-record cursor within that stored artifact (example: `line_index` in the stored raw table,
-  or byte offset of the line start), persisted as evidence
+- `stream.cursor`: stable per-record cursor within that stored artifact (example: `line_index` in the stored raw table, or byte offset of the line start), persisted as evidence
 
 Rules:
 - The cursor MUST be stable under reprocessing of the same stored artifact.
-- Implementations MUST NOT use an ephemeral collector read offset unless it is persisted with the stored artifact
-  and remains stable for that artifact under reprocessing.
+- The cursor MUST be represented as a string (example encodings: `li:<decimal>` for line index; `bo:<decimal>` for byte offset).
+- Implementations MUST NOT use an ephemeral collector read offset unless it is persisted with the stored artifact and remains stable for that artifact under reprocessing.
+
+#### Linux identity basis fixtures (normative)
+
+Implementations MUST maintain a fixture-driven test suite that exercises Linux identity-basis extraction and
+hashing for Tier 1 and Tier 2 inputs, and demonstrates Tier 3 fallback behavior.
+
+Recommended fixture set (v0.1):
+- `tests/fixtures/event_id/v1/linux_identity_vectors.jsonl`
+  - JSONL vectors where each line contains: `case`, `identity_tier`, `identity_basis`, and `event_id`.
+  - Vectors MUST include at least:
+    - auditd Tier 1 (aggregated audit event)
+    - auditd Tier 2 (no aggregation; per-record cursor)
+    - journald Tier 1 (cursor-based)
+    - syslog Tier 2 (stored artifact cursor-based)
+    - syslog Tier 3 (fingerprint fallback)
+- `tests/fixtures/event_id/v1/linux_identity_collision.jsonl`
+  - Two or more vectors that intentionally collide (same Tier 3 identity basis), used to validate collision
+    accounting and downstream de-duplication behavior.
+- Representative raw inputs for extraction tests (recommended):
+  - `tests/fixtures/event_id/v1/linux_auditd.audit.log`
+  - `tests/fixtures/event_id/v1/linux_journald.jsonl`
+  - `tests/fixtures/event_id/v1/linux_syslog.messages`
 
 ### Canonicalization rules
 To ensure cross-implementation determinism, implementations MUST use

@@ -39,7 +39,7 @@ venv/
 Thumbs.db
 
 # Logs
-*.log
+#*.log
 logs/
 
 # Data

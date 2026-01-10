@@ -70,6 +70,8 @@ receivers:
       - C:\\ProgramData\\osquery\\log\\osqueryd.results.log
     start_at: beginning
     include_file_path: true
+    # Required for durable offset tracking across restarts; see 040_telemetry_pipeline.md "Checkpointing and replay semantics"
+    storage: file_storage    
     operators:
       - type: json_parser
         parse_from: body
@@ -86,6 +88,7 @@ receivers:
         from: attributes.action
         to: attributes.osquery.action
 ```
+**Durable offset tracking note (required):** This receiver example assumes the collector enables a storage extension (v0.1 reference: `file_storage` / filestorage) and points it at a durable on-disk directory. Loss/corruption/reset of that directory MUST be treated as checkpoint loss per `040_telemetry_pipeline.md` (replay/duplication is expected; gaps must be recorded).
 
 Required exporter tagging:
 - The collector (or downstream normalizer) MUST be able to set `metadata.source_type = "osquery"` for records originating from this receiver.

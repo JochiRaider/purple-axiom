@@ -216,7 +216,11 @@ At-least-once delivery implies duplicates and replay. This is expected and MUST 
 - The checkpoint storage directory MUST be explicitly configured to a stable location on durable disk (not an ephemeral temp directory).
 - If the collector is deployed in a container, the checkpoint directory MUST be mounted to a persistent volume.
 - For file-tailed sources (example: osquery results via `filelog`), the receiver MUST enable durable offset tracking via a storage-backed checkpoint (file offsets MUST NOT be in-memory only).
+- For `filelog` receivers, durable offset tracking MUST be implemented using the receiver `storage` setting wired to an enabled storage extension.
+  - v0.1 reference wiring: `storage: file_storage` and an enabled `file_storage` extension (filestorage).
+  - The on-disk storage extension data MUST be treated as a checkpoint artifact: loss/corruption/reset MUST be classified as checkpoint loss and recorded accordingly.
 - If the offset checkpoint storage is reset (example: storage corruption recovery or manual deletion), this MUST be treated as checkpoint loss (see #2) and recorded as such.
+- If the chosen storage backend performs automatic corruption recovery by starting a fresh database, this MUST be treated as checkpoint loss (even if the process continues without operator action).
 
 2) Loss and replay handling (pipeline)
 - If a collector checkpoint is lost, the collector MAY replay historical events.
@@ -230,6 +234,8 @@ At-least-once delivery implies duplicates and replay. This is expected and MUST 
 
 4) File-tailed source caveats (osquery NDJSON and similar)
 - osquery filesystem logger rotation may produce compressed rotated files; operators MUST ensure that the chosen rotation and retention scheme preserves a sufficient window of readable NDJSON for the collector to catch up after a restart or outage.
+- The `filelog` receiver `include` patterns MUST cover both the active file and any rotated segments that remain readable during the worst-case catch-up window (outage budget + restart time). If rotated segments age out of the include glob before being read, loss is expected and MUST be treated as a telemetry gap.
+- If rotated segments are gzip-compressed, the collector MUST be configured with `compression: gzip` for those files and the compressed file MUST be append-only (recompress-overwrite patterns are not supported for correctness).
 - Telemetry validation MUST include a crash/restart + rotation continuity test for every enabled file-tailed source (see §4).
 
 ## 3) Injecting `run_id` / `scenario_id`
@@ -268,7 +274,9 @@ Before the telemetry stage is treated as "green", validate each Windows endpoint
    - If osquery (or any file-tailed source) is enabled, perform a crash/restart + rotation continuity test:
      - generate a monotonic sequence in the source NDJSON stream,
      - force at least one rotation boundary during the test window,
-     - confirm no sequence gaps in the raw store after restart (duplication is acceptable; loss is not).
+     - crash the collector (hard kill) mid-stream and restart it,
+     - confirm no sequence gaps in the raw store after restart (duplication is acceptable; loss is not), and
+     - record measured `loss_pct` and `dup_pct` for the test window (per rotation mode), alongside the collector config hash and the checkpoint directory fingerprint.
 3. **Backpressure**
    - Throttle the exporter/disk; confirm bounded queue behavior (drops are explicit and counted).
 4. **Footprint**

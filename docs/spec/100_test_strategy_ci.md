@@ -39,8 +39,15 @@
 - Checkpoint-loss replay fixture:
   - Run normalization on a fixed raw telemetry fixture.
   - Delete/move `runs/<run_id>/logs/telemetry_checkpoints/` and restart normalization over the same inputs.
-  - Assert: (1) normalized store remains unique by `metadata.event_id`, (2) `dedupe_duplicates_dropped_total > 0`,
-    and (3) normalized outputs are deterministic relative to the baseline fixture.
+  - Assert: (1) normalized store remains unique by `metadata.event_id`, (2) `dedupe_duplicates_dropped_total > 0`, and (3) normalized outputs are deterministic relative to the baseline fixture.
+- File-tailed crash+rotation continuity fixture (R-01):
+  - Use a synthetic NDJSON writer that emits a monotonic `seq` field and rotates the file at a fixed byte or line threshold.
+  - Configure the collector `filelog` receiver with `storage: file_storage` (filestorage) and capture the storage directory as a test artifact.
+  - Matrix (minimum): OS={Windows, Linux} × rotation={rename+create, copytruncate} × crash={graceful stop, hard kill}.
+  - Assert per matrix cell:
+    - `loss_pct == 0` for the window spanning (pre-rotation, rotation, post-rotation) and the crash boundary.
+    - `dup_pct` is computed and recorded (duplication is acceptable but MUST be bounded and observable).
+    - Results include collector config hash and a deterministic fingerprint of the checkpoint directory contents.
     
 ## CI gates (seed)
 - Schema validation of produced OCSF events

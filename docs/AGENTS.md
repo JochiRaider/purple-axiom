@@ -16,12 +16,14 @@
 - ADR navigation (decisions, consequences): `docs/adr/ADR_INDEX.md`
 - Spec navigation (normative requirements): `docs/spec/SPEC_INDEX.md`
 - Contract registry (schema catalog): `docs/contracts/index.json`
+- Mapping completeness checklist (v0.1 MVP): `docs/mappings/coverage_matrix.md`
 
 ## Index maintenance (required)
 - If you add/rename/move a document in `docs/spec/`, update `docs/spec/SPEC_INDEX.md`.
 - If you add a new ADR in `docs/adr/`, update `docs/adr/ADR_INDEX.md`.
 - If you add/rename/remove a contract schema in `docs/contracts/`, update `docs/contracts/index.json`.
 - If you create a new documentation category, update `docs/DOCS_INDEX.md`.
+- If you add/rename/move a document in `docs/mappings/`, update `docs/DOCS_INDEX.md`.
 
 ## Documentation hygiene
 - Preserve existing structure unless a change is necessary for correctness.

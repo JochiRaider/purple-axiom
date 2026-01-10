@@ -19,6 +19,8 @@ This file provides a high-level navigation aid for the `docs/` directory to help
   - *Read when:* Understanding the "why" behind a design or proposing a fundamental change.
 - **`docs/contracts/`**: CI-enforced data structures.
   - *Read when:* Modifying JSON outputs, validating data formats, or checking schema compatibility.
+- **`docs/mappings/`**: Mapping references and completeness checklists.
+  - *Read when:* Implementing or reviewing normalization mappings; adding CI coverage for “mapping completeness”.
 - **`docs/research/`**: Transient or exploratory documents.
   - *Read when:* Investigating performance experiments or reliability studies.
 

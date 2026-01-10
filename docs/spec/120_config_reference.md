@@ -135,6 +135,10 @@ Common keys:
 See `042_osquery_integration.md` for format requirements, OTel receiver examples, normalization routing, and fixtures.
 
 Notes:
+- For Windows Event Log sources, the referenced OTel Collector config MUST set
+  `raw: true` for every enabled `windowseventlog/*` receiver.
+- For v0.1, the config SHOULD also set `suppress_rendering_info: true` and a persistent
+  `storage` extension for bookmarks (see `040_telemetry_pipeline.md` §2).
 - OTel Collector configuration shape is owned by upstream OTel. Purple Axiom only references the path and hashes it.
 
 Additional Purple Axiom staging policy (applies during raw Parquet writing and optional sidecar extraction):

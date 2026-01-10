@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/telemetry_validation.schema.json",
+  "title": "Purple Axiom Telemetry Validation Summary",
+  "description": "Contract for runs/<run_id>/logs/telemetry_validation.json. Records per-asset telemetry validation checks and evidence pointers sufficient to reproduce gating decisions (for example, raw Windows Event Log canary location).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "generated_at_utc",
+    "assets"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Schema contract version for this artifact."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Run identifier (must match the enclosing runs/<run_id>/ folder name)."
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when this summary was generated (RFC 3339)."
+    },
+    "assets": {
+      "type": "array",
+      "description": "Per-asset telemetry validation results. Producers SHOULD sort by asset_id (UTF-8 byte order) for determinism.",
+      "items": {
+        "$ref": "#/$defs/asset_result"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Forward-compatible extension point for additional producer data.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "asset_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id",
+        "checks"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "checks": {
+          "type": "array",
+          "description": "Validation checks for the asset. Producers SHOULD sort by check_id (UTF-8 byte order) for determinism.",
+          "items": {
+            "$ref": "#/$defs/check_result"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "check_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_id",
+        "status"
+      ],
+      "properties": {
+        "check_id": {
+          "type": "string",
+          "description": "Stable identifier for the check (for example, telemetry.windows_eventlog.raw_mode)."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "success",
+            "failed",
+            "skipped"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "description": "Stable token explaining failure or skip."
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "canary_observed_at": {
+              "$ref": "#/$defs/canary_observed_at"
+            },
+            "extensions": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "reason_code"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "check_id": {
+                "const": "telemetry.windows_eventlog.raw_mode"
+              }
+            },
+            "required": [
+              "check_id"
+            ]
+          },
+          "then": {
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "failed"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "reason_code": {
+                      "enum": [
+                        "winlog_raw_missing",
+                        "winlog_rendering_detected"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "success"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "evidence"
+                  ],
+                  "properties": {
+                    "evidence": {
+                      "required": [
+                        "canary_observed_at"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "failed"
+                    },
+                    "reason_code": {
+                      "const": "winlog_rendering_detected"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "reason_code"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "evidence"
+                  ],
+                  "properties": {
+                    "evidence": {
+                      "required": [
+                        "canary_observed_at"
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "canary_observed_at": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "path"
+      ],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "description": "Windows Event Log channel where the canary was observed (for example, Application, Security, Microsoft-Windows-Sysmon/Operational)."
+        },
+        "path": {
+          "type": "string",
+          "description": "Run-relative path (POSIX separators) to the concrete raw artifact or dataset file where the canary was observed.",
+          "pattern": "^[^\\\\]*$"
+        },
+        "row_locator": {
+          "type": "object",
+          "description": "Optional minimal locator sufficient to re-query a dataset deterministically (for example, event_record_id and provider).",
+          "additionalProperties": true
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

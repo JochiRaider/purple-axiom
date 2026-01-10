@@ -32,7 +32,14 @@
 - “Golden run” fixture: deterministic scenario + captured telemetry to validate end-to-end outputs.
 - “Scenario suite” fixture: a small, representative set of techniques used as a regression pack.
 - Telemetry fixture: raw Windows event XML corpus including missing rendered messages and at least one event containing binary-like payload data.
-- Windows Event Log raw/unrendered failure-mode tests (R-03):
+- Windows Event Log raw-mode conformance test (collector + validator):
+  - Use an OTel collector config where every enabled `windowseventlog/*` receiver sets
+    `raw: true`.
+  - Inject a canary event and assert the captured payload begins with `<Event` and MUST
+    NOT contain `<RenderingInfo>`.
+  - The validator MUST record the outcome as `health.json` stage
+    `telemetry.windows_eventlog.raw_mode` (see `110_operability.md`).
+- Windows Event Log raw/unrendered failure-mode tests:
   - Missing publisher/manifest metadata with raw XML present MUST NOT fail ingestion; MUST increment `wineventlog_rendering_metadata_missing_total`.
   - Raw XML unavailable MUST fail telemetry stage under `fail_mode: fail_closed`; under `fail_mode: warn_and_skip` MUST skip the record and increment `wineventlog_raw_unavailable_total`.
   - Oversize raw XML MUST truncate deterministically and create a content-addressed sidecar `${sha256}.xml` with `payload_overflow_ref` pointing to `${sidecar.path}/${sha256}.xml`.

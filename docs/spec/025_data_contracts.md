@@ -42,6 +42,7 @@ Schemas live in:
 - `docs/contracts/ocsf_event_envelope.schema.json`
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
+- `docs/contracts/telemetry_validation.schema.json`
 - `docs/contracts/mapping_profile_snapshot.schema.json`
 - `docs/contracts/mapping_coverage.schema.json`
 - `docs/contracts/bridge_router_table.schema.json`
@@ -68,7 +69,9 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `detections/` (detections emitted by evaluators)
 - `scoring/` (joins and summary metrics)
 - `report/` (HTML and JSON report outputs)
-- `logs/` (debug logs; not considered long-term storage)
+- `logs/` (structured operability summaries + debug logs; not considered long-term storage)
+  - `logs/health.json` (when enabled; see `110_operability.md`)
+  - `logs/telemetry_validation.json` (when telemetry validation is enabled)
 
 The manifest is the authoritative index for what exists in the bundle and which versions were used.
 

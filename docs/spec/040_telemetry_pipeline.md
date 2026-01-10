@@ -42,6 +42,55 @@ Policy:
 - For every `windowseventlog` receiver instance, set `raw: true`.
 - Treat the raw XML as the canonical payload for later parsing and determinism.
 
+#### Reference collector config (raw Windows Event Log receiver)
+
+This is a minimal per-channel excerpt showing the required placement of `raw: true`.
+It is not a full collector configuration (processors/exporters omitted).
+
+```yaml
+receivers:
+  windowseventlog/security:
+    channel: Security
+    start_at: end
+    raw: true
+    suppress_rendering_info: true
+    include_log_record_original: true
+    storage: file_storage/winlog_bookmarks
+
+  windowseventlog/sysmon:
+    channel: Microsoft-Windows-Sysmon/Operational
+    start_at: end
+    raw: true
+    suppress_rendering_info: true
+    include_log_record_original: true
+    storage: file_storage/winlog_bookmarks
+
+extensions:
+  file_storage/winlog_bookmarks:
+    directory: C:\ProgramData\purple-axiom\otel\winlog-bookmarks
+```
+
+Normative requirements:
+- Every enabled `windowseventlog/*` receiver MUST set `raw: true`.
+- Every enabled `windowseventlog/*` receiver SHOULD set `suppress_rendering_info: true`
+  unless an operator has a documented requirement for rendered strings.
+- When `raw: true`, receivers SHOULD set `include_log_record_original: true` to preserve
+  `log.record.original` as a debugging and determinism escape hatch.
+- Receiver bookmarks MUST be persisted via a stable `storage` extension so restarts do
+  not silently reset cursor state.
+
+#### Runtime verification hook (required)
+
+Telemetry validation MUST verify raw/unrendered collection at runtime by injecting a
+canary event and asserting:
+
+- The captured payload begins with `<Event` after trimming leading whitespace, and
+- The captured payload MUST NOT contain `<RenderingInfo>`.
+
+A reference canary is:
+
+- `eventcreate /L APPLICATION /T INFORMATION /ID 9001 /SO EventCreate /D "PurpleAxiom raw-mode canary"`
+
 ### Manifest independence and publisher metadata failures
 
 Windows Event Log “rendering” (human-readable message strings) depends on provider metadata and OS state and can fail when publisher metadata cannot be opened or message resources are unavailable. Purple Axiom MUST NOT treat rendered strings as required inputs for parsing, identity, or normalization.

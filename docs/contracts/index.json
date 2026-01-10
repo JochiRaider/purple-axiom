@@ -34,6 +34,10 @@
       "purpose": "Scoring summary for scoring/summary.json."
     },
     {
+      "name": "telemetry_validation.schema.json",
+      "purpose": "Telemetry validation summary (runs/<run_id>/logs/telemetry_validation.json)."    
+    },
+    {
       "name": "mapping_profile_snapshot.schema.json",
       "purpose": "Normalization mapping profile snapshot (normalized/mapping_profile_snapshot.json)."
     },

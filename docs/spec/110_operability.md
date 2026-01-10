@@ -86,6 +86,32 @@ Implementations SHOULD also record:
 A telemetry stage is only considered "validated" for an asset when a validation run produces:
 
 - raw Windows Event Log events captured in raw/unrendered mode
+  - verified by a runtime canary:
+    - captured XML begins with `<Event`
+    - captured XML MUST NOT contain `<RenderingInfo>`
+    - see `040_telemetry_pipeline.md` §2
+
+Additional normative checks:
+- The validator MUST emit a `health.json.stages[]` entry with
+  `stage: "telemetry.windows_eventlog.raw_mode"`.
+- When the raw-mode canary check fails, `reason_code` MUST be one of:
+  - `winlog_raw_missing` (no raw XML captured for the canary event)
+  - `winlog_rendering_detected`
+    (`<RenderingInfo>` present in the captured payload)
+- The validator MUST record where the canary was observed so operators can reproduce
+  the check without guesswork.
+  - `runs/<run_id>/logs/telemetry_validation.json` MUST include a
+    `windows_eventlog_raw_mode.canary_observed_at` object with, at minimum:
+    - `asset_id` (string)
+    - `channel` (string)
+    - `path` (string; run-relative path to the concrete raw artifact or dataset file)
+  - `canary_observed_at.path` MUST use POSIX-style separators (`/`) and MUST be
+    interpreted as relative to `runs/<run_id>/`.
+  - Example (illustrative only): `raw/<asset_id>/windows_eventlog/<channel>/...`
+    or `raw_parquet/windows_eventlog/part-00000.parquet`.
+  - If the canary is observed in a Parquet dataset, the validator SHOULD also include
+    a minimal `row_locator` (for example, `event_record_id` and `provider`) sufficient
+    to re-query the dataset deterministically.    
 - stable parsing of required identity fields (channel, provider, record id)
 - successful parsing when rendered message strings are missing (manifest/publisher metadata failures must not be fatal)
 - no unbounded growth under exporter throttling
@@ -94,7 +120,7 @@ A telemetry stage is only considered "validated" for an asset when a validation 
   - oversized `event_xml` produces `event_xml_truncated=true` plus `event_xml_sha256`
   - binary fields honor `max_binary_bytes` and produce deterministic `binary_present/binary_oversize` signals
 
-The validator writes a summary to `runs/<run_id>/logs/telemetry_validation.json` and the manifest SHOULD include a pointer to it.
+The validator MUST write `runs/<run_id>/logs/telemetry_validation.json`, conforming to `docs/contracts/telemetry_validation.schema.json`; the manifest SHOULD include a pointer to it.
 
 ## Health files (normative, v0.1)
 

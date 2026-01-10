@@ -29,9 +29,6 @@ dev = [
   # Markdown formatting
   "mdformat==1.0.0",
   "mdformat-gfm==1.0.0",
-  "mdformat-gfm-alerts==2.0.0",
-  "mdformat-footnote==0.1.2",
-  "mdformat_frontmatter==2.0.8",
 
   # Local + CI hook runner
   "pre-commit==4.5.1",

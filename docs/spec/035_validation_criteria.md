@@ -1,7 +1,9 @@
 <!-- docs/spec/035_validation_criteria.md -->
+
 # Validation Criteria Packs
 
-Purple Axiom externalizes “expected telemetry” and cleanup verification expectations into **criteria packs**.
+Purple Axiom externalizes “expected telemetry” and cleanup verification expectations into **criteria
+packs**.
 
 This follows the common harness pattern:
 
@@ -9,14 +11,16 @@ This follows the common harness pattern:
 - Telemetry is collected and normalized (OCSF).
 - Validation criteria are evaluated against the normalized store.
 
-Criteria packs are versioned and independently curatable so that expectation tuning does not require modifying Atomic YAML or scenario definitions.
+Criteria packs are versioned and independently curatable so that expectation tuning does not require
+modifying Atomic YAML or scenario definitions.
 
 ## Goals
 
 - Keep Atomic YAML focused on execution mechanics.
 - Make expected signals explicit, diffable, and versioned.
 - Support environment-specific expectations without forking upstream Atomic tests.
-- Provide a deterministic basis for classifying “missing telemetry” versus downstream mapping/bridge/rule gaps.
+- Provide a deterministic basis for classifying “missing telemetry” versus downstream
+  mapping/bridge/rule gaps.
 - Treat cleanup as a first-class stage and record verification results.
 
 ## Repository layout (source of truth)
@@ -33,40 +37,49 @@ Optional (non-contractual):
 
 ## Pack control workflow (versioning + operational ownership)
 
-This section defines how criteria packs are **versioned**, how a specific pack is **selected** for a run,
-and how pack changes are managed so operational handoff is deterministic.
+This section defines how criteria packs are **versioned**, how a specific pack is **selected** for a
+run, and how pack changes are managed so operational handoff is deterministic.
 
 ### Pack identity
 
-- `pack_id` MUST be a stable identifier for a logical criteria pack (example: `default`, `windows-enterprise`, `lab-small`).
+- `pack_id` MUST be a stable identifier for a logical criteria pack (example: `default`,
+  `windows-enterprise`, `lab-small`).
 - `pack_version` MUST be a **SemVer** string (`MAJOR.MINOR.PATCH`).
-  - Pre-release identifiers MAY be used for development (`-alpha.1`), but production CI SHOULD pin only stable versions.
+  - Pre-release identifiers MAY be used for development (`-alpha.1`), but production CI SHOULD pin
+    only stable versions.
 
 ### Immutability and change discipline
 
-- A released pack version (a concrete `<pack_id>/<pack_version>/` directory) MUST be treated as **immutable**:
-  - Editing `criteria.jsonl` or `manifest.json` in-place for an already-released version SHOULD NOT be done.
+- A released pack version (a concrete `<pack_id>/<pack_version>/` directory) MUST be treated as
+  **immutable**:
+  - Editing `criteria.jsonl` or `manifest.json` in-place for an already-released version SHOULD NOT
+    be done.
   - Any change that affects evaluation semantics MUST produce a new `pack_version`.
 - Version bumps:
-  - PATCH: predicate/threshold tweaks, selector refinements, cleanup check tuning that preserves intent.
+  - PATCH: predicate/threshold tweaks, selector refinements, cleanup check tuning that preserves
+    intent.
   - MINOR: additive coverage (new entries/signals), broader selector support, new optional fields.
-  - MAJOR: breaking semantics (status meaning changes, operator set changes, required-field changes, widespread entry id changes).
+  - MAJOR: breaking semantics (status meaning changes, operator set changes, required-field changes,
+    widespread entry id changes).
 
 ### Selection and pinning
 
 Determinism requirement:
-- For any run that is intended to be diffable/regression-tested, the effective criteria pack MUST be pinned by:
+
+- For any run that is intended to be diffable/regression-tested, the effective criteria pack MUST be
+  pinned by:
   - `pack_id`, and
   - a concrete `pack_version`.
 
 If `pack_version` is not provided (non-recommended):
+
 - The implementation MUST resolve a version **deterministically** using SemVer ordering:
   1. Enumerate available `<pack_id>/<pack_version>/` directories across the configured search paths.
-  2. Parse candidate versions as SemVer.
-  3. Select the **highest** SemVer version.
-  4. If no candidates parse as SemVer, fail closed (do not “guess” lexicographically).
-  5. If the same `(pack_id, pack_version)` appears in multiple search paths, fail closed unless they are byte-identical
-     (as proven by `criteria_sha256` and `manifest_sha256` matching).
+  1. Parse candidate versions as SemVer.
+  1. Select the **highest** SemVer version.
+  1. If no candidates parse as SemVer, fail closed (do not “guess” lexicographically).
+  1. If the same `(pack_id, pack_version)` appears in multiple search paths, fail closed unless they
+     are byte-identical (as proven by `criteria_sha256` and `manifest_sha256` matching).
 - The resolved `pack_version` MUST be recorded in run provenance (manifest + report).
 
 ### Recommended source control practice (non-normative)
@@ -76,7 +89,8 @@ If `pack_version` is not provided (non-recommended):
 
 ## Run bundle snapshot
 
-Each run snapshots the selected criteria pack into the run bundle so results remain reproducible even if the repo changes:
+Each run snapshots the selected criteria pack into the run bundle so results remain reproducible
+even if the repo changes:
 
 - `runs/<run_id>/criteria/manifest.json`
 - `runs/<run_id>/criteria/criteria.jsonl`
@@ -86,32 +100,39 @@ The run manifest pins the pack identity and hashes.
 
 ## Drift detection (execution definitions vs criteria expectations)
 
-Criteria packs are intentionally decoupled from execution definitions (Atomic YAML, Caldera abilities, etc.).
-That decoupling introduces a controlled failure mode: **criteria drift**.
+Criteria packs are intentionally decoupled from execution definitions (Atomic YAML, Caldera
+abilities, etc.). That decoupling introduces a controlled failure mode: **criteria drift**.
 
 ### Definitions
 
-- **Execution definition**: the upstream content that defines *what* the runner executed for an `(engine, technique_id, engine_test_id)`.
+- **Execution definition**: the upstream content that defines *what* the runner executed for an
+  `(engine, technique_id, engine_test_id)`.
   - Atomic: the Atomic YAML test definition associated with the Atomic GUID.
   - Caldera: the ability definition (or operation plan material) associated with the ability ID.
-- **Criteria drift**: the execution definition changed, but the criteria pack entry used for evaluation was not updated
-  (or was updated against a different upstream revision).
+- **Criteria drift**: the execution definition changed, but the criteria pack entry used for
+  evaluation was not updated (or was updated against a different upstream revision).
 
 ### Required provenance fields for drift detection
 
 To make drift detection implementable and testable without heuristic parsing:
 
-1) Criteria pack manifest provenance (pack authoring time)
-- `criteria/packs/<pack_id>/<pack_version>/manifest.json` MUST record, for each supported engine, an upstream provenance record:
+1. Criteria pack manifest provenance (pack authoring time)
+
+- `criteria/packs/<pack_id>/<pack_version>/manifest.json` MUST record, for each supported engine, an
+  upstream provenance record:
   - `upstreams[]` (array), each element:
     - `engine` (string; `atomic | caldera | custom`)
     - `source_ref` (string; a stable revision identifier)
       - Examples:
-        - Atomic: git commit SHA of the Atomic Red Team repo checkout used to author the pack, or a content-addressed snapshot id.
-        - Caldera: git commit SHA of the Caldera content repo / abilities repo used to author the pack.
-    - `source_tree_sha256` (string; sha256 over a deterministic file list + file sha256 values; see below)
+        - Atomic: git commit SHA of the Atomic Red Team repo checkout used to author the pack, or a
+          content-addressed snapshot id.
+        - Caldera: git commit SHA of the Caldera content repo / abilities repo used to author the
+          pack.
+    - `source_tree_sha256` (string; sha256 over a deterministic file list + file sha256 values; see
+      below)
 
 Deterministic tree hash basis (normative):
+
 - `source_tree_sha256` MUST be computed as:
   - Build `tree_basis_v1`:
     - `v: 1`
@@ -119,22 +140,27 @@ Deterministic tree hash basis (normative):
     - `files[]`: sorted array of `{ path, sha256 }`
       - `path` MUST be repo-relative, normalized to `/` separators.
       - `sha256` MUST be lower-hex SHA-256 of the file bytes.
-      - The `files[]` array MUST be sorted by `path` using bytewise UTF-8 lexical ordering (same ordering rules as `entry_id`).
+      - The `files[]` array MUST be sorted by `path` using bytewise UTF-8 lexical ordering (same
+        ordering rules as `entry_id`).
   - `source_tree_sha256 = sha256_hex( canonical_json_bytes(tree_basis_v1) )`
 
-2) Runner provenance (run time)
-- The runner MUST record the execution-definition provenance for the engine being used, using the same structure
-  (`engine`, `source_ref`, `source_tree_sha256`) in run provenance (manifest `extensions` or equivalent run metadata).
+2. Runner provenance (run time)
 
-Rationale: this allows drift detection without requiring the evaluator to locate and parse upstream repos at evaluation time.
+- The runner MUST record the execution-definition provenance for the engine being used, using the
+  same structure (`engine`, `source_ref`, `source_tree_sha256`) in run provenance (manifest
+  `extensions` or equivalent run metadata).
+
+Rationale: this allows drift detection without requiring the evaluator to locate and parse upstream
+repos at evaluation time.
 
 ### Drift detection algorithm (normative)
 
-Before evaluating any actions for a run, the criteria evaluator MUST compute `criteria_drift_status`:
+Before evaluating any actions for a run, the criteria evaluator MUST compute
+`criteria_drift_status`:
 
 1. Load the selected pack snapshot manifest from the run bundle.
-2. Read the run’s runner-recorded provenance for the active engine.
-3. Compare `(engine, source_ref, source_tree_sha256)`:
+1. Read the run’s runner-recorded provenance for the active engine.
+1. Compare `(engine, source_ref, source_tree_sha256)`:
    - If all match: `criteria_drift_status = "none"`.
    - If `source_ref` differs OR `source_tree_sha256` differs: `criteria_drift_status = "detected"`.
    - If either side is missing required provenance: `criteria_drift_status = "unknown"`.
@@ -142,11 +168,14 @@ Before evaluating any actions for a run, the criteria evaluator MUST compute `cr
 ### Required behavior on drift (normative)
 
 When `criteria_drift_status = "detected"`:
+
 - The evaluator MUST surface drift in run outputs (report + machine-readable provenance).
-- Per-action criteria evaluation MUST NOT silently claim “fail” for missing signals when drift is detected.
-  Instead, actions MUST be marked as `skipped` with a drift reason recorded in a deterministic field location.
+- Per-action criteria evaluation MUST NOT silently claim “fail” for missing signals when drift is
+  detected. Instead, actions MUST be marked as `skipped` with a drift reason recorded in a
+  deterministic field location.
 
 Recording drift in results (normative, minimal-impact):
+
 - Each affected `criteria/results.jsonl` line MUST include:
   - `status: "skipped"`
   - an explanation under a deterministic extension location:
@@ -157,12 +186,16 @@ Recording drift in results (normative, minimal-impact):
       - `actual_source_ref` / `actual_source_tree_sha256` (from runner provenance)
 
 When `criteria_drift_status = "unknown"`:
+
 - The evaluator SHOULD proceed, but MUST surface an explicit warning in run outputs.
-- The evaluator MAY choose to treat this as `detected` when `validation.evaluation.fail_mode = fail_closed`.
+- The evaluator MAY choose to treat this as `detected` when
+  `validation.evaluation.fail_mode = fail_closed`.
 
 Scoring integration (normative intent):
-- Drift-related skips MUST classify as `criteria_misconfigured` (or an equivalent explicit “criteria drift” sub-reason)
-  so “missing telemetry” is not incorrectly attributed when expectations were authored against different execution content.
+
+- Drift-related skips MUST classify as `criteria_misconfigured` (or an equivalent explicit “criteria
+  drift” sub-reason) so “missing telemetry” is not incorrectly attributed when expectations were
+  authored against different execution content.
 
 ## Matching model
 
@@ -183,29 +216,31 @@ Optional selectors refine specificity:
 Deterministic selection:
 
 1. Filter entries that match (engine, technique_id, engine_test_id).
-2. Among matches, prefer entries with the greatest selector specificity (most selector keys present and satisfied).
-3. Break ties by `entry_id` lexical sort (normative order defined below).
+1. Among matches, prefer entries with the greatest selector specificity (most selector keys present
+   and satisfied).
+1. Break ties by `entry_id` lexical sort (normative order defined below).
 
 If no entry matches, criteria evaluation emits `criteria_unavailable` for the action.
 
 ### Tie-breaking order for `entry_id` (normative)
 
-When multiple entries remain tied after steps (1) and (2), the evaluator MUST select the entry
-with the smallest `entry_id` under the following **bytewise lexical ordering**:
+When multiple entries remain tied after steps (1) and (2), the evaluator MUST select the entry with
+the smallest `entry_id` under the following **bytewise lexical ordering**:
 
 1. Let `B(entry_id)` be the **UTF-8** encoding of the JSON string value of `entry_id`:
    - UTF-8 only (no BOM).
    - **Case-sensitive** (no case folding).
    - **No locale** or collation rules.
-   - **No Unicode normalization** is applied (no NFC/NFD/NFKC/NFKD). The exact codepoint
-     sequence in the JSON string is what is compared.
-2. Compare byte sequences `B(a)` and `B(b)` lexicographically by **unsigned byte value**
+   - **No Unicode normalization** is applied (no NFC/NFD/NFKC/NFKD). The exact codepoint sequence in
+     the JSON string is what is compared.
+1. Compare byte sequences `B(a)` and `B(b)` lexicographically by **unsigned byte value**
    (`0x00`..`0xFF`), left to right.
-3. If one byte sequence is a strict prefix of the other, the shorter sequence sorts first.
+1. If one byte sequence is a strict prefix of the other, the shorter sequence sorts first.
 
 Rationale: this yields cross-language deterministic ordering without locale dependence.
 
 Pack authoring guidance (non-normative):
+
 - `entry_id` SHOULD be restricted to ASCII (for example `[A-Za-z0-9._/-]`) to avoid visually
   confusable identifiers and normalization surprises.
 
@@ -214,15 +249,17 @@ Pack authoring guidance (non-normative):
 CI MUST include at least the following fixture cases for selection determinism:
 
 1. **Case sensitivity**
-   - Two criteria entries are identical in (engine, technique_id, engine_test_id) and selector specificity,
-     differing only in `entry_id`:
+
+   - Two criteria entries are identical in (engine, technique_id, engine_test_id) and selector
+     specificity, differing only in `entry_id`:
      - `entry_id = "A"`
      - `entry_id = "a"`
    - Expected selection: `"A"` (because `0x41 < 0x61` in UTF-8).
 
-2. **No Unicode normalization**
-   - Two criteria entries are identical in (engine, technique_id, engine_test_id) and selector specificity,
-     differing only in `entry_id`:
+1. **No Unicode normalization**
+
+   - Two criteria entries are identical in (engine, technique_id, engine_test_id) and selector
+     specificity, differing only in `entry_id`:
      - `entry_id = "e\u0301"` (LATIN SMALL LETTER E + COMBINING ACUTE ACCENT)
      - `entry_id = "\u00e9"` (LATIN SMALL LETTER E WITH ACUTE)
    - Expected selection: `"e\u0301"` (because UTF-8 bytes begin with `0x65 ...` vs `0xC3 ...`).
@@ -263,8 +300,10 @@ Each expected signal defines a predicate over **normalized OCSF events**.
 
 Notes:
 
-- The predicate intentionally starts simple. The evaluator can evolve to support richer operators over time, but the MVP must be implementable without a full query language.
-- Matching is performed against event-time (`time`) with respect to the ground truth action `timestamp_utc`.
+- The predicate intentionally starts simple. The evaluator can evolve to support richer operators
+  over time, but the MVP must be implementable without a full query language.
+- Matching is performed against event-time (`time`) with respect to the ground truth action
+  `timestamp_utc`.
 
 ### Cleanup verification model
 
@@ -287,52 +326,66 @@ Each check:
 
 #### Check type: `file_absent` (Option B, minimum semantics)
 
-`file_absent` verifies that a filesystem path has **no resolvable directory entry** on the target system at verification time.
-This deliberately mirrors common cleanup commands (`rm -f <path>`, `Remove-Item <path>`) by treating the path itself as the
-artifact to remove, not the dereferenced target of a link.
+`file_absent` verifies that a filesystem path has **no resolvable directory entry** on the target
+system at verification time. This deliberately mirrors common cleanup commands (`rm -f <path>`,
+`Remove-Item <path>`) by treating the path itself as the artifact to remove, not the dereferenced
+target of a link.
 
 Target (type-specific, required):
+
 - `target.path` (string)
   - MUST be interpreted as a **literal path**.
-  - Implementations MUST NOT perform glob expansion, environment-variable expansion, or `~` expansion.
+  - Implementations MUST NOT perform glob expansion, environment-variable expansion, or `~`
+    expansion.
 
 Non-goals (normative):
+
 - `file_absent` MUST NOT check timestamps, contents, or ACL correctness.
-- `file_absent` MUST NOT attempt to prove that an unlinked POSIX file is no longer held open by a process.
-  It only asserts that the directory entry at `target.path` is absent.
+- `file_absent` MUST NOT attempt to prove that an unlinked POSIX file is no longer held open by a
+  process. It only asserts that the directory entry at `target.path` is absent.
 
 Per-check status (normative):
+
 - `pass`: the path is absent (no directory entry exists at `target.path`).
-- `fail`: the path is present (a directory entry exists at `target.path`, including symlinks/reparse points).
-- `indeterminate`: the verifier cannot determine presence vs absence due to permissions, invalid path syntax, or other
-  non-presence-related errors.
+- `fail`: the path is present (a directory entry exists at `target.path`, including symlinks/reparse
+  points).
+- `indeterminate`: the verifier cannot determine presence vs absence due to permissions, invalid
+  path syntax, or other non-presence-related errors.
 
 POSIX/Linux evaluation (normative):
-- The verifier MUST evaluate existence using `lstat`-equivalent semantics (the link object counts as present).
+
+- The verifier MUST evaluate existence using `lstat`-equivalent semantics (the link object counts as
+  present).
   - If the `lstat(target.path)`-equivalent call succeeds: `status = fail`.
   - If the call fails with `ENOENT` or `ENOTDIR`: `status = pass`.
   - If the call fails with `EACCES` or `EPERM`: `status = indeterminate`.
   - Any other error: `status = indeterminate`.
 
 Windows evaluation (normative):
-- The verifier MUST evaluate existence using a path attribute query that observes the path entry itself when the path is a
-  symbolic link, junction, or other reparse point.
+
+- The verifier MUST evaluate existence using a path attribute query that observes the path entry
+  itself when the path is a symbolic link, junction, or other reparse point.
   - If the attribute query succeeds: `status = fail`.
-  - If the query fails with “not found” (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`): `status = pass`.
+  - If the query fails with “not found” (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`):
+    `status = pass`.
   - If the query fails with `ERROR_ACCESS_DENIED` (or equivalent): `status = indeterminate`.
-  - If the query fails due to invalid path syntax (`ERROR_INVALID_NAME`, `ERROR_BAD_PATHNAME`, or equivalent):
-    `status = indeterminate`.
+  - If the query fails due to invalid path syntax (`ERROR_INVALID_NAME`, `ERROR_BAD_PATHNAME`, or
+    equivalent): `status = indeterminate`.
   - Any other error: `status = indeterminate`.
 
 Deterministic stabilization window (optional, recommended):
+
 - `target.settle_timeout_ms` (optional int, default `0`)
-  - If `> 0`, the verifier SHOULD repeat the existence check on a fixed interval until `pass` or timeout.
+  - If `> 0`, the verifier SHOULD repeat the existence check on a fixed interval until `pass` or
+    timeout.
 - `target.settle_interval_ms` (optional int, default `250`)
-  - If `settle_timeout_ms > 0`, the verifier MUST use a fixed interval and MUST report the attempt count deterministically:
-    `attempts = 1 + floor(settle_timeout_ms / settle_interval_ms)`.
+  - If `settle_timeout_ms > 0`, the verifier MUST use a fixed interval and MUST report the attempt
+    count deterministically: `attempts = 1 + floor(settle_timeout_ms / settle_interval_ms)`.
 
 Required evidence recording (normative):
-- The runner MUST write a per-action `runner/actions/<action_id>/cleanup_verification.json` that includes, per check:
+
+- The runner MUST write a per-action `runner/actions/<action_id>/cleanup_verification.json` that
+  includes, per check:
   - `check_id`, `type`, `target` (echoed), `status` (`pass | fail | indeterminate | skipped`)
   - `reason_code` (string; required for all statuses)
   - `attempts` (int), `elapsed_ms` (int)
@@ -340,15 +393,20 @@ Required evidence recording (normative):
   - `observed_kind` (optional string) when `status = fail` (implementation-defined, but stable)
 
 Minimum conformance fixtures (normative intent):
-- Linux: a dangling symlink at `target.path` MUST yield `status = fail` (because the link entry exists).
+
+- Linux: a dangling symlink at `target.path` MUST yield `status = fail` (because the link entry
+  exists).
 - Linux: a deleted regular file at `target.path` MUST yield `status = pass`.
 - Windows: an existing file at `target.path` MUST yield `status = fail`.
-- Windows: an access-denied probe (directory ACL prevents attribute query) MUST yield `status = indeterminate`.
+- Windows: an access-denied probe (directory ACL prevents attribute query) MUST yield
+  `status = indeterminate`.
 
 MVP guidance:
 
-- Prefer `command` checks for early implementation, because they are portable across Windows/Linux if the runner is already remote-executing commands.
-- Runner MUST record check execution results and evidence references (stdout/stderr hashes, exit codes).
+- Prefer `command` checks for early implementation, because they are portable across Windows/Linux
+  if the runner is already remote-executing commands.
+- Runner MUST record check execution results and evidence references (stdout/stderr hashes, exit
+  codes).
 
 ## Evaluation outputs
 
@@ -375,7 +433,8 @@ Minimum fields:
 ## Design constraints
 
 - Criteria evaluation MUST operate on the normalized OCSF store (not raw telemetry).
-- Criteria results MUST be sufficient to power the “missing telemetry” classification without referencing Atomic YAML content.
+- Criteria results MUST be sufficient to power the “missing telemetry” classification without
+  referencing Atomic YAML content.
 - Criteria evaluation MUST be deterministic:
   - stable tie-breaking for entry selection
   - stable ordering of result arrays (`signals`, `checks`) by id
@@ -383,23 +442,27 @@ Minimum fields:
 
 ## Cleanup verification checks: deterministic semantics (v0.1)
 
-Cleanup verification checks MUST evaluate to a tri-state verdict: `pass`, `fail`, or `indeterminate`.
-Implementations MAY additionally emit `skipped` when a check is not executed (for example, not applicable on the platform
-or the verifier is disabled by policy). `skipped` is an execution outcome, not an evaluated verdict.
+Cleanup verification checks MUST evaluate to a tri-state verdict: `pass`, `fail`, or
+`indeterminate`. Implementations MAY additionally emit `skipped` when a check is not executed (for
+example, not applicable on the platform or the verifier is disabled by policy). `skipped` is an
+execution outcome, not an evaluated verdict.
 
 ### 1) Common evaluation contract
 
 **Verdicts**
+
 - `pass`: the check predicate is satisfied.
 - `fail`: the predicate is violated.
-- `indeterminate`: the predicate could not be evaluated with confidence (unsupported OS, missing permissions, missing tooling, timeout, probe error, or parse error).
+- `indeterminate`: the predicate could not be evaluated with confidence (unsupported OS, missing
+  permissions, missing tooling, timeout, probe error, or parse error).
 
 **Indeterminate is not success**
+
 - Cleanup verification gating MUST treat `indeterminate` as a gate-fail by default.
 - The tri-state verdict is still recorded to support diagnostics and deterministic reporting.
 
-**Reason codes**
-Each check result MUST include a stable `reason_code` (even for PASS) from the following minimal set:
+**Reason codes** Each check result MUST include a stable `reason_code` (even for PASS) from the
+following minimal set:
 
 - `ok` (PASS)
 - `present` (FAIL; “thing exists / is running / state mismatched”)
@@ -414,31 +477,38 @@ Each check result MUST include a stable `reason_code` (even for PASS) from the f
 - `ambiguous_match` (INDETERMINATE; multiple targets match but check expects exactly one)
 - `unstable_observation` (INDETERMINATE; observation flaps across probes)
 
-**Skipped requires reason_code**
-If a check result status is `skipped`, it MUST include `reason_code`, and `reason_code` MUST be one of:
+**Skipped requires reason_code** If a check result status is `skipped`, it MUST include
+`reason_code`, and `reason_code` MUST be one of:
+
 - `unsupported_platform`
 - `insufficient_privileges`
 - `exec_error`
 
-Unless a check type defines a more specific mapping, absence checks MUST use `absent` (PASS) and `present` (FAIL).
-State checks MUST use `ok` (PASS) and `state_mismatch` (FAIL).
+Unless a check type defines a more specific mapping, absence checks MUST use `absent` (PASS) and
+`present` (FAIL). State checks MUST use `ok` (PASS) and `state_mismatch` (FAIL).
 
-**Deterministic stability window**
-Checks that query live system state (process_absent, service_state) MUST apply a stabilization protocol:
+**Deterministic stability window** Checks that query live system state (process_absent,
+service_state) MUST apply a stabilization protocol:
 
 - `probes = 3` (fixed default)
 - `probe_delays_ms = [0, 250, 1000]` (fixed default)
 - Observation is collected at each probe.
 - **PASS** is allowed only when all probes agree on PASS.
 - **FAIL** is allowed when all probes agree on FAIL.
-- Mixed observations across probes MUST yield INDETERMINATE with `reason_code = unstable_observation`.
+- Mixed observations across probes MUST yield INDETERMINATE with
+  `reason_code = unstable_observation`.
 
-This eliminates nondeterministic “wins” from transient races and makes PASS/FAIL/INDETERMINATE stable across runs given identical machine state.
+This eliminates nondeterministic “wins” from transient races and makes PASS/FAIL/INDETERMINATE
+stable across runs given identical machine state.
 
-Parsing requirement: Implementations SHOULD prefer structured/system APIs over localized, human-oriented CLI output. When CLI output is used, it MUST be restricted to stable key-value outputs or structured output. For example, `systemctl show` returns `Key=Value` pairs and is appropriate for parsing.
+Parsing requirement: Implementations SHOULD prefer structured/system APIs over localized,
+human-oriented CLI output. When CLI output is used, it MUST be restricted to stable key-value
+outputs or structured output. For example, `systemctl show` returns `Key=Value` pairs and is
+appropriate for parsing.
 
-**Probe transcript**
-Each sample MUST record a probe transcript to enable fixtures and debugging. At minimum:
+**Probe transcript** Each sample MUST record a probe transcript to enable fixtures and debugging. At
+minimum:
+
 - `tool` (example: `psutil`, `powershell`, `systemctl`)
 - `args` (array)
 - `exit_code` (if applicable)
@@ -447,54 +517,66 @@ Each sample MUST record a probe transcript to enable fixtures and debugging. At 
 - `error` (string, if applicable)
 
 Probe normalization rules are deterministic:
+
 - Decode bytes as UTF-8 with replacement on decode errors
 - Normalize newlines to `\n`
-- Limit captured `stdout` and `stderr` to `max_output_bytes` (default 8192) and set `truncated: true|false`
+- Limit captured `stdout` and `stderr` to `max_output_bytes` (default 8192) and set
+  `truncated: true|false`
 
 ### 2) process_absent
 
 `process_absent` verifies that no running process matches a selector.
 
-**Selector (minimum)**
-The selector is an AND across any provided fields:
+**Selector (minimum)** The selector is an AND across any provided fields:
+
 - `pid` (integer, optional)
 - `exe_path` (string, optional)
 - `name` (string, optional)
 
 Matching rules are deterministic:
-- `name` comparison is case-insensitive on Windows; case-sensitive on Linux/macOS.
-- `exe_path` MUST be path-normalized (separator normalization). Comparison is case-insensitive on Windows; case-sensitive on Linux/macOS.
 
-**Verdict rules**
-Per-probe observation:
+- `name` comparison is case-insensitive on Windows; case-sensitive on Linux/macOS.
+- `exe_path` MUST be path-normalized (separator normalization). Comparison is case-insensitive on
+  Windows; case-sensitive on Linux/macOS.
+
+**Verdict rules** Per-probe observation:
+
 - `present` if any running process matches the selector.
 - `absent` if no running process matches the selector.
 
 Verdict and reason_code mapping (using the stabilization protocol):
+
 - PASS only if all probes observe `absent` (`reason_code = absent`).
 - FAIL only if all probes observe `present` (`reason_code = present`).
 - Mixed observations across probes: INDETERMINATE (`reason_code = unstable_observation`).
-- If any probe cannot enumerate due to permissions: INDETERMINATE (`reason_code = insufficient_privileges`).
+- If any probe cannot enumerate due to permissions: INDETERMINATE
+  (`reason_code = insufficient_privileges`).
 - If the required tooling is missing: INDETERMINATE (`reason_code = not_found`).
 - Any other execution failure: INDETERMINATE (`reason_code = exec_error`).
 
 **Windows guidance (normative for determinism)**
-- Prefer CIM/WMI `Win32_Process` for `CommandLine` and `ExecutablePath` matching because it exposes these as structured properties.
-- `Get-Process` alone is insufficient for deterministic command line matching because it does not directly expose `CommandLine`. (Use CIM/WMI when command line is required.)
+
+- Prefer CIM/WMI `Win32_Process` for `CommandLine` and `ExecutablePath` matching because it exposes
+  these as structured properties.
+- `Get-Process` alone is insufficient for deterministic command line matching because it does not
+  directly expose `CommandLine`. (Use CIM/WMI when command line is required.)
 
 ### 3) registry_absent (Windows only)
 
 `registry_absent` verifies that a registry key (and optionally a value) does not exist.
 
 **Applicability**
+
 - On non-Windows OS, the check MUST return INDETERMINATE (`reason_code = unsupported_platform`).
 
 **Selector**
+
 - `hive`: `HKLM|HKCU|HKCR|HKU|HKCC`
 - `key_path`: string
 - `value_name`: string optional
 
 **Verdict rules (Windows)**
+
 - If access is denied for the key or value: INDETERMINATE (`reason_code = insufficient_privileges`).
 - If the key does not exist: PASS (`reason_code = absent`).
 - If `value_name` is omitted and the key exists: FAIL (`reason_code = present`).
@@ -502,24 +584,31 @@ Verdict and reason_code mapping (using the stabilization protocol):
   - value missing: PASS (`reason_code = absent`)
   - value present: FAIL (`reason_code = present`)
 
-**Implementation note** 
-- `Get-ItemProperty` is provider-agnostic and works with the Registry provider; use it (or an API equivalent) rather than parsing `reg.exe` output.
+**Implementation note**
+
+- `Get-ItemProperty` is provider-agnostic and works with the Registry provider; use it (or an API
+  equivalent) rather than parsing `reg.exe` output.
 
 ### 4) service_state
 
 `service_state` verifies runtime state (and optionally enablement) for a service.
 
 **Expected state**
+
 - `runtime`: `running|stopped` (required)
 - `enabled`: `enabled|disabled` (optional)
 
 **Observed state model**
+
 - `runtime`: `running|stopped|unknown`
 - `enabled`: `enabled|disabled|unknown`
 
 **Verdict rules**
-- If the service manager query fails due to permissions: INDETERMINATE (`reason_code = insufficient_privileges`).
-- If the service cannot be found: INDETERMINATE (`reason_code = not_found`) and the probe evidence MUST set `service_not_found: true`.
+
+- If the service manager query fails due to permissions: INDETERMINATE
+  (`reason_code = insufficient_privileges`).
+- If the service cannot be found: INDETERMINATE (`reason_code = not_found`) and the probe evidence
+  MUST set `service_not_found: true`.
 - If `expected.enabled` is not set:
   - `pass` if observed runtime equals expected runtime
   - otherwise `fail`
@@ -528,50 +617,68 @@ Verdict and reason_code mapping (using the stabilization protocol):
   - otherwise `fail`
 
 **Backend selection**
-- Windows: query Service Control Manager via `Get-Service` / .NET service APIs (structured, enumerated statuses).
-- Linux with systemd available: query via `systemctl show` properties. `systemctl show` returns stable `Key=Value` output suitable for deterministic parsing.
-- If the platform’s service manager cannot be queried deterministically (for example, no systemd and no supported alternative), return **INDETERMINATE** `unsupported_platform`.
+
+- Windows: query Service Control Manager via `Get-Service` / .NET service APIs (structured,
+  enumerated statuses).
+- Linux with systemd available: query via `systemctl show` properties. `systemctl show` returns
+  stable `Key=Value` output suitable for deterministic parsing.
+- If the platform’s service manager cannot be queried deterministically (for example, no systemd and
+  no supported alternative), return **INDETERMINATE** `unsupported_platform`.
 
 **State mapping rules (minimal, stable)**
+
 - **Windows**
   - `running` means service status is `Running`
   - `stopped` means service status is `Stopped`
-  - Any pending/transitional state (StartPending, StopPending, etc.) MUST be treated as **INDETERMINATE** `unstable_observation` unless it stabilizes across probes.
+  - Any pending/transitional state (StartPending, StopPending, etc.) MUST be treated as
+    **INDETERMINATE** `unstable_observation` unless it stabilizes across probes.
 - **systemd**
   - Parse `ActiveState` (and optionally SubState if present).
   - `running` means `ActiveState=active`
   - `stopped` means `ActiveState=inactive`
-  - `failed` (or other unexpected values) counts as `state_mismatch` for `running` and as `state_mismatch` for `stopped` unless explicitly allowed.
-  - If `systemctl` reports “unit not found,” this MUST be treated as INDETERMINATE (`reason_code = not_found`) with `service_not_found: true`.
-  - Because possible `ACTIVE`/`SUB` values can vary across systemd versions, checks MUST primarily compare `ActiveState` and treat unknown states as mismatches or indeterminate based on stability across probes.
-Stabilization protocol is REQUIRED for `service_state` (services transition asynchronously).
+  - `failed` (or other unexpected values) counts as `state_mismatch` for `running` and as
+    `state_mismatch` for `stopped` unless explicitly allowed.
+  - If `systemctl` reports “unit not found,” this MUST be treated as INDETERMINATE
+    (`reason_code = not_found`) with `service_not_found: true`.
+  - Because possible `ACTIVE`/`SUB` values can vary across systemd versions, checks MUST primarily
+    compare `ActiveState` and treat unknown states as mismatches or indeterminate based on stability
+    across probes. Stabilization protocol is REQUIRED for `service_state` (services transition
+    asynchronously).
 
 ### 5) command
 
-`command` executes a command and evaluates deterministic predicates over exit code and optional stdout matching.
+`command` executes a command and evaluates deterministic predicates over exit code and optional
+stdout matching.
 
 **Execution constraints**
+
 - Commands MUST be executed as an argv array (no string parsing) with `shell=false` by default.
 - Each execution MUST apply `timeout_ms` (default 10000) and record the effective working directory.
 - Captured stdout/stderr MUST be normalized per the probe transcript rules above.
 
 **Predicate (minimum)**
+
 - `argv`: list of tokens (not a shell string)
 - `timeout_ms` (default 10000)
 - `expect_exit_codes`: array of integers, default `[0]`
 - Optional output assertions that do not require parsing localized text:
   - `stdout_contains` / `stderr_contains` (substring over normalized captured text)
-  - `stdout_sha256` / `stderr_sha256` (exact match; computed over normalized captured text encoded as UTF-8)
-  - `stdout_regex` only if regex is anchored (`^...$`) and the regex dialect is pinned by the implementation
-
+  - `stdout_sha256` / `stderr_sha256` (exact match; computed over normalized captured text encoded
+    as UTF-8)
+  - `stdout_regex` only if regex is anchored (`^...$`) and the regex dialect is pinned by the
+    implementation
 
 **Verdict rules**
-- If the command cannot be executed because it is not found: INDETERMINATE (`reason_code = not_found`).
+
+- If the command cannot be executed because it is not found: INDETERMINATE
+  (`reason_code = not_found`).
 - If the command times out: INDETERMINATE (`reason_code = timeout`).
 - If the exit code is not in `expect_exit_codes`: FAIL (`reason_code = present`).
 - If exit code matches but any specified output assertion is not satisfied:
-  - If the relevant stream is truncated and the assertion requires full output (`*_sha256`): INDETERMINATE (`reason_code = parse_error`).
+  - If the relevant stream is truncated and the assertion requires full output (`*_sha256`):
+    INDETERMINATE (`reason_code = parse_error`).
   - If the relevant stream is truncated and the assertion is `*_contains` or `stdout_regex`:
-    - PASS only if the match is found within captured output; otherwise INDETERMINATE (`reason_code = parse_error`).
+    - PASS only if the match is found within captured output; otherwise INDETERMINATE
+      (`reason_code = parse_error`).
   - Otherwise: FAIL (`reason_code = present`).
 - Otherwise: PASS (`reason_code = ok`).

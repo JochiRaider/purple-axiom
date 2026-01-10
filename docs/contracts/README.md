@@ -1,14 +1,16 @@
 <!-- docs/contracts/README.md -->
+
 # Purple Axiom Contracts (JSON Schemas)
 
 Contract version: `0.1.0`
 
-These schemas define the **minimum** structure required for deterministic, CI-validated artifacts in the Purple Axiom run bundle.
+These schemas define the **minimum** structure required for deterministic, CI-validated artifacts in
+the Purple Axiom run bundle.
 
 ## Intended usage
 
-- `ground_truth.jsonl`, `normalized/ocsf_events.jsonl`, `detections/detections.jsonl`, `criteria/criteria.jsonl`,
-  and `criteria/results.jsonl` are **JSON Lines** files:
+- `ground_truth.jsonl`, `normalized/ocsf_events.jsonl`, `detections/detections.jsonl`,
+  `criteria/criteria.jsonl`, and `criteria/results.jsonl` are **JSON Lines** files:
   - validate **each line** against the corresponding schema.
 - The following are single JSON objects:
   - `manifest.json`
@@ -23,10 +25,12 @@ These schemas define the **minimum** structure required for deterministic, CI-va
 
 ## Design notes
 
-- Strict schemas (manifest, ground truth, detections, summary) use `additionalProperties: false` for high signal-to-noise.
+- Strict schemas (manifest, ground truth, detections, summary) use `additionalProperties: false` for
+  high signal-to-noise.
 - Forward-compatible extension point: `extensions` object.
 - OCSF event validation is intentionally *minimal*:
-  - It enforces provenance (`metadata.run_id`, `metadata.scenario_id`, versions, `metadata.source_type`) and a stable `metadata.event_id`.
+  - It enforces provenance (`metadata.run_id`, `metadata.scenario_id`, versions,
+    `metadata.source_type`) and a stable `metadata.event_id`.
   - It does not attempt to fully validate the entire OCSF spec payload.
 
 ## Files

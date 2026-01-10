@@ -1,7 +1,9 @@
 <!-- docs/spec/042_osquery_integration.md -->
+
 # osquery integration (telemetry + normalization)
 
 This document defines the v0.1 integration path for osquery as a telemetry source:
+
 - Canonical continuous monitoring output format.
 - OpenTelemetry Collector ingestion.
 - Raw staging layout in the run bundle.
@@ -11,9 +13,11 @@ This document defines the v0.1 integration path for osquery as a telemetry sourc
 
 ### 1.1 Required: filesystem logger in event format NDJSON
 
-When osquery is enabled, collectors MUST ingest the osquery **scheduled query results log** emitted by `osqueryd` using the filesystem logger.
+When osquery is enabled, collectors MUST ingest the osquery **scheduled query results log** emitted
+by `osqueryd` using the filesystem logger.
 
 Canonical format (v0.1):
+
 - One JSON object per line (NDJSON).
 - Each line MUST include:
   - `name` (string): scheduled query name (query identifier for routing).
@@ -25,37 +29,47 @@ Canonical format (v0.1):
   - `snapshot` (array of objects): snapshot payload for `action: snapshot`.
 
 Non-canonical forms:
-- Status logs (`INFO|WARNING|ERROR|FATAL`) are not part of the results stream and MUST NOT be mixed into the results log stream.
-- “Batch” result formats MAY be supported later, but are out of scope for v0.1 unless explicitly enabled and covered by fixtures.
+
+- Status logs (`INFO|WARNING|ERROR|FATAL`) are not part of the results stream and MUST NOT be mixed
+  into the results log stream.
+- “Batch” result formats MAY be supported later, but are out of scope for v0.1 unless explicitly
+  enabled and covered by fixtures.
 
 ### 1.2 Timestamp handling
 
 - The normalizer MUST interpret `unixTime` as integer epoch seconds and derive:
   - `time` (required envelope) as epoch milliseconds (`unixTime * 1000`).
-- The normalizer MUST treat `calendarTime` as non-authoritative and MUST NOT use it for identity or ordering.
+- The normalizer MUST treat `calendarTime` as non-authoritative and MUST NOT use it for identity or
+  ordering.
 
 ## 2) Raw staging in the run bundle
 
-When `telemetry.sources.osquery.enabled=true`, the pipeline MUST stage the source-native results log under:
+When `telemetry.sources.osquery.enabled=true`, the pipeline MUST stage the source-native results log
+under:
 
 - `runs/<run_id>/raw/osquery/osqueryd.results.log`
 
 Notes:
+
 - This staged file is the canonical “evidence-tier” representation for osquery results.
-- The pipeline MAY also stage adjacent files (example: `osqueryd.*.log`) under the same directory, but they MUST be clearly separated from the results log.
+- The pipeline MAY also stage adjacent files (example: `osqueryd.*.log`) under the same directory,
+  but they MUST be clearly separated from the results log.
 
 ## 3) OpenTelemetry Collector ingestion
 
 ### 3.1 Collection model
 
 The preferred ingestion model is:
+
 - osquery writes NDJSON results to the local filesystem.
 - The OTel Collector tails the results file via the `filelog` receiver.
-- The collector parses JSON and exports logs via OTLP (local file/OTLP and optional gateway), consistent with the canonical topology in `040_telemetry_pipeline.md`.
+- The collector parses JSON and exports logs via OTLP (local file/OTLP and optional gateway),
+  consistent with the canonical topology in `040_telemetry_pipeline.md`.
 
 ### 3.2 Minimal `filelog` receiver example
 
 This example is intentionally minimal and is designed to:
+
 - Tail osquery results.
 - Parse NDJSON into attributes.
 - Preserve the original line for forensic/debug use.
@@ -88,27 +102,35 @@ receivers:
         from: attributes.action
         to: attributes.osquery.action
 ```
-**Durable offset tracking note (required):** This receiver example assumes the collector enables a storage extension (v0.1 reference: `file_storage` / filestorage) and points it at a durable on-disk directory. Loss/corruption/reset of that directory MUST be treated as checkpoint loss per `040_telemetry_pipeline.md` (replay/duplication is expected; gaps must be recorded).
+
+**Durable offset tracking note (required):** This receiver example assumes the collector enables a
+storage extension (v0.1 reference: `file_storage` / filestorage) and points it at a durable on-disk
+directory. Loss/corruption/reset of that directory MUST be treated as checkpoint loss per
+`040_telemetry_pipeline.md` (replay/duplication is expected; gaps must be recorded).
 
 ### 3.3 Rotation and compression constraints (required)
 
 - The `filelog` receiver MUST be able to read every rotated segment necessary to cover the
   worst-case catch-up window (see `040_telemetry_pipeline.md` “Checkpointing and replay semantics”).
-- osquery filesystem logger rotation MAY produce Zstandard-compressed rotated files (`*.zst`).
-  The v0.1 pipeline MUST NOT assume that the `filelog` receiver can read `*.zst` segments.
+- osquery filesystem logger rotation MAY produce Zstandard-compressed rotated files (`*.zst`). The
+  v0.1 pipeline MUST NOT assume that the `filelog` receiver can read `*.zst` segments.
 - Operators MUST ensure the osquery results rotation policy yields rotated history that is readable
   by `filelog` for the full catch-up window. Acceptable strategies include:
   - keep rotated segments uncompressed until after the catch-up window expires, or
-  - use gzip (`*.gz`) for rotated segments and configure `filelog` `compression: gzip`
-    (append-only; MUST NOT recompress-overwrite existing files).
+  - use gzip (`*.gz`) for rotated segments and configure `filelog` `compression: gzip` (append-only;
+    MUST NOT recompress-overwrite existing files).
 - If unreadable rotated segments lead to missing results, the validator MUST record the gap as a
   telemetry failure (not silently ignored).
 
 Required exporter tagging:
-- The collector (or downstream normalizer) MUST be able to set `metadata.source_type = "osquery"` for records originating from this receiver.
+
+- The collector (or downstream normalizer) MUST be able to set `metadata.source_type = "osquery"`
+  for records originating from this receiver.
 
 Failure handling (v0.1):
-- If a line fails JSON parsing, the collector SHOULD emit it as an unstructured log record (retain the raw line) and the normalizer MUST account for it as an ingest/parse error (see §6).
+
+- If a line fails JSON parsing, the collector SHOULD emit it as an unstructured log record (retain
+  the raw line) and the normalizer MUST account for it as an ingest/parse error (see §6).
 
 ## 4) Derived raw Parquet (optional but recommended)
 
@@ -118,19 +140,21 @@ The pipeline MAY convert staged NDJSON lines into a Parquet dataset under:
 
 When emitted, the dataset MUST include (at minimum) the following columns:
 
-| Column | Type | Notes |
-|---|---|---|
-| `time` | int64 | Epoch ms derived from `unixTime` |
-| `query_name` | string | From `name` |
-| `host_identifier` | string | From `hostIdentifier` |
-| `action` | string | `added|removed|snapshot` |
-| `columns_json` | string (JSON) | Present for `added|removed`, else null |
-| `snapshot_json` | string (JSON) | Present for `snapshot`, else null |
-| `raw_json` | string (JSON) | The full original JSON object (canonical raw) |
-| `log.file.path` | string | If provided by the collector; else null |
+| Column            | Type          | Notes                                         |
+| ----------------- | ------------- | --------------------------------------------- |
+| `time`            | int64         | Epoch ms derived from `unixTime`              |
+| `query_name`      | string        | From `name`                                   |
+| `host_identifier` | string        | From `hostIdentifier`                         |
+| `action`          | string        | \`added                                       |
+| `columns_json`    | string (JSON) | Present for \`added                           |
+| `snapshot_json`   | string (JSON) | Present for `snapshot`, else null             |
+| `raw_json`        | string (JSON) | The full original JSON object (canonical raw) |
+| `log.file.path`   | string        | If provided by the collector; else null       |
 
 Determinism requirements:
-- `raw_json` MUST be the original parsed JSON object re-serialized via RFC 8785 (JCS) prior to hashing or stable joins (see ADR-0002).
+
+- `raw_json` MUST be the original parsed JSON object re-serialized via RFC 8785 (JCS) prior to
+  hashing or stable joins (see ADR-0002).
 
 ## 5) Normalization to OCSF
 
@@ -140,28 +164,37 @@ Determinism requirements:
 
 ### 5.2 Routing by `query_name`
 
-Normalization MUST be routed by osquery `query_name` (the `name` field in the results log). The routing table MUST be captured in the mapping profile snapshot (`normalized/mapping_profile_snapshot.json`).
+Normalization MUST be routed by osquery `query_name` (the `name` field in the results log). The
+routing table MUST be captured in the mapping profile snapshot
+(`normalized/mapping_profile_snapshot.json`).
 
 v0.1 default routing:
 
-| `query_name` | OCSF target class | `class_uid` |
-|---|---|---:|
-| `process_events` | Process Activity | 1007 |
-| `file_events` | File System Activity | 1001 |
-| `socket_events` | Network Activity | 4002 |
+| `query_name`     | OCSF target class    | `class_uid` |
+| ---------------- | -------------------- | ----------: |
+| `process_events` | Process Activity     |        1007 |
+| `file_events`    | File System Activity |        1001 |
+| `socket_events`  | Network Activity     |        4002 |
 
 Rules:
+
 - The normalizer MUST NOT guess a `class_uid` for unknown `query_name` values.
-- Unknown `query_name` rows MUST be counted as unrouted/unmapped in `normalized/mapping_coverage.json`.
-- Implementations MAY provide an explicit allowlist of additional `query_name` routes via mapping profile material.
+- Unknown `query_name` rows MUST be counted as unrouted/unmapped in
+  `normalized/mapping_coverage.json`.
+- Implementations MAY provide an explicit allowlist of additional `query_name` routes via mapping
+  profile material.
 
 ### 5.3 Minimal mapping obligations (v0.1)
 
 For routed rows, the normalizer MUST:
-- Emit a valid OCSF envelope as defined in `docs/spec/050_normalization_ocsf.md` and `docs/spec/055_ocsf_field_tiers.md`.
-- Preserve the full source payload under an explicit `unmapped.osquery` object when fields cannot be mapped deterministically.
+
+- Emit a valid OCSF envelope as defined in `docs/spec/050_normalization_ocsf.md` and
+  `docs/spec/055_ocsf_field_tiers.md`.
+- Preserve the full source payload under an explicit `unmapped.osquery` object when fields cannot be
+  mapped deterministically.
 
 Minimum `unmapped.osquery` contents:
+
 - `query_name`
 - `action`
 - `columns` (object) or `snapshot` (array), whichever was present
@@ -169,9 +202,11 @@ Minimum `unmapped.osquery` contents:
 
 ### 5.4 Event identity (required)
 
-`metadata.event_id` MUST be computed per ADR-0002 using an osquery identity basis with deterministic inputs.
+`metadata.event_id` MUST be computed per ADR-0002 using an osquery identity basis with deterministic
+inputs.
 
 v0.1 identity basis (Tier 3, because osquery does not provide a stable record id):
+
 ```json
 {
   "source_type": "osquery",
@@ -184,61 +219,99 @@ v0.1 identity basis (Tier 3, because osquery does not provide a stable record id
 ```
 
 Rules:
-- `payload` MUST be the canonical JSON object/array for `columns` or `snapshot` using RFC 8785 (JCS).
+
+- `payload` MUST be the canonical JSON object/array for `columns` or `snapshot` using RFC 8785
+  (JCS).
 - `calendarTime` MUST NOT be included.
-- For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id` (see `025_data_contracts.md`).
+- For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id` (see
+  `025_data_contracts.md`).
 
 ## 5.5 Known Mapping Limitations (v0.1)
 
-The v0.1 osquery mappings have the following documented limitations. These are driven by what the underlying osquery event tables can provide and, in some cases, by platform-specific collection backends.
+The v0.1 osquery mappings have the following documented limitations. These are driven by what the
+underlying osquery event tables can provide and, in some cases, by platform-specific collection
+backends.
 
 ### macOS and Linux
 
 #### `file_events` (FIM)
 
-- Initiating process attribution is not available from `file_events`. The table reports file change metadata (including file owner `uid/gid`) and an `action`, but it does not include a process identifier or executable path for the initiating actor. As a result, `actor.process` MUST be absent for `file_events` normalized events.
-- If process context is required for detection content, it MUST be sourced from a process-context file auditing table rather than inferred from `file_events`. Feasible options include:
-  - Linux: `process_file_events` (audit-based file activity with process context). This includes process identifiers and user identifiers such as `pid`, `ppid`, `uid/euid`, `auid`, and `executable`.
-    - Operational constraints apply: `process_file_events` requires audit control (it will not work if `auditd` is running), and it only reports events for directories that exist before the agent starts.
-  - macOS: `es_process_file_events` (EndpointSecurity-based file activity with process context), which includes `pid`, parent process context, and executed `path`.
-- `activity_id` mapping is best-effort. `file_events.action` does not fully disambiguate content writes versus metadata-only changes. For example, osquery can emit actions like `ATTRIBUTES_MODIFIED`, which indicates a metadata change.
+- Initiating process attribution is not available from `file_events`. The table reports file change
+  metadata (including file owner `uid/gid`) and an `action`, but it does not include a process
+  identifier or executable path for the initiating actor. As a result, `actor.process` MUST be
+  absent for `file_events` normalized events.
+- If process context is required for detection content, it MUST be sourced from a process-context
+  file auditing table rather than inferred from `file_events`. Feasible options include:
+  - Linux: `process_file_events` (audit-based file activity with process context). This includes
+    process identifiers and user identifiers such as `pid`, `ppid`, `uid/euid`, `auid`, and
+    `executable`.
+    - Operational constraints apply: `process_file_events` requires audit control (it will not work
+      if `auditd` is running), and it only reports events for directories that exist before the
+      agent starts.
+  - macOS: `es_process_file_events` (EndpointSecurity-based file activity with process context),
+    which includes `pid`, parent process context, and executed `path`.
+- `activity_id` mapping is best-effort. `file_events.action` does not fully disambiguate content
+  writes versus metadata-only changes. For example, osquery can emit actions like
+  `ATTRIBUTES_MODIFIED`, which indicates a metadata change.
 
 #### `socket_events` (process and socket auditing)
 
-- `socket_events` does provide process linkage, including `pid` and executed `path`, so `actor.process.pid` can be populated directly when present.
-- `socket_events` provides an audit user identifier (`auid`). v0.1 normalization SHOULD map this to a numeric user identifier (for example, `actor.user.uid`) when present. Username resolution is out of scope for v0.1 unless explicitly supported via additional identity correlation logic.
-- Direction inference is best-effort and derived from the observed action set (`bind`, `connect`, `accept`). `connect` is treated as outbound intent, `accept` as inbound acceptance, and `bind` is ambiguous without additional context.
+- `socket_events` does provide process linkage, including `pid` and executed `path`, so
+  `actor.process.pid` can be populated directly when present.
+- `socket_events` provides an audit user identifier (`auid`). v0.1 normalization SHOULD map this to
+  a numeric user identifier (for example, `actor.user.uid`) when present. Username resolution is out
+  of scope for v0.1 unless explicitly supported via additional identity correlation logic.
+- Direction inference is best-effort and derived from the observed action set (`bind`, `connect`,
+  `accept`). `connect` is treated as outbound intent, `accept` as inbound acceptance, and `bind` is
+  ambiguous without additional context.
 
 #### `action=snapshot` (scheduled query snapshot logging)
 
 - Snapshot rows represent bulk table state at a point in time, not discrete per-entity events.
-- When snapshot rows are emitted as event-like rows (for example, via snapshot event logging), they MUST be normalized as state observations rather than activity. v0.1 routes these to the standard class but with `activity_id=99` (Other), and includes an explanation in `unmapped.osquery.notes`.
+- When snapshot rows are emitted as event-like rows (for example, via snapshot event logging), they
+  MUST be normalized as state observations rather than activity. v0.1 routes these to the standard
+  class but with `activity_id=99` (Other), and includes an explanation in `unmapped.osquery.notes`.
 
 ### Windows
 
 #### Filesystem activity (`ntfs_journal_events`)
 
-- On Windows, osquery file integrity monitoring is sourced from `ntfs_journal_events` (NTFS USN journal), not `file_events`.
-- `ntfs_journal_events` does not include initiating process identifiers or executable path. Therefore, for file activity normalized from `ntfs_journal_events`, `actor.process` MUST be absent.
-- User attribution is not provided directly by `ntfs_journal_events`. Any `actor.user` attribution requires a different telemetry source.
-- `activity_id` mapping remains best-effort because `action` values reflect USN journal semantics (for example, write, delete, rename) and do not always cleanly distinguish content writes from metadata-only changes.
+- On Windows, osquery file integrity monitoring is sourced from `ntfs_journal_events` (NTFS USN
+  journal), not `file_events`.
+- `ntfs_journal_events` does not include initiating process identifiers or executable path.
+  Therefore, for file activity normalized from `ntfs_journal_events`, `actor.process` MUST be
+  absent.
+- User attribution is not provided directly by `ntfs_journal_events`. Any `actor.user` attribution
+  requires a different telemetry source.
+- `activity_id` mapping remains best-effort because `action` values reflect USN journal semantics
+  (for example, write, delete, rename) and do not always cleanly distinguish content writes from
+  metadata-only changes.
 
 #### Network socket activity
 
 - The osquery `socket_events` table is not available on Windows (it is macOS/Linux only).
-- Therefore, v0.1 does not normalize Windows network connection activity from osquery. Any Windows network connection normalization MUST be sourced from a non-osquery telemetry provider (or treated as out of scope for v0.1).
-- Scheduled snapshot diffs of socket state are intentionally not treated as event-equivalent in v0.1 (race-prone and non-deterministic under load).
+- Therefore, v0.1 does not normalize Windows network connection activity from osquery. Any Windows
+  network connection normalization MUST be sourced from a non-osquery telemetry provider (or treated
+  as out of scope for v0.1).
+- Scheduled snapshot diffs of socket state are intentionally not treated as event-equivalent in v0.1
+  (race-prone and non-deterministic under load).
 
 #### Process execution context (`process_etw_events`)
 
-- Windows process execution telemetry MAY be sourced from `process_etw_events` (ETW-backed), which can provide `pid`, `ppid`, `path`, `cmdline`, and `username` when available.
-- `process_etw_events` reliability is build-dependent. v0.1 treats this source as best-effort and requires fixture validation on the supported Windows build matrix (including validation that ProcessStart events are emitted as expected).
+- Windows process execution telemetry MAY be sourced from `process_etw_events` (ETW-backed), which
+  can provide `pid`, `ppid`, `path`, `cmdline`, and `username` when available.
+- `process_etw_events` reliability is build-dependent. v0.1 treats this source as best-effort and
+  requires fixture validation on the supported Windows build matrix (including validation that
+  ProcessStart events are emitted as expected).
 
 #### `action=snapshot`
 
-- Snapshot rows remain bulk table state, not discrete events. Snapshot-derived rows continue to be routed to the standard class with `activity_id=99` (Other), with rationale recorded in `unmapped.osquery.notes`.
+- Snapshot rows remain bulk table state, not discrete events. Snapshot-derived rows continue to be
+  routed to the standard class with `activity_id=99` (Other), with rationale recorded in
+  `unmapped.osquery.notes`.
 
-These limitations do not prevent normalization but may affect Tier 1 field coverage metrics (see `055_ocsf_field_tiers.md`).
+These limitations do not prevent normalization but may affect Tier 1 field coverage metrics (see
+`055_ocsf_field_tiers.md`).
 
 ## 6) Conformance fixtures and tests
 
@@ -259,19 +332,26 @@ Add the following fixtures under `tests/fixtures/osquery/` (recommended conventi
 At minimum, CI MUST assert:
 
 - **Parsing:**
+
   - Valid JSON lines are ingested and available to normalization.
   - Invalid JSON lines are counted as ingest/parse errors and do not produce normalized events.
 
 - **Routing:**
+
   - Known `query_name` values map to the expected `class_uid`.
-  - Unknown `query_name` values do not produce normalized events and are recorded as unrouted/unmapped.
+  - Unknown `query_name` values do not produce normalized events and are recorded as
+    unrouted/unmapped.
 
 - **Identity determinism:**
-  - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values (and `metadata.uid` when present).
+
+  - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values (and
+    `metadata.uid` when present).
 
 - **Raw preservation:**
+
   - The staged `runs/<run_id>/raw/osquery/osqueryd.results.log` is present when osquery is enabled.
-  - Routed normalized events contain `unmapped.osquery.raw_json` (or an explicitly redacted-safe representation when redaction is enabled).
+  - Routed normalized events contain `unmapped.osquery.raw_json` (or an explicitly redacted-safe
+    representation when redaction is enabled).
 
 ## 7) Sample inputs and outputs (non-normative)
 

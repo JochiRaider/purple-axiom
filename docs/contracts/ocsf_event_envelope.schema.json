@@ -1,21 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://purple-axiom.local/schemas/ocsf_event_envelope.schema.json",
-  "title": "Purple Axiom OCSF Event Envelope (Minimal Required Fields)",
-  "description": "Validates the required provenance and a minimal OCSF-compatible core. Allows additional OCSF fields and vendor extensions.",
+  "title": "Purple Axiom OCSF Event Envelope (OCSF-minimal core)",
+  "description": "Validates the minimal OCSF Base Event core for OCSF v1.7.0, as emitted by Purple Axiom. This schema does not require additional Purple Axiom provenance fields; implementations MAY include additional fields as extra properties.",
   "type": "object",
   "additionalProperties": true,
   "required": [
     "contract_version",
     "time",
+    "activity_id",
+    "category_uid",    
     "class_uid",
+    "type_uid",
+    "severity_id",    
     "metadata"
   ],
   "properties": {
     "time": {
       "type": "integer",
       "minimum": 0,
-      "description": "Event time in milliseconds since Unix epoch (UTC)."
+      "description": "Event time as milliseconds since Unix epoch (UTC). (OCSF timestamp_t)"
     },
     "time_dt": {
       "type": "string",
@@ -23,169 +27,191 @@
     },
     "class_uid": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "OCSF class_uid."
     },
     "category_uid": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "OCSF category_uid."
     },
     "type_uid": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "OCSF type_uid."
     },
     "severity_id": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "OCSF severity_id."
     },
     "metadata": {
       "type": "object",
       "additionalProperties": true,
       "required": [
-        "uid",
-        "event_id",
-        "run_id",
-        "scenario_id",
-        "collector_version",
-        "normalizer_version",
-        "source_type"
+        "product",
+        "version",
+        "uid"
       ],
       "properties": {
-        "event_id": {
+        "version": {
           "type": "string",
-          "pattern": "^pa:eid:v1:[A-Fa-f0-9]{32}$",
-          "description": "Purple Axiom deterministic event identifier (pa:eid:v1:<128-bit-hex>). MUST equal metadata.uid (enforced at runtime)."
+          "const": "1.7.0",
+          "description": "The version of the OCSF schema (SemVer). Pinned by Purple Axiom."
+        },
+        "product": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "OCSF Product.name"
+            },
+            "uid": {
+              "type": "string",
+              "minLength": 1,
+              "description": "OCSF Product.uid"
+            },
+            "vendor_name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "OCSF Product.vendor_name"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "OCSF Product.version"
+            },
+            "feature": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "OCSF Product.feature (optional)"
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "name"
+              ]
+            },
+            {
+              "required": [
+                "uid"
+              ]
+            }
+          ],
+          "description": "The product that reported the event (OCSF Metadata.product). At least one of name or uid MUST be present."
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "version"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "OCSF Schema Extension.name"
+              },
+              "uid": {
+                "type": "string",
+                "minLength": 1,
+                "description": "OCSF Schema Extension.uid"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "description": "OCSF Schema Extension.version"
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "uid"
+                ]
+              }
+            ],
+            "description": "OCSF Schema Extension object. At least one of name or uid MUST be present."
+          },
+          "description": "Schema extensions used to create the event (OCSF Metadata.extensions)."
         },
         "uid": {
           "type": "string",
+          "minLength": 1,
           "pattern": "^pa:eid:v1:[A-Fa-f0-9]{32}$",
-          "description": "OCSF metadata.uid; MUST equal metadata.event_id (enforced at runtime)."
+          "description": "OCSF Metadata.uid. In Purple Axiom, this MUST be the deterministic event identifier: \"pa:eid:v1:\" + <128-bit-hex>. This identifier is stable across replays of identical normalized events."
         },
-        "run_id": {
+        "original_event_uid": {
           "type": "string",
-          "format": "uuid"
+          "minLength": 1,
+          "description": "The unique identifier assigned to the event in its original logging system (OCSF Metadata.original_event_uid). For Windows Event Log this SHOULD be EventRecordID as a decimal string."
         },
-        "scenario_id": {
+        "event_code": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Identifier of the original event (OCSF Metadata.event_code)."
         },
-        "collector_version": {
+        "log_name": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "The event log name for the consumer (OCSF Metadata.log_name)."
         },
-        "normalizer_version": {
+        "log_source": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "The log system/component where the data originated (OCSF Metadata.log_source)."
         },
-        "source_type": {
+        "log_provider": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "The logging provider or logging service (OCSF Metadata.log_provider)."
         },
-        "source_event_id": {
-          "description": "Native/source event identifier when meaningful (e.g., Windows EventRecordID).",
-          "oneOf": [
-            {
-              "type": "integer",
-              "minimum": 0
-            },
-            {
-              "type": "string",
-              "pattern": "^\\d+$"
-            },
-            {
-              "type": "string",
-              "minLength": 1
-            }
-          ]
-        },
-        "observed_time_utc": {
+        "log_format": {
           "type": "string",
-          "format": "date-time",
-          "description": "When the event was observed by the collector (diagnostic only; excluded from metadata.event_id)."
+          "minLength": 1,
+          "description": "The format of data in the log where it originated (OCSF Metadata.log_format)."
         },
-        "ingest_id": {
+        "log_version": {
           "type": "string",
-          "format": "uuid",
-          "description": "Optional ingestion-attempt identifier (debug only; never used for joins)."
+          "minLength": 1,
+          "description": "The event log schema version of the original event (OCSF Metadata.log_version)."
         },
-        "identity_tier": {
-          "type": "integer",
-          "enum": [
-            1,
-            2,
-            3
-          ],
-          "description": "Identity tier used to compute metadata.event_id (1=native id, 2=cursor, 3=fingerprint)."
-        },
-        "time_precision": {
+        "source": {
           "type": "string",
-          "enum": [
-            "s",
-            "ms",
-            "us",
-            "ns"
-          ],
-          "description": "Precision of the event time field, as emitted by the source/collector."
+          "minLength": 1,
+          "description": "A distinguishing name for the logical origin of the data (OCSF Metadata.source)."
         },
-        "origin": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "Optional identity inputs captured from the source system (recommended for auditability and EVTX reprocessing).",
-          "properties": {
-            "host": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Originating host/computer from the event payload."
-            },
-            "channel": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Windows channel/log name or equivalent stream name."
-            },
-            "record_id": {
-              "oneOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\d+$"
-                }
-              ],
-              "description": "Windows EventRecordID / record number when available."
-            },
-            "provider": {
-              "type": "string",
-              "minLength": 1
-            },
-            "provider_guid": {
-              "type": "string",
-              "pattern": "^\\{?[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\\}?$"
-            },
-            "event_id": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Source-native event ID/type code when meaningful (e.g., Windows EventID)."
-            }
-          }
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The type of the event or finding as a subset of the source (OCSF Metadata.type)."
         },
-        "host": {
-          "type": "string"
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Labels attached to the event (OCSF Metadata.labels)."
         },
-        "pipeline": {
-          "type": "string"
-        }
-      },
-      "dependentSchemas": {
-        "origin": {
-          "properties": {
-            "origin": {
-              "required": [
-                "host",
-                "channel"
-              ]
-            }
-          }
+        "debug": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Debug information about non-fatal issues (OCSF Metadata.debug)."
+        },
+        "is_truncated": {
+          "type": "boolean",
+          "description": "Whether the OCSF event data has been truncated (OCSF Metadata.is_truncated)."
         }
       }
     },
@@ -234,45 +260,16 @@
       "type": "string",
       "const": "0.1.0",
       "description": "Contract version stamp for this event envelope."
+    },
+    "activity_id": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The normalized identifier of the activity that triggered the event (OCSF Base Event)."
+    },
+    "status_id": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The normalized identifier of the event status (OCSF Base Event). Recommended by OCSF."      
     }
-  },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "metadata": {
-            "properties": {
-              "source_type": {
-                "const": "windows_eventlog"
-              }
-            },
-            "required": [
-              "source_type"
-            ]
-          }
-        },
-        "required": [
-          "metadata"
-        ]
-      },
-      "then": {
-        "properties": {
-          "metadata": {
-            "required": [
-              "source_event_id"
-            ],
-            "properties": {
-              "origin": {
-                "required": [
-                  "host",
-                  "channel",
-                  "record_id"
-                ]
-              }
-            }
-          }
-        }
-      }
-    }
-  ]
+  }
 }

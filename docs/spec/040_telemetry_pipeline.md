@@ -355,3 +355,60 @@ These limits are Purple Axiom staging policy (not upstream OTel config) and MUST
 - `field_path_hash` MUST be SHA-256 of the UTF-8 bytes of `field_path` and encoded as lowercase hex.
 - Sidecar writes MUST respect redaction posture:
   - When `security.redaction.enabled=false`, sidecar payloads MUST follow the same withhold/quarantine rules as other evidence-tier artifacts (see `090_security_safety.md`).
+
+### Raw/unrendered Windows Event Log failure modes
+This subsection defines deterministic behavior when the Windows Event Log receiver cannot provide raw/unrendered XML, or when rendering metadata is unavailable due to missing provider manifests or publisher metadata failures.
+
+#### Receiver capability assumptions (OTel `windowseventlog`)
+The OTel `windowseventlog` receiver supports:
+- `raw: true` (body is the original XML string), and `include_log_record_original: true` (adds `log.record.original` attribute containing the original XML). Operators MAY mutate `body`, so `log.record.original` is the preferred “escape hatch” when present.
+- `suppress_rendering_info: true` to avoid extra rendering syscalls; this may produce unresolved values, but must not prevent collection of raw XML.
+
+#### Deterministic raw acquisition algorithm
+For every ingested Windows Event Log record, the pipeline MUST derive a single `raw_event_xml` string as follows (in priority order):
+1) If `LogRecord.body` is a string and begins with `<Event` (after trimming leading whitespace), use it as `raw_event_xml`.
+2) Else if `LogRecord.attributes["log.record.original"]` exists and is a string and begins with `<Event`, use it as `raw_event_xml` and increment `wineventlog_used_log_record_original_total`.
+3) Else treat the record as `RAW_XML_UNAVAILABLE` (see “Validation and gating”).
+
+The pipeline MUST NOT attempt heuristic recovery of identity fields (regex scraping, partial XML repair) when `RAW_XML_UNAVAILABLE` triggers, because this can introduce non-deterministic behavior across environments and library versions.
+
+#### Missing provider manifests and rendering metadata failures
+If publisher/manifest metadata is missing such that event rendering fails (for example, missing message strings or incomplete `RenderingInfo`), the pipeline MUST:
+- Continue processing the record if and only if `raw_event_xml` was acquired.
+- Treat “rendering metadata unavailable” as non-fatal for the raw/unrendered invariant.
+- Increment `wineventlog_rendering_metadata_missing_total` when rendering metadata is absent or explicitly suppressed.
+
+#### Binary payload extraction failures
+If the pipeline attempts to decode binary payloads from `raw_event_xml` and decoding fails, it MUST:
+- Treat the failure as non-fatal (do not drop the record solely due to binary decode failure).
+- Omit decoded bytes from normalized output.
+- Emit a bounded, deterministic summary for that field consisting of:
+  - `encoding` (e.g., `"hex"`, `"base64"`, or `"unknown"`),
+  - `encoded_len_bytes`,
+  - `encoded_sha256` (sha256 over the encoded string bytes, UTF-8),
+  - `decode_error_code` (stable token from the set: `invalid_encoding`, `invalid_hex`, `invalid_base64`, `size_limit_exceeded`).
+- Increment `wineventlog_binary_decode_failed_total`.
+
+#### Oversize payload sidecar naming (deterministic)
+When `sidecar.enabled: true` and a payload overflows `max_event_xml_bytes`, the sidecar object name MUST be content-addressed:
+- `payload_overflow_sha256` MUST be lowercase hex.
+- The sidecar filename MUST be `${payload_overflow_sha256}.xml`.
+- `payload_overflow_ref` MUST be the POSIX-style relative path `${sidecar.path}/${payload_overflow_sha256}.xml` (even on Windows).
+
+If writing the sidecar object fails, the pipeline MUST:
+- Increment `wineventlog_sidecar_write_failed_total`.
+- Still emit the truncated inline payload and `payload_overflow_sha256`.
+- Treat the condition as a telemetry validation failure under `fail_mode: fail_closed`, and as a warning under `fail_mode: warn_and_skip`.
+
+#### Validation and gating
+Telemetry validation output MUST include the following counters (integers, deterministic):
+- `wineventlog_raw_unavailable_total`
+- `wineventlog_raw_malformed_total`
+- `wineventlog_used_log_record_original_total`
+- `wineventlog_rendering_metadata_missing_total`
+- `wineventlog_binary_decode_failed_total`
+- `wineventlog_payload_overflow_total`
+- `wineventlog_sidecar_write_failed_total`
+
+Under `fail_mode: fail_closed`, any non-zero `wineventlog_raw_unavailable_total` or `wineventlog_raw_malformed_total` MUST fail the telemetry stage.
+Under `fail_mode: warn_and_skip`, records that trigger `RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` MUST be skipped (not written to `raw_parquet/windows_eventlog`) and MUST still be counted in telemetry validation output.

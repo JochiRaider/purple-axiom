@@ -150,7 +150,7 @@ Additional Purple Axiom staging policy (applies during raw Parquet writing and o
 Controls raw-to-OCSF transformation and the normalized store written under `normalized/`.
 
 Common keys:
-- `ocsf_version` (required): pinned OCSF version string (example: `1.3.0`)
+- `ocsf_version` (required): pinned OCSF version string (example: `1.7.0`)
 - `mapping_profiles` (optional): list of profile identifiers (example: `windows`, `linux`, `dns`)
 - `source_type_mapping` (optional): map of raw source identifiers to `metadata.source_type`
 - `dedupe` (optional)
@@ -160,7 +160,7 @@ Common keys:
   - `conflict_policy` (default: `warn`): `warn | fail_closed`
 
 Notes (v0.1):
-- Purple Axiom v0.1 pins `ocsf_version = "1.3.0"`. OCSF schema update/migration policy is defined in `050_normalization_ocsf.md`.
+- Purple Axiom v0.1 pins `ocsf_version = "1.7.0"`. OCSF schema update/migration policy is defined in `050_normalization_ocsf.md`.
 - `strict_mode` (default: true)
   - When true, normalization failures produce a run-level failure unless explicitly allowlisted.
 - `raw_preservation` (optional)
@@ -397,7 +397,7 @@ telemetry:
       output_path: raw/osquery/
 
 normalization:
-  ocsf_version: "1.3.0"
+  ocsf_version: "1.7.0"
   mapping_profiles: ["windows", "dns"]
   strict_mode: true
   raw_preservation:

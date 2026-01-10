@@ -14,7 +14,7 @@
 
 Purple Axiom v0.1 MUST pin the OCSF schema version to:
 
-- `ocsf_version = "1.3.0"`
+- `ocsf_version = "1.7.0"`
 
 Conformance requirements (v0.1):
 - Every run MUST record the effective `ocsf_version` used for normalization in run provenance.

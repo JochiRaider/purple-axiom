@@ -113,6 +113,9 @@ Failure classification (telemetry stage):
 - If the receiver cannot open publisher metadata (example: “Failed to open publisher handle”), the event MUST still be captured if raw XML is available.
 - If raw XML is not available for a Windows Event Log record, telemetry validation for that asset MUST fail closed (see §4).
 
+Observable signal (publisher metadata unavailable):
+During telemetry validation, the validator SHOULD detect publisher metadata open failures via collector self-telemetry. At minimum, it MUST treat the collector log substring `"writing log entry to pipeline without metadata"` (or an equivalent stable token) as evidence that publisher metadata was unavailable for at least one record. When observed, the validator MUST record: `(asset_id, channel if available, observed_count, sample_log_refs)` in `runs/<run_id>/logs/telemetry_validation.json`. Publisher metadata unavailability MUST NOT cause normalization failure when `raw` XML is present.
+
 ### Receiver instance model
 
 Create one receiver instance per channel (or per channel group), using stable names:
@@ -248,6 +251,35 @@ When tuning, change one dimension at a time, in this order, and record the resul
    - Re-run the validation harness backpressure and restart tests (§4) after each tuning change.
    - Operators SHOULD treat any tuning change that increases drops at steady-state EPS as a regression unless justified by tighter resource budgets.
 
+#### EPS baselines and sizing guidance (planning; v0.1)
+
+Purple Axiom treats “EPS targets” as an operator sizing primitive, not as a universal constant. The baseline targets in `110_operability.md` § “Resource budgets” are intended to provide a reasonable default for typical lab roles (Windows endpoint, DC, Linux server) and common telemetry profiles.
+
+Sizing guidance:
+- **Queue sizing (bounded outage budget):** `queue_size ≈ sustained_eps_target * tolerated_stall_seconds`.
+  - Example: for 50 sustained EPS and a 60s outage budget, choose `queue_size ≈ 3000` (round up).
+- **Batch sizing (bounded latency):** pick `send_batch_size` such that a batch represents ~0.5–2.0 seconds of traffic at sustained EPS.
+  - Example: for 300 sustained EPS, `send_batch_size` in the 150–600 range is a reasonable starting point.
+
+#### Measuring EPS and footprint (required for validation)
+
+Telemetry validation SHOULD derive EPS and collector footprint directly from collector self-telemetry:
+
+- **Sustained EPS:** `rate(otelcol_receiver_accepted_log_records[10m])`
+- **Burst EPS (p95 1m):** p95 over 1-minute windows of `rate(otelcol_receiver_accepted_log_records[1m])`
+- **Drops / backpressure indicators:**
+  - `otelcol_processor_dropped_log_records`
+  - `otelcol_exporter_enqueue_failed_log_records`
+  - `otelcol_exporter_send_failed_log_records`
+- **CPU and memory (collector process):**
+  - CPU: `rate(otelcol_process_cpu_seconds[1m])` (convert to percent using host core count)
+  - RSS: `otelcol_process_memory_rss` (bytes)
+
+Normative requirements:
+- During validation, operators MUST measure EPS and footprint under steady-state load for at least 10 minutes per asset role and telemetry profile.
+- If `otelcol_exporter_enqueue_failed_log_records` is non-zero at sustained EPS, the configuration MUST be treated as under-provisioned (queue too small, exporter too slow, or CPU constrained) and tuning MUST be performed before the asset is considered “validated”.
+- Any tuning change that increases steady-state drops (`otelcol_processor_dropped_log_records`) SHOULD be treated as a regression unless explicitly justified by tighter resource budgets.
+ 
 ### Checkpointing and replay semantics (required)
 
 At-least-once delivery implies duplicates and replay. This is expected and MUST be handled without breaking determinism goals.

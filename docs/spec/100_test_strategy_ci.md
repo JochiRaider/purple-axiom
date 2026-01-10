@@ -66,6 +66,15 @@
 - Schema validation of produced OCSF events
 - Pinned-version consistency checks (fail closed):
   - `manifest.normalization.ocsf_version` (when present), `mapping_profile_snapshot.ocsf_version`, and bridge mapping pack `ocsf_version` (when present) MUST match.
+- External dependency version matrix (fail closed; v0.1):
+  - CI MUST run the integration and “golden run” fixtures using the pinned dependency versions in `SUPPORTED_VERSIONS.md`.
+  - CI MUST fail if any runtime dependency version differs from the pins for an enabled stage.
+  - Minimum pinned set (v0.1):
+    - OpenTelemetry Collector Contrib (otelcol-contrib distribution): `0.143.1`
+    - pySigma: `1.1.0`
+    - DuckDB: `1.4.3`
+    - osquery: `5.14.1`
+    - OCSF schema: `1.7.0`
 - Linting/validation for Sigma rules
 - Report generation sanity checks
 - Artifact manifest completeness check

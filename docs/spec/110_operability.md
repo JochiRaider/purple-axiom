@@ -51,6 +51,29 @@ The pipeline MUST enforce upper bounds:
 - **Memory**: collector memory limit (via memory limiter) and normalizer process RSS guardrails.
 - **CPU**: continuous runs should not starve endpoints; target sustained CPU under a configurable threshold.
 
+### EPS baselines (planning targets; v0.1)
+
+Purple Axiom uses EPS (events per second) targets to (a) size collectors and (b) define the “footprint within configured budgets at target event rate” gate in telemetry validation.
+
+Definitions:
+- `sustained_eps_target`: 10-minute rolling average EPS (per asset, aggregated across enabled telemetry sources).
+- `burst_eps_target_p95_1m`: 95th percentile of 1-minute EPS windows during the same 10-minute interval.
+
+Planning baseline targets (initial defaults; operators SHOULD replace with measured baselines for their lab):
+
+| Asset role | Telemetry profile | Sustained EPS target | Burst EPS target (p95 1m) | Collector CPU target (p95) | Collector RSS target (p95) | Raw write estimate (MB/s)† |
+|---|---|---:|---:|---:|---:|---:|
+| Windows endpoint | Windows Event Log (Application/Security/System) + Sysmon | 50 | 150 | ≤ 5% of 1 vCPU | ≤ 350 MB | 0.1–0.9 |
+| Windows domain controller | Windows Event Log (Application/Security/System) | 300 | 1,000 | ≤ 15% of 1 vCPU | ≤ 500 MB | 0.6–6.0 |
+| Linux server | auditd + osquery (evented + scheduled) | 100 | 300 | ≤ 10% of 1 vCPU | ≤ 250 MB | 0.2–1.8 |
+
+† Raw write estimate assumes 2–6 KB average serialized event payload per record and is intended only for order-of-magnitude disk sizing. Implementations MUST measure and report observed raw bytes per second during validation.
+
+Normative requirements:
+- Telemetry validation MUST treat these values as planning defaults only; operators MAY override them via configuration or asset-specific profiles.
+- The validator SHOULD record observed EPS and footprint statistics (CPU, RSS, raw bytes/sec) for each validated asset to make regressions and sizing errors detectable.
+  - Measurement methodology is specified in `040_telemetry_pipeline.md` §2 “Performance and footprint controls (agent)”.
+ 
 Budgets are configuration-driven and surfaced in reports when exceeded.
 
 ## Resiliency and backpressure

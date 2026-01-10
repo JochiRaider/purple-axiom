@@ -134,7 +134,7 @@ v0.1 default routing:
 |---|---|---:|
 | `process_events` | Process Activity | 1007 |
 | `file_events` | File System Activity | 1001 |
-| `socket_events` | Network Activity | 4001 |
+| `socket_events` | Network Activity | 4002 |
 
 Rules:
 - The normalizer MUST NOT guess a `class_uid` for unknown `query_name` values.
@@ -173,6 +173,58 @@ Rules:
 - `payload` MUST be the canonical JSON object/array for `columns` or `snapshot` using RFC 8785 (JCS).
 - `calendarTime` MUST NOT be included.
 - For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id` (see `025_data_contracts.md`).
+
+## 5.5 Known Mapping Limitations (v0.1)
+
+The v0.1 osquery mappings have the following documented limitations. These are driven by what the underlying osquery event tables can provide and, in some cases, by platform-specific collection backends.
+
+### macOS and Linux
+
+#### `file_events` (FIM)
+
+- Initiating process attribution is not available from `file_events`. The table reports file change metadata (including file owner `uid/gid`) and an `action`, but it does not include a process identifier or executable path for the initiating actor. As a result, `actor.process` MUST be absent for `file_events` normalized events.
+- If process context is required for detection content, it MUST be sourced from a process-context file auditing table rather than inferred from `file_events`. Feasible options include:
+  - Linux: `process_file_events` (audit-based file activity with process context). This includes process identifiers and user identifiers such as `pid`, `ppid`, `uid/euid`, `auid`, and `executable`.
+    - Operational constraints apply: `process_file_events` requires audit control (it will not work if `auditd` is running), and it only reports events for directories that exist before the agent starts.
+  - macOS: `es_process_file_events` (EndpointSecurity-based file activity with process context), which includes `pid`, parent process context, and executed `path`.
+- `activity_id` mapping is best-effort. `file_events.action` does not fully disambiguate content writes versus metadata-only changes. For example, osquery can emit actions like `ATTRIBUTES_MODIFIED`, which indicates a metadata change.
+
+#### `socket_events` (process and socket auditing)
+
+- `socket_events` does provide process linkage, including `pid` and executed `path`, so `actor.process.pid` can be populated directly when present.
+- `socket_events` provides an audit user identifier (`auid`). v0.1 normalization SHOULD map this to a numeric user identifier (for example, `actor.user.uid`) when present. Username resolution is out of scope for v0.1 unless explicitly supported via additional identity correlation logic.
+- Direction inference is best-effort and derived from the observed action set (`bind`, `connect`, `accept`). `connect` is treated as outbound intent, `accept` as inbound acceptance, and `bind` is ambiguous without additional context.
+
+#### `action=snapshot` (scheduled query snapshot logging)
+
+- Snapshot rows represent bulk table state at a point in time, not discrete per-entity events.
+- When snapshot rows are emitted as event-like rows (for example, via snapshot event logging), they MUST be normalized as state observations rather than activity. v0.1 routes these to the standard class but with `activity_id=99` (Other), and includes an explanation in `unmapped.osquery.notes`.
+
+### Windows
+
+#### Filesystem activity (`ntfs_journal_events`)
+
+- On Windows, osquery file integrity monitoring is sourced from `ntfs_journal_events` (NTFS USN journal), not `file_events`.
+- `ntfs_journal_events` does not include initiating process identifiers or executable path. Therefore, for file activity normalized from `ntfs_journal_events`, `actor.process` MUST be absent.
+- User attribution is not provided directly by `ntfs_journal_events`. Any `actor.user` attribution requires a different telemetry source.
+- `activity_id` mapping remains best-effort because `action` values reflect USN journal semantics (for example, write, delete, rename) and do not always cleanly distinguish content writes from metadata-only changes.
+
+#### Network socket activity
+
+- The osquery `socket_events` table is not available on Windows (it is macOS/Linux only).
+- Therefore, v0.1 does not normalize Windows network connection activity from osquery. Any Windows network connection normalization MUST be sourced from a non-osquery telemetry provider (or treated as out of scope for v0.1).
+- Scheduled snapshot diffs of socket state are intentionally not treated as event-equivalent in v0.1 (race-prone and non-deterministic under load).
+
+#### Process execution context (`process_etw_events`)
+
+- Windows process execution telemetry MAY be sourced from `process_etw_events` (ETW-backed), which can provide `pid`, `ppid`, `path`, `cmdline`, and `username` when available.
+- `process_etw_events` reliability is build-dependent. v0.1 treats this source as best-effort and requires fixture validation on the supported Windows build matrix (including validation that ProcessStart events are emitted as expected).
+
+#### `action=snapshot`
+
+- Snapshot rows remain bulk table state, not discrete events. Snapshot-derived rows continue to be routed to the standard class with `activity_id=99` (Other), with rationale recorded in `unmapped.osquery.notes`.
+
+These limitations do not prevent normalization but may affect Tier 1 field coverage metrics (see `055_ocsf_field_tiers.md`).
 
 ## 6) Conformance fixtures and tests
 

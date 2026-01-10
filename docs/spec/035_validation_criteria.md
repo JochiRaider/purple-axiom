@@ -334,6 +334,7 @@ Deterministic stabilization window (optional, recommended):
 Required evidence recording (normative):
 - The runner MUST write a per-action `runner/actions/<action_id>/cleanup_verification.json` that includes, per check:
   - `check_id`, `type`, `target` (echoed), `status` (`pass | fail | indeterminate | skipped`)
+  - `reason_code` (string; required for all statuses)
   - `attempts` (int), `elapsed_ms` (int)
   - `observed_error` (string or int) when `status = indeterminate` (OS-native error code or errno)
   - `observed_kind` (optional string) when `status = fail` (implementation-defined, but stable)
@@ -379,3 +380,198 @@ Minimum fields:
   - stable tie-breaking for entry selection
   - stable ordering of result arrays (`signals`, `checks`) by id
   - stable sampling (if sampling is used)
+
+## Cleanup verification checks: deterministic semantics (v0.1)
+
+Cleanup verification checks MUST evaluate to a tri-state verdict: `pass`, `fail`, or `indeterminate`.
+Implementations MAY additionally emit `skipped` when a check is not executed (for example, not applicable on the platform
+or the verifier is disabled by policy). `skipped` is an execution outcome, not an evaluated verdict.
+
+### 1) Common evaluation contract
+
+**Verdicts**
+- `pass`: the check predicate is satisfied.
+- `fail`: the predicate is violated.
+- `indeterminate`: the predicate could not be evaluated with confidence (unsupported OS, missing permissions, missing tooling, timeout, probe error, or parse error).
+
+**Indeterminate is not success**
+- Cleanup verification gating MUST treat `indeterminate` as a gate-fail by default.
+- The tri-state verdict is still recorded to support diagnostics and deterministic reporting.
+
+**Reason codes**
+Each check result MUST include a stable `reason_code` (even for PASS) from the following minimal set:
+
+- `ok` (PASS)
+- `present` (FAIL; “thing exists / is running / state mismatched”)
+- `absent` (PASS for absence checks)
+- `state_mismatch` (FAIL for state checks)
+- `unsupported_platform` (INDETERMINATE)
+- `insufficient_privileges` (INDETERMINATE)
+- `not_found` (INDETERMINATE; required tool/target not found)
+- `timeout` (INDETERMINATE)
+- `exec_error` (INDETERMINATE; command could not be executed or probe crashed)
+- `parse_error` (INDETERMINATE; output not interpretable deterministically)
+- `ambiguous_match` (INDETERMINATE; multiple targets match but check expects exactly one)
+- `unstable_observation` (INDETERMINATE; observation flaps across probes)
+
+**Skipped requires reason_code**
+If a check result status is `skipped`, it MUST include `reason_code`, and `reason_code` MUST be one of:
+- `unsupported_platform`
+- `insufficient_privileges`
+- `exec_error`
+
+Unless a check type defines a more specific mapping, absence checks MUST use `absent` (PASS) and `present` (FAIL).
+State checks MUST use `ok` (PASS) and `state_mismatch` (FAIL).
+
+**Deterministic stability window**
+Checks that query live system state (process_absent, service_state) MUST apply a stabilization protocol:
+
+- `probes = 3` (fixed default)
+- `probe_delays_ms = [0, 250, 1000]` (fixed default)
+- Observation is collected at each probe.
+- **PASS** is allowed only when all probes agree on PASS.
+- **FAIL** is allowed when all probes agree on FAIL.
+- Mixed observations across probes MUST yield INDETERMINATE with `reason_code = unstable_observation`.
+
+This eliminates nondeterministic “wins” from transient races and makes PASS/FAIL/INDETERMINATE stable across runs given identical machine state.
+
+Parsing requirement: Implementations SHOULD prefer structured/system APIs over localized, human-oriented CLI output. When CLI output is used, it MUST be restricted to stable key-value outputs or structured output. For example, `systemctl show` returns `Key=Value` pairs and is appropriate for parsing.
+
+**Probe transcript**
+Each sample MUST record a probe transcript to enable fixtures and debugging. At minimum:
+- `tool` (example: `psutil`, `powershell`, `systemctl`)
+- `args` (array)
+- `exit_code` (if applicable)
+- `stdout`, `stderr` (newlines normalized to `\n`)
+- `duration_ms`
+- `error` (string, if applicable)
+
+Probe normalization rules are deterministic:
+- Decode bytes as UTF-8 with replacement on decode errors
+- Normalize newlines to `\n`
+- Limit captured `stdout` and `stderr` to `max_output_bytes` (default 8192) and set `truncated: true|false`
+
+### 2) process_absent
+
+`process_absent` verifies that no running process matches a selector.
+
+**Selector (minimum)**
+The selector is an AND across any provided fields:
+- `pid` (integer, optional)
+- `exe_path` (string, optional)
+- `name` (string, optional)
+
+Matching rules are deterministic:
+- `name` comparison is case-insensitive on Windows; case-sensitive on Linux/macOS.
+- `exe_path` MUST be path-normalized (separator normalization). Comparison is case-insensitive on Windows; case-sensitive on Linux/macOS.
+
+**Verdict rules**
+Per-probe observation:
+- `present` if any running process matches the selector.
+- `absent` if no running process matches the selector.
+
+Verdict and reason_code mapping (using the stabilization protocol):
+- PASS only if all probes observe `absent` (`reason_code = absent`).
+- FAIL only if all probes observe `present` (`reason_code = present`).
+- Mixed observations across probes: INDETERMINATE (`reason_code = unstable_observation`).
+- If any probe cannot enumerate due to permissions: INDETERMINATE (`reason_code = insufficient_privileges`).
+- If the required tooling is missing: INDETERMINATE (`reason_code = not_found`).
+- Any other execution failure: INDETERMINATE (`reason_code = exec_error`).
+
+**Windows guidance (normative for determinism)**
+- Prefer CIM/WMI `Win32_Process` for `CommandLine` and `ExecutablePath` matching because it exposes these as structured properties.
+- `Get-Process` alone is insufficient for deterministic command line matching because it does not directly expose `CommandLine`. (Use CIM/WMI when command line is required.)
+
+### 3) registry_absent (Windows only)
+
+`registry_absent` verifies that a registry key (and optionally a value) does not exist.
+
+**Applicability**
+- On non-Windows OS, the check MUST return INDETERMINATE (`reason_code = unsupported_platform`).
+
+**Selector**
+- `hive`: `HKLM|HKCU|HKCR|HKU|HKCC`
+- `key_path`: string
+- `value_name`: string optional
+
+**Verdict rules (Windows)**
+- If access is denied for the key or value: INDETERMINATE (`reason_code = insufficient_privileges`).
+- If the key does not exist: PASS (`reason_code = absent`).
+- If `value_name` is omitted and the key exists: FAIL (`reason_code = present`).
+- If `value_name` is provided and the key exists:
+  - value missing: PASS (`reason_code = absent`)
+  - value present: FAIL (`reason_code = present`)
+
+**Implementation note** 
+- `Get-ItemProperty` is provider-agnostic and works with the Registry provider; use it (or an API equivalent) rather than parsing `reg.exe` output.
+
+### 4) service_state
+
+`service_state` verifies runtime state (and optionally enablement) for a service.
+
+**Expected state**
+- `runtime`: `running|stopped` (required)
+- `enabled`: `enabled|disabled` (optional)
+
+**Observed state model**
+- `runtime`: `running|stopped|unknown`
+- `enabled`: `enabled|disabled|unknown`
+
+**Verdict rules**
+- If the service manager query fails due to permissions: INDETERMINATE (`reason_code = insufficient_privileges`).
+- If the service cannot be found: INDETERMINATE (`reason_code = not_found`) and the probe evidence MUST set `service_not_found: true`.
+- If `expected.enabled` is not set:
+  - `pass` if observed runtime equals expected runtime
+  - otherwise `fail`
+- If `expected.enabled` is set:
+  - `pass` only if both runtime and enabled match expectations
+  - otherwise `fail`
+
+**Backend selection**
+- Windows: query Service Control Manager via `Get-Service` / .NET service APIs (structured, enumerated statuses).
+- Linux with systemd available: query via `systemctl show` properties. `systemctl show` returns stable `Key=Value` output suitable for deterministic parsing.
+- If the platform’s service manager cannot be queried deterministically (for example, no systemd and no supported alternative), return **INDETERMINATE** `unsupported_platform`.
+
+**State mapping rules (minimal, stable)**
+- **Windows**
+  - `running` means service status is `Running`
+  - `stopped` means service status is `Stopped`
+  - Any pending/transitional state (StartPending, StopPending, etc.) MUST be treated as **INDETERMINATE** `unstable_observation` unless it stabilizes across probes.
+- **systemd**
+  - Parse `ActiveState` (and optionally SubState if present).
+  - `running` means `ActiveState=active`
+  - `stopped` means `ActiveState=inactive`
+  - `failed` (or other unexpected values) counts as `state_mismatch` for `running` and as `state_mismatch` for `stopped` unless explicitly allowed.
+  - If `systemctl` reports “unit not found,” this MUST be treated as INDETERMINATE (`reason_code = not_found`) with `service_not_found: true`.
+  - Because possible `ACTIVE`/`SUB` values can vary across systemd versions, checks MUST primarily compare `ActiveState` and treat unknown states as mismatches or indeterminate based on stability across probes.
+Stabilization protocol is REQUIRED for `service_state` (services transition asynchronously).
+
+### 5) command
+
+`command` executes a command and evaluates deterministic predicates over exit code and optional stdout matching.
+
+**Execution constraints**
+- Commands MUST be executed as an argv array (no string parsing) with `shell=false` by default.
+- Each execution MUST apply `timeout_ms` (default 10000) and record the effective working directory.
+- Captured stdout/stderr MUST be normalized per the probe transcript rules above.
+
+**Predicate (minimum)**
+- `argv`: list of tokens (not a shell string)
+- `timeout_ms` (default 10000)
+- `expect_exit_codes`: array of integers, default `[0]`
+- Optional output assertions that do not require parsing localized text:
+  - `stdout_contains` / `stderr_contains` (substring over normalized captured text)
+  - `stdout_sha256` / `stderr_sha256` (exact match; computed over normalized captured text encoded as UTF-8)
+  - `stdout_regex` only if regex is anchored (`^...$`) and the regex dialect is pinned by the implementation
+
+
+**Verdict rules**
+- If the command cannot be executed because it is not found: INDETERMINATE (`reason_code = not_found`).
+- If the command times out: INDETERMINATE (`reason_code = timeout`).
+- If the exit code is not in `expect_exit_codes`: FAIL (`reason_code = present`).
+- If exit code matches but any specified output assertion is not satisfied:
+  - If the relevant stream is truncated and the assertion requires full output (`*_sha256`): INDETERMINATE (`reason_code = parse_error`).
+  - If the relevant stream is truncated and the assertion is `*_contains` or `stdout_regex`:
+    - PASS only if the match is found within captured output; otherwise INDETERMINATE (`reason_code = parse_error`).
+  - Otherwise: FAIL (`reason_code = present`).
+- Otherwise: PASS (`reason_code = ok`).

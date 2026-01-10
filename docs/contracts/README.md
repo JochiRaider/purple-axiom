@@ -47,3 +47,5 @@ See `index.json` for the authoritative registry. Current schemas:
 - `bridge_mapping_pack.schema.json`
 - `bridge_compiled_plan.schema.json`
 - `bridge_coverage.schema.json`
+- `pcap_manifest.schema.json`
+- `netflow_manifest.schema.json`

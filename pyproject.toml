@@ -1,0 +1,67 @@
+# pyproject.toml
+
+[build-system]
+# Needed so `uv sync` can install the project in editable mode (default behavior).
+# If you don't want editable install, you can also run `uv sync --no-install-project`.
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "purple-axiom"
+version = "0.1.0"
+description = "Purple Axiom (v0.1): local-first cyber-range evaluation harness"
+readme = "README.md"
+requires-python = "==3.12.3"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  # Unit + integration tests
+  "pytest==9.0.2",
+  "pytest-regressions==2.9.1",
+
+  # Lint + format
+  "ruff==0.14.11",
+
+  # Type checking
+  "pyright==1.1.408",
+
+  # Markdown formatting
+  "mdformat==1.0.0",
+  "mdformat-gfm==1.0.0",
+  "mdformat-gfm-alerts==2.0.0",
+  "mdformat-footnote==0.1.2",
+  "mdformat_frontmatter==2.0.8",
+
+  # Local + CI hook runner
+  "pre-commit==4.5.1",
+]
+
+[tool.ruff]
+# Ruff can be configured via pyproject.toml. 
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+  ".venv",
+  "runs",
+  "dist",
+  "build",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+# If you prefer ruff to enforce max line length in lint too, remove E501 from ignores (default).
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.pyright]
+# Pyright supports configuration via `[tool.pyright]` in pyproject.toml. 
+pythonVersion = "3.12"
+pythonPlatform = "All"
+typeCheckingMode = "standard"
+# Assumes a src layout; adjust if you use a flat package layout.
+include = ["src", "tests"]
+exclude = ["**/.venv", "**/runs", "**/dist", "**/build"]

@@ -1,0 +1,38 @@
+# .mdformat.toml
+#
+# Repo-wide mdformat configuration (v0.1 toolchain).
+
+# Reflow paragraphs to keep source lines under control.
+# Options: "keep", "no", or an INTEGER column width. :contentReference[oaicite:1]{index=1}
+wrap = 100
+
+# Do not renumber ordered lists (keeps diffs stable).
+number = false
+
+# Normalize line endings in the repo.
+end_of_line = "lf"
+
+# Keep mdformat's safety validation enabled (default).
+# (CLI exposes --no-validate to bypass if you ever need it.) :contentReference[oaicite:2]{index=2}
+validate = true
+
+# Explicitly enable only the extensions we rely on, even if additional plugins
+# are installed later (determinism).
+#
+# mdformat plugin-provided extension names: :contentReference[oaicite:3]{index=3}
+# - mdformat-gfm: "gfm" (and "tables")
+# - mdformat-frontmatter: "frontmatter"
+# - mdformat-footnote: "footnote"
+# - mdformat-gfm-alerts: "gfm_alerts"
+extensions = [
+  "gfm",
+  "frontmatter",
+  "footnote",
+  "gfm_alerts",
+]
+
+# NOTE: `exclude = [...]` in the config file is Python 3.13+ only. Since your
+# toolchain is Python 3.12.3, do NOT add `exclude` here. :contentReference[oaicite:4]{index=4}
+# Instead, exclude via:
+# - pre-commit hook `exclude:` patterns, or
+# - command-line `--exclude` during ad hoc runs.

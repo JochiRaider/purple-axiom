@@ -36,6 +36,7 @@ Toolchain baseline (v0.1):
 | pytest-regressions |          2.9.1 | Golden/regression fixtures  | CI gate for “golden outputs”                 |
 | ruff               |        0.14.11 | Lint + format               | Lint + format gate                           |
 | pyright            |        1.1.408 | Type checking               | type-check gate                              |
+| mdformat           |          1.0.0 | MD Format checking          | MD Format gate                               |
 | pre-commit         |          4.5.1 | Local + CI hook runner      | CI SHOULD enforce hook parity                |
 
 ## Version drift policy (normative)

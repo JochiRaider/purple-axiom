@@ -28,21 +28,15 @@
       "type": "string",
       "format": "date-time"
     },
-    "source": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "repo_ref": {
-          "type": "string"
-        },
-        "path": {
-          "type": "string"
-        },
-        "commit": {
-          "type": "string"
-        },
-        "notes": {
-          "type": "string"
+    "upstreams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["engine", "source_ref", "source_tree_sha256"],
+        "properties": {
+          "engine": { "type": "string" },
+          "source_ref": { "type": "string" },
+          "source_tree_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
         }
       }
     },

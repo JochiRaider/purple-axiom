@@ -179,6 +179,25 @@ Purple Axiom treats a small set of pivots as “core common” because they unlo
 | `message` | SHOULD | Short, redaction-safe human summary. |
 | `observables[]` | SHOULD | Extract canonical pivots (IPs, domains, hashes, usernames, URLs). Use when available in your OCSF version/profile. |
 
+### Field mapping completeness matrix (v0.1 MVP)
+
+For v0.1, Purple Axiom defines a source-type-specific checklist for Tier 1 (Core Common) and the Tier 2 families
+used by the v0.1 MVP normalizer. The authoritative checklist is defined in `docs/mappings/coverage_matrix.md`.
+
+The matrix:
+
+- Uses rows = `source_type` (for example, Windows Security, Sysmon, osquery, auditd).
+- Uses columns = OCSF field paths (Tier 1 plus selected Tier 2 families: process, network, file, user).
+- Uses cells = `R` / `O` / `N/A` with the following semantics:
+  - `R` (required mapping target): the mapping **MUST** populate the field when an authoritative value is present in
+    the raw input or when it is deterministically derived from run context (for example, `device.uid` from inventory).
+    The mapping **MUST NOT** infer or fabricate semantic values that are not present.
+  - `O` (optional mapping target): populate when present; absence does not fail mapping completeness.
+  - `N/A`: the field is not applicable for that `source_type` (or defined sub-scope) and **MUST** remain absent.
+
+The completeness matrix is a mapping-profile conformance tool. It is intentionally distinct from the run-level Tier 1
+coverage metric: a run may have low Tier 1 coverage due to collection gaps even when the mapping profiles are complete.
+
 ---
 
 ## Tier 2: Core Class Minimums (per event family)

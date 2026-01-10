@@ -136,6 +136,8 @@ Within a run bundle, store Parquet datasets as directories with one or more Parq
 - `runs/<run_id>/raw_parquet/windows_eventlog/`
 - `runs/<run_id>/raw_parquet/syslog/`
 - `runs/<run_id>/raw_parquet/osquery/`
+- `runs/<run_id>/raw_parquet/pcap/` (placeholder contract; capture/ingestion is not required for v0.1)
+- `runs/<run_id>/raw_parquet/netflow/` (placeholder contract; capture/ingestion is not required for v0.1)
 - `runs/<run_id>/normalized/ocsf_events/`
 - `runs/<run_id>/scoring/joins/` (optional)
 
@@ -301,7 +303,8 @@ Even when the normalized store is Parquet, the same contract intent applies as t
 
 Minimum required columns:
 - `time` (int64, ms since epoch)
-- `time_dt` (timestamp or string ISO-8601; choose one and standardize)
+- `time_dt` (string, ISO-8601/RFC3339 UTC, e.g. `2026-01-08T14:30:00Z`)
+  - `time_dt` MUST be a deterministic rendering of `time` (no locale; UTC only).
 - `class_uid` (int32)
 - `category_uid` (int32, nullable)
 - `type_uid` (int32, nullable)
@@ -310,6 +313,7 @@ Minimum required columns:
 Provenance (required):
 - `metadata.event_id` (string)
 - `metadata.run_id` (string, UUID)
+  - `metadata.run_id` MUST validate as an RFC 4122 UUID (canonical hyphenated form).
 - `metadata.scenario_id` (string)
 - `metadata.collector_version` (string)
 - `metadata.normalizer_version` (string)

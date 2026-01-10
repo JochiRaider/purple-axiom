@@ -76,3 +76,42 @@ in default mode), since it changes operator expectations and the interpretabilit
 
 ## Methodology inspiration
 - Prefer transparent reporting tied to specific behaviors/techniques rather than opaque vendor-style scores.
+
+## Default thresholds and weights (v0.1)
+
+Unless overridden via configuration, v0.1 implementations MUST apply the following defaults for CI gating and score computation.
+
+### Thresholds (CI gates)
+
+```yaml
+scoring:
+  thresholds:
+    # Technique coverage: % of executed techniques with ≥1 detection
+    min_technique_coverage: 0.75
+
+    # Latency gate: maximum allowed detection latency at p95 (batch evaluation tolerance)
+    max_allowed_latency_seconds: 300
+
+    # Normalization quality gate (already defined above)
+    min_tier1_field_coverage: 0.80
+
+    # Gap budgets (rates in [0.0, 1.0])
+    max_missing_telemetry_rate: 0.10
+    max_normalization_gap_rate: 0.05
+    max_bridge_gap_rate: 0.15
+```
+
+### Weights (composite score)
+
+```yaml
+scoring:
+  weights:
+    coverage_weight: 0.60
+    latency_weight: 0.25
+    fidelity_weight: 0.15
+```
+
+### CI interpretation (normative)
+
+- If any threshold is violated, the run SHOULD be marked `partial` (exit code `10`), not `failed`, unless a stage-level `fail_closed` condition is met.
+- Threshold evaluation MUST be based on metrics emitted in `scoring/summary.json` (or `report/summary.json` if exported), and the report MUST enumerate which thresholds failed.

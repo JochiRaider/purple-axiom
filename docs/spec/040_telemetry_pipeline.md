@@ -76,6 +76,20 @@ Create one receiver instance per channel (or per channel group), using stable na
 
 This mirrors how downstream storage partitions are organized (by `channel`).
 
+### v0.1 required Windows channel set (normative)
+
+For v0.1 validation runs on Windows lab assets, the telemetry stage MUST collect **full Windows Event Logs** (not Security-only) and Sysmon.
+
+Minimum required channels (Windows):
+- Application
+- Security
+- System
+- Microsoft-Windows-Sysmon/Operational (Sysmon)
+
+Notes:
+- If Sysmon is not installed on a Windows target, the run MUST be treated as `failed` (telemetry stage `fail_closed`), unless the scenario explicitly declares Sysmon as not required for that run.
+- ForwardedEvents MAY be collected when used, but is not required for v0.1.
+
 ### Output shape and assumptions
 
 The `windowseventlog` receiver emits **OTel LogRecords**. The LogRecord body (`body`) may be either:

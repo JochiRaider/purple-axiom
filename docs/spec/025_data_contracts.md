@@ -60,6 +60,8 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `ground_truth.jsonl` (JSONL)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw/` (telemetry as collected, plus source-native evidence where applicable)
+  - `raw/pcap/` (optional; placeholder contract in v0.1)
+  - `raw/netflow/` (optional; placeholder contract in v0.1)
 - `runner/` (runner evidence: transcripts, executor metadata, cleanup verification)
 - `normalized/` (normalized event store and mapping coverage)
 - `bridge/` (Sigma-to-OCSF bridge artifacts: mapping pack snapshot, compiled plans, bridge coverage)
@@ -85,6 +87,9 @@ Validation:
 
 Key semantics:
 - `run_id` is the unique identifier for the run bundle folder.
+- `run_id` MUST be a UUID string (RFC 4122, canonical hyphenated form) and MUST be validated as a UUID.
+- `run_id` is unique per execution and MUST NOT be reused across replays.
+- Stable joins across replays MUST use `action_key` and other stable basis fields; `action_key` MUST NOT incorporate `run_id`.
 - `status` reflects the overall run outcome:
   - `success`: pipeline completed and artifacts are present and valid
   - `partial`: pipeline produced some outputs but one or more stages failed
@@ -99,13 +104,28 @@ Status derivation (normative):
   - else `partial` if any stage has `status=failed`
   - else `success`
 - When `operability.health.emit_health_files=true`, stage outcomes MUST also be written to `runs/<run_id>/logs/health.json` (minimum schema in `110_operability.md`).
- 
+
 Recommended manifest additions (normative in schema when implemented):
 - `lab.provider` (string): `manual | ludus | terraform | other`
 - `lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot
 - `lab.assets` (array): resolved assets used by the run (or pointer to `logs/lab_inventory_snapshot.json`)
 - `normalization.ocsf_version` (string): pinned OCSF version used by the normalizer for this run.
   - When `normalized/mapping_profile_snapshot.json` is present, `normalization.ocsf_version` SHOULD match `mapping_profile_snapshot.ocsf_version`.
+
+Stage outcomes (v0.1 baseline expectations):
+- The following table defines the baseline stage behaviors for v0.1. Implementations MAY add additional stages, but MUST keep stage identifiers stable and must surface failures via stage outcomes.
+
+| Stage | Typical `fail_mode` (v0.1 default) | Minimum artifacts when enabled | Notes |
+|---|---|---|---|
+| `lab_provider` | `fail_closed` | `manifest.json` | Failure to resolve targets deterministically is fatal. |
+| `runner` | `fail_closed` | `ground_truth.jsonl`, `runner/**` | If stable `asset_id` resolution fails, the run MUST fail closed. |
+| `telemetry` | `fail_closed` | `raw_parquet/**` (when enabled), `manifest.json` | If required Windows sources are missing (e.g., Sysmon), the run MUST fail closed unless the scenario exempts them. |
+| `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events.*`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped/unmapped counts MUST still be reported. |
+| `validation` | `warn_and_skip` (default) | `criteria/results.jsonl`, `criteria/manifest.json` | MUST emit a result row per selected action; un-evaluable actions MUST be `skipped` with `reason_code`. |
+| `detection` | `fail_closed` (default) | `detections/detections.jsonl`, `bridge/coverage.json` | MUST record non-executable rules with stable reasons (compiled plans / coverage). |
+| `scoring` | `fail_closed` | `scoring/summary.json` | A missing or invalid summary is fatal when scoring is enabled. |
+| `reporting` | `fail_closed` | `reporting/**` | Reporting failures are fatal when reporting is enabled. |
+| `signing` | `fail_closed` (when enabled) | `signatures/**` | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed. |
 
 ### 2) Ground truth timeline (`ground_truth.jsonl`)
 
@@ -278,6 +298,9 @@ Validation:
 Key semantics:
 - Results reference `action_id` and `action_key` from ground truth.
 - Results include a status (`pass|fail|skipped`) plus evidence references (example: counts of matching events, sample event_ids, query plans used).
+- The evaluator MUST emit exactly one result row per selected ground truth action.
+  - If an action cannot be evaluated (missing telemetry, mapping gaps, executor error, etc.), the evaluator MUST emit `status=skipped` and MUST set a stable `reason_code`.
+- The evaluator MUST NOT suppress results silently; skipped actions MUST remain visible in the output.
 
 ### 2c) Runner evidence (`runner/`)
 
@@ -292,6 +315,19 @@ Minimum contents (recommended):
 
 Validation:
 - `executor.json` and `cleanup_verification.json` SHOULD be schema validated when present.
+
+### 2d) Network sensor placeholders (`raw/pcap/` and `raw/netflow/`)
+
+Purpose:
+- Reserve stable artifact locations and contracts for network telemetry (pcap/netflow) without requiring capture/ingestion in v0.1.
+
+When present:
+- `raw/pcap/manifest.json` MUST validate against `pcap_manifest.schema.json` and MUST enumerate the capture files written under `raw/pcap/`.
+- `raw/netflow/manifest.json` MUST validate against `netflow_manifest.schema.json` and MUST enumerate the flow log files written under `raw/netflow/`.
+
+Absence semantics:
+- These directories and manifests MAY be absent.
+- If telemetry config enables a network sensor source but the active build has no implementation for it, the telemetry stage MUST fail closed with `reason_code=source_not_implemented`.
 
 ### 3) Normalized events (`normalized/ocsf_events.*`)
 

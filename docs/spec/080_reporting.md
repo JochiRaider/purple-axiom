@@ -12,7 +12,7 @@
 - bridge/ (mapping pack snapshot, compiled plans, bridge coverage)
 - detections.jsonl
 - report.html
-- summary.json
+- scoring/summary.json
 
 ## Report sections (seed)
 - Run summary (scenario, targets, duration)
@@ -49,3 +49,30 @@
 - Maintain a history table keyed by (scenario_id, rule_set_version, pipeline_version, bridge_mapping_pack_version).
   - Source: `manifest.extensions.bridge.mapping_pack_version` (or equivalent) when not present in `manifest.versions`.
 - Emit regression alerts when coverage/latency deviates beyond thresholds.
+
+## Required JSON outputs (v0.1)
+
+The following JSON outputs MUST be produced for v0.1 runs (unless the corresponding stage is explicitly disabled):
+
+| File | Purpose | Primary contract |
+|---|---|---|
+| `manifest.json` | Run-level provenance and outcomes | `manifest.schema.json` |
+| `scoring/summary.json` | Operator-facing rollup (coverage, latency, fidelity, gaps) | `summary.schema.json` |
+| `bridge/coverage.json` | Sigma-to-OCSF bridge quality and coverage | `bridge_coverage.schema.json` |
+| `normalized/mapping_coverage.json` | OCSF normalization coverage and missing core fields | `mapping_coverage.schema.json` |
+| `criteria/manifest.json` | Criteria pack snapshot metadata | `criteria_pack_manifest.schema.json` |
+
+## Trending keys (normative)
+
+Exporters and downstream dashboards MUST treat the following fields as the stable trending dimensions for joining historical runs:
+
+- `scenario_id` (REQUIRED)
+- `scenario_version` (SHOULD be present for trending)
+- `rule_set_version` (REQUIRED for Sigma regression tracking)
+- `pipeline_version` (REQUIRED for pipeline drift detection)
+- `extensions.bridge.mapping_pack_version` (RECOMMENDED)
+- `versions.ocsf_version` (RECOMMENDED)
+- `extensions.criteria.criteria_pack_version` (RECOMMENDED)
+
+Non-goal:
+- `run_id` is unique per execution and MUST NOT be used as a trending key.

@@ -7,7 +7,11 @@
 - Scenarios should target assets via stable selectors (asset_id, tags, roles), then the provider resolves those selectors to concrete hosts for the run.
 
 ## Scenario types
-1) Caldera Operation
+v0.1 support (normative):
+- The v0.1 runner MUST support **Atomic Test Plan** scenarios.
+- **Caldera Operation** and **Mixed Plan** are reserved for a future release; if encountered, the v0.1 runner MUST fail before execution with a clear error (and a stable `reason_code`).
+
+1) Caldera Operation (reserved; not supported in v0.1)
    - One or more adversary profiles / abilities
    - Agents + target groups
    - Stop conditions and safety toggles
@@ -17,7 +21,7 @@
    - Prereqs, input args, cleanup steps
    - Safe mode flags
 
-3) Mixed Plan
+3) Mixed Plan (reserved; not supported in v0.1)
    - A Caldera operation plus a set of Atomics
    - Used for “breadth + depth” runs
 
@@ -36,6 +40,9 @@ The runner MUST persist:
 - Runner evidence artifacts (stdout/stderr transcripts, executor metadata, cleanup verification results)
 
 ## Stable action identity (join keys)
+
+v0.1 constraint (normative):
+- `action_key_basis_v1.engine` MUST be `atomic`.
 
 Each executed action MUST include two identifiers:
 

@@ -39,7 +39,7 @@
   - This snapshot is treated as an input for determinism (hashable, diffable).
 
 ### Scenario Runner
-- Executes test plans (Caldera operations and/or Atomic tests).
+- Executes test plans (Atomic tests for v0.1; Caldera operations are a future candidate).
 - Emits a signed, append-only timeline: what ran, when, where, and with what *resolved* inputs.
 - MUST record resolved target identifiers (asset_id plus resolved host identity) so that ground truth remains valid even if the provider inventory changes later.
 
@@ -48,8 +48,8 @@ Runner artifacts (evidence tier):
 - Treats cleanup as a staged lifecycle (invoke -> verify) and records verification results.
 
 ### Telemetry Collectors
-- Endpoint logs (Windows Event Log receiver for OTel contrib; Linux journald/syslog options later).
-- Optional: osquery, Sysmon, EDR exports, network sensors (phase 2).
+- Endpoint logs (Windows Event Log receiver for OTel contrib; includes Sysmon Operational channel on Windows; Linux journald/syslog options later).
+- Optional: osquery, EDR exports. Network sensors (pcap/netflow) are phase 2 for collection, but v0.1 reserves placeholder contracts.
 
 ### Normalizer
 - Maps raw telemetry to OCSF categories/classes.

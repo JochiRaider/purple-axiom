@@ -130,3 +130,25 @@ When a run is `partial` or `failed`, prefer this order:
 4. Only then inspect rule logic and scorer joins.
 
 This prevents "rule debugging" when the root cause is missing telemetry.
+
+## Run limit enforcement (normative)
+
+When run limits are configured (see `operability.run_limits` in `120_config_reference.md`), the pipeline MUST behave as follows:
+
+| Limit | Exceeded behavior | Run status | Exit code | Accounting required |
+|---|---|---|---|---|
+| `max_run_minutes` | Hard-fail, stop immediately | `failed` | `20` | Record `reason_code=run_timeout` in `logs/health.json` and include a `limits_exceeded[]` entry in `manifest.extensions.operability`. |
+| `max_disk_gb` | Stop gracefully and finalize artifacts | `partial` (default) | `10` (default) | Record `reason_code=disk_limit_exceeded` with the truncation timestamp and disk watermark in `logs/health.json`, and include a `limits_exceeded[]` entry in `manifest.extensions.operability`. |
+| `max_memory_mb` | Hard-fail (OOM is fatal) | `failed` | `20` | Record `reason_code=memory_limit_exceeded` (or `oom_killed`) in `logs/health.json`. |
+
+Disk limit configurability (normative):
+- If `operability.run_limits.disk_limit_behavior=hard_fail`, exceeding `max_disk_gb` MUST produce `failed` (exit code `20`) instead of `partial`.
+- Regardless of behavior, the report output MUST explicitly state which stages were truncated and the time window captured.
+
+Minimum accounting fields (normative):
+- `limit` (one of `max_run_minutes|max_disk_gb|max_memory_mb`)
+- `configured` (numeric)
+- `observed` (numeric)
+- `behavior` (`partial|hard_fail`)
+- `stage` (stable stage identifier)
+- `truncated_at_utc` (ISO-8601, required for disk truncation)

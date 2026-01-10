@@ -65,6 +65,7 @@ Controls scenario execution. The runner is responsible for producing ground trut
 
 Common keys:
 - `type` (required): `caldera | atomic | custom`
+  - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not required). If enabled without an implementation, telemetry MUST fail closed with `reason_code=source_not_implemented`.
 - `caldera` (optional, when `type: caldera`)
   - `endpoint` (required)
   - `api_token_ref` (required): reference only (example: `env:CALDERA_TOKEN`)
@@ -102,6 +103,7 @@ Common keys:
   - `enabled` (default: true)
   - `config_path` (required when enabled): path to OTel Collector config file
   - `channels` (optional): list of sources/channels to enable (implementation-defined)
+    - v0.1 Windows baseline (normative): MUST include `application`, `security`, `system`, and `sysmon` (Microsoft-Windows-Sysmon/Operational).
   - `bookmarks` (optional): resume policy for sources that support cursoring
     - `mode` (default: `auto`): `auto | resume | reset`
       - `auto`: resume if a checkpoint exists, otherwise reset
@@ -111,6 +113,7 @@ Common keys:
     - `flush_interval_seconds` (default: 5)
 - `sources` (optional)
   - Additional non-OTel sources (example: `osquery`, `pcap`, `netflow`)
+  - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not required). If enabled without an implementation, telemetry MUST fail closed with `reason_code=source_not_implemented`.
   - Each source should include:
     - `enabled`
     - `config_path` or equivalent
@@ -248,13 +251,21 @@ Common keys:
   - `bridge_gap`
   - `rule_logic_gap`
   - `cleanup_verification_failed`
-- `thresholds` (optional)
-  - `min_technique_coverage` (optional)
-  - `max_allowed_latency_seconds` (optional)
-- `weights` (optional)
-  - `coverage_weight`
-  - `latency_weight`
-  - `fidelity_weight`
+- `thresholds` (optional): allow CI to fail if below expected quality.
+  - v0.1 defaults (normative) if omitted: `min_technique_coverage=0.75`, `max_allowed_latency_seconds=300`, `min_tier1_field_coverage=0.80`, `max_missing_telemetry_rate=0.10`, `max_normalization_gap_rate=0.05`, `max_bridge_gap_rate=0.15`.
+  - Keys:
+    - `min_technique_coverage`: percent of executed techniques that must have ≥1 detection.
+    - `max_allowed_latency_seconds`: maximum time delta between a ground truth action and first detection hit.
+    - `min_tier1_field_coverage`: minimum Tier 1 field coverage ratio (0.0-1.0).
+    - `max_missing_telemetry_rate`: maximum fraction of executed techniques classified as `missing_telemetry` (0.0-1.0).
+    - `max_normalization_gap_rate`: maximum fraction of executed techniques classified as `normalization_gap` (0.0-1.0).
+    - `max_bridge_gap_rate`: maximum fraction of executed techniques classified as `bridge_gap` (0.0-1.0).
+- `weights` (optional): allow scores to emphasize certain categories.
+  - v0.1 defaults (normative) if omitted: `coverage_weight=0.60`, `latency_weight=0.25`, `fidelity_weight=0.15`.
+  - Keys:
+    - `coverage_weight`: factor for technique coverage.
+    - `latency_weight`: factor for time-to-detection.
+    - `fidelity_weight`: factor for match quality (exact vs partial vs weak).
 
 ### `reporting`
 Controls report generation and output locations.
@@ -279,8 +290,10 @@ Common keys:
   - `level` (default: `info`): `debug | info | warn | error`
   - `json` (default: true)
 - `run_limits`
-  - `max_run_minutes` (optional)
-  - `max_disk_gb` (optional)
+  - `max_run_minutes` (optional): hard upper bound for runtime.
+  - `max_disk_gb` (optional): maximum disk usage for run artifacts.
+  - `disk_limit_behavior` (optional): `partial` | `hard_fail` (default: `partial`).
+  - `max_memory_mb` (optional): maximum resident memory usage.
 - `health`
   - `emit_health_files` (default: true)
     - When `true`, the pipeline MUST write `runs/<run_id>/logs/health.json` (minimum schema in `110_operability.md`, “Health files (normative, v0.1)”).
@@ -301,7 +314,8 @@ Common keys:
     - `max_field_chars` (optional)
   - `disabled_behavior` (optional, default: `withhold_from_long_term`): `withhold_from_long_term | quarantine_unredacted`
     - `withhold_from_long_term`: write deterministic placeholders in standard artifact locations
-    - `quarantine_unredacted`: write unredacted evidence only to a quarantined location excluded from default packaging/export
+    - `quarantine_unredacted`: write unredacted evidence to `runs/<run_id>/unredacted/`.
+    - `runs/<run_id>/unredacted/` MUST be excluded from default exports/packaging.
   - `allow_unredacted_evidence_storage` (optional, default: false)
     - When `true` and `disabled_behavior: quarantine_unredacted`, the pipeline MAY persist unredacted evidence to the quarantine path.
   - `unredacted_dir` (optional, default: `unredacted/`): relative directory under the run bundle root for quarantined evidence

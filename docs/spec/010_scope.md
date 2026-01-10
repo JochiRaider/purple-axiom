@@ -2,8 +2,9 @@
 # Scope and Non-Goals
 
 ## In-scope
-- Scenario execution orchestration (Caldera and/or Atomic runner).
-- Telemetry collection from lab assets (endpoint + optional network sensors).
+- Scenario execution orchestration (Atomic runner for v0.1; Caldera is a future candidate).
+- Telemetry collection from lab assets (endpoint sources required; network sensors are not required for v0.1, but placeholder contracts are reserved now).
+- Placeholder data contracts for network telemetry (pcap/netflow), without requiring capture/ingestion in v0.1.
 - Normalization to OCSF.
 - Rule evaluation and scoring.
 - Reporting and trend tracking.
@@ -11,6 +12,7 @@
 - Capturing a deterministic “lab inventory snapshot” per run for reproducibility and diffability.
 
 ## Explicit non-goals (initially)
+- Network sensor capture/ingestion (pcap/netflow) as a required v0.1 capability; only placeholder contracts are defined.
 - Exploit development, weaponization, or destructive testing.
 - Production deployment guidance for hostile environments.
 - “Full SIEM replacement.” The range produces artifacts; external SIEM ingestion is optional.

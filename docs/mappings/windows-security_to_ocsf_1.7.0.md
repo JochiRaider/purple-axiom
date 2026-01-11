@@ -119,6 +119,8 @@ For every emitted event, the normalizer MUST set:
 Rules:
 
 - `type_uid` MUST be computed as: `class_uid * 100 + activity_id`.
+  - Example: Authentication Logon = `3002 * 100 + 1 = 300201`
+  - Example: Process Launch = `1007 * 100 + 1 = 100701`
 - `category_uid` SHOULD be set when known for the class.
 - `severity_id` MAY be set if an authoritative mapping exists; otherwise it MUST be absent.
 
@@ -129,14 +131,26 @@ or ingestion time). This profile assumes a project-wide event identity decision 
 the Windows Security mapping MUST provide the required basis fields (record_id, channel, provider,
 computer, event_id, time_created).
 
+### `metadata.uid` requirement
+
+Per `055_ocsf_field_tiers.md` Tier 0 and ADR-0002:
+
+- `metadata.uid` MUST be present on every emitted event.
+- `metadata.uid` MUST equal `metadata.event_id`.
+
 ## Field mapping: shared (all Windows Security events)
 
 This section defines the baseline field population rules that apply to all routed events.
 
 ### Device
 
-- `device.name` MUST be populated from `computer` when present.
+- `device.name` MUST be populated from `computer` when present. This field represents the
+  NetBIOS/hostname as reported by the event source.
 - `device.hostname` SHOULD be populated from `computer` when the value is a hostname.
+  - `device.hostname` SHOULD be lowercased for cross-source join consistency.
+  - When `device.name` and `device.hostname` are both populated from `computer`, they MAY differ
+    only in case normalization (`device.name` preserves original case; `device.hostname` is
+    lowercased).
 - `device.ip` MUST be populated only when an authoritative device IP exists in the raw event.
 - If multiple authoritative IPs exist, `device.ip` SHOULD be the stable “primary” IP and the full
   set MAY be emitted to `extensions.purple.device.ips[]` (sorted, de-duplicated).
@@ -175,6 +189,12 @@ This section lists v0.1-required Windows Security event IDs and their OCSF mappi
 Class:
 
 - Authentication (`class_uid = 3002`)
+
+Classification (normative):
+
+- `category_uid` MUST be `3` (Identity & Access Management).
+- `type_uid` MUST be computed as `class_uid * 100 + activity_id`.
+  - Example: Logon (4624/4625) = `300201`; Logoff (4634/4647) = `300202`
 
 #### Event IDs and activities
 
@@ -226,6 +246,12 @@ Class:
 
 - Process Activity (`class_uid = 1007`)
 
+Classification (normative):
+
+- `category_uid` MUST be `1` (System Activity).
+- `type_uid` MUST be computed as `class_uid * 100 + activity_id`.
+  - Example: Launch (4688) = `100701`; Terminate (4689) = `100702`
+
 #### Event IDs and activities
 
 | Windows Event ID | Meaning (Windows)   |   activity_id |   status_id |
@@ -269,6 +295,11 @@ Class:
 
 - Account Change (`class_uid = 3001`)
 
+Classification (normative):
+
+- `category_uid` MUST be `3` (Identity & Access Management).
+- `activity_id` MUST be derived from the specific event ID (create/enable/disable/delete/lockout).
+
 v0.1 routing MAY include:
 
 - 4720 (user created)
@@ -288,6 +319,10 @@ Class:
 
 - Group Management (`class_uid = 3006`)
 
+Classification (normative):
+
+- `category_uid` MUST be `3` (Identity & Access Management).
+
 v0.1 routing MAY include:
 
 - 4728/4729 (member added/removed from a security-enabled global group)
@@ -305,6 +340,10 @@ Rules:
 Class:
 
 - Event Log Activity (`class_uid = 1008`)
+
+Classification (normative):
+
+- `category_uid` MUST be `1` (System Activity).
 
 v0.1 routing SHOULD include:
 

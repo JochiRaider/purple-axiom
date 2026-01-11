@@ -14,6 +14,9 @@
   normalized event metadata).
 - Provide migration notes when updating the pinned OCSF version (field moves, enum changes, class
   reclassification).
+- Mapping packs under `mappings/normalizer/ocsf/<ocsf_version>/<source_pack_id>/` MUST conform to
+  `docs/mappings/ocsf_mapping_profile_authoring_guide.md` (directory structure, routing semantics,
+  and deterministic parsing constraints).
 
 ## Pinned OCSF version (v0.1)
 

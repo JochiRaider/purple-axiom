@@ -131,15 +131,21 @@ Routing is based on the osquery `query_name` (`name` in the results log).
 
 The routing table is normative and versioned in:
 
-- `mappings/normalizer/ocsf/1.7.0/osquery/routing.yaml`
+- `mappings/normalizer/ocsf/1.7.0/osquery/routing.yaml` (MUST validate against
+  `bridge_router_table.schema.json` or an equivalent routing schema)
 
 v0.1 required routes:
 
-| `query_name`     | OCSF target class    | `class_uid` |
-| ---------------- | -------------------- | ----------: |
-| `process_events` | Process Activity     |        1007 |
-| `file_events`    | File System Activity |        1001 |
-| `socket_events`  | Network Activity     |        4001 |
+| `query_name`     | OCSF target class    | `class_uid` | `category_uid` |
+| ---------------- | -------------------- | ----------: | -------------: |
+| `process_events` | Process Activity     |        1007 |              1 |
+| `file_events`    | File System Activity |        1001 |              1 |
+| `socket_events`  | Network Activity     |        4001 |              4 |
+
+Category UID values (OCSF 1.7.0):
+
+- `1` = System Activity
+- `4` = Network Activity
 
 Unrouted behavior (normative):
 
@@ -160,11 +166,18 @@ Rules:
 - `type_uid` MUST be computed as: `class_uid * 100 + activity_id`.
 - `category_uid` SHOULD be set when known for the class.
 - `severity_id` MAY be set if an authoritative mapping exists; otherwise it MUST be absent.
+- For `action = "snapshot"` rows, `activity_id` MUST be `99` (Other) because snapshot rows represent
+  point-in-time state observations rather than discrete activity events. This aligns with
+  `042_osquery_integration.md` "Known Mapping Limitations".
 
-### Event identity
+### Event identity and `metadata.uid`
 
-osquery does not provide a stable record id. Therefore osquery-derived `metadata.event_id` is Tier
-3\.
+osquery does not provide a stable record id. Therefore osquery-derived `metadata.event_id` is Tier 3.
+
+Normative requirements (per ADR-0002 and `055_ocsf_field_tiers.md` Tier 0):
+
+- `metadata.uid` MUST be present and MUST equal `metadata.event_id`.
+- `metadata.event_id` MUST be computed from the osquery identity basis defined below.
 
 `metadata.event_id` MUST be computed from the osquery identity basis:
 
@@ -183,7 +196,6 @@ Rules (normative):
 
 - `payload` MUST be canonical JSON (RFC 8785 JCS) for `columns` or `snapshot`.
 - `calendarTime` MUST NOT be included.
-- `metadata.uid` MUST equal `metadata.event_id`.
 
 Recommended `metadata.source_event_id` (normative if emitted):
 
@@ -252,7 +264,7 @@ Rules:
 - UID to name resolution MUST NOT perform external lookups. If the project supports UID to name
   mapping, it MUST be derived only from a deterministic, snapshotted local context.
 
-### Raw retention and unmapped preservation
+### Raw retention and unmapped preservation (`unmapped.*` namespace)
 
 For every routed osquery record, the normalizer MUST preserve:
 
@@ -260,6 +272,16 @@ For every routed osquery record, the normalizer MUST preserve:
 - `unmapped.osquery.action`
 - `unmapped.osquery.columns` or `unmapped.osquery.snapshot` (whichever was present)
 - `unmapped.osquery.raw_json` (the original object, or a redacted-safe representation)
+
+Namespace rationale:
+
+- This profile uses `unmapped.<source_type>.*` rather than `raw.*` to clearly indicate that these
+  fields were not mapped to OCSF-native fields (as opposed to being intentionally retained raw
+  evidence).
+- The `unmapped` namespace aligns with `050_normalization_ocsf.md` "route unmapped fields into an
+  explicit `unmapped` / `raw` object so nothing is silently dropped".
+- Implementations MAY additionally populate `raw.*` for forensic evidence retention if the project
+  requires both namespaces.
 
 ## Routed event families (v0.1)
 

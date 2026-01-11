@@ -150,6 +150,10 @@ For every emitted event, the normalizer MUST set:
 - `class_uid`
 - `activity_id`
 - `type_uid`
+  - Example: Process Launch = `1007 * 100 + 1 = 100701`
+  - Example: Network Open = `4001 * 100 + 1 = 400101`
+- `category_uid` SHOULD be set when known for the class (see per-family sections below).
+- `severity_id` MAY be set if an authoritative mapping exists; otherwise it MUST be absent.
 
 Rules:
 
@@ -162,12 +166,21 @@ or ingestion time). This profile assumes a project-wide event identity decision 
 mapping MUST provide required basis fields (record_id, channel, provider, computer, event_id,
 time_created).
 
+### `metadata.uid` requirement
+
+Per `055_ocsf_field_tiers.md` Tier 0 and ADR-0002:
+
+- `metadata.uid` MUST be present on every emitted event.
+- `metadata.uid` MUST equal `metadata.event_id`.
+
 ## Field mapping: shared (all routed Sysmon events)
 
 ### Device
 
 - `device.name` MUST be populated from `computer` when present.
 - `device.hostname` SHOULD be populated from `computer` when the value is a hostname.
+  - `device.hostname` SHOULD be lowercased for cross-source join consistency (per canonicalization
+    rules).
 
 ### Actor
 
@@ -202,12 +215,20 @@ Class:
 
 - Process Activity (`class_uid = 1007`)
 
+Classification (normative):
+
+- `category_uid` MUST be `1` (System Activity).
+- `type_uid` MUST be computed as `class_uid * 100 + activity_id`.
+
 #### Event IDs and activities
 
 | Sysmon Event ID | Sysmon name        |   activity_id |
 | --------------: | ------------------ | ------------: |
 |               1 | Process creation   |    1 (Launch) |
-|               5 | Process terminated | 4 (Terminate) |
+|               5 | Process terminated | 2 (Terminate) |
+
+Note: OCSF 1.7.0 Process Activity uses `activity_id = 2` for Terminate, aligning with Windows
+Security event 4689 mapping.
 
 #### Field mapping rules (Event ID 1: Process creation)
 
@@ -265,6 +286,11 @@ Class:
 
 - Network Activity (`class_uid = 4001`)
 
+Classification (normative):
+
+- `category_uid` MUST be `4` (Network Activity).
+- `type_uid` MUST be computed as `class_uid * 100 + activity_id`.
+
 #### Event IDs and activities
 
 | Sysmon Event ID | Sysmon name        | activity_id |
@@ -304,6 +330,11 @@ Class:
 
 - File System Activity (`class_uid = 1001`)
 
+Classification (normative):
+
+- `category_uid` MUST be `1` (System Activity).
+- `type_uid` MUST be computed as `class_uid * 100 + activity_id`.
+
 #### Event IDs and activities
 
 | Sysmon Event ID | Sysmon name | activity_id |
@@ -320,6 +351,14 @@ Authoritative inputs commonly include:
 Rules:
 
 - `file.path` MUST be populated from `TargetFilename` when present.
+- `file.name` MUST be derived from `TargetFilename` using the deterministic basename algorithm:
+  - Treat both `\` and `/` as path separators.
+  - Ignore trailing separators.
+  - Return the final non-empty segment.
+- `file.parent_folder` MUST be derived from `TargetFilename` using the deterministic split rule:
+  - Split at the last path separator (treating both `\` and `/` as separators).
+  - Set `file.parent_folder` to the prefix before the final separator.
+  - If no separator exists, `file.parent_folder` MUST be absent.
 - `actor.process.*` SHOULD be populated using the shared actor mapping rules.
 
 No inference:
@@ -331,6 +370,11 @@ No inference:
 Class:
 
 - DNS Activity (`class_uid = 4003`)
+
+Classification (normative):
+
+- `category_uid` MUST be `4` (Network Activity).
+- `type_uid` MUST be computed as `class_uid * 100 + activity_id`.
 
 #### Event IDs and activities
 
@@ -353,7 +397,11 @@ Rules:
 - `QueryStatus` MUST NOT be mapped to DNS `rcode` (not authoritative as DNS server rcode); it MAY be
   preserved under `extensions.purple.sysmon.query_status`.
 - `QueryResults` MAY be preserved under `extensions.purple.sysmon.query_results` in v0.1.
-
+- DNS `rcode` (response code) is `N/A` for Sysmon Event ID 22:
+  - Sysmon `QueryStatus` is a Windows NTSTATUS code indicating whether the DNS client API call
+    succeeded, not the DNS protocol response code from the server.
+  - Mapping profiles MUST NOT infer or populate `rcode` from `QueryStatus`.
+  
 ## Applicability and coverage
 
 This profile is designed to work with an applicability-aware coverage model:

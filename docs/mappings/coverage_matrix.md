@@ -82,6 +82,15 @@ ______________________________________________________________________
 
 ## Tier 1 matrix (Core Common)
 
+### Relationship to Tier 0 (envelope contract)
+
+This matrix covers Tier 1 (Core Common) fields only. Tier 0 (Core Envelope) fields are
+contract-required per `055_ocsf_field_tiers.md` and are not repeated here. Key Tier 0 requirements:
+
+- `metadata.uid` MUST equal `metadata.event_id` (ADR-0002).
+- `metadata.run_id`, `metadata.scenario_id`, `metadata.source_type` MUST be present.
+- See `055` for the complete Tier 0 field list.
+
 Tier 1 is “core common” per `055`. This matrix makes Tier 1 **mapping-profile-checkable**.
 
 Notes:
@@ -153,17 +162,20 @@ Notes:
 - `target.user.*` is optional because not all auth events have a distinct target principal beyond
   `actor.user`.
 
-### Tier 2B: Process and execution activity (Sysmon, osquery, auditd)
+### Tier 2B: Process and execution activity (Windows Security, Sysmon, osquery, auditd)
 
-| source_type      | actor.process.name | actor.process.pid | actor.process.cmd_line | actor.process.parent_process.pid | actor.user.uid | actor.user.name |
-| ---------------- | ------------------ | ----------------- | ---------------------- | -------------------------------- | -------------- | --------------- |
-| Windows Security | O[P]               | O[P]              | O[P]                   | O[P]                             | R[U]           | R[U]            |
-| Sysmon           | R[P]               | R[P]              | R[P]                   | R[P]                             | O[U]           | O[U]            |
-| osquery          | R[P]               | R[P]              | R[P]                   | O[P]                             | O[U]           | O[U]            |
-| auditd           | O[P]               | R[P]              | O[P]                   | O[P]                             | R[U]           | O[U]            |
+| source_type      | activity_id | actor.process.name | actor.process.pid | actor.process.cmd_line | actor.process.parent_process.pid | actor.user.uid | actor.user.name |
+| ---------------- | ----------- | ------------------ | ----------------- | ---------------------- | -------------------------------- | -------------- | --------------- |
+| Windows Security | R[C]        | O[P]               | O[P]              | O[P]                   | O[P]                             | R[U]           | R[U]            |
+| Sysmon           | R[C]        | R[P]               | R[P]              | R[P]                   | R[P]                             | O[U]           | O[U]            |
+| osquery          | R[C]        | R[P]               | R[P]              | R[P]                   | O[P]                             | O[U]           | O[U]            |
+| auditd           | R[C]        | O[P]               | R[P]              | O[P]                   | O[P]                             | R[U]           | O[U]            |
 
 Notes:
-
+- `activity_id` is required because it determines `type_uid` computation (`class_uid * 100 +
+  activity_id`) and is needed for deterministic downstream routing and scoring.
+- For Process Activity (`class_uid = 1007`), OCSF 1.7.0 uses: `1 = Launch`, `2 = Terminate`,
+  `0 = Unknown`.
 - Sysmon requires process pivots because it is the primary v0.1 source for endpoint behavior
   detections.
 - auditd often provides executable path rather than a clean process name. Mapping profiles may
@@ -188,18 +200,27 @@ Notes:
 
 ### Tier 2D: File system activity (Sysmon, osquery, auditd)
 
-| source_type      | file.name | file.parent_folder | actor.process.pid | actor.process.name | actor.user.uid |
-| ---------------- | --------: | -----------------: | ----------------: | -----------------: | -------------: |
-| Windows Security |      O[F] |               O[F] |              O[P] |               O[P] |           O[U] |
-| Sysmon           |      R[F] |               R[F] |              R[P] |               R[P] |           O[U] |
-| osquery          |      R[F] |               R[F] |               N/A |                N/A |           O[U] |
-| auditd           |      R[F] |               O[F] |              R[P] |               O[P] |           R[U] |
-
+| source_type      | file.name | file.parent_folder | file.path | actor.process.pid | actor.process.name | actor.user.uid |
+| ---------------- | --------: | -----------------: | --------: | ----------------: | -----------------: | -------------: |
+| Windows Security |      O[F] |               O[F] |      O[F] |              O[P] |               O[P] |           O[U] |
+| Sysmon           |      R[F] |               R[F] |      R[F] |              R[P] |               R[P] |           O[U] |
+| osquery          |      R[F] |               R[F] |      O[F] |               N/A |                N/A |           O[U] |
+| auditd           |      R[F] |               O[F] |      O[F] |              R[P] |               O[P] |           R[U] |
+ 
 Notes:
 
 - For **osquery `file_events`**, initiating process attribution is not available in v0.1. Therefore
   `actor.process.*` is `N/A` and **MUST NOT be inferred**. (This matches the “known mapping
   limitations” approach in `042_osquery_integration.md`.)
+- `file.path` and `file.name`/`file.parent_folder` relationship:
+  - When a source provides a full path (example: Sysmon `TargetFilename`), mapping profiles MUST
+    populate `file.path` directly from the source.
+  - Mapping profiles MUST also derive `file.name` (basename) and `file.parent_folder` (directory)
+    using a deterministic split algorithm. The split MUST treat both `\` and `/` as path separators.
+  - When only `file.name` or only `file.parent_folder` is authoritative (no full path), populate
+    only the authoritative field(s).
+  - `file.path` is marked `O[F]` for sources that do not always provide a full path (osquery
+    `file_events` may have partial paths depending on configuration).  
 - For auditd file activity, `file.parent_folder` is optional because audit records may provide only
   a full path or inode-derived context depending on configuration. If only a full path is available,
   mapping profiles should deterministically split it into `parent_folder` and `name`.
@@ -228,6 +249,7 @@ For each `source_type`, maintain a small raw fixture corpus that includes at lea
   - 1 `file_events` row
 - auditd:
   - 1 exec/process event
+  - 1 network/socket event (optional; validates Tier 2C `O[N]` handling)
   - 1 file activity event
 
 ### Conformance assertions

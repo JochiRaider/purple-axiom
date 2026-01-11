@@ -486,6 +486,8 @@ Key semantics (normative):
   detectable even when filenames are unchanged.
 - The snapshot MUST record upstream origins when derived from external projects (example: Security
   Lake transformation library custom source mappings).
+- The “mapping material” hashed and recorded by the snapshot MUST correspond to the mapping pack
+  boundary defined in `docs/mappings/ocsf_mapping_profile_authoring_guide.md`.
 
 Minimum fields (normative):
 

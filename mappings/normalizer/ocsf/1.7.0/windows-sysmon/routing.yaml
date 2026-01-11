@@ -25,7 +25,7 @@ routes:
   - event_id: 5
     name: "Process terminated"
     class_uid: 1007
-    activity_id: 4
+    activity_id: 2
     map_ref: "maps/process_activity.yaml#sysmon_eid_5"
   - event_id: 11
     name: "File create"

@@ -1,0 +1,90 @@
+# mappings/normalizer/ocsf/1.7.0/osquery/profile.yaml
+format_version: 1
+
+profile:
+  profile_id: osquery_to_ocsf_1.7.0
+  profile_version: 0.1.0
+  ocsf_version: "1.7.0"
+
+source:
+  source_pack_id: osquery
+  event_source_type: osquery
+  product_name: osquery
+  log_name: osqueryd.results.log
+
+inputs:
+  raw_shape_version: 1
+  required_fields:
+    - name
+    - hostIdentifier
+    - unixTime
+    - action
+
+includes:
+  canonicalization: canonicalization.yaml
+  routing: routing.yaml
+
+shared_emit:
+  time:
+    from: unixTime
+    transforms: [parse_epoch_s_to_epoch_ms]
+
+  device.name:
+    from: hostIdentifier
+    transforms: [trim_ascii]
+
+  device.hostname:
+    from: hostIdentifier
+    transforms: [trim_ascii, lowercase_ascii]
+
+  metadata.source_type:
+    const: osquery
+
+  metadata.log_provider:
+    const: osquery
+
+  metadata.log_name:
+    const: osqueryd.results.log
+
+  metadata.product.name:
+    const: osquery
+
+  # Preserve raw osquery inputs under unmapped.osquery
+  unmapped.osquery.query_name:
+    from: name
+    transforms: [trim_ascii]
+
+  unmapped.osquery.action:
+    from: action
+    transforms: [trim_ascii, lowercase_ascii]
+
+  unmapped.osquery.columns:
+    from: columns
+
+  unmapped.osquery.snapshot:
+    from: snapshot
+
+  unmapped.osquery.raw_json:
+    from: raw_json
+
+identity:
+  # Tier 3 identity basis per 042_osquery_integration.md.
+  algorithm: "pa:eid:v1"
+  identity_source_type: osquery
+  basis:
+    source_type_const: osquery
+    origin.host_identifier_from: hostIdentifier
+    origin.query_name_from: name
+    origin.action_from: action
+    origin.unix_time_from: unixTime
+    # The payload must be the canonical JSON for columns or snapshot (no expansion).
+    origin.payload_from: columns
+  prehash_normalization:
+    origin.host_identifier: [trim_ascii, lowercase_ascii]
+    origin.query_name: [trim_ascii]
+    origin.action: [trim_ascii, lowercase_ascii]
+    origin.unix_time: [trim_ascii, parse_int]
+    origin.payload: [jcs_canonical_json_bytes]
+
+outputs:
+  set_uid_equal_event_id: true

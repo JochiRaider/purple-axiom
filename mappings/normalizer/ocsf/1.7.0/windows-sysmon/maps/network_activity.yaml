@@ -3,6 +3,7 @@ schema_version: "pa.class_map.v0.1"
 ocsf_version: "1.7.0"
 source_type: "windows-sysmon"
 class_uid: 4001
+category_uid: 4
 
 shared:
   device:

@@ -3,6 +3,7 @@ schema_version: "pa.class_map.v0.1"
 ocsf_version: "1.7.0"
 source_type: "windows-sysmon"
 class_uid: 1007
+category_uid: 1
 
 shared:
   # Baseline provenance and device identity (applies to all entries in this file)
@@ -115,7 +116,7 @@ entries:
     selectors:
       event_id: 5
     ocsf:
-      activity_id: 4
+      activity_id: 2
     fields:
       - path: "actor.user.name"
         from_object:

@@ -1,0 +1,59 @@
+# mappings/normalizer/ocsf/1.7.0/osquery/classes/process_activity_1007.yaml
+format_version: 1
+
+class_map:
+  class_uid: 1007
+  class_name: Process Activity
+  category_uid: 1
+
+  # For osquery, action is the per-row activity key (event_id_map is the schema alias).
+  event_id_map:
+    "added": {activity_id: 1}
+    "removed": {activity_id: 2}
+    "snapshot": {activity_id: 99}
+
+emit:
+  class_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  actor.user.uid:
+    from: columns.uid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.user.name:
+    from: columns.username
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.process.pid:
+    from: columns.pid
+    transforms: [trim_ascii, parse_int]
+
+  actor.process.parent_process.pid:
+    from: columns.ppid
+    transforms: [trim_ascii, parse_int]
+
+  actor.process.file.path:
+    from: columns.path
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.process.name:
+    from: columns.path
+    transforms: [trim_ascii, absent_if_placeholder, extract_basename]
+
+  actor.process.cmd_line:
+    from: columns.cmdline
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.osquery.notes:
+    when:
+      event_id_in: ["snapshot"]
+    const: "snapshot row; activity_id=99 (Other)"

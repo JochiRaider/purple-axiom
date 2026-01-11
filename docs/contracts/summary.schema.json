@@ -155,10 +155,14 @@
             "type": "string",
             "enum": [
               "missing_telemetry",
-              "mapping_gap",
+              "criteria_unavailable",
+              "criteria_misconfigured",
+              "normalization_gap",
+              "bridge_gap",
               "rule_logic_gap",
-              "other"
-            ]
+              "cleanup_verification_failed"
+            ],
+            "description": "Failure category per gap_taxonomy (spec 070_scoring_metrics.md)"
           },
           "count": {
             "type": "integer",

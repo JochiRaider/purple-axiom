@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/cleanup_verification.schema.json",
+  "title": "Purple Axiom Cleanup Verification Results (v0.1)",
+  "description": "Validates cleanup verification results written to runs/<run_id>/runner/actions/<action_id>/cleanup_verification.json.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "results"],
+      "properties": {
+        "contract_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Schema contract version."
+        },
+        "results": {
+          "type": "array",
+          "minItems": 0,
+          "items": { "$ref": "#/$defs/cleanup_check_result" },
+          "description": "Cleanup verification check results. Producers MUST emit a deterministic ordering (see spec)."
+        },
+        "extensions": {
+          "type": "object",
+          "description": "Optional extension point for future metadata about the verification run.",
+          "additionalProperties": true
+        }
+      }
+    },
+    {
+      "type": "array",
+      "minItems": 0,
+      "items": { "$ref": "#/$defs/cleanup_check_result" },
+      "description": "Legacy form: bare array of cleanup check results."
+    }
+  ],
+  "$defs": {
+    "cleanup_check_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "type", "target", "status", "reason_code", "attempts", "elapsed_ms"],
+      "properties": {
+        "check_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "description": "Stable identifier for the verification check."
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Check type identifier (example: file_absent, registry_absent, process_absent, query)."
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable target or selector for the check."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "indeterminate", "skipped"],
+          "description": "Verification outcome."
+        },
+        "reason_code": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Stable reason token. Required for all statuses, including pass and skipped."
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of attempts performed by the verifier."
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Elapsed time for this check in milliseconds."
+        },
+        "details": {
+          "type": "object",
+          "description": "Optional structured details for operator debugging. Must not contain secrets when redaction is enabled.",
+          "additionalProperties": true
+        },
+        "extensions": {
+          "type": "object",
+          "description": "Optional extension point for future per-check fields.",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

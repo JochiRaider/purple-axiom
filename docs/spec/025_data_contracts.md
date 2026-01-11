@@ -43,6 +43,8 @@ Schemas live in:
 
 - `docs/contracts/manifest.schema.json`
 - `docs/contracts/ground_truth.schema.json`
+- `docs/contracts/runner_executor_evidence.schema.json`
+- `docs/contracts/cleanup_verification.schema.json`
 - `docs/contracts/criteria_pack_manifest.schema.json`
 - `docs/contracts/criteria_entry.schema.json`
 - `docs/contracts/criteria_result.schema.json`

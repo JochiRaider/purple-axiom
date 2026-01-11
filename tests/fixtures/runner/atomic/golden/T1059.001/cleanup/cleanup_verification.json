@@ -1,0 +1,17 @@
+{
+  "contract_version": "0.1.0",
+  "results": [
+    {
+      "check_id": "payload_absent",
+      "type": "file_absent",
+      "target": "$ATOMICS_ROOT\\T1059.001\\src\\payload.ps1",
+      "status": "pass",
+      "reason_code": "ok",
+      "attempts": 1,
+      "elapsed_ms": 0,
+      "details": {
+        "note": "Fixture-only sample; integration tests provide real verification."
+      }
+    }
+  ]
+}

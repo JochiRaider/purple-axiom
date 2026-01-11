@@ -211,6 +211,7 @@ Primary specs:
 - Architecture: `docs/spec/020_architecture.md`
 - Data contracts: `docs/spec/025_data_contracts.md`
 - Scenario model: `docs/spec/030_scenarios.md`
+- Atomic executor integration: `docs/spec/032_atomic_red_team_executor_integration.md`
 - Validation criteria: `docs/spec/035_validation_criteria.md`
 - Telemetry pipeline: `docs/spec/040_telemetry_pipeline.md`
 - Osquery integration: `docs/spec/042_osquery_integration.md`

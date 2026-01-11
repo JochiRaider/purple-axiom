@@ -167,9 +167,11 @@
           "enum": [
             "success",
             "failed",
+            "indeterminate",
             "skipped",
             "not_applicable"
-          ]
+          ],
+          "description": "Cleanup execution status per spec 035_validation_criteria.md"
         },
         "verification": {
           "type": "object",
@@ -183,9 +185,11 @@
               "enum": [
                 "success",
                 "failed",
+                "indeterminate",
                 "skipped",
                 "not_applicable"
-              ]
+              ],
+              "description": "Cleanup verification status per spec 035_validation_criteria.md"
             },
             "results_ref": {
               "type": "string"

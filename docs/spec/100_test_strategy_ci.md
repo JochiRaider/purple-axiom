@@ -1,5 +1,4 @@
 <!-- docs/spec/100_test_strategy_ci.md -->
-
 # Test Strategy and CI
 
 ## Unit tests
@@ -31,6 +30,9 @@
 - Lab provider parser tests: provider inventory export -> canonical `lab.assets` list
 - Scenario selection tests: target selectors -> resolved target set (using a fixed inventory
   snapshot fixture)
+- Atomic runner determinism fixtures: extracted Atomic test -> resolved inputs -> `$ATOMICS_ROOT`
+  canonicalization -> `resolved_inputs_sha256` and `action_key` under
+  `tests/fixtures/runner/atomic/`.
 - Criteria pack versioning tests:
   - `criteria/packs/<pack_id>/<pack_version>/manifest.json.pack_version` MUST match the directory
     `pack_version`.
@@ -45,6 +47,9 @@
 
 - “Golden run” fixture: deterministic scenario + captured telemetry to validate end-to-end outputs.
 - “Scenario suite” fixture: a small, representative set of techniques used as a regression pack.
+- Atomic runner conformance fixture (lab-gated): execute a pinned Atomic action twice with identical
+  inputs and assert stable `resolved_inputs_sha256` and stable `action_key`. See
+  `tests/integration/test_atomic_runner_conformance.py`.
 - Telemetry fixture: raw Windows event XML corpus including missing rendered messages and at least
   one event containing binary-like payload data.
 - Windows Event Log raw-mode conformance test (collector + validator):

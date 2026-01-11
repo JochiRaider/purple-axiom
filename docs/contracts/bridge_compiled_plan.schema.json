@@ -131,12 +131,14 @@
         "non_executable_reason": {
           "type": "string",
           "enum": [
-            "unroutable_logsource",
             "unmapped_field",
+            "raw_fallback_disabled",
             "unsupported_modifier",
-            "backend_error",
-            "other"
-          ]
+            "backend_compile_error",
+            "backend_eval_error",
+            "unroutable_logsource"
+          ],
+          "description": "Reason code per spec 065_sigma_to_ocsf_bridge.md and ADR-0005"
         },
         "routed_scope": {
           "type": "object",

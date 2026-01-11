@@ -1,0 +1,23 @@
+attack_technique: T1059.001
+display_name: Command and Scripting Interpreter: PowerShell
+atomic_tests:
+  - name: PowerShell whoami (synthetic minimal)
+    auto_generated_guid: 11111111-1111-1111-1111-111111111111
+    description: >
+      Synthetic minimal Atomic test used for Purple Axiom determinism fixtures.
+      It is not intended to exercise real adversary behaviors.
+    supported_platforms:
+      - windows
+    input_arguments:
+      command:
+        description: Command to execute
+        type: string
+        default: hostname
+      payload_path:
+        description: Synthetic payload path used to test $ATOMICS_ROOT canonicalization.
+        type: string
+        default: PathToAtomicsFolder\T1059.001\src\payload.ps1
+    executor:
+      name: powershell
+      command: powershell.exe -NoProfile -Command #{command}; Write-Output #{payload_path}
+      cleanup_command: powershell.exe -NoProfile -Command Remove-Item #{payload_path} -ErrorAction SilentlyContinue

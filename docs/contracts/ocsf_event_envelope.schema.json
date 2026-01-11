@@ -2,24 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://purple-axiom.local/schemas/ocsf_event_envelope.schema.json",
   "title": "Purple Axiom OCSF Event Envelope (OCSF-minimal core)",
-  "description": "Validates the minimal OCSF Base Event core for OCSF v1.7.0, as emitted by Purple Axiom. This schema does not require additional Purple Axiom provenance fields; implementations MAY include additional fields as extra properties.",
+  "description": "Validates the minimal OCSF Base Event core for OCSF v1.7.0, as emitted by Purple Axiom. Per spec 055_ocsf_field_tiers.md: Tier 0 fields (time, class_uid, metadata provenance) are MUST; Tier 1 fields (activity_id, category_uid, type_uid, severity_id) are SHOULD.",
   "type": "object",
   "additionalProperties": true,
   "required": [
     "contract_version",
     "time",
-    "activity_id",
-    "category_uid",    
     "class_uid",
-    "type_uid",
-    "severity_id",    
     "metadata"
   ],
   "properties": {
     "time": {
       "type": "integer",
       "minimum": 0,
-      "description": "Event time as milliseconds since Unix epoch (UTC). (OCSF timestamp_t)"
+      "description": "Event time as milliseconds since Unix epoch (UTC). (OCSF timestamp_t) [Tier 0 - MUST]"
     },
     "time_dt": {
       "type": "string",
@@ -28,30 +24,29 @@
     "class_uid": {
       "type": "integer",
       "minimum": 0,
-      "description": "OCSF class_uid."
+      "description": "OCSF class_uid. [Tier 0 - MUST]"
     },
     "category_uid": {
       "type": "integer",
       "minimum": 0,
-      "description": "OCSF category_uid."
+      "description": "OCSF category_uid. [Tier 1 - SHOULD]"
     },
     "type_uid": {
       "type": "integer",
       "minimum": 0,
-      "description": "OCSF type_uid."
+      "description": "OCSF type_uid. [Tier 1 - SHOULD]"
     },
     "severity_id": {
       "type": "integer",
       "minimum": 0,
-      "description": "OCSF severity_id."
+      "description": "OCSF severity_id. [Tier 1 - SHOULD]"
     },
     "metadata": {
       "type": "object",
       "additionalProperties": true,
       "required": [
-        "product",
-        "version",
-        "uid"
+        "uid",
+        "version"
       ],
       "properties": {
         "version": {
@@ -148,7 +143,7 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^pa:eid:v1:[A-Fa-f0-9]{32}$",
-          "description": "OCSF Metadata.uid. In Purple Axiom, this MUST be the deterministic event identifier: \"pa:eid:v1:\" + <128-bit-hex>. This identifier is stable across replays of identical normalized events."
+          "description": "OCSF Metadata.uid. In Purple Axiom, this MUST be the deterministic event identifier: \"pa:eid:v1:\" + <128-bit-hex>. This identifier is stable across replays of identical normalized events. [Tier 0 - MUST]"
         },
         "original_event_uid": {
           "type": "string",
@@ -264,7 +259,7 @@
     "activity_id": {
       "type": "integer",
       "minimum": 0,
-      "description": "The normalized identifier of the activity that triggered the event (OCSF Base Event)."
+      "description": "The normalized identifier of the activity that triggered the event (OCSF Base Event). [Tier 1 - SHOULD]"
     },
     "status_id": {
       "type": "integer",

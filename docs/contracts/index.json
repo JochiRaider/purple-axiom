@@ -62,6 +62,14 @@
       "purpose": "Bridge coverage summary (bridge/coverage.json)."
     },
     {
+      "name": "cleanup_verification.schema.json",
+      "purpose": "<TODO>"
+    },
+    {
+      "name": "runner_executor_evidence.schema.json.schema.json",
+      "purpose": "<TODO>"
+    },
+    {
       "name": "pcap_manifest.schema.json",
       "purpose": "Manifest enumerating pcap capture files for a run (placeholder contract; v0.1)."
     },

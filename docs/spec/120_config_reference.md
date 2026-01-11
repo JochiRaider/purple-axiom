@@ -94,7 +94,8 @@ Common keys:
   - `executor` (optional, default: `invoke_atomic_red_team`):
     `invoke_atomic_red_team | atomic_operator | other`
     - `invoke_atomic_red_team`: execute Atomics via the PowerShell Invoke-AtomicRedTeam module
-      (canonical on Windows)
+      (reference executor for v0.1; MUST conform to
+      `docs/spec/032_atomic_red_team_executor_integration.md`)
     - `atomic_operator`: execute Atomics via a cross-platform runner (Python), suitable for
       Linux/macOS targets
   - `timeout_seconds` (optional, default: 300): per-test execution timeout

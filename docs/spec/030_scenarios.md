@@ -48,6 +48,9 @@ The runner MUST persist:
 - Ground truth timeline entries (contracted)
 - Runner evidence artifacts (stdout/stderr transcripts, executor metadata, cleanup verification
   results)
+- For `engine = "atomic"` actions, the runner MUST implement the integration contract defined in
+  `docs/spec/032_atomic_red_team_executor_integration.md` (deterministic YAML parsing, input
+  resolution, transcript capture, cleanup invocation, and cleanup verification).
 
 ## Stable action identity (join keys)
 

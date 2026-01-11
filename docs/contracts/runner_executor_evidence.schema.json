@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/runner_executor_evidence.schema.json",
+  "title": "Purple Axiom Runner Executor Evidence (v0.1)",
+  "description": "Validates per-action runner executor evidence written to runs/<run_id>/runner/actions/<action_id>/executor.json. This artifact records the reference executor pin set and execution timing/outcome metadata. It is evidence, not identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "executor",
+    "pwsh_version",
+    "invoke_atomicredteam_version",
+    "started_at_utc",
+    "ended_at_utc",
+    "duration_ms",
+    "exit_code"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Schema contract version."
+    },
+    "executor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Normalized executor name (example: powershell, cmd, sh, bash)."
+    },
+    "pwsh_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact PowerShell version string used by the runner (pinned)."
+    },
+    "invoke_atomicredteam_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact Invoke-AtomicRedTeam module version used by the runner (pinned)."
+    },
+    "started_at_utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$",
+      "description": "Action start timestamp in UTC (RFC 3339 with trailing 'Z')."
+    },
+    "ended_at_utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$",
+      "description": "Action end timestamp in UTC (RFC 3339 with trailing 'Z')."
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock duration in milliseconds."
+    },
+    "exit_code": {
+      "type": "integer",
+      "description": "Process exit code for the primary executor invocation (0 indicates success by convention)."
+    },
+    "atomics_root_actual": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Evidence-only: actual filesystem path used as the Atomics root/payload root. MUST NOT participate in identity-bearing hashes."
+    },
+    "command_shell_specific": {
+      "description": "Evidence-only: shell-specific command string(s) actually invoked (after executor-specific rewriting/quoting).",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      ]
+    },
+    "notes": {
+      "type": "array",
+      "description": "Optional informational notes, warnings, or non-fatal anomalies for operator debugging. Not identity-bearing.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Optional extension point for future fields. Producers SHOULD keep this deterministic (stable key ordering is enforced via JCS in hashed contexts, not here).",
+      "additionalProperties": true
+    }
+  }
+}

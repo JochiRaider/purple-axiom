@@ -18,6 +18,7 @@ changes the pins.
 | DuckDB | 1.4.3 | Batch evaluator backend (`duckdb_sql`) | Pin exact version for stable query planning behavior across “golden run” fixtures. |
 | osquery | 5.14.1 | Endpoint telemetry (osqueryd) | Pin official packages for lab assets; CI fixtures should record `osqueryd --version` for provenance. |
 | OCSF schema | 1.7.0 | Normalization target | v0.1 is pinned to OCSF 1.7.0; see `docs/spec/050_normalization_ocsf.md` for migration policy and `docs/spec/120_config_reference.md` for config pin. |
+| PowerShell | 7.4.6 | Runner (Atomic executor) | Pin exact version for stable transcript encoding and module behavior |
 
 ## Toolchain and CI pins (normative for CI; guidance for local)
 

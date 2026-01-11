@@ -1,0 +1,4 @@
+{
+  "command": "whoami",
+  "payload_path": "$ATOMICS_ROOT\\T1059.001\\src\\payload.ps1"
+}

@@ -174,7 +174,7 @@ v0.1 default routing:
 | ---------------- | -------------------- | ----------: |
 | `process_events` | Process Activity     |        1007 |
 | `file_events`    | File System Activity |        1001 |
-| `socket_events`  | Network Activity     |        4002 |
+| `socket_events`  | Network Activity     |        4001 |
 
 Rules:
 

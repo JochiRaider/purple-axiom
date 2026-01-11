@@ -89,7 +89,7 @@ be driven by the osquery scheduled query name:
 - v0.1 routing defaults (mapping profile MAY override explicitly):
   - `process_events` → Process Activity (`class_uid: 1007`)
   - `file_events` → File System Activity (`class_uid: 1001`)
-  - `socket_events` → Network Activity (`class_uid: 4002`)
+  - `socket_events` → Network Activity (`class_uid: 4001`)
 
 Unrouted behavior:
 

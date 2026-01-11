@@ -7,28 +7,29 @@ in `docs/spec/` so agents do not need to load every document to find the authori
 
 ## File map (covers all spec files)
 
-| Spec file                     | Primary purpose (authoritative for)                             |
-| ----------------------------- | --------------------------------------------------------------- |
-| `000_charter.md`              | Mission, principles, and project charter constraints            |
-| `010_scope.md`                | In-scope / out-of-scope boundaries and definitions              |
-| `015_lab_providers.md`        | Lab provider model and environment assumptions                  |
-| `020_architecture.md`         | System architecture and stage boundaries                        |
-| `025_data_contracts.md`       | Run bundle artifacts and cross-artifact invariants              |
-| `030_scenarios.md`            | Scenario model, action identity expectations, and run semantics |
-| `035_validation_criteria.md`  | Criteria evaluation semantics and cleanup verification model    |
-| `040_telemetry_pipeline.md`   | Telemetry collection invariants and capture requirements        |
-| `042_osquery_integration.md`  | Osquery collection path and normalization expectations          |
-| `045_storage_formats.md`      | Storage formats and schema evolution expectations               |
-| `050_normalization_ocsf.md`   | Normalization rules into OCSF and mapping approach              |
-| `055_ocsf_field_tiers.md`     | OCSF field tiers and coverage expectations                      |
-| `060_detection_sigma.md`      | Detection representation and Sigma-specific semantics           |
-| `065_sigma_to_ocsf_bridge.md` | Sigma→OCSF bridge behavior and outputs                          |
-| `070_scoring_metrics.md`      | Scoring model, coverage metrics, and gating language            |
-| `080_reporting.md`            | Reporting outputs, summaries, and operator-facing artifacts     |
-| `090_security_safety.md`      | Security and safety requirements (spec-level)                   |
-| `100_test_strategy_ci.md`     | Test strategy, fixtures, CI gates, and conformance expectations |
-| `110_operability.md`          | Operability requirements and run-time expectations              |
-| `120_config_reference.md`     | Configuration surface area and defaults                         |
+| Spec file                                     | Primary purpose (authoritative for)                             |
+| --------------------------------------------- | --------------------------------------------------------------- |
+| `000_charter.md`                              | Mission, principles, and project charter constraints            |
+| `010_scope.md`                                | In-scope / out-of-scope boundaries and definitions              |
+| `015_lab_providers.md`                        | Lab provider model and environment assumptions                  |
+| `020_architecture.md`                         | System architecture and stage boundaries                        |
+| `025_data_contracts.md`                       | Run bundle artifacts and cross-artifact invariants              |
+| `030_scenarios.md`                            | Scenario model, action identity expectations, and run semantics |
+| `032_atomic_red_team_executor_integration.md` | Atomic Red Team executor integration contract and artifacts     |
+| `035_validation_criteria.md`                  | Criteria evaluation semantics and cleanup verification model    |
+| `040_telemetry_pipeline.md`                   | Telemetry collection invariants and capture requirements        |
+| `042_osquery_integration.md`                  | Osquery collection path and normalization expectations          |
+| `045_storage_formats.md`                      | Storage formats and schema evolution expectations               |
+| `050_normalization_ocsf.md`                   | Normalization rules into OCSF and mapping approach              |
+| `055_ocsf_field_tiers.md`                     | OCSF field tiers and coverage expectations                      |
+| `060_detection_sigma.md`                      | Detection representation and Sigma-specific semantics           |
+| `065_sigma_to_ocsf_bridge.md`                 | Sigma→OCSF bridge behavior and outputs                          |
+| `070_scoring_metrics.md`                      | Scoring model, coverage metrics, and gating language            |
+| `080_reporting.md`                            | Reporting outputs, summaries, and operator-facing artifacts     |
+| `090_security_safety.md`                      | Security and safety requirements (spec-level)                   |
+| `100_test_strategy_ci.md`                     | Test strategy, fixtures, CI gates, and conformance expectations |
+| `110_operability.md`                          | Operability requirements and run-time expectations              |
+| `120_config_reference.md`                     | Configuration surface area and defaults                         |
 
 ## Other files in docs/spec
 
@@ -37,26 +38,27 @@ in `docs/spec/` so agents do not need to load every document to find the authori
 
 ## Common tasks (fast paths)
 
-| Need                                         | Read first                    | Then (if needed)                                                             |
-| -------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------- |
-| “What is Purple Axiom trying to do?”         | `000_charter.md`              | `010_scope.md`                                                               |
-| “Is X in scope?”                             | `010_scope.md`                | `000_charter.md`                                                             |
-| “How do stages fit together?”                | `020_architecture.md`         | `040_telemetry_pipeline.md`, `050_normalization_ocsf.md`, `080_reporting.md` |
-| “What artifacts exist in a run bundle?”      | `025_data_contracts.md`       | `045_storage_formats.md`, `080_reporting.md`                                 |
-| “How are scenarios defined and compared?”    | `030_scenarios.md`            | `035_validation_criteria.md`, `070_scoring_metrics.md`                       |
-| “What does cleanup verification mean?”       | `035_validation_criteria.md`  | `030_scenarios.md`                                                           |
-| “What telemetry must be captured?”           | `040_telemetry_pipeline.md`   | `042_osquery_integration.md`                                                 |
-| “How is osquery ingested?”                   | `042_osquery_integration.md`  | `040_telemetry_pipeline.md`, `050_normalization_ocsf.md`                     |
-| “How do we normalize into OCSF?”             | `050_normalization_ocsf.md`   | `055_ocsf_field_tiers.md`                                                    |
-| “What coverage is required for OCSF fields?” | `055_ocsf_field_tiers.md`     | `070_scoring_metrics.md`                                                     |
-| “How are detections represented?”            | `060_detection_sigma.md`      | `065_sigma_to_ocsf_bridge.md`                                                |
-| “How does the Sigma→OCSF bridge behave?”     | `065_sigma_to_ocsf_bridge.md` | `060_detection_sigma.md`, `070_scoring_metrics.md`                           |
-| “How are scores computed / gated?”           | `070_scoring_metrics.md`      | `055_ocsf_field_tiers.md`, `100_test_strategy_ci.md`                         |
-| “What reports are produced?”                 | `080_reporting.md`            | `025_data_contracts.md`                                                      |
-| “What are the security/safety requirements?” | `090_security_safety.md`      | `110_operability.md`                                                         |
-| “What must CI enforce?”                      | `100_test_strategy_ci.md`     | (follow links to the stage spec being gated)                                 |
-| “What knobs/config keys exist?”              | `120_config_reference.md`     | (the stage spec referenced by the key)                                       |
-| “How should operators run/observe this?”     | `110_operability.md`          | `080_reporting.md`, `120_config_reference.md`                                |
+| Need                                               | Read first                                    | Then (if needed)                                                             |
+| -------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------- |
+| “What is Purple Axiom trying to do?”               | `000_charter.md`                              | `010_scope.md`                                                               |
+| “Is X in scope?”                                   | `010_scope.md`                                | `000_charter.md`                                                             |
+| “How do stages fit together?”                      | `020_architecture.md`                         | `040_telemetry_pipeline.md`, `050_normalization_ocsf.md`, `080_reporting.md` |
+| “What artifacts exist in a run bundle?”            | `025_data_contracts.md`                       | `045_storage_formats.md`, `080_reporting.md`                                 |
+| “How are scenarios defined and compared?”          | `030_scenarios.md`                            | `035_validation_criteria.md`, `070_scoring_metrics.md`                       |
+| “How does the Atomic Red Team executor integrate?” | `032_atomic_red_team_executor_integration.md` | `025_data_contracts.md`, `030_scenarios.md`, `035_validation_criteria.md`    |
+| “What does cleanup verification mean?”             | `035_validation_criteria.md`                  | `030_scenarios.md`                                                           |
+| “What telemetry must be captured?”                 | `040_telemetry_pipeline.md`                   | `042_osquery_integration.md`                                                 |
+| “How is osquery ingested?”                         | `042_osquery_integration.md`                  | `040_telemetry_pipeline.md`, `050_normalization_ocsf.md`                     |
+| “How do we normalize into OCSF?”                   | `050_normalization_ocsf.md`                   | `055_ocsf_field_tiers.md`                                                    |
+| “What coverage is required for OCSF fields?”       | `055_ocsf_field_tiers.md`                     | `070_scoring_metrics.md`                                                     |
+| “How are detections represented?”                  | `060_detection_sigma.md`                      | `065_sigma_to_ocsf_bridge.md`                                                |
+| “How does the Sigma→OCSF bridge behave?”           | `065_sigma_to_ocsf_bridge.md`                 | `060_detection_sigma.md`, `070_scoring_metrics.md`                           |
+| “How are scores computed / gated?”                 | `070_scoring_metrics.md`                      | `055_ocsf_field_tiers.md`, `100_test_strategy_ci.md`                         |
+| “What reports are produced?”                       | `080_reporting.md`                            | `025_data_contracts.md`                                                      |
+| “What are the security/safety requirements?”       | `090_security_safety.md`                      | `110_operability.md`                                                         |
+| “What must CI enforce?”                            | `100_test_strategy_ci.md`                     | (follow links to the stage spec being gated)                                 |
+| “What knobs/config keys exist?”                    | `120_config_reference.md`                     | (the stage spec referenced by the key)                                       |
+| “How should operators run/observe this?”           | `110_operability.md`                          | `080_reporting.md`, `120_config_reference.md`                                |
 
 ## Update rule (required)
 

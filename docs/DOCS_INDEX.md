@@ -7,11 +7,12 @@ locate authoritative information.
 
 ## Primary Indexes (Start Here)
 
-| Domain             | Index File                  | Purpose                                                                  |
-| :----------------- | :-------------------------- | :----------------------------------------------------------------------- |
-| **Specifications** | `docs/spec/SPEC_INDEX.md`   | **Normative requirements**, architecture, data flows, and configuration. |
-| **Decisions**      | `docs/adr/ADR_INDEX.md`     | **Context and history** of architectural choices (ADRs).                 |
-| **Contracts**      | `docs/contracts/index.json` | **JSON Schemas** for validation of artifacts (e.g., manifest, events).   |
+| Domain             | Index File                        | Purpose                                                                  |
+| :----------------- | :-------------------------------- | :----------------------------------------------------------------------- |
+| **Specifications** | `docs/spec/SPEC_INDEX.md`         | **Normative requirements**, architecture, data flows, and configuration. |
+| **Decisions**      | `docs/adr/ADR_INDEX.md`           | **Context and history** of architectural choices (ADRs).                 |
+| **Contracts**      | `docs/contracts/index.json`       | **JSON Schemas** for validation of artifacts (e.g., manifest, events).   |
+| **Mappings**       | `docs/mappings/MAPPINGS_INDEX.md` | **Mapping specs** and coverage expectations per `source_type`.           |
 
 ## Directory Guide
 
@@ -34,3 +35,4 @@ locate authoritative information.
   - **Specs**: `docs/spec/AGENTS.md`
   - **ADRs**: `docs/adr/AGENTS.md`
   - **Contracts**: `docs/contracts/AGENTS.md`
+  - **Mappings**: `docs/mappings/AGENTS.md`

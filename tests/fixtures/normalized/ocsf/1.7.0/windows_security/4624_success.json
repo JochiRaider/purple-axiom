@@ -1,0 +1,38 @@
+{
+  "contract_version": "ocsf_event_envelope@v0.1",
+  "time": 1768089598123,
+  "class_uid": 3002,
+  "activity_id": 1,
+  "type_uid": 300201,
+  "status_id": 1,
+  "device": {
+    "hostname": "win10-lab",
+    "name": "WIN10-LAB"
+  },
+  "actor": {
+    "user": {
+      "domain": "LAB",
+      "name": "alice",
+      "uid": "S-1-5-21-1111111111-2222222222-3333333333-1001"
+    }
+  },
+  "authentication": {
+    "logon_type_id": 3
+  },
+  "src_endpoint": {
+    "ip": "192.168.1.50",
+    "port": 51512
+  },
+  "metadata": {
+    "event_id": "pa:eid:v1:0ecaf2a7ed583ab2338e32b14eecb9d0",
+    "identity_tier": 1,
+    "log_name": "Security",
+    "log_provider": "Microsoft-Windows-Security-Auditing",
+    "product": {
+      "name": "windows_eventlog"
+    },
+    "source_event_id": "123456",
+    "source_type": "windows-security",
+    "uid": "pa:eid:v1:0ecaf2a7ed583ab2338e32b14eecb9d0"
+  }
+}

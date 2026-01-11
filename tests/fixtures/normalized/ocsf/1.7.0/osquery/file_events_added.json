@@ -1,0 +1,48 @@
+{
+  "activity_id": 0,
+  "actor": {
+    "user": {
+      "name": "root",
+      "uid": "0"
+    }
+  },
+  "class_uid": 1001,
+  "device": {
+    "hostname": "linux1"
+  },
+  "file": {
+    "name": "sshd_config",
+    "parent_folder": "/etc/ssh",
+    "path": "/etc/ssh/sshd_config"
+  },
+  "metadata": {
+    "collector_version": "collector-fixture-0",
+    "event_id": "aa20111429d58bf30997b9e66723d04c4fddf28e58067d41f95a6edbef4b0a20",
+    "log_name": "osqueryd.results.log",
+    "normalizer_version": "normalizer-fixture-0",
+    "product": {
+      "name": "osquery"
+    },
+    "run_id": "RUN_FIXTURE_OSQUERY_0001",
+    "scenario_id": "SCEN_FIXTURE_OSQUERY_0001",
+    "source_event_id": "osquery:aa20111429d58bf30997b9e66723d04c4fddf28e58067d41f95a6edbef4b0a20",
+    "source_type": "osquery",
+    "uid": "aa20111429d58bf30997b9e66723d04c4fddf28e58067d41f95a6edbef4b0a20"
+  },
+  "time": "2026-01-11T00:00:10Z",
+  "type_uid": 100100,
+  "unmapped": {
+    "osquery": {
+      "action": "added",
+      "calendarTime": "Sun Jan 11 00:00:10 2026 UTC",
+      "columns": {
+        "action": "CREATED",
+        "target_path": "/etc/ssh/sshd_config",
+        "uid": "0",
+        "username": "root"
+      },
+      "name": "file_events",
+      "unixTime": "1768089610"
+    }
+  }
+}

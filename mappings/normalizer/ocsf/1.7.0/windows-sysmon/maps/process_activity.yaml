@@ -1,0 +1,142 @@
+# Process Activity (class_uid 1007) mappings for Sysmon
+schema_version: "pa.class_map.v0.1"
+ocsf_version: "1.7.0"
+source_type: "windows-sysmon"
+class_uid: 1007
+
+shared:
+  # Baseline provenance and device identity (applies to all entries in this file)
+  device:
+    - path: "device.name"
+      from: ["$.computer"]
+      transforms: ["trim"]
+      emit_if_present: true
+    - path: "device.hostname"
+      from: ["$.computer"]
+      transforms: ["trim", "hostname_lower"]
+      emit_if_present: true
+
+  metadata:
+    - path: "metadata.product.name"
+      value: "sysmon"
+    - path: "metadata.log_provider"
+      value: "Microsoft-Windows-Sysmon"
+    - path: "metadata.log_name"
+      value: "Microsoft-Windows-Sysmon/Operational"
+    - path: "metadata.source_event_id"
+      from: ["$.record_id"]
+      transforms: ["trim"]
+      emit_if_present: true
+
+  # Parsed user object (map entry selects domain/name paths)
+  actor_user_from_eventdata_user:
+    source: "$.event_data.User"
+    transform: "parse_domain_user"
+
+entries:
+  # Sysmon Event ID 1: Process creation (activity_id 1)
+  sysmon_eid_1:
+    selectors:
+      event_id: 1
+    ocsf:
+      activity_id: 1
+    fields:
+      # Actor user (User)
+      - path: "actor.user.name"
+        from_object:
+          ref: "actor_user_from_eventdata_user"
+          key: "name"
+        emit_if_present: true
+      - path: "actor.user.domain"
+        from_object:
+          ref: "actor_user_from_eventdata_user"
+          key: "domain"
+        emit_if_present: true
+
+      # Primary process (the created process)
+      - path: "process.pid"
+        from: ["$.event_data.ProcessId"]
+        transforms: ["parse_int"]
+        emit_if_present: true
+      - path: "process.uid"
+        from: ["$.event_data.ProcessGuid"]
+        transforms: ["trim"]
+        emit_if_present: true
+      - path: "process.file.path"
+        from: ["$.event_data.Image"]
+        transforms: ["trim"]
+        emit_if_present: true
+      - path: "process.cmd_line"
+        from: ["$.event_data.CommandLine"]
+        transforms: ["trim"]
+        emit_if_present: true
+        # NOTE: if redaction policy drops this field, it MUST be absent.
+
+      # Parent/initiator process context (Sysmon provides these explicitly)
+      - path: "actor.process.pid"
+        from: ["$.event_data.ParentProcessId"]
+        transforms: ["parse_int"]
+        emit_if_present: true
+      - path: "actor.process.uid"
+        from: ["$.event_data.ParentProcessGuid"]
+        transforms: ["trim"]
+        emit_if_present: true
+      - path: "actor.process.file.path"
+        from: ["$.event_data.ParentImage"]
+        transforms: ["trim"]
+        emit_if_present: true
+      - path: "actor.process.cmd_line"
+        from: ["$.event_data.ParentCommandLine"]
+        transforms: ["trim"]
+        emit_if_present: true
+
+      # Hashes for the created process image (if present)
+      - path: "process.file.hashes"
+        from: ["$.event_data.Hashes"]
+        transforms: ["parse_sysmon_hashes"]
+        emit_if_present: true
+        postprocess:
+          - type: "dedupe_sort_fingerprints"
+            key: ["algorithm_id", "value"]
+            order_by: ["algorithm_id", "value"]
+
+      # Preserve raw sysmon identifiers for debugging/replay (optional pivot)
+      - path: "extensions.purple.sysmon.process_guid"
+        from: ["$.event_data.ProcessGuid"]
+        transforms: ["trim"]
+        emit_if_present: true
+      - path: "extensions.purple.sysmon.parent_process_guid"
+        from: ["$.event_data.ParentProcessGuid"]
+        transforms: ["trim"]
+        emit_if_present: true
+
+  # Sysmon Event ID 5: Process terminated (activity_id 4)
+  sysmon_eid_5:
+    selectors:
+      event_id: 5
+    ocsf:
+      activity_id: 4
+    fields:
+      - path: "actor.user.name"
+        from_object:
+          ref: "actor_user_from_eventdata_user"
+          key: "name"
+        emit_if_present: true
+      - path: "actor.user.domain"
+        from_object:
+          ref: "actor_user_from_eventdata_user"
+          key: "domain"
+        emit_if_present: true
+
+      - path: "process.pid"
+        from: ["$.event_data.ProcessId"]
+        transforms: ["parse_int"]
+        emit_if_present: true
+      - path: "process.uid"
+        from: ["$.event_data.ProcessGuid"]
+        transforms: ["trim"]
+        emit_if_present: true
+      - path: "process.file.path"
+        from: ["$.event_data.Image"]
+        transforms: ["trim"]
+        emit_if_present: true

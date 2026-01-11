@@ -1,0 +1,1 @@
+{"action":"added","calendarTime":"Sun Jan 11 00:00:10 2026 UTC","columns":{"action":"CREATED","target_path":"/etc/ssh/sshd_config","uid":"0","username":"root"},"hostIdentifier":"linux1","name":"file_events","unixTime":"1768089610"}

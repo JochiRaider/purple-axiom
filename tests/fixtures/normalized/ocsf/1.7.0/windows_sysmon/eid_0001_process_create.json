@@ -1,0 +1,70 @@
+{
+  "activity_id": 1,
+  "actor": {
+    "process": {
+      "cmd_line": "explorer.exe",
+      "file": {
+        "path": "C:\\Windows\\explorer.exe"
+      },
+      "pid": 1111,
+      "uid": "{22222222-2222-2222-2222-222222222222}"
+    },
+    "user": {
+      "domain": "LAB",
+      "name": "alice"
+    }
+  },
+  "class_uid": 1007,
+  "device": {
+    "hostname": "win10-lab",
+    "name": "WIN10-LAB"
+  },
+  "extensions": {
+    "purple": {
+      "sysmon": {
+        "parent_process_guid": "{22222222-2222-2222-2222-222222222222}",
+        "process_guid": "{11111111-1111-1111-1111-111111111111}"
+      }
+    }
+  },
+  "metadata": {
+    "collector_version": "collector_fixture_0.1.0",
+    "event_id": "c56484298b7e384bccb41e62188cf765af2f0a2e94759ca857133dae89289938",
+    "log_name": "Microsoft-Windows-Sysmon/Operational",
+    "log_provider": "Microsoft-Windows-Sysmon",
+    "normalizer_version": "normalizer_fixture_0.1.0",
+    "product": {
+      "name": "sysmon"
+    },
+    "run_id": "run_fixture_0001",
+    "scenario_id": "scenario_fixture_sysmon_v0.1",
+    "source_event_id": "2000001",
+    "source_type": "windows-sysmon",
+    "uid": "c56484298b7e384bccb41e62188cf765af2f0a2e94759ca857133dae89289938"
+  },
+  "process": {
+    "cmd_line": "cmd.exe /c whoami",
+    "file": {
+      "hashes": [
+        {
+          "algorithm_id": 1,
+          "value": "aaa"
+        },
+        {
+          "algorithm_id": 3,
+          "value": "bbb"
+        },
+        {
+          "algorithm": "IMPHash",
+          "algorithm_id": 99,
+          "value": "ccc"
+        }
+      ],
+      "path": "C:\\Windows\\System32\\cmd.exe"
+    },
+    "pid": 4242,
+    "uid": "{11111111-1111-1111-1111-111111111111}"
+  },
+  "time": 1767225601000,
+  "type_uid": 100701
+}

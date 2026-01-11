@@ -1,0 +1,50 @@
+# windows-sysmon mapping profile (machine-executable)
+# Profile ID and version MUST be stable inputs to mapping_profile_sha256.
+#
+# Assumed raw input shape (before mapping):
+# {
+#   "provider": "Microsoft-Windows-Sysmon",
+#   "channel": "Microsoft-Windows-Sysmon/Operational",
+#   "event_id": 1,
+#   "record_id": 12345,
+#   "time_created": "2026-01-11T01:02:03.456Z",
+#   "computer": "HOST01",
+#   "event_data": { "Image": "C:\\Windows\\System32\\cmd.exe", ... }
+# }
+#
+# Notes:
+# - This profile is declarative. The normalizer MUST implement the semantics in `transforms/*`.
+# - All "absent" handling MUST omit the field (do not emit null/empty string/empty array).
+# - This profile MUST NOT infer values.
+
+schema_version: "pa.mapping_profile.v0.1"
+profile_id: "windows-sysmon_to_ocsf_1.7.0"
+profile_version: "0.1.0"
+ocsf_version: "1.7.0"
+source_type: "windows-sysmon"
+
+inputs:
+  provider: "Microsoft-Windows-Sysmon"
+  channel: "Microsoft-Windows-Sysmon/Operational"
+
+entrypoints:
+  routing_table: "routing.yaml"
+  canonicalization: "canonicalization.yaml"
+  class_maps:
+    process_activity: "maps/process_activity.yaml"
+    network_activity: "maps/network_activity.yaml"
+    file_system_activity: "maps/file_system_activity.yaml"
+    dns_activity: "maps/dns_activity.yaml"
+
+defaults:
+  # Product strings are provenance-only and MUST NOT participate in event identity hashing.
+  metadata:
+    product_name: "sysmon"
+    log_provider: "Microsoft-Windows-Sysmon"
+    log_name: "Microsoft-Windows-Sysmon/Operational"
+
+  # If your normalizer supports a redaction stage, it MUST execute BEFORE mapping emission for
+  # sensitive fields (e.g., command line), and MUST be deterministic.
+  redaction:
+    cmd_line:
+      mode: "policy"   # "policy" | "drop"

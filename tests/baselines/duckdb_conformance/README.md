@@ -1,12 +1,13 @@
 <!-- tests/baselines/duckdb_conformance/README.md -->
+
 # DuckDB Conformance Baselines
 
 This directory contains checked-in baselines used to gate DuckDB determinism conformance in CI.
 
 These baselines are distinct from CI conformance outputs:
 
-- **Baselines (this directory)** are committed and represent the expected hashes for a given
-  DuckDB version and fixture set.
+- **Baselines (this directory)** are committed and represent the expected hashes for a given DuckDB
+  version and fixture set.
 - **CI outputs** (full conformance reports) are ephemeral build artifacts and MUST NOT be committed.
 
 ## What is being baselined
@@ -40,7 +41,8 @@ Where:
 The baseline file MUST be valid UTF-8 JSON and MUST use stable ordering:
 
 - arrays MUST be sorted by `query_id`
-- objects SHOULD be serialized deterministically in tooling (do not rely on Python dict insertion order)
+- objects SHOULD be serialized deterministically in tooling (do not rely on Python dict insertion
+  order)
 
 The baseline file contract version is:
 
@@ -50,14 +52,16 @@ The baseline file contract version is:
 
 In CI:
 
-1) The harness MUST execute the conformance matrix and emit an ephemeral report:
+1. The harness MUST execute the conformance matrix and emit an ephemeral report:
+
    - `artifacts/duckdb_conformance/<report_id>/report.json`
    - Report MUST conform to `docs/contracts/duckdb_conformance_report.schema.json`
 
-2) The harness (or a comparator step) MUST compare observed hashes to the checked-in baseline
+1. The harness (or a comparator step) MUST compare observed hashes to the checked-in baseline
    matching the pinned DuckDB version and fixture id.
 
-3) CI gating:
+1. CI gating:
+
    - `result_hash_mismatch` MUST fail CI (fail closed).
    - `plan_hash_mismatch` SHOULD warn and MUST NOT fail CI unless a plan gate is explicitly enabled.
 

@@ -1,0 +1,28 @@
+{
+  "_fixture": {
+    "collector_version": "collector_fixture_0.1.0",
+    "normalizer_version": "normalizer_fixture_0.1.0",
+    "ocsf_version": "1.7.0",
+    "run_id": "run_fixture_0001",
+    "scenario_id": "scenario_fixture_sysmon_v0.1",
+    "source_type": "windows-sysmon"
+  },
+  "channel": "Microsoft-Windows-Sysmon/Operational",
+  "computer": "WIN10-LAB",
+  "event_data": {
+    "DestinationHostname": "example.com",
+    "DestinationIp": "93.184.216.34",
+    "DestinationPort": "443",
+    "Image": "C:\\Windows\\System32\\cmd.exe",
+    "ProcessGuid": "{11111111-1111-1111-1111-111111111111}",
+    "ProcessId": "4242",
+    "Protocol": "tcp",
+    "SourceIp": "10.0.0.10",
+    "SourcePort": "51515",
+    "User": "LAB\\alice"
+  },
+  "event_id": 3,
+  "provider": "Microsoft-Windows-Sysmon",
+  "record_id": 2000003,
+  "time_created": "2026-01-01T00:00:03Z"
+}

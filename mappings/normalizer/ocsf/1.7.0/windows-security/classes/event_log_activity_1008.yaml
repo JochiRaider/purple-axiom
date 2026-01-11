@@ -1,0 +1,44 @@
+# mappings/normalizer/ocsf/1.7.0/windows-security/classes/event_log_activity_1008.yaml
+format_version: 1
+
+class_map:
+  class_uid: 1008
+  class_name: Event Log Activity
+  category_uid: 1
+
+  event_id_map:
+    1102: {activity_id: 1, status_id: 1} # Clear
+
+emit:
+  class_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  status_id:
+    from_event_id_map: status_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  # Actor user: Subject* is the initiator for 1102.
+  actor.user.uid:
+    from: event_data.SubjectUserSid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.user.name:
+    from: event_data.SubjectUserName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.user.domain:
+    from: event_data.SubjectDomainName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  # Optional: if the event payload includes the cleared log name, keep it.
+  event_log.name:
+    from: event_data.LogName
+    transforms: [trim_ascii, absent_if_placeholder]

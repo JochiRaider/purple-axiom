@@ -1,0 +1,35 @@
+# Routes osquery scheduled-results records to an OCSF class map by query_name.
+routing_id: osquery-routing
+routing_version: 0.1.0
+source_type: osquery
+ocsf_version: "1.7.0"
+
+# How to derive the routing key from raw input deterministically.
+routing_key:
+  name: query_name
+  coalesce:
+    - name
+    - osquery.query_name
+
+routes:
+  - route_id: process_events
+    match:
+      query_name: process_events
+    map: maps/process_activity.yaml
+
+  - route_id: socket_events
+    match:
+      query_name: socket_events
+    map: maps/network_activity.yaml
+
+  - route_id: file_events
+    match:
+      query_name: file_events
+    map: maps/file_system_activity.yaml
+
+# Unknown query_name handling (normative):
+# - MUST NOT guess class_uid.
+# - MUST preserve raw record and count as unrouted/unmapped in coverage.
+unrouted_policy:
+  action: preserve_and_count
+  reason_code: unrouted_query_name

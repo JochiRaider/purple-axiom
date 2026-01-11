@@ -1,4 +1,5 @@
 <!--tests/fixtures/runner/atomic/golden/T1059.001/README.md -->
+
 # Atomic runner determinism fixture: T1059.001 (v0.1)
 
 This fixture is a **unit-level determinism** vector for Purple Axiom’s Atomic runner integration
@@ -8,7 +9,8 @@ It validates, without executing Atomics:
 
 - input precedence (YAML defaults + runner `-InputArgs` overrides)
 - fixed-point placeholder substitution for `#{...}`
-- `$ATOMICS_ROOT` canonicalization for `PathToAtomicsFolder` / `$PathToPayloads`-style path expansions
+- `$ATOMICS_ROOT` canonicalization for `PathToAtomicsFolder` / `$PathToPayloads`-style path
+  expansions
 - `parameters.resolved_inputs_sha256` hashing determinism
 - `action_key` basis hashing determinism (per `docs/spec/030_scenarios.md`)
 

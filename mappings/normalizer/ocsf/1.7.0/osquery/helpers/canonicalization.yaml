@@ -1,0 +1,75 @@
+# Canonicalization helpers used by per-class maps.
+# All transforms MUST be deterministic and locale-independent.
+
+transforms:
+  trim:
+    type: string
+    behavior: trim_whitespace
+
+  lowercase:
+    type: string
+    behavior: to_lower_ascii
+
+  parse_int_base10:
+    type: string_to_int
+    behavior:
+      base: 10
+      on_error: absent
+
+  normalize_ip:
+    type: ip
+    behavior:
+      on_error: absent
+
+  normalize_port_int:
+    type: string_to_int
+    behavior:
+      base: 10
+      on_error: absent
+
+  # Treat common placeholder tokens as absent.
+  absent_if_placeholder:
+    type: string
+    behavior:
+      placeholders: ["", "-", "N/A", "null"]
+      comparison: exact_after_trim
+
+  # Path helpers treat both Windows and POSIX separators.
+  path_basename:
+    type: string
+    behavior:
+      separators: ["\\", "/"]
+      ignore_trailing_separators: true
+
+  path_split_parent_name:
+    type: string_to_object
+    behavior:
+      separators: ["\\", "/"]
+      ignore_trailing_separators: true
+      outputs:
+        parent_key: parent_folder
+        name_key: name
+
+  # JSON canonicalization used for identity hashing.
+  # This is RFC 8785 JCS canonical JSON.
+  canonical_json_jcs:
+    type: json
+    behavior:
+      canonicalization: rfc8785_jcs
+      on_error: absent
+
+  # Build a sorted, de-duplicated array from one or more candidate scalars.
+  collect_set_sorted:
+    type: aggregate
+    behavior:
+      dedupe: true
+      sort: lexicographic
+      drop_absent: true
+
+  # Stable sort for snapshot expansion using JCS bytes as the key.
+  sort_by_jcs_bytes:
+    type: array
+    behavior:
+      key_transform: canonical_json_jcs
+      sort: lexicographic_bytes
+      on_error: fail_closed

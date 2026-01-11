@@ -1,0 +1,18 @@
+{
+  "provider": "Microsoft-Windows-Security-Auditing",
+  "channel": "Security",
+  "event_id": 4688,
+  "record_id": 123458,
+  "time_created": "2026-01-11T00:00:05.000Z",
+  "computer": "WIN10-LAB",
+  "event_data": {
+    "SubjectUserSid": "S-1-5-21-1111111111-2222222222-3333333333-1001",
+    "SubjectUserName": "alice",
+    "SubjectDomainName": "LAB",
+    "ProcessId": "0x3f0",
+    "ProcessName": "C:\\Windows\\System32\\svchost.exe",
+    "NewProcessId": "0x4a8",
+    "NewProcessName": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "CommandLine": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -Command \"whoami\""
+  }
+}

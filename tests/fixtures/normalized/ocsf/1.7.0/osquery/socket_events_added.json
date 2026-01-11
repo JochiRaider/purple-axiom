@@ -1,0 +1,62 @@
+{
+  "activity_id": 1,
+  "actor": {
+    "process": {
+      "file": {
+        "path": "/usr/bin/ssh"
+      },
+      "name": "ssh",
+      "pid": 4242
+    },
+    "user": {
+      "name": "alice",
+      "uid": "1000"
+    }
+  },
+  "class_uid": 4001,
+  "device": {
+    "hostname": "linux1"
+  },
+  "dst_endpoint": {
+    "ip": "93.184.216.34",
+    "port": 22
+  },
+  "metadata": {
+    "collector_version": "collector-fixture-0",
+    "event_id": "3fdf172d0c12cd7e6ad839f4cf4c04e2ec9e0a21565dbb21f3519acd96d775f5",
+    "log_name": "osqueryd.results.log",
+    "normalizer_version": "normalizer-fixture-0",
+    "product": {
+      "name": "osquery"
+    },
+    "run_id": "RUN_FIXTURE_OSQUERY_0001",
+    "scenario_id": "SCEN_FIXTURE_OSQUERY_0001",
+    "source_event_id": "osquery:3fdf172d0c12cd7e6ad839f4cf4c04e2ec9e0a21565dbb21f3519acd96d775f5",
+    "source_type": "osquery",
+    "uid": "3fdf172d0c12cd7e6ad839f4cf4c04e2ec9e0a21565dbb21f3519acd96d775f5"
+  },
+  "src_endpoint": {
+    "ip": "192.168.1.10",
+    "port": 55234
+  },
+  "time": "2026-01-11T00:00:05Z",
+  "type_uid": 400101,
+  "unmapped": {
+    "osquery": {
+      "action": "added",
+      "calendarTime": "Sun Jan 11 00:00:05 2026 UTC",
+      "columns": {
+        "exe": "/usr/bin/ssh",
+        "local_address": "192.168.1.10",
+        "local_port": "55234",
+        "pid": "4242",
+        "remote_address": "93.184.216.34",
+        "remote_port": "22",
+        "uid": "1000",
+        "username": "alice"
+      },
+      "name": "socket_events",
+      "unixTime": "1768089605"
+    }
+  }
+}

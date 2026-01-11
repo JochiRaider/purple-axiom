@@ -1,0 +1,41 @@
+{
+  "activity_id": 1,
+  "actor": {
+    "process": {
+      "file": {
+        "path": "C:\\Windows\\System32\\cmd.exe"
+      },
+      "pid": 4242,
+      "uid": "{11111111-1111-1111-1111-111111111111}"
+    },
+    "user": {
+      "domain": "LAB",
+      "name": "alice"
+    }
+  },
+  "class_uid": 1001,
+  "device": {
+    "hostname": "win10-lab",
+    "name": "WIN10-LAB"
+  },
+  "file": {
+    "path": "C:\\Users\\alice\\AppData\\Local\\Temp\\dropper.bin"
+  },
+  "metadata": {
+    "collector_version": "collector_fixture_0.1.0",
+    "event_id": "8ef1c0d9536a1d9440d7ad1a7505988249d62b6ed63e636a0b08e452be950995",
+    "log_name": "Microsoft-Windows-Sysmon/Operational",
+    "log_provider": "Microsoft-Windows-Sysmon",
+    "normalizer_version": "normalizer_fixture_0.1.0",
+    "product": {
+      "name": "sysmon"
+    },
+    "run_id": "run_fixture_0001",
+    "scenario_id": "scenario_fixture_sysmon_v0.1",
+    "source_event_id": "2000004",
+    "source_type": "windows-sysmon",
+    "uid": "8ef1c0d9536a1d9440d7ad1a7505988249d62b6ed63e636a0b08e452be950995"
+  },
+  "time": 1767225604000,
+  "type_uid": 100101
+}

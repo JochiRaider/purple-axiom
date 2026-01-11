@@ -1,0 +1,83 @@
+# mappings/normalizer/ocsf/1.7.0/windows-security/profile.yaml
+format_version: 1
+
+profile:
+  profile_id: windows-security_to_ocsf_1.7.0
+  profile_version: 0.1.0
+  ocsf_version: "1.7.0"
+
+source:
+  source_type: windows-security
+  provider: Microsoft-Windows-Security-Auditing
+  channel: Security
+
+inputs:
+  raw_shape_version: 1
+  required_fields:
+    - provider
+    - channel
+    - event_id
+    - record_id
+    - time_created
+    - computer
+    - event_data
+
+includes:
+  canonicalization: canonicalization.yaml
+  routing: routing.yaml
+
+# Shared output rules applied for all routed events before class-specific mappings.
+shared_emit:
+  # OCSF `time` is epoch milliseconds.
+  time:
+    from: time_created
+    transforms: [parse_rfc3339_to_epoch_ms]
+
+  device.name:
+    from: computer
+    transforms: [trim_ascii]
+
+  device.hostname:
+    from: computer
+    transforms: [trim_ascii, lowercase_ascii]
+
+  # Minimal provenance fields used throughout the project docs.
+  metadata.source_type:
+    const: windows-security
+
+  metadata.source_event_id:
+    from: record_id
+    transforms: [to_string]
+
+  metadata.identity_tier:
+    const: 1
+
+  metadata.log_provider:
+    from: provider
+    transforms: [trim_ascii]
+
+  metadata.log_name:
+    from: channel
+    transforms: [trim_ascii]
+
+  metadata.product.name:
+    const: windows_eventlog
+
+identity:
+  # ADR-0002 Tier 1 Windows Event Log identity basis.
+  algorithm: pa_event_id_v1
+  basis:
+    source_type_const: windows_eventlog
+    origin.host_from: computer
+    origin.channel_from: channel
+    origin.provider_from: provider
+    origin.record_id_from: record_id
+    origin.event_id_from: event_id
+  prehash_normalization:
+    origin.host: [trim_ascii, lowercase_ascii]
+    origin.channel: [trim_ascii, lowercase_ascii]
+    origin.provider: [trim_ascii, lowercase_ascii]
+
+outputs:
+  # Required by contract: metadata.uid MUST equal metadata.event_id.
+  set_uid_equal_event_id: true

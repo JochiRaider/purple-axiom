@@ -1,0 +1,1 @@
+{"action":"added","calendarTime":"Sun Jan 11 00:00:05 2026 UTC","columns":{"exe":"/usr/bin/ssh","local_address":"192.168.1.10","local_port":"55234","pid":"4242","remote_address":"93.184.216.34","remote_port":"22","uid":"1000","username":"alice"},"hostIdentifier":"linux1","name":"socket_events","unixTime":"1768089605"}

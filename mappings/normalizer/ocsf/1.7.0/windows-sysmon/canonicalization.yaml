@@ -1,0 +1,42 @@
+# Canonicalization rules applied prior to mapping.
+# These rules define deterministic, reusable transforms for Sysmon mapping.
+
+schema_version: "pa.canonicalization.v0.1"
+profile_id: "windows-sysmon_to_ocsf_1.7.0"
+
+rules:
+  # Common string cleanup for EventData values
+  - id: "trim_strings"
+    applies_to:
+      - "$.computer"
+      - "$.provider"
+      - "$.channel"
+      - "$.event_data.*"
+    transform: "transforms/trim.yaml"
+
+  # Normalize hostname for device.hostname (lowercase)
+  - id: "hostname_lowercase"
+    applies_to:
+      - "$.computer"
+    transform: "transforms/hostname_lower.yaml"
+
+  # Parse base-10 integer fields (pid/ports)
+  - id: "parse_int_fields"
+    applies_to:
+      - "$.event_data.ProcessId"
+      - "$.event_data.ParentProcessId"
+      - "$.event_data.SourcePort"
+      - "$.event_data.DestinationPort"
+    transform: "transforms/parse_int.yaml"
+
+  # Parse DOMAIN\USER or USER into structured user fields when requested by a map.
+  - id: "parse_domain_user"
+    applies_to:
+      - "$.event_data.User"
+    transform: "transforms/parse_domain_user.yaml"
+
+  # Parse Sysmon "Hashes" field into normalized fingerprints when requested by a map.
+  - id: "parse_sysmon_hashes"
+    applies_to:
+      - "$.event_data.Hashes"
+    transform: "transforms/parse_sysmon_hashes.yaml"

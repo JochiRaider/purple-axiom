@@ -1,0 +1,5 @@
+schema_version: "pa.transform.v0.1"
+id: "hostname_lower"
+type: "string_lowercase"
+params:
+  absent_sentinels: ["", "-", "(null)"]

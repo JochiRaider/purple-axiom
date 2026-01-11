@@ -1,0 +1,78 @@
+# mappings/normalizer/ocsf/1.7.0/windows-security/classes/process_activity_1007.yaml
+format_version: 1
+
+class_map:
+  class_uid: 1007
+  class_name: Process Activity
+  category_uid: 1
+
+  event_id_map:
+    4688: {activity_id: 1, status_id: 1} # Launch
+    4689: {activity_id: 2, status_id: 1} # Terminate
+
+emit:
+  class_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  status_id:
+    from_event_id_map: status_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  # Actor user: Subject* is the initiator on these events.
+  actor.user.uid:
+    from: event_data.SubjectUserSid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.user.name:
+    from: event_data.SubjectUserName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.user.domain:
+    from: event_data.SubjectDomainName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  # Primary process: for 4688, NewProcess* fields describe the created process.
+  process.pid:
+    when:
+      event_id_in: [4688]
+    from: event_data.NewProcessId
+    transforms: [trim_ascii, absent_if_placeholder, parse_hex_or_dec_int]
+
+  process.file.path:
+    when:
+      event_id_in: [4688]
+    from: event_data.NewProcessName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  process.cmd_line:
+    when:
+      event_id_in: [4688]
+    from: event_data.CommandLine
+    transforms: [trim_ascii, absent_if_placeholder]
+    # NOTE: redaction is assumed to occur earlier in the pipeline per ADR-0003.
+
+  # Initiator process context (creator)
+  actor.process.pid:
+    when:
+      event_id_in: [4688]
+    from: event_data.ProcessId
+    transforms: [trim_ascii, absent_if_placeholder, parse_hex_or_dec_int]
+
+  actor.process.file.path:
+    when:
+      event_id_in: [4688]
+    from: event_data.ProcessName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+no_inference:
+  forbidden_derivations:
+    - process.hash_from_image_path
+    - process.integrity_from_token_elevation_type

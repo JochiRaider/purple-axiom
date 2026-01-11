@@ -54,7 +54,7 @@ Identity basis selection is tiered:
 
 Use when the source provides a stable per-record identifier or cursor.
 
-**Windows Event Log / EVTX**
+**Windows Event Log / EVTX (generic)**
 
 - `source_type`: `windows_eventlog`
 - `origin.host`: event's source computer name (from the event payload)
@@ -68,11 +68,28 @@ Notes:
 - `origin.record_id` is unique only within `(origin.host, origin.channel)`; both MUST be included.
 - Do not include event time in Tier 1 (avoid precision drift across collectors).
 
+**Windows Sysmon (Microsoft-Windows-Sysmon/Operational)**
+
+- `source_type`: `sysmon`
+- `origin.host`: event's source computer name (from the event payload)
+- `origin.channel`: `Microsoft-Windows-Sysmon/Operational`
+- `origin.record_id`: Windows `EventRecordID` from the event payload
+- `origin.provider`: provider name and/or provider GUID (include both when available)
+- `origin.event_id`: the Sysmon EventID (include qualifiers/version if available)
+
+Source-type selection rule (normative):
+
+- For events collected via Windows Event Log / EVTX, the normalizer MUST set
+  `identity_basis.source_type = "sysmon"` if and only if `origin.channel` equals
+  `Microsoft-Windows-Sysmon/Operational`. Otherwise it MUST set
+  `identity_basis.source_type = "windows_eventlog"`.
+
 **Other examples (non-exhaustive)**
 
 - journald: cursor
 - Zeek: `uid`
 - EDR: stable event GUID
+- osquery: results log entry (v0.1 uses Tier 3; see "osquery identity basis (v0.1)" below)
 
 #### Tier 2: Stable stream cursor exists
 
@@ -94,9 +111,32 @@ Use only when neither Tier 1 nor Tier 2 inputs exist. Identity is a fingerprint 
 - `origin.host`
 - `stream.name`
 - `event.time_bucket` (event time truncated to the source's true precision)
+- `payload` (canonical stable payload fields; exclude volatile fields), or
 - `payload.fingerprint` (sha256 of canonical stable payload fields; exclude volatile fields)
 
 Tier 3 MUST record `metadata.identity_tier = 3` for auditability.
+
+Tier 3 payload guidance (normative):
+
+- Implementations SHOULD prefer `payload.fingerprint` when payload size is unbounded or would
+  materially increase identity basis size.
+- If `payload.fingerprint` is used, it MUST be computed as `sha256(canonical_stable_payload)` where
+  `canonical_stable_payload` is serialized using RFC 8785 (JCS) and excludes volatile fields.
+- If `payload` is used, it MUST contain only stable fields and MUST be canonicalizable under RFC
+  8785 (JCS).
+
+### osquery identity basis (v0.1)
+
+For `source_type = "osquery"`, v0.1 uses Tier 3.
+
+Normative requirements:
+
+- The normalizer MUST set `identity_basis.source_type = "osquery"`.
+- The normalizer MUST record `metadata.identity_tier = 3`.
+- The Tier 3 `identity_basis` fields and stable-payload selection rules for osquery MUST conform to
+  `docs/spec/042_osquery_integration.md` (see "Identity basis (Tier 3, v0.1)").
+- Implementations MAY use `payload.fingerprint` instead of embedding `payload` when payload size is
+  unbounded, subject to the Tier 3 payload guidance above.
 
 ### Linux identity basis (auditd / journald / syslog)
 
@@ -216,8 +256,16 @@ Rules:
 
 #### Linux identity basis fixtures (normative)
 
-Implementations MUST maintain a fixture-driven test suite that exercises Linux identity-basis
-extraction and hashing for Tier 1 and Tier 2 inputs, and demonstrates Tier 3 fallback behavior.
+Implementations MUST maintain a fixture-driven test suite that exercises identity-basis extraction
+and hashing for all implemented `source_type` values, including Tier 3 fallback behavior where
+applicable.
+
+At minimum:
+
+- Sources using Tier 2 or Tier 3 (including `osquery`) MUST have fixture-driven identity vectors.
+- The fixture suite MUST include at least one case that exercises Tier 3 payload handling using
+  `payload` and at least one case using `payload.fingerprint` (when the implementation supports
+  both), and MUST validate that the resulting `metadata.event_id` values are stable.
 
 Recommended fixture set (v0.1):
 
@@ -237,6 +285,10 @@ Recommended fixture set (v0.1):
   - `tests/fixtures/event_id/v1/linux_auditd.audit.log`
   - `tests/fixtures/event_id/v1/linux_journald.jsonl`
   - `tests/fixtures/event_id/v1/linux_syslog.messages`
+  - (Additional recommended non-Linux vectors)
+    - `tests/fixtures/event_id/v1/osquery_identity_vectors.jsonl`
+    - Representative raw osquery results fixtures, as defined by
+      `docs/spec/042_osquery_integration.md`
 
 ### Canonicalization rules
 
@@ -317,10 +369,11 @@ volatile pipeline fields:
 - The normalizer MUST increment a `dedupe_conflicts_total` counter and record details in
   `runs/<run_id>/logs/` (without writing sensitive payloads into long-term artifacts).
 
-### Collector restarts and checkpoints (Windows)
+### Collector restarts and checkpoints (Windows Event Log)
 
-Windows collectors SHOULD persist read state using bookmarks/checkpoints to minimize duplicates on
-restart. Duplicates can still occur; identity and dedupe rules above remain authoritative.
+Windows Event Log collectors (including sources normalized under `windows_eventlog` and `sysmon`)
+SHOULD persist read state using bookmarks/checkpoints to minimize duplicates on restart. Duplicates
+can still occur; identity and dedupe rules above remain authoritative.
 
 ### Checkpoint persistence (normative)
 
@@ -333,6 +386,15 @@ To reduce replay volume while preserving at-least-once correctness:
   - `runs/<run_id>/logs/telemetry_checkpoints/<source_type>/<asset_id>/<stream_id>.json`
 - Checkpoint updates MUST be atomic (write temp file, fsync, rename).
 - The pipeline MUST flush checkpoints at least once every `N` events or `T` seconds (configurable).
+
+File-tailed sources (optional tightening, normative):
+
+- For file-tailed sources (for example: syslog files and osquery results logs), the pipeline SHOULD
+  persist per-stream checkpoints using the same layout.
+- These checkpoints are pipeline state intended to reduce replay volume. Implementations MUST NOT
+  incorporate file tail offsets into `metadata.event_id` unless the offset is persisted as part of a
+  stable stored artifact cursor and the source is explicitly using Tier 2 identity for that stored
+  artifact.
 
 ### Checkpoint loss / corruption (normative)
 
@@ -366,3 +428,7 @@ With these inputs, `metadata.event_id` remains stable across:
   `EventRecordID`) whenever available.
 - Tier 3 fallback is allowed but is explicitly weaker; coverage metrics should track how often it is
   used.
+- Introducing a distinct `source_type = "sysmon"` changes the Tier 1 identity basis for Sysmon
+  events (because `source_type` participates in the identity hash). Implementations MUST treat this
+  as join-key drift relative to older artifacts that used `windows_eventlog` for Sysmon and SHOULD
+  regenerate golden fixtures/baselines accordingly.

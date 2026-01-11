@@ -1,0 +1,16 @@
+{
+  "provider": "Microsoft-Windows-Security-Auditing",
+  "channel": "Security",
+  "event_id": 4624,
+  "record_id": 123456,
+  "time_created": "2026-01-10T23:59:58.123Z",
+  "computer": "WIN10-LAB",
+  "event_data": {
+    "TargetUserSid": "S-1-5-21-1111111111-2222222222-3333333333-1001",
+    "TargetUserName": "alice",
+    "TargetDomainName": "LAB",
+    "LogonType": "3",
+    "IpAddress": "192.168.1.50",
+    "IpPort": "51512"
+  }
+}

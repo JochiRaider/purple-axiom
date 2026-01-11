@@ -1,0 +1,88 @@
+# mappings/normalizer/ocsf/1.7.0/windows-security/canonicalization.yaml
+format_version: 1
+
+constants:
+  placeholder_values:
+    - ""        # empty string
+    - "-"       # common Windows placeholder
+    - "NULL"
+    - "null"
+    - "(null)"
+    - "N/A"
+
+transforms:
+  # --- string helpers ---
+  trim_ascii:
+    kind: string
+    op: trim_ascii_whitespace
+
+  lowercase_ascii:
+    kind: string
+    op: lowercase_ascii
+
+  to_string:
+    kind: scalar
+    op: to_string
+
+  # --- numeric parsing ---
+  parse_int:
+    kind: scalar
+    op: parse_int
+    args:
+      base: 10
+
+  parse_hex_or_dec_int:
+    kind: scalar
+    op: parse_hex_or_dec_int
+    args:
+      allow_prefix_0x: true
+
+  parse_port_int:
+    kind: scalar
+    op: parse_int
+    args:
+      base: 10
+      min: 0
+      max: 65535
+
+  # --- timestamps ---
+  parse_rfc3339_to_epoch_ms:
+    kind: time
+    op: parse_rfc3339_to_epoch_ms
+
+  # --- presence / placeholders ---
+  absent_if_placeholder:
+    kind: presence
+    op: absent_if_in_set
+    args:
+      set_ref: constants.placeholder_values
+
+  # --- network ---
+  normalize_ip:
+    kind: network
+    op: normalize_ip_text
+    args:
+      # This is a normalization-only transform; it MUST NOT perform DNS resolution.
+      allow_ipv4: true
+      allow_ipv6: true
+
+  # --- identity ---
+  build_identity_basis_windows_evtx:
+    kind: identity
+    op: build_identity_basis_windows_evtx
+
+  jcs_canonical_json_bytes:
+    kind: identity
+    op: jcs_canonical_json_bytes
+
+  sha256_trunc128_hex:
+    kind: identity
+    op: sha256_trunc128_hex
+    args:
+      bytes: 16
+
+  prefix_pa_eid_v1:
+    kind: identity
+    op: prefix_string
+    args:
+      prefix: "pa:eid:v1:"

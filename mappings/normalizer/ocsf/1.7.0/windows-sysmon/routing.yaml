@@ -1,0 +1,39 @@
+# Sysmon routing table (v0.1)
+# Routing key: (provider, channel, event_id)
+#
+# Determinism:
+# - `routes[]` MUST be evaluated in ascending `event_id` order.
+# - If multiple routes match (should not happen), the first match MUST win.
+
+schema_version: "pa.routing_table.v0.1"
+router_table_id: "windows-sysmon-routing"
+router_table_version: "0.1.0"
+ocsf_version: "1.7.0"
+source_type: "windows-sysmon"
+
+routes:
+  - event_id: 1
+    name: "Process creation"
+    class_uid: 1007
+    activity_id: 1
+    map_ref: "maps/process_activity.yaml#sysmon_eid_1"
+  - event_id: 3
+    name: "Network connection"
+    class_uid: 4001
+    activity_id: 1
+    map_ref: "maps/network_activity.yaml#sysmon_eid_3"
+  - event_id: 5
+    name: "Process terminated"
+    class_uid: 1007
+    activity_id: 4
+    map_ref: "maps/process_activity.yaml#sysmon_eid_5"
+  - event_id: 11
+    name: "File create"
+    class_uid: 1001
+    activity_id: 1
+    map_ref: "maps/file_system_activity.yaml#sysmon_eid_11"
+  - event_id: 22
+    name: "DNS query"
+    class_uid: 4003
+    activity_id: 1
+    map_ref: "maps/dns_activity.yaml#sysmon_eid_22"

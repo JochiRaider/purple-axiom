@@ -1,0 +1,44 @@
+{
+  "contract_version": "ocsf_event_envelope@v0.1",
+  "time": 1768089605000,
+  "class_uid": 1007,
+  "activity_id": 1,
+  "type_uid": 100701,
+  "status_id": 1,
+  "device": {
+    "hostname": "win10-lab",
+    "name": "WIN10-LAB"
+  },
+  "actor": {
+    "process": {
+      "file": {
+        "path": "C:\\Windows\\System32\\svchost.exe"
+      },
+      "pid": 1008
+    },
+    "user": {
+      "domain": "LAB",
+      "name": "alice",
+      "uid": "S-1-5-21-1111111111-2222222222-3333333333-1001"
+    }
+  },
+  "process": {
+    "cmd_line": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -Command \"whoami\"",
+    "file": {
+      "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+    },
+    "pid": 1192
+  },
+  "metadata": {
+    "event_id": "pa:eid:v1:6b12f8e8c90b96425021d4abef43a743",
+    "identity_tier": 1,
+    "log_name": "Security",
+    "log_provider": "Microsoft-Windows-Security-Auditing",
+    "product": {
+      "name": "windows_eventlog"
+    },
+    "source_event_id": "123458",
+    "source_type": "windows-security",
+    "uid": "pa:eid:v1:6b12f8e8c90b96425021d4abef43a743"
+  }
+}

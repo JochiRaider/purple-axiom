@@ -1,0 +1,23 @@
+# mappings/normalizer/ocsf/1.7.0/windows-security/routing.yaml
+format_version: 1
+
+routing:
+  provider: Microsoft-Windows-Security-Auditing
+  channel: Security
+
+# Routing chooses the class-map file only. Event-specific activity/status lives in the class map.
+routes:
+  - route_id: winsec_authentication
+    match:
+      event_ids: [4624, 4625, 4634, 4647]
+    class_map: classes/authentication_3002.yaml
+
+  - route_id: winsec_process_activity
+    match:
+      event_ids: [4688, 4689]
+    class_map: classes/process_activity_1007.yaml
+
+  - route_id: winsec_event_log_activity
+    match:
+      event_ids: [1102]
+    class_map: classes/event_log_activity_1008.yaml

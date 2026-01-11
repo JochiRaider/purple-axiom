@@ -1,0 +1,36 @@
+{
+  "contract_version": "ocsf_event_envelope@v0.1",
+  "time": 1768089601456,
+  "class_uid": 3002,
+  "activity_id": 1,
+  "type_uid": 300201,
+  "status_id": 2,
+  "device": {
+    "hostname": "win10-lab",
+    "name": "WIN10-LAB"
+  },
+  "actor": {
+    "user": {
+      "domain": "LAB",
+      "name": "alice"
+    }
+  },
+  "authentication": {
+    "logon_type_id": 3
+  },
+  "metadata": {
+    "event_id": "pa:eid:v1:0ed27ca10ad56132a1db02c10152d223",
+    "identity_tier": 1,
+    "log_name": "Security",
+    "log_provider": "Microsoft-Windows-Security-Auditing",
+    "product": {
+      "name": "windows_eventlog"
+    },
+    "source_event_id": "123457",
+    "source_type": "windows-security",
+    "status_code": "0xC000006D",
+    "status_detail": "0xC000006A",
+    "status_message": "Unknown user name or bad password.",
+    "uid": "pa:eid:v1:0ed27ca10ad56132a1db02c10152d223"
+  }
+}

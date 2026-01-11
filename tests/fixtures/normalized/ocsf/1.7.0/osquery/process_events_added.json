@@ -1,0 +1,58 @@
+{
+  "activity_id": 1,
+  "actor": {
+    "process": {
+      "cmd_line": "ssh -V",
+      "file": {
+        "path": "/usr/bin/ssh"
+      },
+      "name": "ssh",
+      "parent_process": {
+        "pid": 1337
+      },
+      "pid": 4242
+    },
+    "user": {
+      "name": "alice",
+      "uid": "1000"
+    }
+  },
+  "class_uid": 1007,
+  "device": {
+    "hostname": "linux1"
+  },
+  "metadata": {
+    "collector_version": "collector-fixture-0",
+    "event_id": "2ef73976c5eb22d02a798a2a2a2c89b239e7308757cc7ddc7d6137830c0c9ef6",
+    "log_name": "osqueryd.results.log",
+    "normalizer_version": "normalizer-fixture-0",
+    "product": {
+      "name": "osquery"
+    },
+    "run_id": "RUN_FIXTURE_OSQUERY_0001",
+    "scenario_id": "SCEN_FIXTURE_OSQUERY_0001",
+    "source_event_id": "osquery:2ef73976c5eb22d02a798a2a2a2c89b239e7308757cc7ddc7d6137830c0c9ef6",
+    "source_type": "osquery",
+    "uid": "2ef73976c5eb22d02a798a2a2a2c89b239e7308757cc7ddc7d6137830c0c9ef6"
+  },
+  "time": "2026-01-11T00:00:00Z",
+  "type_uid": 100701,
+  "unmapped": {
+    "osquery": {
+      "action": "added",
+      "calendarTime": "Sun Jan 11 00:00:00 2026 UTC",
+      "columns": {
+        "cmdline": "ssh -V",
+        "euid": "1000",
+        "exe": "/usr/bin/ssh",
+        "name": "ssh",
+        "pid": "4242",
+        "ppid": "1337",
+        "uid": "1000",
+        "username": "alice"
+      },
+      "name": "process_events",
+      "unixTime": "1768089600"
+    }
+  }
+}

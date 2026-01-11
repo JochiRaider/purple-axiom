@@ -1,0 +1,85 @@
+# mappings/normalizer/ocsf/1.7.0/windows-security/classes/authentication_3002.yaml
+format_version: 1
+
+class_map:
+  class_uid: 3002
+  class_name: Authentication
+  category_uid: 3
+
+  # Per-event classification (stable, explicit).
+  event_id_map:
+    4624: {activity_id: 1, status_id: 1}
+    4625: {activity_id: 1, status_id: 2}
+    4634: {activity_id: 2, status_id: 1}
+    4647: {activity_id: 2, status_id: 1}
+
+emit:
+  # Required classification outputs
+  class_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  status_id:
+    from_event_id_map: status_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      # type_uid = class_uid * 100 + activity_id
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  # Actor user: for 4624/4625, Target* describes the authenticated principal.
+  actor.user.uid:
+    from: event_data.TargetUserSid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.user.name:
+    from: event_data.TargetUserName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.user.domain:
+    from: event_data.TargetDomainName
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  # Logon type is authoritative when present and numeric.
+  authentication.logon_type_id:
+    from: event_data.LogonType
+    transforms: [trim_ascii, absent_if_placeholder, parse_int]
+
+  # Source network context: only when authoritative. '-' MUST yield absence.
+  src_endpoint.ip:
+    from: event_data.IpAddress
+    transforms: [trim_ascii, absent_if_placeholder, normalize_ip]
+
+  src_endpoint.port:
+    from: event_data.IpPort
+    transforms: [trim_ascii, absent_if_placeholder, parse_port_int]
+
+  # Failure details (4625 only)
+  metadata.status_code:
+    when:
+      event_id_in: [4625]
+    from: event_data.Status
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  metadata.status_detail:
+    when:
+      event_id_in: [4625]
+    from: event_data.SubStatus
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  # Optional human hint if present (not used for identity).
+  metadata.status_message:
+    when:
+      event_id_in: [4625]
+    from: event_data.FailureReason
+    transforms: [trim_ascii, absent_if_placeholder]
+
+no_inference:
+  # Explicit "do not derive" guardrails for implementers/harness.
+  forbidden_derivations:
+    - dst_endpoint.ip_from_workstation_name
+    - actor.user.domain_from_computer_name

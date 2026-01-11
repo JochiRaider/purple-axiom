@@ -1,0 +1,141 @@
+{
+  "assertions_version": "0.1.0",
+  "cases": [
+    {
+      "coverage_expectations": {
+        "tier2B_process_execution_required_when_authoritative": [
+          "actor.process.pid",
+          "actor.process.name"
+        ]
+      },
+      "expect": {
+        "absent_paths": [
+          "src_endpoint",
+          "dst_endpoint",
+          "file"
+        ],
+        "activity_id": 1,
+        "class_uid": 1007,
+        "metadata_event_id": "2ef73976c5eb22d02a798a2a2a2c89b239e7308757cc7ddc7d6137830c0c9ef6",
+        "present_paths": [
+          "time",
+          "class_uid",
+          "activity_id",
+          "type_uid",
+          "metadata.event_id",
+          "metadata.uid",
+          "metadata.run_id",
+          "metadata.scenario_id",
+          "metadata.collector_version",
+          "metadata.normalizer_version",
+          "metadata.source_type",
+          "device.hostname",
+          "actor.user.uid",
+          "actor.user.name",
+          "actor.process.pid",
+          "actor.process.name",
+          "actor.process.file.path",
+          "unmapped.osquery.name",
+          "unmapped.osquery.unixTime"
+        ],
+        "type_uid": 100701
+      },
+      "golden_fixture": "tests/fixtures/normalized/ocsf/1.7.0/osquery/process_events_added.json",
+      "id": "process_events_added",
+      "raw_fixture": "tests/fixtures/raw/osquery/process_events_added.ndjson",
+      "route_id": "process_events"
+    },
+    {
+      "coverage_expectations": {
+        "tier2A_auth_network_required_when_authoritative": [
+          "src_endpoint.ip",
+          "dst_endpoint.ip"
+        ]
+      },
+      "expect": {
+        "absent_paths": [
+          "file"
+        ],
+        "activity_id": 1,
+        "class_uid": 4001,
+        "metadata_event_id": "3fdf172d0c12cd7e6ad839f4cf4c04e2ec9e0a21565dbb21f3519acd96d775f5",
+        "present_paths": [
+          "time",
+          "class_uid",
+          "activity_id",
+          "type_uid",
+          "metadata.event_id",
+          "metadata.uid",
+          "metadata.run_id",
+          "metadata.scenario_id",
+          "metadata.collector_version",
+          "metadata.normalizer_version",
+          "metadata.source_type",
+          "device.hostname",
+          "src_endpoint.ip",
+          "src_endpoint.port",
+          "dst_endpoint.ip",
+          "dst_endpoint.port",
+          "actor.process.pid",
+          "actor.process.name",
+          "unmapped.osquery.name",
+          "unmapped.osquery.unixTime"
+        ],
+        "type_uid": 400101
+      },
+      "golden_fixture": "tests/fixtures/normalized/ocsf/1.7.0/osquery/socket_events_added.json",
+      "id": "socket_events_added",
+      "raw_fixture": "tests/fixtures/raw/osquery/socket_events_added.ndjson",
+      "route_id": "socket_events"
+    },
+    {
+      "coverage_expectations": {
+        "n_a_fields_must_remain_absent": [
+          "actor.process"
+        ],
+        "tier2C_file_activity_required_when_authoritative": [
+          "file.name",
+          "file.parent_folder"
+        ]
+      },
+      "expect": {
+        "absent_paths": [
+          "actor.process",
+          "src_endpoint",
+          "dst_endpoint"
+        ],
+        "activity_id": 0,
+        "class_uid": 1001,
+        "metadata_event_id": "aa20111429d58bf30997b9e66723d04c4fddf28e58067d41f95a6edbef4b0a20",
+        "present_paths": [
+          "time",
+          "class_uid",
+          "activity_id",
+          "type_uid",
+          "metadata.event_id",
+          "metadata.uid",
+          "metadata.run_id",
+          "metadata.scenario_id",
+          "metadata.collector_version",
+          "metadata.normalizer_version",
+          "metadata.source_type",
+          "device.hostname",
+          "file.path",
+          "file.name",
+          "file.parent_folder",
+          "actor.user.uid",
+          "actor.user.name",
+          "unmapped.osquery.name",
+          "unmapped.osquery.unixTime"
+        ],
+        "type_uid": 100100
+      },
+      "golden_fixture": "tests/fixtures/normalized/ocsf/1.7.0/osquery/file_events_added.json",
+      "id": "file_events_added",
+      "raw_fixture": "tests/fixtures/raw/osquery/file_events_added.ndjson",
+      "route_id": "file_events"
+    }
+  ],
+  "ocsf_version": "1.7.0",
+  "source_type": "osquery"
+}

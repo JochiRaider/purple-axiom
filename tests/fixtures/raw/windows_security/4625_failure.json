@@ -1,0 +1,19 @@
+{
+  "provider": "Microsoft-Windows-Security-Auditing",
+  "channel": "Security",
+  "event_id": 4625,
+  "record_id": 123457,
+  "time_created": "2026-01-11T00:00:01.456Z",
+  "computer": "WIN10-LAB",
+  "event_data": {
+    "TargetUserSid": "S-1-0-0",
+    "TargetUserName": "alice",
+    "TargetDomainName": "LAB",
+    "LogonType": "3",
+    "IpAddress": "-",
+    "IpPort": "-",
+    "Status": "0xC000006D",
+    "SubStatus": "0xC000006A",
+    "FailureReason": "Unknown user name or bad password."
+  }
+}

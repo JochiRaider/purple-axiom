@@ -1,0 +1,94 @@
+map_id: osquery-file-system-activity
+map_version: 0.1.0
+source_type: osquery
+ocsf_version: "1.7.0"
+
+route_match:
+  query_name: file_events
+
+target:
+  class_uid: 1001 # File System Activity
+
+# v0.1: avoid guessing. Most file_events “action” tokens do not map cleanly without schema-verified enums.
+activity:
+  default: 0
+
+type_uid:
+  formula: "class_uid * 100 + activity_id"
+
+fields:
+  - target: metadata.product.name
+    value: osquery
+
+  - target: metadata.source_type
+    value: osquery
+
+  - target: metadata.log_name
+    value: osqueryd.results.log
+
+  - target: device.hostname
+    selector:
+      coalesce: [hostIdentifier, osquery.host_identifier]
+    transforms: [trim, lowercase]
+    when:
+      present: true
+
+  # Actor user (if available)
+  - target: actor.user.uid
+    selector:
+      coalesce: [columns.uid, columns.euid]
+    transforms: [trim, absent_if_placeholder]
+    when:
+      present: true
+
+  - target: actor.user.name
+    selector:
+      coalesce: [columns.username, columns.user]
+    transforms: [trim, absent_if_placeholder]
+    when:
+      present: true
+
+  # File path (authoritative-only)
+  - target: file.path
+    selector:
+      coalesce: [columns.target_path, columns.path]
+    transforms: [trim, absent_if_placeholder]
+    when:
+      present: true
+
+  - target: file.name
+    selector:
+      coalesce: [columns.target_path, columns.path]
+    transforms: [trim, absent_if_placeholder, path_basename]
+    when:
+      present: true
+
+  - target: file.parent_folder
+    selector:
+      coalesce: [columns.target_path, columns.path]
+    transforms:
+      - trim
+      - absent_if_placeholder
+      - path_split_parent_name
+    when:
+      present: true
+    project:
+      from_object_key: parent_folder
+
+# Known limitation (normative for v0.1):
+# - Do not populate actor.process.* for file_events.
+# - Even if pid-like fields exist, treat them as unmapped unless/until a schema-verified attribution
+#   decision is made and fixture-covered.
+deny_fields:
+  - actor.process
+  - process
+
+unmapped:
+  preserve_under: unmapped.osquery
+  include:
+    - name
+    - action
+    - unixTime
+    - columns
+    - snapshot
+    - calendarTime

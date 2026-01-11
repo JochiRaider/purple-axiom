@@ -1,0 +1,1 @@
+{"action":"added","calendarTime":"Sun Jan 11 00:00:00 2026 UTC","columns":{"cmdline":"ssh -V","euid":"1000","exe":"/usr/bin/ssh","name":"ssh","pid":"4242","ppid":"1337","uid":"1000","username":"alice"},"hostIdentifier":"linux1","name":"process_events","unixTime":"1768089600"}

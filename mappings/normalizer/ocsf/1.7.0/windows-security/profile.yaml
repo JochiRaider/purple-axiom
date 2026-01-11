@@ -7,7 +7,8 @@ profile:
   ocsf_version: "1.7.0"
 
 source:
-  source_type: windows-security
+  source_pack_id: windows-security
+  event_source_type: windows-security
   provider: Microsoft-Windows-Security-Auditing
   channel: Security
 
@@ -65,7 +66,8 @@ shared_emit:
 
 identity:
   # ADR-0002 Tier 1 Windows Event Log identity basis.
-  algorithm: pa_event_id_v1
+  algorithm: "pa:eid:v1"
+  identity_source_type: windows_eventlog
   basis:
     source_type_const: windows_eventlog
     origin.host_from: computer
@@ -73,10 +75,12 @@ identity:
     origin.provider_from: provider
     origin.record_id_from: record_id
     origin.event_id_from: event_id
+    origin.time_created_from: time_created
   prehash_normalization:
     origin.host: [trim_ascii, lowercase_ascii]
     origin.channel: [trim_ascii, lowercase_ascii]
     origin.provider: [trim_ascii, lowercase_ascii]
+    origin.time_created: [trim_ascii, parse_rfc3339_to_epoch_ms]
 
 outputs:
   # Required by contract: metadata.uid MUST equal metadata.event_id.

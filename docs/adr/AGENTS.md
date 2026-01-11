@@ -1,14 +1,16 @@
 <!-- docs/adr/AGENTS.md -->
 
-# Agent instructions (docs/adr/\*)
+# Agent instructions (docs/adr/)
 
-+## Working set discipline (performance)
+## Scope and authority
+- This file applies to **`docs/adr/*` only**.
+- ADRs record architectural decisions: context, decision, and consequences.
+- Avoid rewriting history; if a decision changes materially, prefer a new ADR or a clearly labeled
+  amendment.
 
-- Treat the ADR markdown files in `docs/adr/` as the only in-scope authority for this directory.
-- DO NOT brute-force read every ADR. Use a navigation-first workflow:
-  1. Open `docs/adr/ADR_INDEX.md` (one-page map) to choose the relevant ADR.
-  1. Use repo search (ripgrep or equivalent) to jump to the exact section/header.
-  1. Open only the minimum sections required to answer/edit.
+## Navigation entrypoint (required)
+
+- Start with `docs/adr/ADR_INDEX.md` (one-page map + “Common tasks” router).
 
 ## ADR intent
 
@@ -28,7 +30,7 @@
   - Include date and a short reason,
   - Preserve the original decision text and clearly separate new text.
 
-## ADR navigation scaffold (required)
+## Index maintenance (required)
 
 - Maintain `docs/adr/ADR_INDEX.md` as a **one-page map** that covers **all** ADRs in this directory.
 - When you add a new ADR:

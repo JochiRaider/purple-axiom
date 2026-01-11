@@ -1,6 +1,6 @@
 <!-- docs/mappings/AGENTS.md -->
 
-# Agent instructions (docs/mappings/\*)
+# Agent instructions (docs/mappings/)
 
 ## Scope and exclusions
 

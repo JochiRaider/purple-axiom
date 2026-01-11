@@ -1,6 +1,6 @@
 <!-- docs/spec/AGENTS.md -->
 
-# Agent instructions (docs/spec/\*)
+# Agent instructions (docs/spec/)
 
 ## Scope and authority
 

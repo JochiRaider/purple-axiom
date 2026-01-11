@@ -1,8 +1,17 @@
 <!-- docs/contracts/AGENTS.md -->
 
-# Agent instructions (docs/contracts/\*)
+# Agent instructions (docs/contracts/)
 
-## Contract registries (keep in sync)
++## Scope and authority
+
+- This file applies to **`docs/contracts/*` only**.
+- `docs/contracts/*` defines **machine-validated schema contracts** (CI-enforced).
+
+## Navigation entrypoint (required)
+
+- Start with `docs/contracts/index.json` (authoritative contract registry). :contentReference[oaicite:1]{index=1}
+
+## Registry sync (required)
 
 - If any `*.schema.json` is added/removed/renamed:
   - update `docs/contracts/index.json`, and
@@ -15,8 +24,8 @@
     for forward additions,
   - do not introduce breaking contract changes without explicit versioning/migration notes.
 
-## Determinism and testability
+## Schema testability hooks
 
-- Define stable ordering rules where arrays/maps affect hashing, identity, or diffability.
-- For materially changed contracts, add/refresh minimal valid example payloads and fixture-driven
-  validation expectations aligned to `docs/spec/100_test_strategy_ci.md`.
+- For materially changed contracts, add/refresh:
+  - minimal valid example payloads (as fixtures or embedded examples), and
+  - fixture-driven validation expectations aligned to `docs/spec/100_test_strategy_ci.md`.

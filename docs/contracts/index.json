@@ -34,8 +34,12 @@
       "purpose": "Scoring summary for scoring/summary.json."
     },
     {
+      "name": "duckdb_conformance_report.schema.json",
+      "purpose": "DuckDB conformance report output (reports/duckdb_conformance_report.json)."
+    },
+    {
       "name": "telemetry_validation.schema.json",
-      "purpose": "Telemetry validation summary (runs/<run_id>/logs/telemetry_validation.json)."    
+      "purpose": "Telemetry validation summary (runs/<run_id>/logs/telemetry_validation.json)."
     },
     {
       "name": "mapping_profile_snapshot.schema.json",
@@ -63,11 +67,11 @@
     },
     {
       "name": "cleanup_verification.schema.json",
-      "purpose": "<TODO>"
+      "purpose": "Cleanup verification results per action (runs/<run_id>/runner/actions/<action_id>/cleanup_verification.json)."
     },
     {
-      "name": "runner_executor_evidence.schema.json.schema.json",
-      "purpose": "<TODO>"
+      "name": "runner_executor_evidence.schema.json",
+      "purpose": "Per-action runner executor evidence (runs/<run_id>/runner/actions/<action_id>/executor.json)."
     },
     {
       "name": "pcap_manifest.schema.json",

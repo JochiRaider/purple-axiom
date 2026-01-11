@@ -1,6 +1,6 @@
 <!-- docs/AGENTS.md -->
 
-# Agent instructions (docs/\*)
+# Agent instructions (docs/)
 
 ## Scope
 

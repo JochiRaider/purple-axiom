@@ -172,8 +172,9 @@ Notes:
 | auditd           | R[C]        | O[P]               | R[P]              | O[P]                   | O[P]                             | R[U]           | O[U]            |
 
 Notes:
-- `activity_id` is required because it determines `type_uid` computation (`class_uid * 100 +
-  activity_id`) and is needed for deterministic downstream routing and scoring.
+
+- `activity_id` is required because it determines `type_uid` computation
+  (`class_uid * 100 + activity_id`) and is needed for deterministic downstream routing and scoring.
 - For Process Activity (`class_uid = 1007`), OCSF 1.7.0 uses: `1 = Launch`, `2 = Terminate`,
   `0 = Unknown`.
 - Sysmon requires process pivots because it is the primary v0.1 source for endpoint behavior
@@ -206,7 +207,7 @@ Notes:
 | Sysmon           |      R[F] |               R[F] |      R[F] |              R[P] |               R[P] |           O[U] |
 | osquery          |      R[F] |               R[F] |      O[F] |               N/A |                N/A |           O[U] |
 | auditd           |      R[F] |               O[F] |      O[F] |              R[P] |               O[P] |           R[U] |
- 
+
 Notes:
 
 - For **osquery `file_events`**, initiating process attribution is not available in v0.1. Therefore
@@ -220,7 +221,7 @@ Notes:
   - When only `file.name` or only `file.parent_folder` is authoritative (no full path), populate
     only the authoritative field(s).
   - `file.path` is marked `O[F]` for sources that do not always provide a full path (osquery
-    `file_events` may have partial paths depending on configuration).  
+    `file_events` may have partial paths depending on configuration).
 - For auditd file activity, `file.parent_folder` is optional because audit records may provide only
   a full path or inode-derived context depending on configuration. If only a full path is available,
   mapping profiles should deterministically split it into `parent_folder` and `name`.

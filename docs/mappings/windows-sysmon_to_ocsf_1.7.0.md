@@ -401,7 +401,7 @@ Rules:
   - Sysmon `QueryStatus` is a Windows NTSTATUS code indicating whether the DNS client API call
     succeeded, not the DNS protocol response code from the server.
   - Mapping profiles MUST NOT infer or populate `rcode` from `QueryStatus`.
-  
+
 ## Applicability and coverage
 
 This profile is designed to work with an applicability-aware coverage model:

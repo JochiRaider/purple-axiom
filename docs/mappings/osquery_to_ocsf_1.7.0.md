@@ -172,7 +172,8 @@ Rules:
 
 ### Event identity and `metadata.uid`
 
-osquery does not provide a stable record id. Therefore osquery-derived `metadata.event_id` is Tier 3.
+osquery does not provide a stable record id. Therefore osquery-derived `metadata.event_id` is Tier
+3\.
 
 Normative requirements (per ADR-0002 and `055_ocsf_field_tiers.md` Tier 0):
 

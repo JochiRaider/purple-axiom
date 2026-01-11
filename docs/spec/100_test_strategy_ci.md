@@ -14,8 +14,8 @@
 - Redaction posture tests: `security.redaction.enabled=false` MUST produce deterministic
   placeholders or quarantine-only outputs and MUST label the run as unredacted in metadata.
 - Mapping unit tests: raw input -> expected OCSF output
-- Mapping pack conformance tests: mapping YAML MUST parse deterministically (no duplicate keys,
-  no anchors/aliases/merge keys), routing MUST be overlap-free, and
+- Mapping pack conformance tests: mapping YAML MUST parse deterministically (no duplicate keys, no
+  anchors/aliases/merge keys), routing MUST be overlap-free, and
   `normalized/mapping_profile_snapshot.json` MUST include hashes for the complete mapping material
   boundary defined by `docs/mappings/ocsf_mapping_profile_authoring_guide.md`.
 - OCSF schema regression tests: representative normalized fixtures MUST validate against the pinned

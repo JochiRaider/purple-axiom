@@ -23,13 +23,14 @@ Conformance to this guide is REQUIRED for mapping packs that participate in:
 - CI mapping conformance gates (see `docs/spec/100_test_strategy_ci.md`)
 
 If this guide conflicts with:
+
 - `docs/spec/050_normalization_ocsf.md`
 - `docs/spec/025_data_contracts.md`
 - `docs/adr/ADR-0002-event-identity-and-provenance.md`
 
 …the spec and ADRs take precedence. This guide MUST be updated to restore consistency.
 
----
+______________________________________________________________________
 
 ## 1. Directory Structure (Normative)
 
@@ -37,13 +38,14 @@ If this guide conflicts with:
 
 This guide uses three distinct identifiers. Implementations MUST NOT conflate them.
 
-| Term | Meaning | Example |
-|------|---------|---------|
-| `source_pack_id` | The mapping pack directory identifier under `mappings/normalizer/ocsf/<ocsf_version>/` | `windows-security`, `windows-sysmon`, `osquery` |
-| `event_source_type` | The constant emitted into `metadata.source_type` for all events produced by this pack | `osquery` |
-| `identity_source_type` | The constant used in the ADR-0002 identity basis as `identity_basis.source_type` | `sysmon`, `windows_eventlog` |
+| Term                   | Meaning                                                                                | Example                                         |
+| ---------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `source_pack_id`       | The mapping pack directory identifier under `mappings/normalizer/ocsf/<ocsf_version>/` | `windows-security`, `windows-sysmon`, `osquery` |
+| `event_source_type`    | The constant emitted into `metadata.source_type` for all events produced by this pack  | `osquery`                                       |
+| `identity_source_type` | The constant used in the ADR-0002 identity basis as `identity_basis.source_type`       | `sysmon`, `windows_eventlog`                    |
 
-Mapping packs MUST declare all three values (or explicitly declare `identity_source_type` is derived from routing rules).
+Mapping packs MUST declare all three values (or explicitly declare `identity_source_type` is derived
+from routing rules).
 
 Mapping profiles MUST be organized under the following directory structure:
 
@@ -62,6 +64,7 @@ mappings/
           maps/                 # OPTIONAL: lookup tables (enums, code mappings)
           transforms/           # OPTIONAL: source-specific transform extensions
 ```
+
 ### Mapping material boundary (normative)
 
 The “mapping material” for a mapping pack is the complete set of files required to route and emit
@@ -71,25 +74,26 @@ events for that pack, including:
 - `routing.yaml`
 - `canonicalization.yaml`
 - all files under `classes/` that are referenced by `routing.yaml`
-- any additional files referenced transitively (for example via `includes`, `helpers`, `maps`, or `transforms`)
+- any additional files referenced transitively (for example via `includes`, `helpers`, `maps`, or
+  `transforms`)
 
-A mapping pack MUST be self-contained under its `<source_pack_id>/` directory. Mapping packs MUST NOT
-reference files outside their pack directory.
+A mapping pack MUST be self-contained under its `<source_pack_id>/` directory. Mapping packs MUST
+NOT reference files outside their pack directory.
 
 This mapping material boundary is used for run provenance hashing in
 `normalized/mapping_profile_snapshot.json` (see Section 2.1 and `docs/spec/025_data_contracts.md`).
 
 ### Naming Conventions
 
-| Component | Pattern | Example |
-|-----------|---------|---------|
-| Source type directory | `<source_type>` (lowercase, hyphens) | `windows-security`, `windows-sysmon`, `osquery` |
-| Class map file | `<class_name>_<class_uid>.yaml` | `authentication_3002.yaml`, `process_activity_1007.yaml` |
-| Profile file | `profile.yaml` | Fixed name |
-| Routing file | `routing.yaml` | Fixed name |
-| Canonicalization file | `canonicalization.yaml` | Fixed name |
+| Component             | Pattern                              | Example                                                  |
+| --------------------- | ------------------------------------ | -------------------------------------------------------- |
+| Source type directory | `<source_type>` (lowercase, hyphens) | `windows-security`, `windows-sysmon`, `osquery`          |
+| Class map file        | `<class_name>_<class_uid>.yaml`      | `authentication_3002.yaml`, `process_activity_1007.yaml` |
+| Profile file          | `profile.yaml`                       | Fixed name                                               |
+| Routing file          | `routing.yaml`                       | Fixed name                                               |
+| Canonicalization file | `canonicalization.yaml`              | Fixed name                                               |
 
----
+______________________________________________________________________
 
 ## 2. File Schemas
 
@@ -100,17 +104,19 @@ This mapping material boundary is used for run provenance hashing in
 Implementations MUST parse mapping YAML as YAML 1.2.
 
 Implementations MUST reject mapping files that contain:
+
 - duplicate keys in any mapping object
 - non-string YAML tags (custom type tags)
 - YAML merge keys (`<<`)
 - anchors and aliases
 
-Rationale: these features commonly lead to non-obvious behavior and non-deterministic materialization
-across parser implementations.
+Rationale: these features commonly lead to non-obvious behavior and non-deterministic
+materialization across parser implementations.
 
 ### Scalar typing constraints
 
 Mapping files MUST use:
+
 - integers only for numeric identifiers (for example `class_uid`, `activity_id`, `category_uid`)
 - strings for raw field paths, OCSF field paths, and lookup keys
 - explicit quotes for values that could be mis-typed by YAML (for example `"01"`, `"0x10"`)
@@ -181,7 +187,8 @@ outputs:
 #### Profile Rules (Normative)
 
 - `profile_id` MUST be globally unique and follow pattern `<source_type>_to_ocsf_<version>`.
-- `ocsf_version` MUST match the directory path and the pinned version in `050_normalization_ocsf.md`.
+- `ocsf_version` MUST match the directory path and the pinned version in
+  `050_normalization_ocsf.md`.
 - `source_type` MUST match the parent directory name.
 - `set_uid_equal_event_id` MUST be `true` to satisfy `metadata.uid = metadata.event_id` contract.
 - `source.source_pack_id` MUST equal the `<source_pack_id>` directory name.
@@ -200,7 +207,7 @@ outputs:
 - For OCSF-conformant outputs, the normalizer MUST emit `metadata.uid` equal to `metadata.event_id`.
   This behavior is not configurable per profile.
 
----
+______________________________________________________________________
 
 ### 2.2 `canonicalization.yaml` (Required)
 
@@ -225,14 +232,14 @@ transforms:
 
 #### Standard Transform Kinds
 
-| Kind | Purpose | Common Operations |
-|------|---------|-------------------|
-| `string` | String manipulation | `trim_ascii_whitespace`, `lowercase_ascii`, `uppercase_ascii` |
-| `scalar` | Type conversion | `to_string`, `parse_int`, `parse_hex_or_dec_int` |
-| `time` | Timestamp parsing | `parse_rfc3339_to_epoch_ms`, `parse_epoch_s_to_epoch_ms` |
-| `presence` | Null/placeholder handling | `absent_if_in_set`, `absent_if_null` |
-| `network` | Network value normalization | `normalize_ip_text` |
-| `identity` | Identity basis computation | `build_identity_basis_*`, `jcs_canonical_json_bytes`, `sha256_trunc128_hex` |
+| Kind       | Purpose                     | Common Operations                                                           |
+| ---------- | --------------------------- | --------------------------------------------------------------------------- |
+| `string`   | String manipulation         | `trim_ascii_whitespace`, `lowercase_ascii`, `uppercase_ascii`               |
+| `scalar`   | Type conversion             | `to_string`, `parse_int`, `parse_hex_or_dec_int`                            |
+| `time`     | Timestamp parsing           | `parse_rfc3339_to_epoch_ms`, `parse_epoch_s_to_epoch_ms`                    |
+| `presence` | Null/placeholder handling   | `absent_if_in_set`, `absent_if_null`                                        |
+| `network`  | Network value normalization | `normalize_ip_text`                                                         |
+| `identity` | Identity basis computation  | `build_identity_basis_*`, `jcs_canonical_json_bytes`, `sha256_trunc128_hex` |
 
 #### Required Transforms (All Profiles)
 
@@ -274,7 +281,7 @@ constants:
     - "N/A"
 ```
 
----
+______________________________________________________________________
 
 ### 2.3 `routing.yaml` (Required)
 
@@ -300,12 +307,14 @@ routes:
 #### Routing Rules (Normative)
 
 - Each `route_id` MUST be unique within the file.
-- `match` criteria MUST be mutually exclusive across routes (no event ID appears in multiple routes).
+- `match` criteria MUST be mutually exclusive across routes (no event ID appears in multiple
+  routes).
 - Unmatched events MUST NOT be silently dropped.
 - For each unmatched event, the normalizer MUST:
   - increment `unmapped` counters in mapping coverage (`normalized/mapping_coverage.json`), and
   - emit a stage outcome reason code indicating an unmapped event (see ADR-0005).
-- The raw event payload SHOULD be retained per Tier R guidance (see `docs/spec/055_ocsf_field_tiers.md`).
+- The raw event payload SHOULD be retained per Tier R guidance (see
+  `docs/spec/055_ocsf_field_tiers.md`).
 - `class_map` paths MUST be relative to the source type directory.
 - Route evaluation order MUST be the order of entries in `routes[]`.
 - Each `match.event_ids` list MUST be strictly ascending numeric order.
@@ -313,7 +322,7 @@ routes:
 - Implementations MUST validate at load time that match criteria are mutually exclusive across
   routes. If overlap exists, the mapping pack MUST be rejected (fail closed).
 
----
+______________________________________________________________________
 
 ### 2.4 Class Map Files (Required per routed class)
 
@@ -368,10 +377,10 @@ no_inference:
     - <derivation_description>
     - ...
 ```
-Note: 
-Implementations MUST treat `no_inference.forbidden_derivations[]` as documentation only unless an
-explicit enforcement mechanism is implemented. If enforcement is implemented, it MUST be deterministic
-and MUST fail closed in CI when violated.
+
+Note: Implementations MUST treat `no_inference.forbidden_derivations[]` as documentation only unless
+an explicit enforcement mechanism is implemented. If enforcement is implemented, it MUST be
+deterministic and MUST fail closed in CI when violated.
 
 #### Class Map Rules (Normative)
 
@@ -422,7 +431,7 @@ emit:
     from_event_id_map: <key>                     # Uses class_map.event_id_map[event_id][key]
 ```
 
----
+______________________________________________________________________
 
 ## 3. Authoring Workflow
 
@@ -431,9 +440,10 @@ emit:
 Before creating a mapping profile, collect:
 
 1. **Source documentation**: Raw event schema, field definitions, event ID catalog.
-2. **Coverage matrix requirements**: Which Tier 1/2 fields are `R` (required) for this source.
-3. **Spec document references**: The human-readable mapping profile doc (e.g., `windows-security_to_ocsf_1.7.0.md`).
-4. **OCSF schema reference**: Class definitions, activity IDs, field types for OCSF 1.7.0.
+1. **Coverage matrix requirements**: Which Tier 1/2 fields are `R` (required) for this source.
+1. **Spec document references**: The human-readable mapping profile doc (e.g.,
+   `windows-security_to_ocsf_1.7.0.md`).
+1. **OCSF schema reference**: Class definitions, activity IDs, field types for OCSF 1.7.0.
 
 ### Step 2: Create Directory Structure
 
@@ -447,51 +457,52 @@ touch mappings/normalizer/ocsf/1.7.0/<source_type>/routing.yaml
 ### Step 3: Author `canonicalization.yaml`
 
 1. Start with the standard transforms template (see Section 2.2).
-2. Add source-specific transforms as needed.
-3. Define placeholder constants for the source.
+1. Add source-specific transforms as needed.
+1. Define placeholder constants for the source.
 
 ### Step 4: Author `profile.yaml`
 
 1. Set profile metadata (`profile_id`, `profile_version`, `ocsf_version`).
-2. Define source discriminators (`source_type`, `provider`, `channel`).
-3. List required input fields.
-4. Define `shared_emit` rules for fields common to ALL events:
+1. Define source discriminators (`source_type`, `provider`, `channel`).
+1. List required input fields.
+1. Define `shared_emit` rules for fields common to ALL events:
    - `time` (REQUIRED)
    - `device.name`, `device.hostname` (REQUIRED for Tier 1)
    - `metadata.source_type` (REQUIRED)
    - `metadata.source_event_id` (REQUIRED)
    - `metadata.log_provider`, `metadata.log_name`, `metadata.product.name` (RECOMMENDED)
-5. Define identity basis per ADR-0002.
+1. Define identity basis per ADR-0002.
 
 ### Step 5: Author `routing.yaml`
 
 1. List all event IDs/query names to be routed.
-2. Group related events into routes (e.g., all auth events → one route).
-3. Reference class map files (create placeholders if needed).
+1. Group related events into routes (e.g., all auth events → one route).
+1. Reference class map files (create placeholders if needed).
 
 ### Step 6: Author Class Map Files
 
 For each routed class:
 
 1. Create `classes/<class_name>_<class_uid>.yaml`.
-2. Set `class_uid`, `class_name`, `category_uid`.
-3. Define `event_id_map` with `activity_id` and `status_id` per event.
-4. Map REQUIRED fields per coverage matrix:
+1. Set `class_uid`, `class_name`, `category_uid`.
+1. Define `event_id_map` with `activity_id` and `status_id` per event.
+1. Map REQUIRED fields per coverage matrix:
    - Actor user fields (`actor.user.uid`, `actor.user.name`, `actor.user.domain`)
    - Process fields (`process.pid`, `process.file.path`, `actor.process.*`)
    - Network fields (`src_endpoint.*`, `dst_endpoint.*`)
    - File fields (`file.path`, `file.name`, `file.parent_folder`)
-5. Add `no_inference` guardrails for forbidden derivations.
+1. Add `no_inference` guardrails for forbidden derivations.
 
 ### Step 7: Validate
 
 1. **Schema validation**: Each YAML file MUST be valid YAML.
-2. **Reference integrity**: All `class_map` paths in routing MUST exist.
-3. **Transform references**: All transforms in `emit` rules MUST be defined in `canonicalization.yaml`.
-4. **Coverage matrix alignment**: All `R` fields for the source MUST have mappings.
-5. **OCSF compliance**: `class_uid`, `activity_id`, `category_uid` MUST match OCSF 1.7.0.
+1. **Reference integrity**: All `class_map` paths in routing MUST exist.
+1. **Transform references**: All transforms in `emit` rules MUST be defined in
+   `canonicalization.yaml`.
+1. **Coverage matrix alignment**: All `R` fields for the source MUST have mappings.
+1. **OCSF compliance**: `class_uid`, `activity_id`, `category_uid` MUST match OCSF 1.7.0.
 
----
+______________________________________________________________________
 
 ## 4. OCSF Class Reference (v1.7.0)
 
@@ -500,67 +511,67 @@ pinned OCSF schema as the source of truth for class UIDs, category UIDs, and act
 
 ### Common Classes and Activity IDs
 
-| Class | `class_uid` | `category_uid` | Activity IDs |
-|-------|-------------|----------------|--------------|
-| File System Activity | 1001 | 1 | 1=Create, 2=Read, 3=Update, 4=Delete, 5=Rename, 6=SetAttributes |
-| Process Activity | 1007 | 1 | 1=Launch, 2=Terminate, 3=Open, 4=Inject, 5=SetUserContext |
-| Event Log Activity | 1008 | 1 | 1=Clear, 2=Read, 3=Modify, 4=Create, 5=Delete |
-| Account Change | 3001 | 3 | 1=Create, 2=Enable, 3=Disable, 4=Delete, 5=PasswordChange, 6=PasswordReset, 7=Lock, 8=Unlock |
-| Authentication | 3002 | 3 | 1=Logon, 2=Logoff, 3=AuthTicket, 4=ServiceTicket |
-| Group Management | 3006 | 3 | 1=AssignPrivileges, 2=RevokePrivileges, 3=AddUser, 4=RemoveUser |
-| Network Activity | 4001 | 4 | 1=Open, 2=Close, 3=Reset, 4=Fail, 5=Refuse, 6=Traffic |
-| DNS Activity | 4003 | 4 | 1=Query, 2=Response |
+| Class                | `class_uid` | `category_uid` | Activity IDs                                                                                 |
+| -------------------- | ----------- | -------------- | -------------------------------------------------------------------------------------------- |
+| File System Activity | 1001        | 1              | 1=Create, 2=Read, 3=Update, 4=Delete, 5=Rename, 6=SetAttributes                              |
+| Process Activity     | 1007        | 1              | 1=Launch, 2=Terminate, 3=Open, 4=Inject, 5=SetUserContext                                    |
+| Event Log Activity   | 1008        | 1              | 1=Clear, 2=Read, 3=Modify, 4=Create, 5=Delete                                                |
+| Account Change       | 3001        | 3              | 1=Create, 2=Enable, 3=Disable, 4=Delete, 5=PasswordChange, 6=PasswordReset, 7=Lock, 8=Unlock |
+| Authentication       | 3002        | 3              | 1=Logon, 2=Logoff, 3=AuthTicket, 4=ServiceTicket                                             |
+| Group Management     | 3006        | 3              | 1=AssignPrivileges, 2=RevokePrivileges, 3=AddUser, 4=RemoveUser                              |
+| Network Activity     | 4001        | 4              | 1=Open, 2=Close, 3=Reset, 4=Fail, 5=Refuse, 6=Traffic                                        |
+| DNS Activity         | 4003        | 4              | 1=Query, 2=Response                                                                          |
 
 ### Status IDs (Common)
 
 | `status_id` | Meaning |
-|-------------|---------|
-| 0 | Unknown |
-| 1 | Success |
-| 2 | Failure |
-| 99 | Other |
+| ----------- | ------- |
+| 0           | Unknown |
+| 1           | Success |
+| 2           | Failure |
+| 99          | Other   |
 
----
+______________________________________________________________________
 
 ## 5. Transform Reference
 
 ### String Transforms
 
-| Transform | Input | Output | Notes |
-|-----------|-------|--------|-------|
-| `trim_ascii_whitespace` | `"  foo  "` | `"foo"` | Removes leading/trailing ASCII whitespace |
-| `lowercase_ascii` | `"FooBar"` | `"foobar"` | ASCII lowercase only |
-| `uppercase_ascii` | `"FooBar"` | `"FOOBAR"` | ASCII uppercase only |
+| Transform               | Input       | Output     | Notes                                     |
+| ----------------------- | ----------- | ---------- | ----------------------------------------- |
+| `trim_ascii_whitespace` | `"  foo  "` | `"foo"`    | Removes leading/trailing ASCII whitespace |
+| `lowercase_ascii`       | `"FooBar"`  | `"foobar"` | ASCII lowercase only                      |
+| `uppercase_ascii`       | `"FooBar"`  | `"FOOBAR"` | ASCII uppercase only                      |
 
 ### Scalar Transforms
 
-| Transform | Input | Output | Notes |
-|-----------|-------|--------|-------|
-| `to_string` | `123` | `"123"` | Convert to string representation |
-| `parse_int` | `"123"` | `123` | Parse base-10 integer |
-| `parse_hex_or_dec_int` | `"0x1A"` or `"26"` | `26` | Parse hex (0x prefix) or decimal |
+| Transform              | Input              | Output  | Notes                            |
+| ---------------------- | ------------------ | ------- | -------------------------------- |
+| `to_string`            | `123`              | `"123"` | Convert to string representation |
+| `parse_int`            | `"123"`            | `123`   | Parse base-10 integer            |
+| `parse_hex_or_dec_int` | `"0x1A"` or `"26"` | `26`    | Parse hex (0x prefix) or decimal |
 
 ### Time Transforms
 
-| Transform | Input | Output | Notes |
-|-----------|-------|--------|-------|
+| Transform                   | Input                    | Output          | Notes                         |
+| --------------------------- | ------------------------ | --------------- | ----------------------------- |
 | `parse_rfc3339_to_epoch_ms` | `"2026-01-11T12:00:00Z"` | `1768161600000` | RFC3339 to epoch milliseconds |
-| `parse_epoch_s_to_epoch_ms` | `1768161600` | `1768161600000` | Multiply by 1000 |
+| `parse_epoch_s_to_epoch_ms` | `1768161600`             | `1768161600000` | Multiply by 1000              |
 
 ### Presence Transforms
 
-| Transform | Args | Behavior |
-|-----------|------|----------|
+| Transform          | Args                                    | Behavior                         |
+| ------------------ | --------------------------------------- | -------------------------------- |
 | `absent_if_in_set` | `set_ref: constants.placeholder_values` | Return absent if value is in set |
-| `absent_if_null` | - | Return absent if value is null |
+| `absent_if_null`   | -                                       | Return absent if value is null   |
 
 ### Network Transforms
 
-| Transform | Input | Output | Notes |
-|-----------|-------|--------|-------|
+| Transform           | Input           | Output          | Notes                              |
+| ------------------- | --------------- | --------------- | ---------------------------------- |
 | `normalize_ip_text` | `"192.168.1.1"` | `"192.168.1.1"` | Normalize IP; MUST NOT resolve DNS |
 
----
+______________________________________________________________________
 
 ## 6. Field Path Conventions
 
@@ -591,7 +602,7 @@ file.parent_folder                     # Parent directory
 metadata.source_event_id               # Source-native event ID
 ```
 
----
+______________________________________________________________________
 
 ## 7. Validation Checklist
 
@@ -600,16 +611,18 @@ metadata.source_event_id               # Source-native event ID
 ### Relationship to `normalized/mapping_profile_snapshot.json`
 
 For every run that performs normalization, the orchestrator/normalizer MUST emit
-`normalized/mapping_profile_snapshot.json` as Tier 0 provenance per `docs/spec/025_data_contracts.md`.
+`normalized/mapping_profile_snapshot.json` as Tier 0 provenance per
+`docs/spec/025_data_contracts.md`.
 
 The mapping pack authored by this guide MUST be fully represented in the snapshot using one of:
 
-1) `mapping_material` (embedded canonical representation), or
-2) `mapping_files[]` (preferred for YAML-based packs)
+1. `mapping_material` (embedded canonical representation), or
+1. `mapping_files[]` (preferred for YAML-based packs)
 
 ### `mapping_files[]` requirements (preferred)
 
 When using `mapping_files[]`, the snapshot MUST include, at minimum, SHA-256 entries for:
+
 - `profile.yaml`
 - `routing.yaml`
 - `canonicalization.yaml`
@@ -617,31 +630,37 @@ When using `mapping_files[]`, the snapshot MUST include, at minimum, SHA-256 ent
 - all transitively referenced files under `helpers/`, `maps/`, or `transforms/` that affect emission
 
 Each `mapping_files[].path` MUST be:
+
 - repository-relative
 - normalized to POSIX separators (`/`)
 - stable across operating systems
 
-Each `mapping_files[].sha256` MUST be computed over the exact file bytes as stored in the repository.
+Each `mapping_files[].sha256` MUST be computed over the exact file bytes as stored in the
+repository.
 
 Before submitting a mapping profile, verify:
 
 ### Structure
+
 - [ ] Directory structure matches Section 1
 - [ ] All required files exist (`profile.yaml`, `canonicalization.yaml`, `routing.yaml`)
 - [ ] Class map files exist for all routed classes
 
 ### Profile
+
 - [ ] `profile_id` is unique and follows naming convention
 - [ ] `ocsf_version` matches directory path
 - [ ] `source_type` matches directory name
 - [ ] `set_uid_equal_event_id: true` is set
 
 ### Routing
+
 - [ ] All event IDs are covered (no gaps)
 - [ ] No overlapping matches across routes
 - [ ] All `class_map` paths resolve to existing files
 
 ### Class Maps
+
 - [ ] `class_uid` matches OCSF 1.7.0 schema
 - [ ] `category_uid` is correct for the class family
 - [ ] `event_id_map` covers all routed event IDs
@@ -649,22 +668,25 @@ Before submitting a mapping profile, verify:
 - [ ] `type_uid` computation is defined
 
 ### Coverage Matrix Alignment
+
 - [ ] All `R` (Required) fields from coverage matrix have mappings
 - [ ] `N/A` fields are not mapped
 - [ ] No inference of values not present in raw data
 
 ### Transforms
+
 - [ ] All referenced transforms exist in `canonicalization.yaml`
 - [ ] Placeholder handling is consistent with source conventions
 - [ ] Numeric parsing handles source-specific formats (hex, decimal)
 
 ### Provenance (Tier 0)
 
-- [ ] `normalized/mapping_profile_snapshot.json` includes this mapping pack as `mapping_files[]` or embedded `mapping_material`
+- [ ] `normalized/mapping_profile_snapshot.json` includes this mapping pack as `mapping_files[]` or
+  embedded `mapping_material`
 - [ ] The file set included in the snapshot matches the mapping material boundary in Section 1
 - [ ] No mapping files are referenced outside the mapping pack directory
 
----
+______________________________________________________________________
 
 ## 8. Examples
 
@@ -673,6 +695,7 @@ Before submitting a mapping profile, verify:
 To add Windows Security event 4672 (Special Privileges Assigned) to the Authentication class:
 
 1. **Update `routing.yaml`**:
+
 ```yaml
 routes:
   - route_id: winsec_authentication
@@ -682,6 +705,7 @@ routes:
 ```
 
 2. **Update `authentication_3002.yaml`**:
+
 ```yaml
 class_map:
   event_id_map:
@@ -745,7 +769,7 @@ no_inference:
     - actor.process.pid_from_file_owner
 ```
 
----
+______________________________________________________________________
 
 ## 9. Appendix: Source-Specific Notes
 
@@ -770,15 +794,15 @@ no_inference:
 - Protocol field: preserve as string; do NOT convert to number.
 - GUIDs: preserve exactly as emitted.
 
----
+______________________________________________________________________
 
 ## 10. References
 
-| Document | Purpose |
-|----------|---------|
-| `050_normalization_ocsf.md` | OCSF version pinning, envelope requirements |
-| `055_ocsf_field_tiers.md` | Tier model, coverage metrics |
-| `coverage_matrix.md` | Per-source field requirements (R/O/N/A) |
-| `ADR-0002` | Event identity and provenance |
-| `ADR-0003` | Redaction policy |
-| Human mapping profile docs | `<source>_to_ocsf_1.7.0.md` in `docs/mappings/` |
+| Document                    | Purpose                                         |
+| --------------------------- | ----------------------------------------------- |
+| `050_normalization_ocsf.md` | OCSF version pinning, envelope requirements     |
+| `055_ocsf_field_tiers.md`   | Tier model, coverage metrics                    |
+| `coverage_matrix.md`        | Per-source field requirements (R/O/N/A)         |
+| `ADR-0002`                  | Event identity and provenance                   |
+| `ADR-0003`                  | Redaction policy                                |
+| Human mapping profile docs  | `<source>_to_ocsf_1.7.0.md` in `docs/mappings/` |

@@ -12,6 +12,8 @@ sets small and prevent “read the entire ADR set” behavior.
 | `ADR-0001-project-naming-and-versioning.md` | Project naming rules and versioning policy                  |
 | `ADR-0002-event-identity-and-provenance.md` | Event identity, provenance model, and determinism rules     |
 | `ADR-0003-redaction-policy.md`              | Redaction policy posture and redaction-related consequences |
+| `ADR-0004-deployment-architecture-and-inter-component-communication.md` | Deployment architecture and inter-component communication |
+| `ADR-0005-stage-outcomes-and-failure-classification.md` | Stage outcomes and failure classification rules |
 
 ## Common tasks (fast paths)
 
@@ -20,6 +22,8 @@ sets small and prevent “read the entire ADR set” behavior.
 | “What naming/versioning rules are in force?”         | `ADR-0001-project-naming-and-versioning.md` |
 | “How is event identity/provenance defined?”          | `ADR-0002-event-identity-and-provenance.md` |
 | “What is the redaction policy and its implications?” | `ADR-0003-redaction-policy.md`              |
+| “What is the deployment architecture and communication model?” | `ADR-0004-deployment-architecture-and-inter-component-communication.md` |
+| “How are stage outcomes and failures classified?”    | `ADR-0005-stage-outcomes-and-failure-classification.md` |
 
 ## Update rule (required)
 

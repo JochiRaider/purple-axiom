@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/duckdb_conformance_report.schema.json",
+  "title": "DuckDB Conformance Report (Query Plan + Result Stability)",
+  "description": "Machine-readable conformance report emitted by the DuckDB determinism harness. Used to qualify (DuckDB version × OS × architecture) stability for fixed Parquet fixtures and fixed SQL queries. Contract version: duckdb_conformance_report_v1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "report_id",
+    "generated_at",
+    "matrix_axes",
+    "fixtures",
+    "queries",
+    "cells",
+    "analysis"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "duckdb_conformance_report_v1"
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp in UTC (Z)."
+    },
+    "matrix_axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duckdb_versions", "oses", "arches"],
+      "properties": {
+        "duckdb_versions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "oses": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["linux", "macos", "windows"] },
+          "minItems": 1
+        },
+        "arches": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["x86_64", "arm64"] },
+          "minItems": 1
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fixture_id",
+          "fixture_manifest_sha256",
+          "parquet_schema_fingerprint_sha256"
+        ],
+        "properties": {
+          "fixture_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "fixture_manifest_sha256": {
+            "$ref": "#/$defs/sha256_hex"
+          },
+          "parquet_schema_fingerprint_sha256": {
+            "$ref": "#/$defs/sha256_hex"
+          }
+        }
+      }
+    },
+    "queries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["query_id", "sql_bytes_sha256"],
+        "properties": {
+          "query_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sql_bytes_sha256": {
+            "$ref": "#/$defs/sha256_hex"
+          }
+        }
+      }
+    },
+    "cells": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cell_id",
+          "duckdb_version_semver",
+          "os",
+          "arch",
+          "env_ref",
+          "results"
+        ],
+        "properties": {
+          "cell_id": {
+            "type": "string",
+            "pattern": "^duckdb=[^/]+/os=(linux|macos|windows)/arch=(x86_64|arm64)$"
+          },
+          "duckdb_version_semver": {
+            "type": "string",
+            "minLength": 1
+          },
+          "os": {
+            "type": "string",
+            "enum": ["linux", "macos", "windows"]
+          },
+          "arch": {
+            "type": "string",
+            "enum": ["x86_64", "arm64"]
+          },
+          "env_ref": {
+            "$ref": "#/$defs/relpath"
+          },
+          "results": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "query_id",
+                "artifact_dir",
+                "plan_jcs_sha256",
+                "result_jcs_sha256",
+                "status"
+              ],
+              "properties": {
+                "query_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "artifact_dir": {
+                  "$ref": "#/$defs/relpath"
+                },
+                "plan_jcs_sha256": {
+                  "$ref": "#/$defs/sha256_hex"
+                },
+                "result_jcs_sha256": {
+                  "$ref": "#/$defs/sha256_hex"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["pass", "fail", "skipped"]
+                },
+                "reason_code": {
+                  "$ref": "#/$defs/reason_code"
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": { "status": { "const": "pass" } },
+                    "required": ["status"]
+                  },
+                  "then": {
+                    "not": { "required": ["reason_code"] }
+                  },
+                  "else": {
+                    "required": ["reason_code"]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by_duckdb_version", "cross_version_drift"],
+      "properties": {
+        "by_duckdb_version": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "duckdb_version_semver",
+              "plan_hash_set",
+              "result_hash_set",
+              "plan_stable_within_version",
+              "result_stable_within_version"
+            ],
+            "properties": {
+              "duckdb_version_semver": { "type": "string", "minLength": 1 },
+              "plan_hash_set": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/sha256_hex" }
+              },
+              "result_hash_set": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/sha256_hex" }
+              },
+              "plan_stable_within_version": { "type": "boolean" },
+              "result_stable_within_version": { "type": "boolean" }
+            }
+          }
+        },
+        "cross_version_drift": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from_version", "to_version", "plan_changed", "result_changed"],
+            "properties": {
+              "from_version": { "type": "string", "minLength": 1 },
+              "to_version": { "type": "string", "minLength": 1 },
+              "plan_changed": { "type": "boolean" },
+              "result_changed": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "relpath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?!.*\\\\).*$",
+      "description": "POSIX-style relative path. MUST NOT begin with '/'. MUST NOT contain backslashes."
+    },
+    "reason_code": {
+      "type": "string",
+      "description": "Stable, lower_snake_case reason code. v1 allows either a known code or an extension code prefixed with 'x_'.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "fixture_manifest_missing",
+            "fixture_manifest_invalid",
+            "fixture_schema_fingerprint_failed",
+            "duckdb_init_failed",
+            "query_execution_failed",
+            "plan_capture_failed",
+            "plan_parse_failed",
+            "result_encode_failed",
+            "plan_hash_mismatch",
+            "result_hash_mismatch",
+            "unsupported_platform",
+            "unsupported_duckdb_version",
+            "insufficient_resources"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^x_[a-z][a-z0-9_]*$"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "contract_version": "duckdb_conformance_baseline_v1",
+  "duckdb_version_semver": "1.4.3",
+  "fixture_id": "REPLACE_ME",
+  "fixture_manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "parquet_schema_fingerprint_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "queries": [
+    {
+      "query_id": "q001",
+      "sql_bytes_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_result_jcs_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_plan_jcs_sha256_set": []
+    }
+  ],
+  "policy": {
+    "gate_results": true,
+    "gate_plans": false
+  },
+  "provenance": {
+    "created_from_report_id": "REPLACE_ME",
+    "notes": "Populate hashes from a known-good conformance run for DuckDB 1.4.3."
+  }
+}

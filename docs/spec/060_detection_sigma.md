@@ -59,6 +59,22 @@ Fail-closed behavior:
   - `technique_ids` when available
   - Recommended: `extensions.bridge` metadata (mapping pack id/version, backend, fallback usage)
 
+### Deterministic emission (normative)
+
+To support reproducible diffs and regression tests, the evaluator MUST write
+`detections/detections.jsonl` deterministically:
+
+- Each detection instance MUST sort `matched_event_ids` using bytewise UTF-8 lexical ordering
+  (case-sensitive, no locale).
+- The file MUST be ordered deterministically by the following stable key tuple:
+  1. `rule_id` ascending (bytewise UTF-8 lexical ordering)
+  1. `first_seen_utc` ascending
+  1. `last_seen_utc` ascending
+  1. `matched_event_ids` ascending by lexicographic comparison of the (already-sorted) string array
+- Each JSONL line MUST be encoded as UTF-8 and MUST end with a single LF (`\n`).
+- Implementations SHOULD serialize each object without insignificant whitespace and with a
+  deterministic key ordering to maximize byte-level stability across runtimes.
+
 ## References
 
 - Sigma rule specification and the pySigma ecosystem.

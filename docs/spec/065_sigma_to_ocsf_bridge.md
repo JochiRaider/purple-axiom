@@ -216,6 +216,11 @@ Non-executable `reason_code` values (normative, v0.1):
 
 - For v0.1, if `detection.sigma.bridge.backend` is omitted, the bridge MUST use `duckdb_sql` (DuckDB
   SQL over Parquet).
+- The `duckdb_sql` backend MUST enforce deterministic DuckDB session settings:
+  - `SET threads = 1;`
+  - `SET TimeZone = 'UTC';`
+- If the implementation allows overriding these settings for performance, it MUST record the
+  effective values in backend provenance (see “Backend provenance”).
 - Compile Sigma -> SQL (after routing + aliasing)
 - Execute over OCSF Parquet using DuckDB
 - Return:
@@ -254,6 +259,9 @@ conformance gates (validated via unit + integration tests; see `docs/spec/100_te
   deterministically before writing `detections/detections.jsonl`.
 - **Backend provenance**: each `compiled_plans/<rule_id>.plan.json` MUST record the backend
   identifier and backend version (or build metadata).
+  - If the backend is `duckdb_sql`, the compiled plan MUST also record:
+    - `backend.settings.threads` (integer)
+    - `backend.settings.timezone` (string; MUST be `UTC` unless explicitly configured)
 - **Explained failure modes**: non-executable rules MUST include a stable, machine-readable
   `reason_code` and a human-readable explanation.
 
@@ -286,6 +294,8 @@ testable:
   - Deterministic compilation output for the chosen backend (SQL or IR), including non-executable
     reasons.
   - Schema: `bridge_compiled_plan.schema.json` per file.
+  - For `duckdb_sql`, the plan MUST include the effective DuckDB determinism settings recorded in
+    backend provenance (see above).
 
 - `coverage.json` (required)
 

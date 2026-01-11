@@ -17,22 +17,30 @@ Purple Axiom v0.1 requires deterministic, machine-readable failure classificatio
 
 The system already specifies:
 
-- a stable, staged pipeline (lab provider → runner → telemetry → normalization → validation → detection → scoring → reporting → signing),
+- a stable, staged pipeline (lab provider → runner → telemetry → normalization → validation →
+  detection → scoring → reporting → signing),
 - a local-first run bundle (`runs/<run_id>/…`) and manifest-driven reproducibility,
 - operability requirements for `logs/health.json`, run limits, and exit codes.
 
-This ADR defines the normative behavior for stage outcomes, reason codes, and the failure taxonomy that the orchestrator and all stage implementations MUST follow.
+This ADR defines the normative behavior for stage outcomes, reason codes, and the failure taxonomy
+that the orchestrator and all stage implementations MUST follow.
 
 ## Decision
 
-1. **Every enabled stage MUST produce a deterministic stage outcome** (or a deterministic fatal exit when outcome recording is impossible due to lock or storage I/O constraints).
-2. **Stage outcomes are the sole inputs** to:
+1. **Every enabled stage MUST produce a deterministic stage outcome** (or a deterministic fatal exit
+   when outcome recording is impossible due to lock or storage I/O constraints).
+
+1. **Stage outcomes are the sole inputs** to:
 
    - `manifest.status` derivation (`success | partial | failed`)
    - `logs/health.json` stage list
    - deterministic exit code selection (`0 | 10 | 20`)
-3. **Reason codes are stable tokens** (`lower_snake_case`) drawn from a normative catalog defined in this ADR.
-4. **Warnings do not belong in `logs/health.json`**. Warning-only information is written to `logs/warnings.jsonl` (optional) and/or `logs/run.log` (required).
+
+1. **Reason codes are stable tokens** (`lower_snake_case`) drawn from a normative catalog defined in
+   this ADR.
+
+1. **Warnings do not belong in `logs/health.json`**. Warning-only information is written to
+   `logs/warnings.jsonl` (optional) and/or `logs/run.log` (required).
 
 ## Definitions
 
@@ -50,18 +58,22 @@ Stages are identified by a stable `stage_id` string. v0.1 defines the following 
 - `reporting`
 - `signing` (only when enabled)
 
-Substages MAY be expressed as dotted identifiers (for example, `lab_provider.connectivity`, `telemetry.windows_eventlog.raw_mode`, `validation.run_limits`) and are additive. Substages MUST NOT change the semantics of the parent stage outcome.
+Substages MAY be expressed as dotted identifiers (for example, `lab_provider.connectivity`,
+`telemetry.windows_eventlog.raw_mode`, `validation.run_limits`) and are additive. Substages MUST NOT
+change the semantics of the parent stage outcome.
 
 ### Stage outcome
 
-A stage outcome is a tuple emitted for each enabled pipeline stage (and for any defined substages that the implementation chooses to record):
+A stage outcome is a tuple emitted for each enabled pipeline stage (and for any defined substages
+that the implementation chooses to record):
 
 - `stage` (string): stable stage identifier
 - `status` (string): `success | failed | skipped`
 - `fail_mode` (string): `fail_closed | warn_and_skip`
 - `reason_code` (string, optional): stable token explaining failure/skip
 
-Implementations MAY include additional fields in the persisted representation (for example timestamps, counters, file pointers), but:
+Implementations MAY include additional fields in the persisted representation (for example
+timestamps, counters, file pointers), but:
 
 - consumers MUST derive run status only from the tuple above
 - additional fields MUST NOT affect determinism-sensitive computations (for example event identity)
@@ -81,7 +93,8 @@ The orchestrator MUST record the stage outcome in:
 - `runs/<run_id>/manifest.json`, and
 - when enabled, `runs/<run_id>/logs/health.json`
 
-**Exception:** Outcome recording MUST NOT be attempted when doing so would violate locking guarantees or is impossible due to storage I/O failure.
+**Exception:** Outcome recording MUST NOT be attempted when doing so would violate locking
+guarantees or is impossible due to storage I/O failure.
 
 In those exceptional cases:
 
@@ -106,27 +119,30 @@ Warning-only entries (non-fatal degradations, informational signals) MUST be wri
 
 ### Stable ordering
 
-`logs/health.json.stages[]` and any stage list in `manifest.json` MUST be emitted in deterministic order.
+`logs/health.json.stages[]` and any stage list in `manifest.json` MUST be emitted in deterministic
+order.
 
 Default ordering MUST follow the canonical pipeline order:
 
 1. `lab_provider`
-2. `runner`
-3. `telemetry`
-4. `normalization`
-5. `validation`
-6. `detection`
-7. `scoring`
-8. `reporting`
-9. `signing`
+1. `runner`
+1. `telemetry`
+1. `normalization`
+1. `validation`
+1. `detection`
+1. `scoring`
+1. `reporting`
+1. `signing`
 
-Substages, when present, MUST be ordered immediately after their parent stage, sorted lexicographically by full `stage` string.
+Substages, when present, MUST be ordered immediately after their parent stage, sorted
+lexicographically by full `stage` string.
 
 ### Stable reason codes
 
 - `reason_code` MUST be ASCII `lower_snake_case`.
 - `reason_code` MUST be stable across runs and versions within v0.1.
-- `reason_code` MUST be selected from the normative catalog in this ADR for the relevant `(stage, reason_code)` pair.
+- `reason_code` MUST be selected from the normative catalog in this ADR for the relevant
+  `(stage, reason_code)` pair.
 
 ## Global failure rules
 
@@ -135,19 +151,22 @@ Substages, when present, MUST be ordered immediately after their parent stage, s
 If a stage fails with `fail_mode="fail_closed"`:
 
 - the orchestrator MUST stop executing subsequent stages
-- all remaining enabled stages MUST be recorded as `status="skipped"`, `fail_mode=<their configured value>`, `reason_code="blocked_by_upstream_failure"`
+- all remaining enabled stages MUST be recorded as `status="skipped"`,
+  `fail_mode=<their configured value>`, `reason_code="blocked_by_upstream_failure"`
 
 If a stage fails with `fail_mode="warn_and_skip"`:
 
 - the orchestrator MAY continue executing subsequent stages
-- subsequent stages MUST use their configured `fail_mode` and MUST not silently upgrade or downgrade severity
+- subsequent stages MUST use their configured `fail_mode` and MUST not silently upgrade or downgrade
+  severity
 
 ### Publish gate on fatal failure
 
 If a stage fails with `fail_mode="fail_closed"`:
 
 - the stage MUST NOT publish its final output directory (no partial promotion)
-- the orchestrator SHOULD still attempt to write final `manifest.json` and `logs/health.json` and record downstream skips
+- the orchestrator SHOULD still attempt to write final `manifest.json` and `logs/health.json` and
+  record downstream skips
 
 **Exception:** When prevented by lock or I/O constraints (see “Outcome recording requirement”).
 
@@ -167,11 +186,14 @@ The orchestrator MUST use deterministic exit codes:
 - `partial`: any enabled stage has `status="failed"` and `fail_mode="warn_and_skip"`
 - `success`: all enabled stages have `status="success"` (and any disabled stages are absent)
 
-Quality gates (for example Tier 1 coverage thresholds) MUST be represented as a `warn_and_skip` stage failure (or substage failure) so that `manifest.status` derivation remains purely outcome-driven.
+Quality gates (for example Tier 1 coverage thresholds) MUST be represented as a `warn_and_skip`
+stage failure (or substage failure) so that `manifest.status` derivation remains purely
+outcome-driven.
 
 ## Stage outcome registry (implementation guidance)
 
-Implementations SHOULD maintain a registry mapping `(stage, reason_code)` to default severity and policy overrides:
+Implementations SHOULD maintain a registry mapping `(stage, reason_code)` to default severity and
+policy overrides:
 
 ```
 registry[(stage_id, reason_code)] -> {
@@ -180,11 +202,13 @@ registry[(stage_id, reason_code)] -> {
 }
 ```
 
-Override rules MUST be deterministic and MUST reference only explicit configuration inputs (for example `normalization.strict_mode`, `reporting.emit_html`).
+Override rules MUST be deterministic and MUST reference only explicit configuration inputs (for
+example `normalization.strict_mode`, `reporting.emit_html`).
 
 ## Failure taxonomy (normative reason codes)
 
-This section defines the authoritative reason codes for v0.1. Codes not listed here MUST NOT be emitted in `logs/health.json` without a spec update.
+This section defines the authoritative reason codes for v0.1. Codes not listed here MUST NOT be
+emitted in `logs/health.json` without a spec update.
 
 ### Cross-cutting (applies to any stage)
 
@@ -215,7 +239,8 @@ Default `fail_mode`: `fail_closed`
 
 #### NON-FATAL reason codes (substage: `lab_provider.connectivity`)
 
-Connectivity checks are an operational degradation, not a determinism failure. When recorded, they MUST be recorded as a separate substage.
+Connectivity checks are an operational degradation, not a determinism failure. When recorded, they
+MUST be recorded as a separate substage.
 
 | Reason code                | Severity  | Description                                     |
 | -------------------------- | --------- | ----------------------------------------------- |
@@ -247,12 +272,17 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 
 Cleanup verification policy (normative):
 
-- `cleanup.verification.status` in ground truth MUST be one of: `success | failed | indeterminate | skipped | not_applicable`.
+- `cleanup.verification.status` in ground truth MUST be one of:
+  `success | failed | indeterminate | skipped | not_applicable`.
+
 - `failed` and `indeterminate` are **not success**.
+
 - Default v0.1 behavior:
 
-  - if runner stage `fail_mode=fail_closed`, a run MUST be marked `failed` when any action cleanup verification is `failed` or `indeterminate`
-  - if runner stage `fail_mode=warn_and_skip`, cleanup verification failures MUST be recorded under `cleanup_verification_failed` and the run MAY be `partial`
+  - if runner stage `fail_mode=fail_closed`, a run MUST be marked `failed` when any action cleanup
+    verification is `failed` or `indeterminate`
+  - if runner stage `fail_mode=warn_and_skip`, cleanup verification failures MUST be recorded under
+    `cleanup_verification_failed` and the run MAY be `partial`
 
 ### Telemetry stage (`telemetry`)
 
@@ -273,11 +303,13 @@ Minimum artifacts when enabled: `raw_parquet/**`, `manifest.json`
 ^ Policy-dependent override:
 
 - If telemetry stage `fail_mode=fail_closed` (default), `raw_xml_unavailable` is FATAL.
-- If telemetry stage `fail_mode=warn_and_skip`, affected records MUST be skipped and counted; stage MAY complete as NON-FATAL degraded with a warning entry and stable counters.
+- If telemetry stage `fail_mode=warn_and_skip`, affected records MUST be skipped and counted; stage
+  MAY complete as NON-FATAL degraded with a warning entry and stable counters.
 
 #### Windows raw-mode canary (substage: `telemetry.windows_eventlog.raw_mode`)
 
-When enabled, the Windows raw-mode canary MUST be recorded as a substage outcome in `logs/health.json` with `reason_code` constrained to:
+When enabled, the Windows raw-mode canary MUST be recorded as a substage outcome in
+`logs/health.json` with `reason_code` constrained to:
 
 - `winlog_raw_missing`
 - `winlog_rendering_detected`
@@ -315,19 +347,24 @@ Minimum artifacts when enabled: `normalized/**`, `normalized/mapping_coverage.js
 
 ^ Policy-dependent override:
 
-- If `normalization.strict_mode=true` (or normalization stage `fail_mode=fail_closed`), any `timestamp_parse_failed` MAY be escalated to a stage failure (FATAL) if configured as such. Default v0.1 policy: drop-and-count, warn-and-skip.
+- If `normalization.strict_mode=true` (or normalization stage `fail_mode=fail_closed`), any
+  `timestamp_parse_failed` MAY be escalated to a stage failure (FATAL) if configured as such.
+  Default v0.1 policy: drop-and-count, warn-and-skip.
 
 #### Quality gate: Tier 1 coverage (substage permitted)
 
-Tier 1 coverage thresholds MUST NOT be expressed as a fail-closed failure unless explicitly configured as such. Default v0.1 posture:
+Tier 1 coverage thresholds MUST NOT be expressed as a fail-closed failure unless explicitly
+configured as such. Default v0.1 posture:
 
-- `tier1_coverage_below_gate` is NON-FATAL degraded (recorded as `fail_mode=warn_and_skip`), producing `manifest.status=partial`.
+- `tier1_coverage_below_gate` is NON-FATAL degraded (recorded as `fail_mode=warn_and_skip`),
+  producing `manifest.status=partial`.
 
 ### Validation stage (`validation`)
 
 Default `fail_mode`: `warn_and_skip` (v0.1 baseline)
 
-This stage includes criteria pack evaluation and orchestrator-level validation gates (for example run limits). Implementations MAY record substages.
+This stage includes criteria pack evaluation and orchestrator-level validation gates (for example
+run limits). Implementations MAY record substages.
 
 #### FATAL reason codes
 
@@ -354,7 +391,8 @@ Run limit conditions MUST be recorded deterministically when they occur.
 | `memory_limit_exceeded` | `failed`   | `20`      | Run exceeded `max_memory_mb`.                     |
 | `oom_killed`            | `failed`   | `20`      | Process killed by OS OOM killer.                  |
 
-^ Disk limit override: operators MAY configure disk limit behavior as hard fail; if so, `disk_limit_exceeded` yields `failed` / `20`.
+^ Disk limit override: operators MAY configure disk limit behavior as hard fail; if so,
+`disk_limit_exceeded` yields `failed` / `20`.
 
 ### Detection stage (`detection`)
 
@@ -399,7 +437,8 @@ Minimum artifacts when enabled: `scoring/summary.json`
 ^ Policy-dependent override:
 
 - Default v0.1 policy: `join_incompleteness` is FATAL.
-- Operators MAY configure scoring join behavior to warn-and-skip; if so, record `join_incompleteness` as NON-FATAL degraded and set run status `partial`.
+- Operators MAY configure scoring join behavior to warn-and-skip; if so, record
+  `join_incompleteness` as NON-FATAL degraded and set run status `partial`.
 
 #### NON-FATAL reason codes
 
@@ -413,7 +452,8 @@ Default `fail_mode`: `fail_closed` (v0.1 baseline)
 
 Minimum artifacts when enabled: `report/**`
 
-Reporting is presentation-oriented. Machine-readable required summary output is produced by the `scoring` stage.
+Reporting is presentation-oriented. Machine-readable required summary output is produced by the
+`scoring` stage.
 
 #### Reason codes
 
@@ -425,7 +465,8 @@ Reporting is presentation-oriented. Machine-readable required summary output is 
 ^ Policy-dependent override:
 
 - If `reporting.emit_html=true` and `reporting.fail_mode=fail_closed`, `html_render_error` is FATAL.
-- If HTML is configured as best-effort (either `emit_html=false` or stage `fail_mode=warn_and_skip`), record `html_render_error` as NON-FATAL warning-only.
+- If HTML is configured as best-effort (either `emit_html=false` or stage
+  `fail_mode=warn_and_skip`), record `html_render_error` as NON-FATAL warning-only.
 
 ### Signing stage (`signing`)
 
@@ -444,5 +485,7 @@ Default `fail_mode`: `fail_closed` (when enabled)
 - Operators can triage failures deterministically using `(stage, status, fail_mode, reason_code)`.
 - CI gating can be implemented mechanically (exit codes and stage outcomes are authoritative).
 - `logs/health.json` remains minimal and deterministic; warnings are separated.
-- The orchestrator can be implemented as a one-shot process per run while preserving reproducibility and safe failure behavior.
-- Policy-dependent overrides are explicitly constrained and deterministic (configuration-driven only).
+- The orchestrator can be implemented as a one-shot process per run while preserving reproducibility
+  and safe failure behavior.
+- Policy-dependent overrides are explicitly constrained and deterministic (configuration-driven
+  only).

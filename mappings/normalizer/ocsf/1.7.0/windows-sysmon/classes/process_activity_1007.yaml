@@ -1,0 +1,92 @@
+# mappings/normalizer/ocsf/1.7.0/windows-sysmon/classes/process_activity_1007.yaml
+format_version: 1
+
+class_map:
+  class_uid: 1007
+  class_name: Process Activity
+  category_uid: 1
+
+  event_id_map:
+    1: {activity_id: 1}
+    5: {activity_id: 2}
+
+emit:
+  class_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  actor.user.name:
+    from: event_data.User
+    transforms: [trim_ascii, absent_if_placeholder, split_domain_user_name]
+
+  actor.user.domain:
+    from: event_data.User
+    transforms: [trim_ascii, absent_if_placeholder, split_domain_user_domain]
+
+  process.pid:
+    from: event_data.ProcessId
+    transforms: [trim_ascii, absent_if_placeholder, parse_int]
+
+  process.uid:
+    from: event_data.ProcessGuid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  process.file.path:
+    from: event_data.Image
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  process.cmd_line:
+    when:
+      event_id_in: [1]
+    from: event_data.CommandLine
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.process.pid:
+    when:
+      event_id_in: [1]
+    from: event_data.ParentProcessId
+    transforms: [trim_ascii, absent_if_placeholder, parse_int]
+
+  actor.process.uid:
+    when:
+      event_id_in: [1]
+    from: event_data.ParentProcessGuid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.process.file.path:
+    when:
+      event_id_in: [1]
+    from: event_data.ParentImage
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.process.cmd_line:
+    when:
+      event_id_in: [1]
+    from: event_data.ParentCommandLine
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  process.file.hashes:
+    when:
+      event_id_in: [1]
+    from: event_data.Hashes
+    transforms: [parse_sysmon_hashes]
+
+  extensions.purple.sysmon.process_guid:
+    when:
+      event_id_in: [1]
+    from: event_data.ProcessGuid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  extensions.purple.sysmon.parent_process_guid:
+    when:
+      event_id_in: [1]
+    from: event_data.ParentProcessGuid
+    transforms: [trim_ascii, absent_if_placeholder]

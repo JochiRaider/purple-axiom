@@ -11,7 +11,7 @@ not need to load every mapping file to find the relevant pack or rule.
 | ------------------ | -------------------------------------------------- | -------------------------------------- |
 | `osquery`          | `mappings/normalizer/ocsf/1.7.0/osquery/`           | Pack profile, routing, canonicalization, classes |
 | `windows-security`| `mappings/normalizer/ocsf/1.7.0/windows-security/`  | Pack profile, routing, canonicalization, classes |
-| `windows-sysmon`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/`    | Pack profile, routing, canonicalization, maps, transforms |
+| `windows-sysmon`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/`    | Pack profile, routing, canonicalization, classes |
 
 ## File map (covers all mapping files)
 
@@ -32,15 +32,10 @@ not need to load every mapping file to find the relevant pack or rule.
 | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/profile.yaml` | Pack profile for Windows Sysmon mappings |
 | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/routing.yaml` | Routing rules for Windows Sysmon mappings |
 | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/canonicalization.yaml` | Canonicalization rules for Windows Sysmon mappings |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/maps/dns_activity.yaml` | DNS activity mapping rules (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/maps/file_system_activity.yaml` | File system activity mapping rules (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/maps/network_activity.yaml` | Network activity mapping rules (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/maps/process_activity.yaml` | Process activity mapping rules (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/transforms/hostname_lower.yaml` | Hostname transform (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/transforms/parse_domain_user.yaml` | Domain\\user parsing transform (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/transforms/parse_int.yaml` | Integer parsing transform (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/transforms/parse_sysmon_hashes.yaml` | Sysmon hashes parsing transform (Windows Sysmon) |
-| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/transforms/trim.yaml` | String trim transform (Windows Sysmon) |
+| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/classes/dns_activity_4003.yaml` | DNS activity class mapping rules (Windows Sysmon) |
+| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/classes/file_system_activity_1001.yaml` | File system activity class mapping rules (Windows Sysmon) |
+| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/classes/network_activity_4001.yaml` | Network activity class mapping rules (Windows Sysmon) |
+| `mappings/normalizer/ocsf/1.7.0/windows-sysmon/classes/process_activity_1007.yaml` | Process activity class mapping rules (Windows Sysmon) |
 
 ## Other files in mappings
 

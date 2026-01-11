@@ -1,42 +1,94 @@
-# Canonicalization rules applied prior to mapping.
-# These rules define deterministic, reusable transforms for Sysmon mapping.
+# mappings/normalizer/ocsf/1.7.0/windows-sysmon/canonicalization.yaml
+format_version: 1
 
-schema_version: "pa.canonicalization.v0.1"
-profile_id: "windows-sysmon_to_ocsf_1.7.0"
+constants:
+  placeholder_values:
+    - ""
+    - "-"
+    - "NULL"
+    - "null"
+    - "(null)"
+    - "N/A"
 
-rules:
-  # Common string cleanup for EventData values
-  - id: "trim_strings"
-    applies_to:
-      - "$.computer"
-      - "$.provider"
-      - "$.channel"
-      - "$.event_data.*"
-    transform: "transforms/trim.yaml"
+transforms:
+  # --- string helpers ---
+  trim_ascii:
+    kind: string
+    op: trim_ascii_whitespace
 
-  # Normalize hostname for device.hostname (lowercase)
-  - id: "hostname_lowercase"
-    applies_to:
-      - "$.computer"
-    transform: "transforms/hostname_lower.yaml"
+  lowercase_ascii:
+    kind: string
+    op: lowercase_ascii
 
-  # Parse base-10 integer fields (pid/ports)
-  - id: "parse_int_fields"
-    applies_to:
-      - "$.event_data.ProcessId"
-      - "$.event_data.ParentProcessId"
-      - "$.event_data.SourcePort"
-      - "$.event_data.DestinationPort"
-    transform: "transforms/parse_int.yaml"
+  to_string:
+    kind: scalar
+    op: to_string
 
-  # Parse DOMAIN\USER or USER into structured user fields when requested by a map.
-  - id: "parse_domain_user"
-    applies_to:
-      - "$.event_data.User"
-    transform: "transforms/parse_domain_user.yaml"
+  # --- numeric parsing ---
+  parse_int:
+    kind: scalar
+    op: parse_int
+    args:
+      base: 10
 
-  # Parse Sysmon "Hashes" field into normalized fingerprints when requested by a map.
-  - id: "parse_sysmon_hashes"
-    applies_to:
-      - "$.event_data.Hashes"
-    transform: "transforms/parse_sysmon_hashes.yaml"
+  # --- timestamps ---
+  parse_rfc3339_to_epoch_ms:
+    kind: time
+    op: parse_rfc3339_to_epoch_ms
+
+  # --- presence / placeholders ---
+  absent_if_placeholder:
+    kind: presence
+    op: absent_if_in_set
+    args:
+      set_ref: constants.placeholder_values
+
+  # --- path helpers ---
+  extract_basename:
+    kind: string
+    op: extract_basename
+
+  extract_parent_folder:
+    kind: string
+    op: extract_parent_folder
+
+  # --- user helpers ---
+  split_domain_user_name:
+    kind: string
+    op: split_domain_user
+    args:
+      delimiter: "\\"
+      part: name
+
+  split_domain_user_domain:
+    kind: string
+    op: split_domain_user
+    args:
+      delimiter: "\\"
+      part: domain
+
+  # --- Sysmon hashes ---
+  parse_sysmon_hashes:
+    kind: string
+    op: parse_kv_list
+    args:
+      pair_delimiter: ","
+      kv_delimiter: "="
+      key_trim: true
+      value_trim: true
+      absent_sentinels:
+        - ""
+        - "-"
+        - "NULL"
+        - "null"
+        - "(null)"
+        - "N/A"
+      algorithm_id_map:
+        MD5: 1
+        SHA1: 2
+        SHA-1: 2
+        SHA256: 3
+        SHA-256: 3
+        SHA512: 4
+        SHA-512: 4
+      unknown_algorithm_id: 99

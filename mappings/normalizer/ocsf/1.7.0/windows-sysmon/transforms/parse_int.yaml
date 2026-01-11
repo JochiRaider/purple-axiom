@@ -1,6 +1,0 @@
-schema_version: "pa.transform.v0.1"
-id: "parse_int"
-type: "parse_int_base10"
-params:
-  absent_sentinels: ["", "-", "(null)"]
-  on_error: "absent"   # "absent" | "error"

@@ -1,6 +1,0 @@
-schema_version: "pa.transform.v0.1"
-id: "trim"
-type: "string_trim"
-params:
-  # Treat these as "absent" sentinel values after trim.
-  absent_sentinels: ["", "-", "(null)"]

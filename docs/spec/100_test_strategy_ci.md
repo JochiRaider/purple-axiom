@@ -27,8 +27,9 @@
   - Given a deprecated column name and an `_schema.json` alias mapping, the query layer MUST resolve
     the canonical column name deterministically (prefer first alias; fall through to next; then NULL
     if none exist).
-- Rule compilation tests: Sigma -> evaluation plan (authoritative supported subset and non-executable 
-  classification: `docs/spec/065_sigma_to_ocsf_bridge.md#backend-adapter-contract-normative-v01`).
+- Rule compilation tests: Sigma -> evaluation plan (authoritative supported subset and
+  non-executable classification:
+  `docs/spec/065_sigma_to_ocsf_bridge.md#backend-adapter-contract-normative-v01`).
 - Bridge router multi-class routing tests:
   - Given a `logsource.category` routed to multiple `class_uid` values, compilation MUST scope
     evaluation to the union (`IN (...)` / OR semantics).
@@ -51,8 +52,8 @@
 
 ## Integration tests
 
-- DuckDB determinism conformance harness (toolchain qualification;
-  default backend semantics: `docs/spec/065_sigma_to_ocsf_bridge.md#3-evaluator-backend-adapter`):
+- DuckDB determinism conformance harness (toolchain qualification; default backend semantics:
+  `docs/spec/065_sigma_to_ocsf_bridge.md#3-evaluator-backend-adapter`):
 
   - Purpose: qualify DuckDB (version × OS × arch) for deterministic evaluation outputs over fixed
     Parquet fixtures and fixed SQL queries, and record drift across patch/minor upgrades.

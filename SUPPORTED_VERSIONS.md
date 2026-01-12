@@ -61,7 +61,7 @@ Toolchain baseline (v0.1):
 - **pySigma upgrades:** treat as behavior-changing for rule parsing/modifier semantics; re-run rule
   compilation fixtures and “golden equivalence” backend gates.
 - **pySigma pipeline upgrades:** treat as behavior-changing for logsource routing assumptions and
-  field alias behavior; re-run rule compilation fixtures and “golden equivalence” backend gates.  
+  field alias behavior; re-run rule compilation fixtures and “golden equivalence” backend gates.
 - **DuckDB upgrades:** treat as behavior-changing for SQL execution and parquet scanning; re-run
   evaluator fixtures and report generation sanity checks.
 - **osquery upgrades:** treat as potentially behavior-changing for table schemas and event backends;

@@ -205,18 +205,21 @@ Over time, the target is to reduce fallback rate by expanding normalized fields.
 Non-executable `reason_code` values (normative, v0.1):
 
 Routing and mapping:
+
 - `unrouted_logsource` (no router entry for the rule `logsource`)
 - `unmapped_field` (Sigma field cannot be resolved to an OCSF path or backend expression)
 - `raw_fallback_disabled` (an unmapped field was encountered and `raw.*` fallback was not permitted)
 - `ambiguous_field_alias` (alias resolution is not uniquely determined for the routed scope)
 
 Expression support:
+
 - `unsupported_operator` (Sigma operator cannot be represented in the selected backend)
 - `unsupported_modifier` (Sigma modifier cannot be represented in the selected backend)
 - `unsupported_value_type` (value type is unsupported for the operator and field expression)
 - `unsupported_regex` (regex use is unsupported or disallowed by backend policy)
 
 Backend execution:
+
 - `backend_compile_error` (backend failed to compile a valid executable plan)
 - `backend_eval_error` (backend failed during evaluation)
 
@@ -242,10 +245,9 @@ Version pinning (normative):
 - The `duckdb_sql` backend MUST use the pinned DuckDB version defined in `SUPPORTED_VERSIONS.md`.
 - The bridge MUST record the effective runtime versions used for:
   - DuckDB (library/runtime version),
-  - pySigma (library version),
-  in backend provenance within each compiled plan.
-- If the effective version differs from the pins, the evaluator stage MUST fail closed 
-  (see version drift policy in `SUPPORTED_VERSIONS.md`).
+  - pySigma (library version), in backend provenance within each compiled plan.
+- If the effective version differs from the pins, the evaluator stage MUST fail closed (see version
+  drift policy in `SUPPORTED_VERSIONS.md`).
 
 ### Streaming backend (optional v0.2)
 
@@ -270,9 +272,9 @@ At least one of the following MUST be true to justify adding or enabling Tenzir:
 ### Backend conformance gates (CI)
 
 Any backend implementation (including `duckdb_sql` and `tenzir` in v0.2) MUST satisfy the following
-Conformance fixtures for these gates are defined in 
-`docs/spec/100_test_strategy_ci.md#unit-tests` (rule compilation, multi-class routing) and 
-`docs/spec/100_test_strategy_ci.md#integration-tests` (DuckDB determinism conformance harness).
+Conformance fixtures for these gates are defined in `docs/spec/100_test_strategy_ci.md#unit-tests`
+(rule compilation, multi-class routing) and `docs/spec/100_test_strategy_ci.md#integration-tests`
+(DuckDB determinism conformance harness).
 
 - **Golden equivalence (supported subset)**: for a pinned fixture corpus and a pinned Sigma subset,
   backends MUST produce identical `matched event ids` per rule. If a backend intentionally differs,
@@ -299,21 +301,25 @@ the evaluator backend adapter. It is authoritative for:
 #### Common requirements (all backends)
 
 1. Output artifacts:
+
    - For each evaluated Sigma rule, the bridge MUST emit exactly one compiled plan file under
      `bridge/compiled_plans/<rule_id>.plan.json` (see “Bridge artifacts in the run bundle”).
    - A compiled plan MUST either:
      - be executable (contains backend-specific executable content), or
      - be explicitly non-executable (contains `reason_code` and an explanation).
 
-2. Fail-closed semantics:
+1. Fail-closed semantics:
+
    - If routing is unknown, aliasing is unknown, or backend compilation cannot represent the rule,
      the bridge MUST mark the rule non-executable. It MUST NOT silently degrade into “no matches”.
 
-3. Deterministic match sets:
+1. Deterministic match sets:
+
    - Any emitted list of matched `metadata.event_id` MUST be sorted deterministically prior to
      writing `detections/detections.jsonl`.
 
-4. Deterministic compilation inputs:
+1. Deterministic compilation inputs:
+
    - Compilation MUST be a pure function of:
      - rule content,
      - router output (routed scope),
@@ -327,6 +333,7 @@ The following MUST be supported by the v0.1 evaluator adapter for the default ba
 after routing and alias resolution.
 
 Selector primitives (field-to-value comparisons):
+
 - Equality:
   - `field: <scalar>` (string, number, boolean)
   - `field: [<scalar> ...]` (list membership)
@@ -340,10 +347,12 @@ Selector primitives (field-to-value comparisons):
   - `field|endswith`
 
 Boolean composition:
+
 - `and`, `or`, `not` over selections and subexpressions
 - `1 of selection*` and `all of selection*` (wildcard selection groups)
 
 Out of scope in v0.1 (MUST be marked non-executable when encountered):
+
 - Correlation and multi-event sequence semantics (beyond single-event matching)
 - Temporal aggregation semantics (for example: `count()`, `near`, `within`, “threshold” rules)
 - Field modifiers that require binary transforms (example: `base64`, `utf16`, `windash`) unless the
@@ -358,6 +367,7 @@ If any required mapping cannot be performed, the rule MUST be marked non-executa
 specific applicable `reason_code`.
 
 1. Field expression resolution
+
 - After pipelines and aliasing, each Sigma field reference MUST resolve to exactly one of:
   - an OCSF dot-path, or
   - a backend expression string suitable for the target dataset schema.
@@ -366,22 +376,26 @@ specific applicable `reason_code`.
   - multiple targets: `ambiguous_field_alias`
 
 2. Null and missing semantics (deterministic)
+
 - If a resolved field expression evaluates to NULL for an event row:
   - `exists:true` MUST evaluate to false
   - `exists:false` MUST evaluate to true
   - all other comparisons MUST evaluate to false
 
 3. Equality and list membership
+
 - `field: v` MUST compile to a type-strict equality predicate.
 - `field: [v1, v2, ...]` MUST compile to membership semantics equivalent to `field IN (...)`.
 - For determinism and diffability, the adapter MUST emit list literals in a stable order:
   - sort scalars by canonical JSON ordering (numbers as numbers, strings by UTF-8 byte order).
 
 4. Relational operators (numeric only)
+
 - `lt/lte/gt/gte` MUST be supported only when the value is numeric and the resolved field is a
   numeric-typed expression for the dataset. Otherwise: `unsupported_value_type`.
 
 5. String matching (contains/startswith/endswith)
+
 - The adapter MUST compile string matching using deterministic escaping semantics.
 - Wildcards MUST NOT be inferred from raw values. Only the Sigma modifier controls wildcarding.
 - The adapter MUST escape any characters that would be interpreted as pattern wildcards in the SQL
@@ -389,14 +403,15 @@ specific applicable `reason_code`.
 - If the resolved field is not a string expression: `unsupported_value_type`.
 
 6. Regex (`|re`)
+
 - Regex matching is out of scope for v0.1 by default.
 - If regex is encountered, the adapter MUST mark the rule non-executable with `unsupported_regex`,
   unless regex support has been explicitly implemented and validated by fixtures for the pinned
   DuckDB version.
 
-7. Deterministic SQL emission
-To keep compiled plans diffable and stable, the adapter SHOULD (recommended) follow these emission
-rules:
+7. Deterministic SQL emission To keep compiled plans diffable and stable, the adapter SHOULD
+   (recommended) follow these emission rules:
+
 - Use a stable, fixed ordering for predicates:
   - routed class filter first,
   - router `filters[]` next in their stored order,

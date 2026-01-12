@@ -1,6 +1,21 @@
-# DuckDB_Backend_Plugin_for_pySigma (Purple Axiom)
+# DuckDB Backend Plugin for pySigma (Purple Axiom)
 
-Research Report Draft v0
+Research Report Draft v0 (research-first)
+
+## Research posture and prototype-start objective
+
+This document is a **research synthesis plus a prototype-start plan**. It is intentionally written to
+avoid locking in behavior where the semantics are not yet confirmed in the pinned environment.
+
+Accordingly:
+
+- Any SQL pattern or behavioral statement that depends on runtime semantics MUST be treated as a
+  **candidate** until it is verified by a recorded prototype experiment.
+- Anything marked **Requires validation** in the Supported Features Matrix is treated as
+  **Non-executable** for MVP compilation until it is promoted by a recorded experiment.
+- Prototype-oriented materials (fixtures, validation SQL, and work packages) are included as
+  **appendices** so they are clearly scoped as prototyping inputs rather than settled research
+  conclusions.
 
 ## 1. Purpose
 
@@ -8,7 +23,7 @@ Define the researched ground truth and an initial, testable capability plan for 
 backend plugin** that emits **DuckDB SQL** for executing Sigma rules against **OCSF-normalized
 data** in Purple Axiom.
 
-This report is a draft pending validation experiments enumerated in Section 8.
+This report is a draft; all validation work is planned and tracked via the research gaps checklist (Section 8) and the phased prototype plan (Section 9).
 
 ## 2. Scope and non-goals
 
@@ -95,7 +110,9 @@ These are draft requirements intended to become spec language later:
   - LIKE pattern escaping policy (documented `ESCAPE` usage).
 
 - The backend MUST define a stable policy for Sigma’s default case-insensitive semantics, because
-  Sigma defaults to case-insensitive matching and `cased` requests case-sensitive matching.
+  Sigma defaults to case-insensitive matching and `cased` requests case-sensitive matching. The *selection*
+  of that policy (e.g., `ILIKE` vs `lower()` vs collation) is a research item (see GAP-01) and MUST NOT be
+  treated as executable for MVP until validated.
 
 ## 7. Supported Features Matrix (DuckDB SQL candidates)
 
@@ -304,7 +321,72 @@ containing at least:
 - Run GAP-03 (nested fields) and GAP-08 (timestamp typing).
 - Produce a single “OCSF-in-DuckDB access note” (field access, list behavior, timestamp type).
 
-**Deliverable:** Data projection note + minimal fixtures demonstrating behavior.
+**Deliverable:** A prototype work package (Appendix C) that defines the minimal fixtures and validation queries, plus a short note capturing the *verified* results once experiments are executed.
+
+### Phase 2: String semantics and matching
+
+- Run GAP-01 and GAP-02 and lock:
+
+  - case-insensitive policy,
+  - wildcard translation,
+  - LIKE escaping rules.
+
+**Deliverable:** Golden SQL emission tests for `contains`, `startswith`, `endswith`, equality.
+
+### Phase 3: Regex policy
+
+- Run GAP-04 and GAP-05 and decide:
+
+  - allowed RE2 subset,
+  - compile-time rejection rules.
+
+**Deliverable:** Regex compatibility matrix + negative fixtures for rejected patterns.
+
+### Phase 4: Extensions and advanced modifiers
+
+- Run GAP-06 (inet) and decide packaging pinning approach.
+- Decide whether to include base64 family (GAP-09) in MVP or defer.
+
+**Deliverable:** Operational note and updated external requirements if needed.
+
+## 10. What to improve next in this report (concrete upgrades)
+
+For the next revision cycle, the report should incorporate:
+
+1. A **backend option catalog** (initial list: `table_name`, output format, case policy switch,
+   timezone policy, inet enablement), explicitly labeled “proposed” until validated.
+1. A **compile-time failure classification** for “non-executable” constructs (regex-incompatible,
+   schema-dependent access, requires extension, unresolved expand).
+1. A **mapping from GAP IDs to test artifacts** (fixture path conventions and golden SQL naming).
+1. A short “comparison to precedent” section, explicitly borrowing the SQLite backend’s
+   supported-features documentation style and gating pattern.
+
+## Appendix A: DuckDB Version Notes
+
+This note assumes DuckDB 1.0+. Key version-dependent behaviors:
+
+| Feature           | DuckDB Version | Notes                    |
+| ----------------- | -------------- | ------------------------ |
+| `TRY()` wrapper   | 0.9+           | Returns NULL on error    |
+| `epoch_ms()`      | 0.8+           | Converts ms to TIMESTAMP |
+| `list_contains()` | 0.3+           | Stable                   |
+| `list_has_any()`  | 0.9+           | Multi-value membership   |
+| `list_has_all()`  | 0.9+           | All-value membership     |
+
+______________________________________________________________________
+
+## Appendix B: References
+
+- Purple Axiom `docs/spec/045_storage_formats.md` (storage schema contract)
+- Purple Axiom `docs/spec/055_ocsf_field_tiers.md` (field tier definitions)
+- Purple Axiom `docs/contracts/ocsf_event_envelope.schema.json` (JSON Schema)
+- DuckDB Documentation: Nested Types (STRUCT, LIST)
+- DuckDB Documentation: Date/Time Functions
+- pySigma DuckDB Backend Draft: `R-0X_draft_DuckDB_Backend_Plugin_for_pySigma.md`
+
+## Appendix C: Prototype work packages (planned validation inputs)
+
+The material in this appendix is intentionally written as prototyping inputs. It preserves the current research and candidate SQL patterns, but it does not claim they are correct until experiments are recorded.
 
 Phase 1 Deliverable for pySigma DuckDB Backend Plugin
 
@@ -312,13 +394,13 @@ Phase 1 Deliverable for pySigma DuckDB Backend Plugin
 
 ## 1. Executive Summary
 
-This note documents the empirically verified (or documented) behaviors for accessing OCSF-normalized
+This work package defines the behaviors to be verified (via documentation review and prototype experiments) for accessing OCSF-normalized
 data in DuckDB, specifically addressing:
 
 - **GAP-03**: Safe nested field access for OCSF STRUCT projections
 - **GAP-08**: Timestamp typing and time-part extraction
 
-**Key findings:**
+**Working hypotheses / candidate strategies (to validate):**
 
 | Concern                | Purple Axiom Schema                     | DuckDB Access Strategy                            | Risk Level |
 | ---------------------- | --------------------------------------- | ------------------------------------------------- | ---------- |
@@ -386,7 +468,7 @@ accessing a key that does not exist in the STRUCT schema. This affects:
 - The `exists` modifier compilation
 - Safe access patterns for sparse nested objects
 
-### 3.2 Documented DuckDB Behavior
+### 3.2 Behavior to confirm (expected per DuckDB documentation; validate in the pinned version)
 
 **Dot notation:**
 
@@ -396,7 +478,7 @@ SELECT actor.user.name FROM events;        -- OK if full path exists
 SELECT actor.user.phone FROM events;       -- ERROR if 'phone' not in schema
 ```
 
-**Key behaviors (DuckDB 1.0+):**
+**Expected behaviors to confirm (DuckDB 1.0+):**
 
 1. Schema-defined keys: Dot access works; NULL if row value is NULL
 1. Schema-missing keys: Runtime error on `struct_extract`
@@ -765,7 +847,7 @@ SELECT time, epoch_ms(time) AS ts FROM ocsf_events;
 -- Test 2: Extract hour from epoch
 SELECT time, date_part('hour', epoch_ms(time)) AS hour
 FROM ocsf_events;
--- Expected: 14, 15, 16
+-- Observation goal: 14, 15, 16
 
 -- Test 3: Extract date parts
 SELECT
@@ -774,7 +856,7 @@ SELECT
   date_part('month', epoch_ms(time)) AS month,
   date_part('day', epoch_ms(time)) AS day
 FROM ocsf_events;
--- Expected: 2026, 1, 8 for all
+-- Observation goal: 2026, 1, 8 for all
 
 -- Test 4: Filter by hour
 SELECT * FROM ocsf_events
@@ -788,7 +870,7 @@ SELECT
   CAST(time_dt AS TIMESTAMP) AS from_string,
   epoch_ms(time) = CAST(time_dt AS TIMESTAMP) AS match
 FROM ocsf_events;
--- Expected: match = true for all
+-- Observation goal: match = true for all
 ```
 
 ______________________________________________________________________
@@ -829,64 +911,3 @@ ______________________________________________________________________
    must contain both substrings, or each substring appears in at least one IP?)
 
 ______________________________________________________________________
-
-## Appendix A: DuckDB Version Notes
-
-This note assumes DuckDB 1.0+. Key version-dependent behaviors:
-
-| Feature           | DuckDB Version | Notes                    |
-| ----------------- | -------------- | ------------------------ |
-| `TRY()` wrapper   | 0.9+           | Returns NULL on error    |
-| `epoch_ms()`      | 0.8+           | Converts ms to TIMESTAMP |
-| `list_contains()` | 0.3+           | Stable                   |
-| `list_has_any()`  | 0.9+           | Multi-value membership   |
-| `list_has_all()`  | 0.9+           | All-value membership     |
-
-______________________________________________________________________
-
-## Appendix B: References
-
-- Purple Axiom `docs/spec/045_storage_formats.md` (storage schema contract)
-- Purple Axiom `docs/spec/055_ocsf_field_tiers.md` (field tier definitions)
-- Purple Axiom `docs/contracts/ocsf_event_envelope.schema.json` (JSON Schema)
-- DuckDB Documentation: Nested Types (STRUCT, LIST)
-- DuckDB Documentation: Date/Time Functions
-- pySigma DuckDB Backend Draft: `R-0X_draft_DuckDB_Backend_Plugin_for_pySigma.md`
-
-### Phase 2: String semantics and matching
-
-- Run GAP-01 and GAP-02 and lock:
-
-  - case-insensitive policy,
-  - wildcard translation,
-  - LIKE escaping rules.
-
-**Deliverable:** Golden SQL emission tests for `contains`, `startswith`, `endswith`, equality.
-
-### Phase 3: Regex policy
-
-- Run GAP-04 and GAP-05 and decide:
-
-  - allowed RE2 subset,
-  - compile-time rejection rules.
-
-**Deliverable:** Regex compatibility matrix + negative fixtures for rejected patterns.
-
-### Phase 4: Extensions and advanced modifiers
-
-- Run GAP-06 (inet) and decide packaging pinning approach.
-- Decide whether to include base64 family (GAP-09) in MVP or defer.
-
-**Deliverable:** Operational note and updated external requirements if needed.
-
-## 10. What to improve next in this report (concrete upgrades)
-
-For the next revision cycle, the report should incorporate:
-
-1. A **backend option catalog** (initial list: `table_name`, output format, case policy switch,
-   timezone policy, inet enablement), explicitly labeled “proposed” until validated.
-1. A **compile-time failure classification** for “non-executable” constructs (regex-incompatible,
-   schema-dependent access, requires extension, unresolved expand).
-1. A **mapping from GAP IDs to test artifacts** (fixture path conventions and golden SQL naming).
-1. A short “comparison to precedent” section, explicitly borrowing the SQLite backend’s
-   supported-features documentation style and gating pattern.

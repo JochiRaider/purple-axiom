@@ -1,16 +1,30 @@
-<!-- docs/spec/050_normalization_ocsf.md -->
+---
+title: Normalization to OCSF
+description: Defines OCSF normalization rules, versioning policy, and required artifacts.
+status: draft
+---
 
 # Normalization to OCSF
+
+This document defines the normalization rules and mapping approach for producing OCSF events in
+Purple Axiom. It specifies versioning policy, required envelopes, and the run bundle artifacts that
+make normalization deterministic and auditable.
+
+## Overview
+
+This spec establishes OCSF as the canonical normalized event model, defines how versions and
+profiles are pinned, and outlines the required artifacts and coverage outputs. It also describes
+v0.1 osquery routing rules and the migration policy for OCSF version updates.
 
 ## Canonical model
 
 - OCSF is the canonical normalized event model for all downstream evaluation and reporting.
-- Normalization must be *loss-minimizing*: never discard source data that may be useful later.
+- Normalization must be loss-minimizing: never discard source data that may be useful later.
 
 ## Versioning and profiles
 
 - Pin a specific OCSF schema version per Purple Axiom release.
-- Record the pinned OCSF version and enabled profiles/extensions in run provenance (manifest +
+- Record the pinned OCSF version and enabled profiles or extensions in run provenance (manifest and
   normalized event metadata).
 - Provide migration notes when updating the pinned OCSF version (field moves, enum changes, class
   reclassification).
@@ -28,8 +42,8 @@ Conformance requirements (v0.1):
 
 - Every run MUST record the effective `ocsf_version` used for normalization in run provenance.
   - Minimum: `normalized/mapping_profile_snapshot.json.ocsf_version`.
-  - RECOMMENDED: also record in `manifest.json` (see `025_data_contracts.md` recommended manifest
-    additions).
+  - RECOMMENDED: also record in `manifest.json` (see the
+    [data contracts spec](025_data_contracts.md) recommended manifest additions).
 - When Sigma-to-OCSF Bridge artifacts are present, the bridge mapping pack MUST declare the same
   `ocsf_version` as the normalizer output for that run. A mismatch MUST be treated as an
   incompatible configuration (fail closed).
@@ -53,22 +67,23 @@ Required steps for changing the pinned OCSF version (normative):
    - Update mapping profile(s) and refresh `normalized/mapping_profile_snapshot.json` semantics as
      needed.
 1. Update bridge mapping packs as needed:
-   - Router tables and field aliases MUST be evaluated for field moves/renames and enum changes.
-1. Migration testing MUST be added/updated (see `docs/spec/100_test_strategy_ci.md`):
+   - Router tables and field aliases MUST be evaluated for field moves, renames, and enum changes.
+1. Migration testing MUST be added or updated (see the
+   [test strategy and CI spec](100_test_strategy_ci.md)):
    - A fixed raw telemetry fixture set MUST be re-normalized under the new pinned version.
-   - Expected outputs MUST be captured as “golden” artifacts, with diffs reviewed.
+   - Expected outputs MUST be captured as golden artifacts, with diffs reviewed.
 
 ## Mapping strategy (industry-aligned)
 
 - Preserve source fidelity:
-  - retain original/raw payload (or a redacted-safe representation) for audit/forensics
-  - route unmapped fields into an explicit `unmapped` / `raw` object so nothing is silently dropped
-- “Core first” mapping:
-  - define a small “core field set” per event class (mandatory + high-value entities)
+  - retain original or raw payload (or a redacted-safe representation) for audit and forensics
+  - route unmapped fields into an explicit `unmapped` or `raw` object so nothing is silently dropped
+- Core-first mapping:
+  - define a small core field set per event class (mandatory + high-value entities)
   - map core fields deterministically; enrich incrementally over time
 - Prefer declarative mappings where practical:
-  - mapping tables/config per source_type and profile
-  - minimal imperative code limited to parsing + derived fields + edge-case handling
+  - mapping tables or config per `source_type` and profile
+  - minimal imperative code limited to parsing, derived fields, and edge-case handling
 
 ## Required envelope (Purple Axiom contract)
 
@@ -81,28 +96,29 @@ Required steps for changing the pinned OCSF version (normative):
 - `metadata.normalizer_version`
 - `metadata.source_type`
 
-## osquery normalization (v0.1)
+## Osquery normalization (v0.1)
 
-osquery is a query engine rather than a single semantic event stream. Normalization MUST therefore
+Osquery is a query engine rather than a single semantic event stream. Normalization MUST therefore
 be driven by the osquery scheduled query name:
 
 - The normalizer MUST set `metadata.source_type = "osquery"` for all osquery-derived events.
 - Routing MUST be based on the osquery `name` field (hereafter `query_name`) using a declarative
   routing table captured in `normalized/mapping_profile_snapshot.json`.
 - v0.1 routing defaults (mapping profile MAY override explicitly):
-  - `process_events` → Process Activity (`class_uid: 1007`)
-  - `file_events` → File System Activity (`class_uid: 1001`)
-  - `socket_events` → Network Activity (`class_uid: 4001`)
+  - `process_events` -> Process Activity (`class_uid: 1007`)
+  - `file_events` -> File System Activity (`class_uid: 1001`)
+  - `socket_events` -> Network Activity (`class_uid: 4001`)
 
 Unrouted behavior:
 
 - The normalizer MUST NOT guess a `class_uid` for an unknown `query_name`.
 - Unknown `query_name` rows MUST be preserved in `raw/` and MUST be counted in
-  `normalized/mapping_coverage.json` as unrouted/unmapped.
+  `normalized/mapping_coverage.json` as unrouted or unmapped.
 
-Implementation details and conformance fixtures are specified in `042_osquery_integration.md`.
+Implementation details and conformance fixtures are specified in the
+[osquery integration spec](042_osquery_integration.md).
 
-## Run bundle artifacts (normalized/)
+## Run bundle artifacts
 
 When normalization is enabled and produces an OCSF event store, the normalizer MUST emit:
 
@@ -141,50 +157,66 @@ Requirements (normative):
 - MUST reference the mapping profile via `mapping_profile_sha256` so coverage is attributable to
   mapping changes vs telemetry changes.
 
-## “Core entities” guidance (best practice)
+## Core entities guidance (best practice)
 
 - Ensure high-query entities are normalized consistently:
-  - device/host identity
-  - user/principal identity
-  - application/service identity
-  - (where applicable) src/dst network endpoints
-- Apply data integrity checks for required/mapped core fields (nullability, type coercion policy).
+  - device or host identity
+  - user or principal identity
+  - application or service identity
+  - (where applicable) src or dst network endpoints
+- Apply data integrity checks for required or mapped core fields (nullability, type coercion
+  policy).
 
 ## Normalization practicalities to handle explicitly
 
-- Differing source column types → deterministic coercion rules
-- Derived fields → explicit derivation functions with tests
-- Missing/null fields → consistent defaults/null semantics
-- Literal normalization → stable enumerations (“Success/Failure”, etc.)
-- Schema evolution → backward-compatibility policy for stored artifacts
-- Enrichment → well-defined join points (asset inventory, threat intel, scenario context)
+- Differing source column types -> deterministic coercion rules
+- Derived fields -> explicit derivation functions with tests
+- Missing or null fields -> consistent defaults or null semantics
+- Literal normalization -> stable enumerations ("Success" and "Failure", and so on)
+- Schema evolution -> backward-compatibility policy for stored artifacts
+- Enrichment -> well-defined join points (asset inventory, threat intel, scenario context)
 
 ## Validation strategy
 
 - Tier 1 (CI gate): validate against Purple Axiom envelope contract + invariants.
-- Tier 2 (deep validation): validate selected classes/sources against pinned OCSF schema artifacts.
+- Tier 2 (deep validation): validate selected classes or sources against pinned OCSF schema
+  artifacts.
 - Tier 3 (storage): enforce Parquet schema + partitioning + deterministic ordering for long-term
   storage.
 
 ## Observability and coverage
 
 - Emit mapping coverage:
-
-  - % events mapped by class_uid/source_type
-  - unknown/unclassified event types
+  - % events mapped by class_uid or source_type
+  - unknown or unclassified event types
   - missing core fields rate per class
-
 - Treat mapping regressions as first-class failures (reportable + trendable).
-
 - Downstream evaluator alignment:
+  - Track coverage for the Sigma-to-OCSF bridge MVP field surface (see the
+    [Sigma to OCSF bridge spec](065_sigma_to_ocsf_bridge.md)).
+  - Report when normalizer changes increase `bridge_gap` risk (fields dropped or renamed, class
+    routing changes).
 
-  - Track coverage for the Sigma-to-OCSF Bridge MVP field surface (see
-    `065_sigma_to_ocsf_bridge.md`).
-  - Report when normalizer changes increase `bridge_gap` risk (fields dropped/renamed, class routing
-    changes).
+## Key decisions
+
+- OCSF is the canonical normalized event model and is pinned per release.
+- Normalization artifacts must include mapping snapshots and coverage metrics for determinism.
+- Osquery routing is based on scheduled query names with explicit unrouted handling.
 
 ## References
 
-- Use the OCSF schema repo and example translations as guidance, not as a gold standard.
-- Prefer production-shaped references (e.g., Security Lake transformation patterns) when designing
-  mappings.
+- [Data contracts spec](025_data_contracts.md)
+- [Telemetry pipeline spec](040_telemetry_pipeline.md)
+- [Osquery integration spec](042_osquery_integration.md)
+- [Storage formats spec](045_storage_formats.md)
+- [OCSF field tiers spec](055_ocsf_field_tiers.md)
+- [Sigma to OCSF bridge spec](065_sigma_to_ocsf_bridge.md)
+- [Test strategy and CI spec](100_test_strategy_ci.md)
+- [Config reference](120_config_reference.md)
+- [OCSF schema documentation](https://schema.ocsf.io/)
+
+## Changelog
+
+| Date | Change                                       |
+| ---- | -------------------------------------------- |
+| TBD  | Style guide migration (no technical changes) |

@@ -1,24 +1,28 @@
-<!-- docs/adr/ADR-0001-project-naming-and-versioning.md -->
+---
+title: 'ADR-0001: Project naming and versioning'
+description: Defines stable naming and versioning conventions for runs, scenarios, mappings, and schema pins to enable reproducible scoring.
+status: proposed
+category: adr
+tags: [versioning, naming, determinism]
+---
 
 # ADR-0001: Project naming and versioning
 
-## Status
-
-Proposed
-
 ## Context
 
-We need stable identifiers for scenarios, rulesets, mappings, and pipeline configs to ensure
-reproducible scoring.
+Purple Axiom needs stable identifiers for scenarios, rulesets, mappings, and pipeline configurations
+to ensure reproducible scoring.
 
-## Decision (seed)
+## Decision
 
-- Use semver for project releases.
-- Use immutable run_id (UUID) for each run.
-- Pin OCSF version and record in manifest.
-- Version scenarios independently from the codebase (scenario_version).
+- The project release versioning MUST use SemVer.
+- Each run MUST use an immutable `run_id` (UUID).
+- The pinned OCSF version MUST be recorded in the run manifest.
+- Scenarios MUST be versioned independently from the codebase via `scenario_version`.
+
+`TODO: Add explicit naming/versioning rules for rule packs and mapping profiles if they are defined elsewhere (for example: `ruleset_id`, `ruleset_version`, `mapping_profile_id`, `mapping_profile_version`) and cross-link the authoritative spec or contract.`
 
 ## Consequences
 
-- Easier regression tracking and reproducibility.
-- Requires discipline around manifest completeness.
+- Improves regression tracking and reproducibility across runs.
+- Requires discipline around manifest completeness and version pin hygiene.

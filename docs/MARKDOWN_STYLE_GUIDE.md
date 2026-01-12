@@ -1,35 +1,34 @@
 # Markdown Style Guide
 
-**Version**: 0.1
-**Applies to**: All markdown files in the Purple Axiom repository
+**Version**: 0.1 **Applies to**: All markdown files in the Purple Axiom repository
 
-This guide defines conventions for markdown authoring that optimize for human readability,
-agent/LLM comprehension, and diff stability. All contributors (human and automated) MUST follow
-these guidelines.
+This guide defines conventions for markdown authoring that optimize for human readability, agent/LLM
+comprehension, and diff stability. All contributors (human and automated) MUST follow these
+guidelines.
 
 ## Guiding Principles
 
 1. **Consistency over preference**: Follow the guide even when alternatives seem reasonable.
-2. **Searchability**: Use explicit, descriptive text that agents can locate and reference.
-3. **Diff stability**: Prefer patterns that minimize spurious changes across edits.
-4. **Context efficiency**: Structure content so agents can extract meaning without reading entire
+1. **Searchability**: Use explicit, descriptive text that agents can locate and reference.
+1. **Diff stability**: Prefer patterns that minimize spurious changes across edits.
+1. **Context efficiency**: Structure content so agents can extract meaning without reading entire
    documents.
 
 ## Tooling Constraints
 
 This repository uses `mdformat` with the following enforced settings:
 
-| Setting        | Value | Effect                                       |
-| -------------- | ----- | -------------------------------------------- |
-| `wrap`         | 100   | Lines reflow to 100 characters               |
-| `number`       | false | Ordered lists keep original numbers          |
-| `end_of_line`  | lf    | Unix line endings                            |
-| `validate`     | true  | Malformed output rejected                    |
-| `extensions`   | gfm, frontmatter | GFM tables/tasklists + YAML frontmatter |
+| Setting       | Value            | Effect                                  |
+| ------------- | ---------------- | --------------------------------------- |
+| `wrap`        | 100              | Lines reflow to 100 characters          |
+| `number`      | false            | Ordered lists keep original numbers     |
+| `end_of_line` | lf               | Unix line endings                       |
+| `validate`    | true             | Malformed output rejected               |
+| `extensions`  | gfm, frontmatter | GFM tables/tasklists + YAML frontmatter |
 
 Do not fight the formatter. Write content that formats cleanly under these rules.
 
----
+______________________________________________________________________
 
 ## Document Structure
 
@@ -47,6 +46,7 @@ NNN_descriptive_name.md
 - Name should be scannable and searchable
 
 Examples:
+
 - `050_normalization_ocsf.md` ✓
 - `OCSF-Normalization.md` ✗
 - `050-normalization-ocsf.md` ✗
@@ -101,11 +101,11 @@ superseded_by: null
 
 #### Status Definitions
 
-| Status       | Meaning                                                    |
-| ------------ | ---------------------------------------------------------- |
-| `draft`      | Under active development; may change without notice        |
-| `stable`     | Approved for implementation; changes require review        |
-| `deprecated` | Superseded; retained for historical reference only         |
+| Status       | Meaning                                             |
+| ------------ | --------------------------------------------------- |
+| `draft`      | Under active development; may change without notice |
+| `stable`     | Approved for implementation; changes require review |
+| `deprecated` | Superseded; retained for historical reference only  |
 
 ### Document Skeleton
 
@@ -149,15 +149,15 @@ applicable.
 | 2026-01-12 | Initial draft                   |
 ```
 
----
+______________________________________________________________________
 
 ## Headings
 
 ### Hierarchy Rules
 
 1. **One H1 per document**: The H1 is the document title and MUST match the frontmatter `title`.
-2. **No skipped levels**: Do not jump from H2 to H4.
-3. **Maximum depth**: Prefer H2 and H3; use H4 sparingly; avoid H5 and H6.
+1. **No skipped levels**: Do not jump from H2 to H4.
+1. **Maximum depth**: Prefer H2 and H3; use H4 sparingly; avoid H5 and H6.
 
 ```markdown
 # Document Title                    ← H1: exactly one per document
@@ -195,7 +195,7 @@ links:
 - Keep heading text stable once documents are published
 - If you must rename a heading, update all internal references
 
----
+______________________________________________________________________
 
 ## Paragraphs and Prose
 
@@ -236,18 +236,20 @@ The provenance model consists of three components...
 
 This pattern helps agents extract key information without parsing entire sections.
 
----
+______________________________________________________________________
 
 ## Lists
 
 ### When to Use Lists
 
 Use lists for:
+
 - Enumerated requirements or steps
 - Feature comparisons
 - Option sets with brief descriptions
 
 Do NOT use lists for:
+
 - Content that flows better as prose
 - Single-item "lists"
 - Deeply nested structures (restructure as sections instead)
@@ -324,13 +326,14 @@ record of what occurred during a scenario run.
 `runs/<run_id>/`.
 ```
 
----
+______________________________________________________________________
 
 ## Code
 
 ### Inline Code
 
 Use backticks for:
+
 - File paths: `runs/<run_id>/manifest.json`
 - Field names: `metadata.event_id`
 - Command names: `uv sync`
@@ -338,6 +341,7 @@ Use backticks for:
 - Environment variables: `$OCSF_SCHEMA_VERSION`
 
 Do NOT use backticks for:
+
 - Emphasis (use bold or italics)
 - Product names: Purple Axiom, not `Purple Axiom`
 - General technical terms: OCSF, Sigma, JSON (unless referring to literal strings)
@@ -346,10 +350,10 @@ Do NOT use backticks for:
 
 Always specify the language identifier:
 
-```markdown
+````markdown
 ```yaml
 schema_version: 1.7.0
-```
+````
 
 ```python
 def compute_event_id(event: dict) -> str:
@@ -359,7 +363,8 @@ def compute_event_id(event: dict) -> str:
 ```bash
 uv sync --frozen
 ```
-```
+
+````
 
 Common language identifiers used in this project:
 - `yaml` - Configuration files, OCSF examples
@@ -380,16 +385,18 @@ For shell commands, use `bash` and include the prompt only when showing interact
 <!-- Single command: no prompt -->
 ```bash
 uv sync --frozen
-```
+````
 
 <!-- Interactive session: include prompts -->
+
 ```bash
 $ uv run pytest tests/
 ===== 42 passed in 1.23s =====
 $ echo $?
 0
 ```
-```
+
+````
 
 ### File Content Examples
 
@@ -400,7 +407,7 @@ When showing file contents, include a comment indicating the filename:
 schema_version: 1.7.0
 lab:
   provider: local
-```
+````
 
 ### Directory Trees
 
@@ -417,18 +424,20 @@ runs/<run_id>/
     └── index.html
 ```
 
----
+______________________________________________________________________
 
 ## Tables
 
 ### When to Use Tables
 
 Tables work well for:
+
 - Structured reference data (field definitions, version pins)
 - Comparisons with consistent attributes
 - Status/feature matrices
 
 Avoid tables for:
+
 - Prose content
 - Deeply nested or variable structures
 - Content with very long cell values
@@ -450,12 +459,13 @@ Avoid tables for:
 ### Wide Tables
 
 If a table exceeds 100 characters, consider:
-1. Abbreviating column headers
-2. Moving detailed descriptions to footnotes or a following list
-3. Splitting into multiple tables
-4. Using a definition list instead
 
----
+1. Abbreviating column headers
+1. Moving detailed descriptions to footnotes or a following list
+1. Splitting into multiple tables
+1. Using a definition list instead
+
+______________________________________________________________________
 
 ## Links and References
 
@@ -513,13 +523,14 @@ The [normalization spec][norm-spec] defines how events map to [OCSF 1.7.0][ocsf]
 [ocsf]: https://schema.ocsf.io/1.7.0/
 ```
 
----
+______________________________________________________________________
 
 ## Emphasis
 
 ### Bold
 
 Use bold (`**text**`) for:
+
 - Key terms on first use
 - Summary lines at the start of sections
 - Critical warnings or requirements
@@ -535,6 +546,7 @@ Use bold (`**text**`) for:
 ### Italics
 
 Use italics (`*text*`) for:
+
 - Introducing new terms (alternative to bold)
 - Titles of external works
 - Slight emphasis within a sentence
@@ -552,7 +564,7 @@ See *Designing Data-Intensive Applications* for background on event sourcing.
 - Combining bold and italics (`***text***`)
 - Excessive emphasis (if everything is bold, nothing is)
 
----
+______________________________________________________________________
 
 ## Special Sections
 
@@ -574,13 +586,14 @@ Standard labels: Note, Warning, Important, Tip, Example
 
 Label examples explicitly and use code blocks:
 
-```markdown
+````markdown
 **Example**: Computing event identity from raw input
 
 ```python
 event_id = compute_identity(raw_event, mapping_profile)
-```
-```
+````
+
+````
 
 ### Changelogs
 
@@ -593,9 +606,9 @@ Use tables for inline changelogs:
 | ---------- | ----------------------------------------- |
 | 2026-01-12 | Added provenance field requirements       |
 | 2026-01-10 | Initial draft                             |
-```
+````
 
----
+______________________________________________________________________
 
 ## Agent-Specific Patterns
 
@@ -622,13 +635,13 @@ This document does NOT cover:
 
 Use RFC 2119 keywords consistently for requirements:
 
-| Keyword      | Meaning                                    |
-| ------------ | ------------------------------------------ |
-| MUST         | Absolute requirement                       |
-| MUST NOT     | Absolute prohibition                       |
-| SHOULD       | Recommended unless good reason to deviate  |
-| SHOULD NOT   | Discouraged unless good reason to use      |
-| MAY          | Optional                                   |
+| Keyword    | Meaning                                   |
+| ---------- | ----------------------------------------- |
+| MUST       | Absolute requirement                      |
+| MUST NOT   | Absolute prohibition                      |
+| SHOULD     | Recommended unless good reason to deviate |
+| SHOULD NOT | Discouraged unless good reason to use     |
+| MAY        | Optional                                  |
 
 ```markdown
 The `run_id` field MUST be present in all normalized events.
@@ -661,7 +674,7 @@ Or link to a central glossary:
 Each **run bundle** ([glossary](glossary.md#run-bundle)) contains...
 ```
 
----
+______________________________________________________________________
 
 ## Common Mistakes
 
@@ -714,7 +727,7 @@ The normalizer processes events and sends them to storage. The normalizer valida
 before forwarding.
 ```
 
----
+______________________________________________________________________
 
 ## Checklist for New Documents
 
@@ -732,7 +745,7 @@ Before committing a new markdown document, verify:
 - [ ] Scope section clarifies what is/isn't covered
 - [ ] Document passes `mdformat --check`
 
----
+______________________________________________________________________
 
 ## References
 

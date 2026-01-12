@@ -1,6 +1,6 @@
 ---
-title: "Specification Title"
-description: "One-sentence summary of what this specification defines"
+title: Specification Title
+description: One-sentence summary of what this specification defines
 status: draft
 category: spec
 tags: []
@@ -81,10 +81,10 @@ Additional technical content organized by topic.
 
 ## Key decisions
 
-| Decision                        | Rationale                              | ADR             |
-| ------------------------------- | -------------------------------------- | --------------- |
-| Decision description            | Brief rationale                        | [ADR-NNNN](link) |
-| Another decision                | Brief rationale                        | N/A             |
+| Decision             | Rationale       | ADR              |
+| -------------------- | --------------- | ---------------- |
+| Decision description | Brief rationale | [ADR-NNNN](link) |
+| Another decision     | Brief rationale | N/A              |
 
 ## References
 
@@ -93,6 +93,6 @@ Additional technical content organized by topic.
 
 ## Changelog
 
-| Date       | Change                                    |
-| ---------- | ----------------------------------------- |
-| YYYY-MM-DD | Initial draft                             |
+| Date       | Change        |
+| ---------- | ------------- |
+| YYYY-MM-DD | Initial draft |

@@ -1,23 +1,23 @@
 ---
-title: "ADR-NNNN: Decision Title"
-description: "One-sentence summary of the decision"
+title: 'ADR-NNNN: Decision Title'
+description: One-sentence summary of the decision
 status: draft
 category: adr
 tags: []
 related: []
-supersedes: null
-superseded_by: null
+supersedes:
+superseded_by:
 ---
 
 # ADR-NNNN: Decision Title
 
-| Property     | Value                              |
-| ------------ | ---------------------------------- |
-| Status       | draft \| proposed \| accepted \| deprecated \| superseded |
-| Date         | YYYY-MM-DD                         |
-| Deciders     | Names or roles                     |
-| Consulted    | Names or roles (optional)          |
-| Informed     | Names or roles (optional)          |
+| Property  | Value                                                     |
+| --------- | --------------------------------------------------------- |
+| Status    | draft \| proposed \| accepted \| deprecated \| superseded |
+| Date      | YYYY-MM-DD                                                |
+| Deciders  | Names or roles                                            |
+| Consulted | Names or roles (optional)                                 |
+| Informed  | Names or roles (optional)                                 |
 
 ## Context
 
@@ -56,10 +56,12 @@ Explain why this decision was made. Include:
 Brief description of this alternative.
 
 **Pros**:
+
 - Advantage one
 - Advantage two
 
 **Cons**:
+
 - Disadvantage one
 - Disadvantage two
 
@@ -70,9 +72,11 @@ Brief description of this alternative.
 Brief description of this alternative.
 
 **Pros**:
+
 - Advantage one
 
 **Cons**:
+
 - Disadvantage one
 
 **Why rejected**: One-sentence explanation.

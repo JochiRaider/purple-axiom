@@ -4,8 +4,8 @@ Research Report Draft v0 (research-first)
 
 ## Research posture and prototype-start objective
 
-This document is a **research synthesis plus a prototype-start plan**. It is intentionally written to
-avoid locking in behavior where the semantics are not yet confirmed in the pinned environment.
+This document is a **research synthesis plus a prototype-start plan**. It is intentionally written
+to avoid locking in behavior where the semantics are not yet confirmed in the pinned environment.
 
 Accordingly:
 
@@ -23,7 +23,8 @@ Define the researched ground truth and an initial, testable capability plan for 
 backend plugin** that emits **DuckDB SQL** for executing Sigma rules against **OCSF-normalized
 data** in Purple Axiom.
 
-This report is a draft; all validation work is planned and tracked via the research gaps checklist (Section 8) and the phased prototype plan (Section 9).
+This report is a draft; all validation work is planned and tracked via the research gaps checklist
+(Section 8) and the phased prototype plan (Section 9).
 
 ## 2. Scope and non-goals
 
@@ -110,9 +111,9 @@ These are draft requirements intended to become spec language later:
   - LIKE pattern escaping policy (documented `ESCAPE` usage).
 
 - The backend MUST define a stable policy for Sigma’s default case-insensitive semantics, because
-  Sigma defaults to case-insensitive matching and `cased` requests case-sensitive matching. The *selection*
-  of that policy (e.g., `ILIKE` vs `lower()` vs collation) is a research item (see GAP-01) and MUST NOT be
-  treated as executable for MVP until validated.
+  Sigma defaults to case-insensitive matching and `cased` requests case-sensitive matching. The
+  *selection* of that policy (e.g., `ILIKE` vs `lower()` vs collation) is a research item (see
+  GAP-01) and MUST NOT be treated as executable for MVP until validated.
 
 ## 7. Supported Features Matrix (DuckDB SQL candidates)
 
@@ -321,7 +322,9 @@ containing at least:
 - Run GAP-03 (nested fields) and GAP-08 (timestamp typing).
 - Produce a single “OCSF-in-DuckDB access note” (field access, list behavior, timestamp type).
 
-**Deliverable:** A prototype work package (Appendix C) that defines the minimal fixtures and validation queries, plus a short note capturing the *verified* results once experiments are executed.
+**Deliverable:** A prototype work package (Appendix C) that defines the minimal fixtures and
+validation queries, plus a short note capturing the *verified* results once experiments are
+executed.
 
 ### Phase 2: String semantics and matching
 
@@ -386,7 +389,9 @@ ______________________________________________________________________
 
 ## Appendix C: Prototype work packages (planned validation inputs)
 
-The material in this appendix is intentionally written as prototyping inputs. It preserves the current research and candidate SQL patterns, but it does not claim they are correct until experiments are recorded.
+The material in this appendix is intentionally written as prototyping inputs. It preserves the
+current research and candidate SQL patterns, but it does not claim they are correct until
+experiments are recorded.
 
 Phase 1 Deliverable for pySigma DuckDB Backend Plugin
 
@@ -394,8 +399,8 @@ Phase 1 Deliverable for pySigma DuckDB Backend Plugin
 
 ## 1. Executive Summary
 
-This work package defines the behaviors to be verified (via documentation review and prototype experiments) for accessing OCSF-normalized
-data in DuckDB, specifically addressing:
+This work package defines the behaviors to be verified (via documentation review and prototype
+experiments) for accessing OCSF-normalized data in DuckDB, specifically addressing:
 
 - **GAP-03**: Safe nested field access for OCSF STRUCT projections
 - **GAP-08**: Timestamp typing and time-part extraction

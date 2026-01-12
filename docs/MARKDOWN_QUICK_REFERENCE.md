@@ -105,13 +105,13 @@ Never: `[here](link)` or `[click here](link)`
 
 ## Normative Keywords
 
-| Keyword    | Meaning                    |
-| ---------- | -------------------------- |
-| MUST       | Absolute requirement       |
-| MUST NOT   | Absolute prohibition       |
-| SHOULD     | Recommended                |
-| SHOULD NOT | Discouraged                |
-| MAY        | Optional                   |
+| Keyword    | Meaning              |
+| ---------- | -------------------- |
+| MUST       | Absolute requirement |
+| MUST NOT   | Absolute prohibition |
+| SHOULD     | Recommended          |
+| SHOULD NOT | Discouraged          |
+| MAY        | Optional             |
 
 ## Section Summary Pattern
 

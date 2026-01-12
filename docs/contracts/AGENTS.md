@@ -9,7 +9,7 @@
 
 ## Navigation entrypoint (required)
 
-- Start with `docs/contracts/index.json` (authoritative contract registry). :contentReference[oaicite:1]{index=1}
+- Start with `docs/contracts/index.json` (authoritative contract registry).
 
 ## Registry sync (required)
 

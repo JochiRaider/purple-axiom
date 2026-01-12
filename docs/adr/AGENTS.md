@@ -3,6 +3,7 @@
 # Agent instructions (docs/adr/)
 
 ## Scope and authority
+
 - This file applies to **`docs/adr/*` only**.
 - ADRs record architectural decisions: context, decision, and consequences.
 - Avoid rewriting history; if a decision changes materially, prefer a new ADR or a clearly labeled

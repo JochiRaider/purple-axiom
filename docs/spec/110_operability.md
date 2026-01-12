@@ -116,6 +116,7 @@ per run (at minimum into `runs/<run_id>/logs/` and optionally into metrics backe
 
 - `telemetry_checkpoints_written_total`
 - `telemetry_checkpoint_loss_total`
+- `telemetry_checkpoint_corruption_total`
 - `dedupe_duplicates_dropped_total`
 - `dedupe_conflicts_total`
 
@@ -123,7 +124,14 @@ Implementations SHOULD also record:
 
 - dedupe index location and size (bytes)
 - checkpoint directory location
-- replay start mode used on restart (`resume` vs `reset` fallback)
+- replay start mode used on restart (`resume | reset_missing | reset_corrupt | reset_manual`)
+
+Replay start mode definitions (normative):
+
+- `resume`: checkpoint existed and was used.
+- `reset_missing`: checkpoint missing; replay expected.
+- `reset_corrupt`: checkpoint corrupt and recovery was applied (fresh state); replay expected.
+- `reset_manual`: operator explicitly requested reset (ignore checkpoints).
 
 ## Telemetry validation (gating)
 
@@ -139,6 +147,12 @@ Additional normative checks:
 
 - The validator MUST emit a `health.json.stages[]` entry with
   `stage: "telemetry.windows_eventlog.raw_mode"`.
+- When collector checkpoint corruption prevents the collector from starting, the validator MUST emit
+  a `health.json.stages[]` entry with `stage: "telemetry.checkpointing.storage_integrity"` and
+  `reason_code=checkpoint_store_corrupt`.
+- When automatic checkpoint corruption recovery is enabled and observed (fresh DB created), the
+  validator SHOULD emit the same stage with `status=success` and record replay start mode
+  `reset_corrupt` in `telemetry_validation.json`.
 - When the raw-mode canary check fails, `reason_code` MUST be one of:
   - `winlog_raw_missing` (no raw XML captured for the canary event)
   - `winlog_rendering_detected` (`<RenderingInfo>` present in the captured payload)

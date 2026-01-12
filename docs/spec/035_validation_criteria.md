@@ -144,7 +144,247 @@ Deterministic tree hash basis (normative):
         ordering rules as `entry_id`).
   - `source_tree_sha256 = sha256_hex( canonical_json_bytes(tree_basis_v1) )`
 
-2. Runner provenance (run time)
+### Deterministic Source Tree Hashing Algorithm (v1)
+
+This addendum defines the **deterministic enumeration rules** used to populate
+`tree_basis_v1.files[]` for `source_tree_sha256`, including **non-Git directories** and **tarball
+distributions**.
+
+This addendum is **normative** for all producers of `source_tree_sha256`, including:
+
+- criteria pack authoring tools (pack-time provenance), and
+- runners (run-time provenance).
+
+#### Definitions
+
+- **Source tree**: a filesystem directory tree or a tar archive representing upstream execution
+  definitions (Atomic, Caldera abilities, or project-local “custom” definitions).
+- **Hash root**: the top-level directory within the source tree from which repo-relative `path`
+  values are computed.
+- **Repo-relative path**: a normalized, portable path string derived from the hash root.
+
+#### Canonical JSON and hashing primitive
+
+`source_tree_sha256` MUST use the project’s canonical JSON and hashing requirements as defined in
+`docs/spec/025_data_contracts.md` (“Canonical JSON (normative)”).
+
+This addendum only defines how to build `tree_basis_v1.files[]`.
+
+#### Inputs
+
+An implementation of v1 MUST accept (explicitly or implicitly) the following inputs:
+
+- `engine` (string): `atomic | caldera | custom`
+
+- `source_kind` (string): `directory | tar`
+
+- `hash_root`:
+
+  - For `directory`: an absolute or process-relative filesystem path to a directory.
+  - For `tar`: an absolute or process-relative filesystem path to a `.tar`, `.tar.gz`, or `.tgz`.
+
+- `exclude_patterns` (optional array of strings): path patterns applied to **repo-relative paths**.
+
+  - If omitted, the **default exclude set** defined below MUST be applied.
+
+If `hash_root` selection is ambiguous (example: multiple plausible Caldera plugin layouts), the
+implementation MUST fail closed (see “Failure behavior”).
+
+#### Default hash roots by engine
+
+To keep drift detection consistent between pack-time and run-time, v1 defines **engine defaults**
+for what constitutes the source tree.
+
+1. `engine = "atomic"`
+
+- If `<hash_root>/atomics/` exists (directory), the effective hash root MUST be
+  `<hash_root>/atomics/`.
+- Otherwise, the effective hash root MUST be `<hash_root>/`.
+
+Rationale: Atomic distributions are commonly either the repo root containing `atomics/`, or a
+tarball containing only the `atomics/` subtree.
+
+2. `engine = "caldera"`
+
+The effective hash scope MUST include:
+
+- all files under any detected `*/data/abilities/` subtree, and
+- all files under any detected `*/data/payloads/` subtree.
+
+Detection rules (directory or tar entry paths) MUST be:
+
+- Identify all directories (or tar path prefixes) that match:
+
+  - `plugins/<plugin_name>/data/abilities/` and `plugins/<plugin_name>/data/payloads/`, OR
+  - `data/abilities/` and `data/payloads/` (abilities-only distributions).
+
+- If **no** `abilities` subtree is detected, the implementation MUST fail closed.
+
+Rationale: abilities and payloads are both execution-definition material. Hashing only YAML
+frequently misses behavior changes introduced by payload updates.
+
+3. `engine = "custom"`
+
+- The effective hash root MUST be explicitly provided by the caller (no discovery is performed).
+- Pack-time and run-time producers MUST use the **same** custom hash root convention for a given
+  custom upstream.
+
+Guidance: if multiple custom source roots exist, the caller SHOULD embed a stable descriptor in
+`source_ref` so `(engine, source_ref, source_tree_sha256)` comparisons do not silently conflate
+different roots.
+
+#### Path normalization (normative)
+
+For every included file, the emitted `path` string MUST be produced as follows:
+
+1. Compute `relpath` relative to the effective hash root (or subtree prefix for tar).
+
+1. Normalize separators to `/`.
+
+1. Remove any leading `./`.
+
+1. Reject any resulting path that:
+
+   - is empty,
+   - begins with `/`,
+   - contains a NUL byte,
+   - contains a path segment equal to `..`.
+
+Encoding and ordering:
+
+- The `path` MUST be representable as a Unicode string and MUST be UTF-8 encodable.
+- Sorting MUST use **bytewise UTF-8 lexical ordering** over `path.encode("utf-8")` (as already
+  required by `tree_basis_v1`).
+
+#### Inclusion rules (normative)
+
+A source tree hash in v1 includes **regular files only**:
+
+- A “regular file” is an on-disk file (directory mode) or a tar entry of type “regular file”.
+- Directories are traversed, but are not themselves hashed.
+
+File content hashing:
+
+- For each included file, `sha256` MUST be computed over the exact file bytes.
+- Implementations SHOULD stream file content and MUST NOT depend on platform text decoding.
+
+#### Exclusion rules (normative)
+
+Exclusions are applied to **repo-relative normalized paths**.
+
+Default exclude set (applied when `exclude_patterns` is omitted):
+
+- `**/.git/**`
+- `**/.hg/**`
+- `**/.svn/**`
+- `**/__MACOSX/**`
+- `**/.DS_Store`
+- `**/Thumbs.db`
+
+Pattern matching requirements:
+
+- Patterns MUST be matched against `/`-separated normalized paths.
+- Matching semantics MUST be deterministic and documented by the implementation.
+- If an implementation provides glob semantics, it MUST support `**` for “any directories”.
+
+#### Symlinks and special files (normative)
+
+To ensure cross-platform determinism, v1 is fail-closed on non-regular file types:
+
+- If the enumerator encounters a symlink (filesystem) or a symlink tar entry, it MUST fail closed.
+- If the enumerator encounters device nodes, FIFOs, sockets, or other non-regular file types, it
+  MUST fail closed.
+
+Rationale: symlink materialization and metadata differ across platforms and extraction tools.
+
+#### Tarball handling (normative)
+
+For `source_kind = "tar"`, the implementation MUST NOT compute `source_tree_sha256` by hashing the
+raw tarball bytes.
+
+Instead, it MUST behave as if enumerating a directory tree composed of tar entries:
+
+- Enumerate tar entries and treat entry names as candidate paths.
+- Apply the same path normalization and exclusion rules.
+- Include only regular file entries; fail closed on symlinks/special entries.
+- Compute `sha256` over the extracted entry content bytes.
+- Apply the same sorting and `tree_basis_v1` construction rules.
+
+This makes `source_tree_sha256` independent of tar metadata (mtime/uid/gid) and archive entry order.
+
+#### Failure behavior (normative)
+
+If any of the following occur, the implementation MUST fail closed for `source_tree_sha256`
+production:
+
+- invalid or non-UTF-8 encodable paths after normalization
+- detected path traversal (`..`) or absolute paths
+- any symlink or special file type encountered
+- inability to read file bytes deterministically (permission error, transient read failure)
+- `engine = "caldera"` and no `abilities` subtree can be detected
+
+When failing closed:
+
+- Pack-time provenance emission MUST NOT emit a `source_tree_sha256` value.
+- Run-time provenance emission MUST NOT emit a `source_tree_sha256` value.
+- Consumers MUST treat the corresponding drift status as `unknown` due to missing required
+  provenance (per the drift detection algorithm).
+
+#### Conformance tests and fixtures (normative)
+
+A conforming implementation MUST be validated using fixture-driven tests that demonstrate:
+
+1. **Stable enumeration ordering**
+
+- Given the same tree contents created in different filesystem orders, `files[]` and
+  `source_tree_sha256` MUST be identical.
+
+2. **Cross-platform stability**
+
+- For the same fixture content, `source_tree_sha256` MUST match across supported platforms.
+
+3. **Exclusion determinism**
+
+- Adding only excluded files MUST NOT change `source_tree_sha256`.
+
+4. **Fail-closed behavior**
+
+- Introducing a symlink in an otherwise valid fixture MUST cause hashing to fail closed.
+
+5. **Tarball equivalence**
+
+- For a tarball fixture containing only regular files, hashing via tar enumeration MUST equal
+  hashing the extracted directory tree (using the same effective hash root).
+
+##### Minimal normative example (basis + expected hash)
+
+Example tree (effective hash root is the directory containing these files):
+
+- `a.txt` with bytes `hello\n`
+- `dir/b.txt` with bytes `world\n`
+
+Per-file SHA-256:
+
+- `a.txt` → `5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03`
+- `dir/b.txt` → `e258d248fda94c63753607f7c4494ee0fcbe92f1a76bfdac795c9d84101eb317`
+
+`tree_basis_v1` (logical form):
+
+- `v: 1`
+
+- `engine: "custom"`
+
+- `files` (sorted by bytewise UTF-8 path):
+
+  - `{ path: "a.txt", sha256: <a.txt sha256> }`
+  - `{ path: "dir/b.txt", sha256: <dir/b.txt sha256> }`
+
+Expected `source_tree_sha256` for this basis (using `canonical_json_bytes` as defined in
+`docs/spec/025_data_contracts.md`):
+
+- `11b328fb981fdcae6f56e7007cfbb84d09e7b324abaf2788f88693600113ea4e`
+
+1. Runner provenance (run time)
 
 - The runner MUST record the execution-definition provenance for the engine being used, using the
   same structure (`engine`, `source_ref`, `source_tree_sha256`) in run provenance (manifest

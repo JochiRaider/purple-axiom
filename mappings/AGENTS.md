@@ -1,6 +1,6 @@
 <!-- mappings/AGENTS.md -->
 
-# Agent instructions (mappings/*)
+# Agent instructions (mappings/)
 
 ## Scope
 
@@ -26,15 +26,17 @@
 
 ## Change protocol (keep changes local and verifiable)
 
-- Prefer edits that stay within a single pack directory under `mappings/normalizer/ocsf/<version>/<source_pack_id>/`.
-- Do not introduce new YAML constructs or “helper conventions” unless they are defined in the authoring guide.
+- Prefer edits that stay within a single pack directory under
+  `mappings/normalizer/ocsf/<version>/<source_pack_id>/`.
+- Do not introduce new YAML constructs or “helper conventions” unless they are defined in the
+  authoring guide.
 - When adding a new pack, new route, or new class map:
   - Update `mappings/MAPPINGS_INDEX.md` (one-page map).
   - Ensure the pack remains self-contained per the authoring guide’s mapping material boundary.
-  - Ensure the change is testable via the project’s existing fixture/golden harness (see CI/test strategy spec).
+  - Ensure the change is testable via the project’s existing fixture/golden harness (see CI/test
+    strategy spec).
 
 ## Index maintenance (required)
 
 - When you add/rename/move/delete mapping packs or mapping files under `mappings/*`, update
   `mappings/MAPPINGS_INDEX.md` (keep it one page and pointer-style).
-

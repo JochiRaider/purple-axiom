@@ -141,6 +141,16 @@ Common keys:
       - `reset`: ignore checkpoints and start at run window start (plus skew tolerance)
     - `checkpoint_dir` (optional): defaults to `runs/<run_id>/logs/telemetry_checkpoints/`
     - `flush_interval_seconds` (default: 5)
+  - `checkpoint_corruption` (optional): policy for checkpoint store corruption events (validation
+    and operability)
+    - `mode` (default: `fail_closed`): `fail_closed | recreate_fresh`
+      - `fail_closed`: treat checkpoint store corruption as fatal for telemetry; the collector MUST
+        NOT automatically recreate checkpoint state.
+      - `recreate_fresh`: allow storage backends that recreate state on corruption. This MUST be
+        treated as checkpoint loss and replay start mode MUST be recorded as `reset_corrupt`.
+    - `require_fsync` (default: true): when the checkpoint backend supports an fsync option
+      (example: OTel `file_storage.fsync`), validation MUST require that it is enabled unless the
+      operator explicitly disables this check.
 - `sources` (optional)
   - Additional non-OTel sources (example: `osquery`, `pcap`, `netflow`)
 
@@ -187,6 +197,10 @@ Notes:
   extension for bookmarks (see `040_telemetry_pipeline.md` §2).
 - OTel Collector configuration shape is owned by upstream OTel. Purple Axiom only references the
   path and hashes it.
+- `telemetry.otel.checkpoint_corruption` does not generate collector configuration. It is a policy
+  input for telemetry validation and operability reporting: the validator SHOULD inspect the
+  effective collector config and logs to determine whether checkpoint corruption recovery was
+  allowed and/or observed.
 
 Additional Purple Axiom staging policy (applies during raw Parquet writing and optional sidecar
 extraction):

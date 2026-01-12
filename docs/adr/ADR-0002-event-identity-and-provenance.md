@@ -398,13 +398,28 @@ File-tailed sources (optional tightening, normative):
 
 ### Checkpoint loss / corruption (normative)
 
-If a checkpoint is missing or corrupt at restart:
+If a checkpoint is missing at restart:
 
 - The pipeline MUST fall back to replaying from the start of the run window (subject to configured
   clock-skew tolerance), and MUST rely on the dedupe index to prevent duplicates in normalized
   output.
 - The pipeline MUST record that checkpoint loss occurred in run-scoped logs and summary metrics
   (example: `telemetry_checkpoint_lost=true`, `telemetry_checkpoint_loss_total += 1`).
+
+If a checkpoint store is corrupt at restart:
+
+- Behavior depends on the collector/storage backend and configured recovery policy (see
+  `docs/spec/040_telemetry_pipeline.md` "Checkpointing and replay semantics" and
+  `docs/spec/120_config_reference.md` `telemetry.otel.checkpoint_corruption`).
+- If the collector refuses to start or cannot open its checkpoint store (fail-closed), the telemetry
+  stage MUST fail closed and MUST use a stable reason code `checkpoint_store_corrupt`.
+- If the storage backend automatically recovers by starting a fresh database (example: OTel
+  `file_storage` with `recreate: true`), this MUST be treated as checkpoint loss. The pipeline MAY
+  replay historical events and MUST rely on the dedupe index to prevent duplicates in normalized
+  output. Implementations MUST record:
+  - checkpoint loss (`telemetry_checkpoint_loss_total += 1`), and
+  - replay start mode `reset_corrupt` (operator-visible), and
+  - recovery evidence when available (example: `.backup` file emitted).
 
 ### EVTX reprocessing invariants
 

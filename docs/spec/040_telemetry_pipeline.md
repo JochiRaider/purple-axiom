@@ -423,6 +423,23 @@ breaking determinism goals.
 - Telemetry validation MUST include a crash/restart + rotation continuity test for every enabled
   file-tailed source (see §4).
 
+#### OTel `file_storage` corruption recovery policy (required)
+
+The OTel Collector contrib `file_storage` extension (filestorage) is the v0.1 reference checkpoint
+backend for receiver state (example: `filelog` offsets and Windows Event Log bookmarks).
+
+Normative requirements:
+
+- For validation runs, collector configs that use `file_storage` for receiver state MUST set
+  `recreate: false` unless the operator explicitly opts into automatic recovery via
+  `telemetry.otel.checkpoint_corruption.mode = "recreate_fresh"` (see
+  `docs/spec/120_config_reference.md`).
+- If `recreate: true` is enabled, any observed recovery (fresh database creation and/or `.backup`
+  emission) MUST be treated as checkpoint loss and MUST be recorded as such.
+- Collector configs SHOULD set `fsync: true` for checkpoint stores when supported. If `fsync: false`
+  is used, operators MUST treat checkpoint corruption as a credible risk and MUST document the
+  performance tradeoff.
+
 ## 3) Injecting `run_id` / `scenario_id`
 
 There are two supported strategies.
@@ -467,6 +484,11 @@ checklist:
      - events may replay into the raw store, and
      - downstream dedupe prevents duplicate normalized events (uniqueness by `metadata.event_id` is
        preserved).
+   - Simulate checkpoint store corruption (corrupt the collector checkpoint database); restart the
+     collector; confirm that behavior matches the configured policy:
+     - fail-closed: collector refuses to start; telemetry validation fails closed.
+     - recreate-fresh: collector starts with a fresh database; checkpoint loss is recorded and
+       replay (duplication) may be observed.
    - If osquery (or any file-tailed source) is enabled, perform a crash/restart + rotation
      continuity test:
      - generate a monotonic sequence in the source NDJSON stream,
@@ -511,6 +533,19 @@ Recommended additional fields (operator UX and regression tracking):
   - `memory_limiter_activated` (bool)
   - `exporter_queue_drops_observed` (bool)
   - `exporter_send_failures_observed` (bool)
+
+Recommended additional fields (checkpointing diagnostics):
+
+- `checkpoint_store` (object, OPTIONAL)
+  - `backend` (string; example: `file_storage`)
+  - `directory` (string; stable path)
+  - `recreate_enabled` (bool)
+  - `fsync_enabled` (bool, when detectable)
+- `checkpoint_corruption_test` (object, OPTIONAL)
+  - `performed` (bool)
+  - `collector_failed_to_start` (bool)
+  - `recreate_observed` (bool)
+  - `backup_files_observed` (bool)
 
 ## 5) Payload limits and binary handling (Windows Event Log)
 

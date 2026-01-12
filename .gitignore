@@ -58,6 +58,7 @@ reports/
 secrets/
 *.key
 *.pem
+ExecPlan.md
 
 # Telemetry
 telemetry/

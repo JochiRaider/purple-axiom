@@ -1,13 +1,23 @@
-<!-- docs/spec/025_data_contracts.md -->
+---
+title: Data contracts
+description: Defines data contracts, schemas, and invariants for Purple Axiom run artifacts.
+status: draft
+---
 
 # Data contracts
 
 This document defines the data contracts for Purple Axiom run artifacts. The goal is to make runs
-reproducible, diffable, and CI-validatable, while preserving enough provenance to support defensible
+reproducible, diffable, and CI-validatable while preserving enough provenance to support defensible
 detection evaluation.
 
 Contracts are enforced through JSON Schemas in `docs/contracts/` plus a small set of cross-artifact
 invariants that cannot be expressed in JSON Schema alone.
+
+## Overview
+
+This spec defines the artifact schemas, run bundle layout, and cross-artifact invariants that make
+runs reproducible and comparable. It covers the normative requirements for manifest status, ground
+truth identity, normalized event envelopes, and optional signing.
 
 ## Goals
 
@@ -81,15 +91,15 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `detections/` (detections emitted by evaluators)
 - `scoring/` (joins and summary metrics)
 - `report/` (HTML and JSON report outputs)
-- `logs/` (structured operability summaries + debug logs; not considered long-term storage)
-  - `logs/health.json` (when enabled; see `110_operability.md`)
+- `logs/` (structured operability summaries and debug logs; not considered long-term storage)
+  - `logs/health.json` (when enabled; see the [operability spec](110_operability.md))
   - `logs/telemetry_validation.json` (when telemetry validation is enabled)
 
 The manifest is the authoritative index for what exists in the bundle and which versions were used.
 
 ## Artifact contracts
 
-### 1) Run manifest (`manifest.json`)
+### Run manifest
 
 Purpose:
 
@@ -118,8 +128,8 @@ Key semantics:
 
 Status derivation (normative):
 
-- Implementations MUST compute an effective outcome for each enabled pipeline stage (a “stage
-  outcome”).
+- Implementations MUST compute an effective outcome for each enabled pipeline stage (a "stage
+  outcome").
 - A stage outcome MUST include: `stage` (stable identifier), `status`
   (`success | failed | skipped`), `fail_mode` (`fail_closed | warn_and_skip`), and an optional
   `reason_code` (stable token).
@@ -128,7 +138,7 @@ Status derivation (normative):
   - else `partial` if any stage has `status=failed`
   - else `success`
 - When `operability.health.emit_health_files=true`, stage outcomes MUST also be written to
-  `runs/<run_id>/logs/health.json` (minimum schema in `110_operability.md`).
+  `runs/<run_id>/logs/health.json` (minimum schema in the [operability spec](110_operability.md)).
 
 Recommended manifest additions (normative in schema when implemented):
 
@@ -151,14 +161,14 @@ Stage outcomes (v0.1 baseline expectations):
 | `lab_provider`  | `fail_closed`                                          | `manifest.json`                                                | Failure to resolve targets deterministically is fatal.                                                             |
 | `runner`        | `fail_closed`                                          | `ground_truth.jsonl`, `runner/**`                              | If stable `asset_id` resolution fails, the run MUST fail closed.                                                   |
 | `telemetry`     | `fail_closed`                                          | `raw_parquet/**` (when enabled), `manifest.json`               | If required Windows sources are missing (e.g., Sysmon), the run MUST fail closed unless the scenario exempts them. |
-| `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events.*`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped/unmapped counts MUST still be reported.              |
+| `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events.*`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped and unmapped counts MUST still be reported.          |
 | `validation`    | `warn_and_skip` (default)                              | `criteria/results.jsonl`, `criteria/manifest.json`             | MUST emit a result row per selected action; un-evaluable actions MUST be `skipped` with `reason_code`.             |
-| `detection`     | `fail_closed` (default)                                | `detections/detections.jsonl`, `bridge/coverage.json`          | MUST record non-executable rules with stable reasons (compiled plans / coverage).                                  |
+| `detection`     | `fail_closed` (default)                                | `detections/detections.jsonl`, `bridge/coverage.json`          | MUST record non-executable rules with stable reasons (compiled plans and coverage).                                |
 | `scoring`       | `fail_closed`                                          | `scoring/summary.json`                                         | A missing or invalid summary is fatal when scoring is enabled.                                                     |
 | `reporting`     | `fail_closed`                                          | `reporting/**`                                                 | Reporting failures are fatal when reporting is enabled.                                                            |
 | `signing`       | `fail_closed` (when enabled)                           | `signatures/**`                                                | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed.                        |
 
-### 2) Ground truth timeline (`ground_truth.jsonl`)
+### Ground truth timeline
 
 Purpose:
 
@@ -184,7 +194,9 @@ Key semantics:
 
 - `timestamp_utc` is the start time of the action (UTC).
 
-### Stable action identity: `action_id` and `action_key`
+### Stable action identity
+
+This section defines `action_id` and `action_key`.
 
 - `action_id` MUST be unique within a run. It is not stable across runs and MUST NOT be used for
   cross-run comparisons.
@@ -217,11 +229,11 @@ Canonical JSON (normative):
   - `canonical_json_bytes(value)` = the exact UTF-8 byte sequence produced by JSON Canonicalization
     Scheme (RFC 8785, JCS).
 - Inputs to `canonical_json_bytes` MUST satisfy the RFC 8785 constraints (I-JSON subset), including
-  (non-exhaustive): finite numbers only (no NaN/Infinity), unique object member names, and valid
+  (non-exhaustive): finite numbers only (no NaN or Infinity), unique object member names, and valid
   Unicode strings.
-- Implementations MUST NOT substitute “native/default JSON serialization” for JCS.
+- Implementations MUST NOT substitute "native or default JSON serialization" for JCS.
 - Hashing primitive:
-  - `sha256_hex = lower_hex( sha256( canonical_json_bytes(value) ) )`
+  - `sha256_hex = lower_hex(sha256(canonical_json_bytes(value)))`
   - No BOM, no trailing newline; hash is over bytes only.
 
 Failure policy (normative):
@@ -234,7 +246,7 @@ Fallback when a full JCS library is unavailable:
 - Implementations MUST vendor or invoke a known-good RFC 8785 implementation (preferred).
 - For **PA JCS Integer Profile** hash bases only, an implementation MAY use a simplified encoder
   that is provably identical to JCS for this restricted data model:
-  - Numbers MUST be signed integers within IEEE-754 “safe integer” range (|n| ≤
+  - Numbers MUST be signed integers within IEEE-754 "safe integer" range (|n| \<=
     9,007,199,254,740,991).
   - No floating point numbers are permitted.
   - Object keys MUST be strings, unique, and sorted lexicographically by Unicode scalar value.
@@ -272,8 +284,8 @@ Fallback when a full JCS library is unavailable:
 
 Redaction policy (normative):
 
-- The runner MUST support a deterministic redaction policy as specified in
-  `docs/adr/ADR-0003-redaction-policy.md`.
+- The runner MUST support a deterministic redaction policy as specified in the
+  [redaction policy ADR](../adr/ADR-0003-redaction-policy.md).
 - The runner MUST apply the effective policy when `security.redaction.enabled: true`.
 - When `security.redaction.enabled: false`, the runner MUST NOT emit unredacted secrets into
   standard long-term artifacts. It MUST either withhold sensitive fields (deterministic
@@ -284,14 +296,14 @@ Redaction policy (normative):
 
 When redaction is enabled, the policy MUST include:
 
-- a flag/value model for common secret-bearing arguments (for example: `--token`, `-Password`,
+- a flag or value model for common secret-bearing arguments (for example: `--token`, `-Password`,
   `-EncodedCommand`)
 - regex-based redaction for high-risk token patterns (JWT-like strings, long base64 blobs, long hex
   keys, connection strings)
 - deterministic truncation rules (fixed max token length and fixed max summary length)
-- The normative policy definition (including “redacted-safe”, fail-closed behavior, limits, and
-  required test vectors) is defined in:
-  - `docs/adr/ADR-0003-redaction-policy.md`
+- The normative policy definition (including "redacted-safe", fail-closed behavior, limits, and
+  required test vectors) is defined in the
+  [redaction policy ADR](../adr/ADR-0003-redaction-policy.md).
 - Runs SHOULD snapshot the effective policy into the run bundle (recommended:
   `runs/<run_id>/security/redaction_policy_snapshot.json`) and record its sha256 in run provenance.
 
@@ -327,7 +339,7 @@ Invariants:
 Population rules:
 
 - If a criteria entry is selected for the action, the runner MUST populate:
-  - `criteria_ref` (pack id/version + entry id)
+  - `criteria_ref` (pack id and version + entry id)
   - `expected_telemetry_hints` as a lossy projection of the selected criteria entry (for example:
     expected OCSF class_uids and preferred sources).
 - If no criteria entry is selected, the runner MAY populate `expected_telemetry_hints` from a
@@ -339,11 +351,13 @@ Cleanup:
 - Ground truth SHOULD include resolved target identity (hostname, IPs, and/or stable labels) so
   action intent remains interpretable even if provider inventory changes later.
 
-### 2a) Criteria pack snapshot (`criteria/criteria.jsonl` + `criteria/manifest.json`)
+### Criteria pack snapshot
+
+This artifact includes `criteria/criteria.jsonl` and `criteria/manifest.json`.
 
 Purpose:
 
-- Externalizes “expected telemetry” away from Atomic YAML and away from ground truth authoring.
+- Externalizes "expected telemetry" away from Atomic YAML and away from ground truth authoring.
 - Allows environment-specific expectations to be versioned and curated without changing execution
   definitions.
 
@@ -360,18 +374,20 @@ Validation:
 Key semantics:
 
 - Criteria entries are keyed by stable identifiers (minimum):
-  - `engine` (atomic|caldera|custom)
+  - `engine` (atomic | caldera | custom)
   - `technique_id`
-  - `engine_test_id` (Atomic GUID / Caldera ability ID)
+  - `engine_test_id` (Atomic GUID or Caldera ability ID)
 - Criteria entries define expected signals in terms of normalized OCSF predicates (example:
   class_uid + optional constraints) and time windows relative to the action start.
 
-### 2b) Criteria evaluation results (`criteria/results.jsonl`)
+### Criteria evaluation results
+
+This artifact is stored at `criteria/results.jsonl`.
 
 Purpose:
 
 - Records whether expected signals were observed for each executed action.
-- Provides the authoritative source for “missing telemetry” classification when criteria exist.
+- Provides the authoritative source for "missing telemetry" classification when criteria exist.
 
 Format:
 
@@ -384,15 +400,15 @@ Validation:
 Key semantics:
 
 - Results reference `action_id` and `action_key` from ground truth.
-- Results include a status (`pass|fail|skipped`) plus evidence references (example: counts of
+- Results include a status (`pass | fail | skipped`) plus evidence references (example: counts of
   matching events, sample event_ids, query plans used).
 - The evaluator MUST emit exactly one result row per selected ground truth action.
-  - If an action cannot be evaluated (missing telemetry, mapping gaps, executor error, etc.), the
-    evaluator MUST emit `status=skipped` and MUST set a stable `reason_code`.
+  - If an action cannot be evaluated (missing telemetry, mapping gaps, executor error, and so on),
+    the evaluator MUST emit `status=skipped` and MUST set a stable `reason_code`.
 - The evaluator MUST NOT suppress results silently; skipped actions MUST remain visible in the
   output.
 
-### 2c) Runner evidence (`runner/`)
+### Runner evidence
 
 Purpose:
 
@@ -402,7 +418,7 @@ Minimum contents (recommended):
 
 - `runner/actions/<action_id>/stdout.txt`
 - `runner/actions/<action_id>/stderr.txt`
-- `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type/version,
+- `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type or version,
   timestamps)
 - `runner/actions/<action_id>/cleanup_verification.json` (checks + results)
 
@@ -410,12 +426,14 @@ Validation:
 
 - `executor.json` and `cleanup_verification.json` SHOULD be schema validated when present.
 
-### 2d) Network sensor placeholders (`raw/pcap/` and `raw/netflow/`)
+### Network sensor placeholders
+
+This section covers `raw/pcap/` and `raw/netflow/`.
 
 Purpose:
 
-- Reserve stable artifact locations and contracts for network telemetry (pcap/netflow) without
-  requiring capture/ingestion in v0.1.
+- Reserve stable artifact locations and contracts for network telemetry (pcap and netflow) without
+  requiring capture or ingestion in v0.1.
 
 When present:
 
@@ -430,7 +448,9 @@ Absence semantics:
 - If telemetry config enables a network sensor source but the active build has no implementation for
   it, the telemetry stage MUST fail closed with `reason_code=source_not_implemented`.
 
-### 3) Normalized events (`normalized/ocsf_events.*`)
+### Normalized events
+
+This artifact is stored under `normalized/ocsf_events.*`.
 
 Purpose:
 
@@ -441,21 +461,21 @@ Validation:
 
 - For JSONL, each line must validate against `ocsf_event_envelope.schema.json`.
 - For Parquet, the required columns and types are enforced by the storage spec and validator logic
-  (see `docs/spec/045_storage_formats.md`).
+  (see the [storage formats spec](045_storage_formats.md)).
 
 Required envelope (minimum):
 
 - `time` (ms since epoch, UTC)
 - `class_uid`
-- `metadata.event_id` (stable, deterministic identifier; see
-  `ADR-0002-event-identity-and-provenance.md`)
+- `metadata.event_id` (stable, deterministic identifier; see the
+  [event identity ADR](../adr/ADR-0002-event-identity-and-provenance.md))
 - `metadata.run_id`
 - `metadata.scenario_id`
 - `metadata.collector_version`
 - `metadata.normalizer_version`
 - `metadata.source_type`
 - `metadata.source_event_id` (native upstream ID when meaningful; example: Windows `EventRecordID`)
-- `metadata.identity_tier` (1|2|3; see ADR-0002)
+- `metadata.identity_tier` (1 | 2 | 3; see the event identity ADR)
 
 Key semantics:
 
@@ -463,13 +483,15 @@ Key semantics:
   contract enforces minimum provenance only.
 - `metadata.event_id` MUST be stable across re-runs when the source event and normalization inputs
   are identical.
-- `metadata.event_id` MUST be computed without using ingest/observation time (at-least-once delivery
-  and collector restarts are expected).
+- `metadata.event_id` MUST be computed without using ingest or observation time (at-least-once
+  delivery and collector restarts are expected).
 - `metadata.source_event_id` SHOULD be populated when the source provides a meaningful native
   identifier (example: Windows `EventRecordID`).
 - For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id`.
 
-### 3a) Normalization mapping profile snapshot (`normalized/mapping_profile_snapshot.json`)
+### Normalization mapping profile snapshot
+
+This artifact is stored at `normalized/mapping_profile_snapshot.json`.
 
 Purpose:
 
@@ -488,7 +510,7 @@ Key semantics (normative):
   detectable even when filenames are unchanged.
 - The snapshot MUST record upstream origins when derived from external projects (example: Security
   Lake transformation library custom source mappings).
-- The “mapping material” hashed and recorded by the snapshot MUST correspond to the mapping pack
+- The "mapping material" hashed and recorded by the snapshot MUST correspond to the mapping pack
   boundary defined in `docs/mappings/ocsf_mapping_profile_authoring_guide.md`.
 
 Minimum fields (normative):
@@ -501,24 +523,21 @@ Hashing (normative):
 - `mapping_material_sha256` is SHA-256 over the canonical JSON serialization of the embedded
   `mapping_material` object (or, if only `mapping_files[]` are provided, over the canonical JSON
   list of `{path,sha256}` entries).
-
 - `mapping_profile_sha256` is SHA-256 over a canonical JSON object containing only stable inputs:
-
   - `ocsf_version`
   - `mapping_profile_id`
   - `mapping_profile_version`
   - `source_profiles[]` projected to `{source_type, profile, mapping_material_sha256}`
-
 - The hash basis MUST NOT include run-specific fields (`run_id`, `scenario_id`, `generated_at_utc`)
   so mapping drift can be detected across runs.
-
 - `source_profiles[]`:
-
   - `source_type` (example: `windows-sysmon`)
   - `mapping_material_sha256`
   - either `mapping_material` (embedded) OR `mapping_files[]` (references), or both
 
-### 4) Detections (`detections/detections.jsonl`)
+### Detections
+
+This artifact is stored at `detections/detections.jsonl`.
 
 Purpose:
 
@@ -550,7 +569,9 @@ Recommended (for reproducibility and gap attribution):
 - Store the original Sigma `logsource` under `extensions.sigma.logsource` (verbatim), when
   available.
 
-### 5) Scoring summary (`scoring/summary.json`)
+### Scoring summary
+
+This artifact is stored at `scoring/summary.json`.
 
 Purpose:
 
@@ -565,7 +586,9 @@ Key semantics:
 - Coverage is computed relative to executed techniques in ground truth.
 - Latency metrics are derived from joins between ground truth action timestamps and detections.
 
-### 6) Mapping coverage (`normalized/mapping_coverage.json`)
+### Mapping coverage
+
+This artifact is stored at `normalized/mapping_coverage.json`.
 
 Purpose:
 
@@ -583,9 +606,12 @@ Key semantics (normative when produced):
 - Coverage MUST include totals and per-source-type breakdowns sufficient to detect regressions:
   - total events observed, mapped, unmapped, and dropped
   - per `source_type` totals and per `class_uid` totals
-  - missing core field counts for each tracked class (see `055_ocsf_field_tiers.md`)
+  - missing core field counts for each tracked class (see the
+    [OCSF field tiers spec](055_ocsf_field_tiers.md))
 
-### 7) Bridge router table snapshot (`bridge/router_table.json`)
+### Bridge router table snapshot
+
+This artifact is stored at `bridge/router_table.json`.
 
 Purpose:
 
@@ -600,15 +626,15 @@ Key semantics (normative when produced):
 
 - The router table MUST map Sigma `logsource.category` to one or more OCSF `class_uid` filters.
 - When a `logsource.category` maps to multiple `class_uid` values, the mapping represents a **union
-  scope** for evaluation (boolean OR / `IN (...)` semantics), not an ambiguity (see
-  `065_sigma_to_ocsf_bridge.md`).
-- Routes MAY also include `filters[]` (producer/source predicates) expressed as OCSF filter objects
-  (`{path, op, value}`) per `bridge_router_table.schema.json`.
+  scope** for evaluation (boolean OR or `IN (...)` semantics), not an ambiguity (see the
+  [Sigma to OCSF bridge spec](065_sigma_to_ocsf_bridge.md)).
+- Routes MAY also include `filters[]` (producer or source predicates) expressed as OCSF filter
+  objects (`{path, op, value}`) per `bridge_router_table.schema.json`.
   - When present, `filters[]` MUST be interpreted as a conjunction (logical AND) applied in addition
     to the `class_uid` union scope.
   - For determinism, `filters[]` SHOULD be emitted in a stable order (RECOMMENDED: sort by `path`,
     then `op`, then canonical JSON of `value`).
-- For determinism and stable hashing/diffs:
+- For determinism and stable hashing and diffs:
   - multi-class `class_uid` sets MUST be emitted in ascending numeric order.
 - The router table MUST be versioned and hashed (`router_table_sha256`) so routing drift is
   detectable.
@@ -622,7 +648,9 @@ Hashing (normative):
   - `routes[]` (full route objects)
 - The hash basis MUST NOT include `generated_at_utc`.
 
-### 8) Bridge mapping pack snapshot (`bridge/mapping_pack_snapshot.json`)
+### Bridge mapping pack snapshot
+
+This artifact is stored at `bridge/mapping_pack_snapshot.json`.
 
 Purpose:
 
@@ -638,8 +666,8 @@ Key semantics (normative when produced):
 
 - The mapping pack MUST reference the router table by id + SHA-256 and SHOULD embed it for
   single-file reproducibility.
-- The mapping pack MUST define the effective `raw.*` fallback policy (enabled/disabled, constraints)
-  used for compilation.
+- The mapping pack MUST define the effective `raw.*` fallback policy (enabled or disabled,
+  constraints) used for compilation.
 
 Hashing (normative):
 
@@ -651,7 +679,9 @@ Hashing (normative):
   - `backend_defaults` (if present)
 - The hash basis MUST NOT include run-specific fields (`run_id`, `scenario_id`, `generated_at_utc`).
 
-### 9) Bridge compiled plans (`bridge/compiled_plans/<rule_id>.plan.json`)
+### Bridge compiled plans
+
+This artifact is stored under `bridge/compiled_plans/<rule_id>.plan.json`.
 
 Purpose:
 
@@ -668,9 +698,12 @@ Key semantics (normative when produced):
 
 - Plans MUST be keyed by stable `rule_id` and MUST include `rule_sha256` (hash of canonical Sigma
   rule content) for drift detection.
-- Plans MUST declare `executable: true|false` and, when false, MUST include `non_executable_reason`.
+- Plans MUST declare `executable: true | false` and, when false, MUST include
+  `non_executable_reason`.
 
-### 10) Bridge coverage (`bridge/coverage.json`)
+### Bridge coverage
+
+This artifact is stored at `bridge/coverage.json`.
 
 Purpose:
 
@@ -724,9 +757,9 @@ Required invariants:
 
 ## Optional invariants: run bundle signing
 
-Run bundle signing is **optional** in v0.1 and is controlled by `security.signing.enabled` (see
-`120_config_reference.md`). When enabled, signing provides integrity guarantees for the full run
-bundle without requiring a specific transport or storage backend.
+Run bundle signing is **optional** in v0.1 and is controlled by `security.signing.enabled` (see the
+[config reference](120_config_reference.md)). When enabled, signing provides integrity guarantees
+for the full run bundle without requiring a specific transport or storage backend.
 
 Normative requirements:
 
@@ -760,24 +793,20 @@ Path canonicalization:
 - Paths MUST use forward slashes (`/`) as separators, even on Windows.
 - Path comparison and sorting MUST be case-sensitive and locale-independent.
 
-### `security/checksums.txt` format (normative)
+### Security checksums format (normative)
+
+This section defines the `security/checksums.txt` format.
 
 - Encoding: UTF-8.
-
 - Line endings: LF (`\n`).
-
-- One record per line:
-
-  `sha256_hex  relative_path`
-
-  Where:
-
+- One record per line: `sha256_hex  relative_path` Where:
   - `sha256_hex` is 64 lowercase hex characters of `sha256(file_bytes)`.
   - `relative_path` is the canonicalized relative path.
-
 - Ordering: lines MUST be sorted by `relative_path` using lexicographic order over UTF-8 bytes.
 
-### Public key and `key_id`
+### Public key and key id
+
+This section defines `key_id`.
 
 - `security/public_key.ed25519` MUST contain the Ed25519 public key as base64 of the 32 raw public
   key bytes, followed by a single LF.
@@ -785,7 +814,9 @@ Path canonicalization:
 - Implementations SHOULD record `key_id` in run provenance (for example, `manifest.json` under an
   extensions namespace) to support downstream trust policies.
 
-### `security/signature.ed25519` format (normative)
+### Security signature format (normative)
+
+This section defines the `security/signature.ed25519` format.
 
 - The signature MUST be computed over the exact bytes of `security/checksums.txt`.
 - `security/signature.ed25519` MUST contain the signature as base64 of the 64 raw signature bytes,
@@ -871,3 +902,26 @@ Recommended validation stages:
 1. Optional signature verification (when signing artifacts are present).
 
 CI gates should fail closed on contract violations.
+
+## Key decisions
+
+- The run bundle and manifest provide the authoritative contract boundaries for stage coordination.
+- Action identity uses deterministic hashing over canonical JSON and redacted inputs.
+- Cross-artifact invariants and optional signing enforce reproducibility and integrity.
+
+## References
+
+- [Scenario model spec](030_scenarios.md)
+- [Storage formats spec](045_storage_formats.md)
+- [OCSF field tiers spec](055_ocsf_field_tiers.md)
+- [Sigma to OCSF bridge spec](065_sigma_to_ocsf_bridge.md)
+- [Operability spec](110_operability.md)
+- [Config reference](120_config_reference.md)
+- [Event identity ADR](../adr/ADR-0002-event-identity-and-provenance.md)
+- [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md)
+
+## Changelog
+
+| Date | Change                                       |
+| ---- | -------------------------------------------- |
+| TBD  | Style guide migration (no technical changes) |

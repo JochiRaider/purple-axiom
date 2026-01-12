@@ -1,11 +1,32 @@
-<!-- docs/spec/090_security_safety.md -->
+---
+title: "Security and safety"
+description: "Defines security boundaries, safe defaults, redaction posture, and fail-closed constraints for Purple Axiom."
+status: draft
+category: spec
+tags: [security, safety, redaction]
+related:
+  - 040_telemetry_pipeline.md
+  - 025_data_contracts.md
+  - 120_config_reference.md
+  - ../adr/ADR-0003-redaction-policy.md
+---
 
 # Security and safety
 
-Purple Axiom intentionally runs adversary emulation. The project must be safe to run in a lab and
-must fail closed when controls are violated.
+Purple Axiom intentionally runs adversary emulation. The project MUST be safe to run in a lab and MUST fail closed when controls are violated.
 
 This document defines security boundaries, safe defaults, and non-negotiable constraints.
+
+## Overview
+
+**Summary**: Purple Axiom MUST enforce explicit trust boundaries between components, default to isolation and egress-deny posture, and apply deterministic redaction and artifact-handling rules that prevent accidental long-term storage of unredacted evidence.
+
+Key constraints:
+
+- Purple Axiom MUST be local-first and lab-isolated by default.
+- Purple Axiom MUST deny unexpected network egress by default and treat violations as run-fatal.
+- Privileged components (for example, the OpenTelemetry Collector on endpoints) MUST be hardened and minimized.
+- Evidence artifacts (telemetry and transcripts) MUST follow the configured redaction posture, with deterministic withheld/quarantine semantics when redaction is disabled.
 
 ## Core principles
 
@@ -18,96 +39,86 @@ This document defines security boundaries, safe defaults, and non-negotiable con
 
 ### Lab provider boundary
 
-- Lab providers may require privileged credentials (hypervisor APIs, cloud APIs). Treat these as
-  secrets and reference them, do not embed them in configs or artifacts.
-- Default posture: inventory resolution only. Provisioning, mutation, or teardown actions must be
-  explicitly enabled and logged.
-- Provider credentials must be scoped to the lab environment only (no production networks, no
-  production identities).
+- Lab providers MAY require privileged credentials (hypervisor APIs, cloud APIs). Implementations MUST treat these as secrets and MUST reference them. Implementations MUST NOT embed secrets in configs or artifacts.
+- Default posture MUST be inventory resolution only. Provisioning, mutation, or teardown actions MUST be explicitly enabled and logged.
+- Provider credentials MUST be scoped to the lab environment only (no production networks, no production identities).
 
 ### Orchestrator boundary
 
-- Orchestration tools (Caldera, Atomic) are allowed to execute only on lab assets.
-- They must not have access to production networks, identities, or secrets.
+- Orchestration tools (Caldera, Atomic) MUST be allowed to execute only on lab assets.
+- Orchestration tools MUST NOT have access to production networks, identities, or secrets.
 
-### Telemetry boundary (Collector)
+### Telemetry boundary (collector)
 
-The OpenTelemetry Collector is a privileged component on endpoints. Hardening requirements:
+The OpenTelemetry Collector is a privileged component on endpoints. Implementations MUST satisfy these hardening requirements:
 
-- Bind network listeners to `localhost` unless remote collection is explicitly required.
-- Disable unused receivers/exporters; ship only what you need.
-- Treat collector config as sensitive:
-  - avoid embedding secrets directly in YAML when possible
-  - enforce file permissions (readable only by the service account)
-  - record config hashes in the run manifest for reproducibility
-- Prefer authenticated, encrypted transport when exporting off-host.
+- Network listeners MUST bind to `localhost` unless remote collection is explicitly required.
+- Unused receivers/exporters MUST be disabled. Deployments MUST ship only what is needed.
+- Collector configuration MUST be treated as sensitive:
+  - Secrets SHOULD be avoided in YAML when possible.
+  - File permissions MUST be enforced so the config is readable only by the service account.
+  - Config hashes MUST be recorded in the run manifest for reproducibility.
+- Off-host export SHOULD use authenticated, encrypted transport.
 
-Windows-specific:
+Windows-specific requirements:
 
-- Reading the Security event log requires elevated privileges. If running the collector as a
-  service, use a dedicated service account with the minimum rights required to read the configured
-  channels.
-- Do not treat rendered event messages as authoritative security evidence; prefer raw/unrendered
-  payloads to avoid locale and manifest dependence.
+- Reading the Security event log requires elevated privileges. If running the collector as a service, deployments MUST use a dedicated service account with the minimum rights required to read the configured channels.
+- Rendered event messages MUST NOT be treated as authoritative security evidence. Implementations SHOULD prefer raw, unrendered payloads to avoid locale and manifest dependence.
 
 ### Normalizer boundary
 
-- The normalizer must not perform network enrichment by default.
-- Any enrichment must be explicitly enabled and recorded in provenance.
+- The normalizer MUST NOT perform network enrichment by default.
+- Any enrichment MUST be explicitly enabled and MUST be recorded in provenance.
 
 ### Evaluator boundary
 
-- Rule execution must not allow arbitrary code execution.
-- Sigma translation and query execution must be sandboxed (read-only).
+- Rule execution MUST NOT allow arbitrary code execution.
+- Sigma translation and query execution MUST be sandboxed and read-only.
 
 ## Safe defaults
 
-- Run in isolated network ranges.
-- Default deny for outbound egress from lab assets.
-- Strict file permissions on run bundles.
-- Do not store secrets in run artifacts.
+- Runs SHOULD use isolated network ranges.
+- Lab assets SHOULD default to outbound egress deny.
+- Run bundles MUST enforce strict file permissions.
+- Secrets MUST NOT be stored in run artifacts.
 
 ## Redaction
 
-The pipeline must support a configurable redaction policy for:
+The pipeline MUST support a configurable redaction policy for:
 
 - credentials and tokens
 - PII fields commonly present in endpoint telemetry
 - large payloads (example: script blocks) when policies require truncation
 
-Normative definition:
+### Policy definition
 
-- The redaction policy format and “redacted-safe” definition are specified in
-  `docs/adr/ADR-0003-redaction-policy.md`.
+The redaction policy format and the definition of “redacted-safe” are specified in [ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md).
 
-Enablement (option, per run):
+### Enablement
 
-- Redaction application MUST be controlled by config `security.redaction.enabled`.
-  - When `true`, artifacts promoted to long-term storage MUST be redacted-safe.
-  - When `false`, the run MUST be explicitly labeled as unredacted in the run manifest and reports.
+Redaction application MUST be controlled by config `security.redaction.enabled`.
 
-Disabled semantics (required when `security.redaction.enabled: false`):
+- When `true`, artifacts promoted to long-term storage MUST be redacted-safe.
+- When `false`, the run MUST be explicitly labeled as unredacted in the run manifest and reports.
 
-- The pipeline MUST NOT silently store unredacted evidence in the standard long-term artifact
-  locations.
-- The pipeline MUST choose one of the following deterministic behaviors (config-controlled):
-  - Withhold-from-long-term (default): write deterministic placeholders in standard locations.
-  - Quarantine-unredacted: write unredacted evidence only to a quarantined location that is excluded
-    from default packaging/export.
+### Disabled posture semantics
 
-Redaction MUST be logged and surfaced in reports; hashes SHOULD be retained for integrity/dedupe
-when fields are truncated or withheld.
+When `security.redaction.enabled: false`, the pipeline MUST NOT silently store unredacted evidence in the standard long-term artifact locations.
 
-Runner transcripts:
+The pipeline MUST choose one of the following deterministic behaviors (config-controlled):
 
-- Executor stdout/stderr transcripts captured under `runner/` are evidence-tier artifacts and must
-  be subject to the same redaction policy as raw telemetry.
-- If transcripts cannot be safely redacted, they must be withheld (record a placeholder file and a
-  hash of the withheld content in volatile logs).
+- Withhold-from-long-term (default): write deterministic placeholders in standard locations.
+- Quarantine-unredacted: write unredacted evidence only to a quarantined location that is excluded from default packaging/export.
+
+Redaction MUST be logged and surfaced in reports. Hashes SHOULD be retained for integrity and deduplication when fields are truncated or withheld.
+
+### Runner transcripts
+
+Executor stdout/stderr transcripts captured under `runner/` are evidence-tier artifacts and MUST be subject to the same redaction policy as raw telemetry.
+
+If transcripts cannot be safely redacted, they MUST be withheld. Implementations MUST record a placeholder file and a hash of the withheld content in volatile logs.
 
 ## Failure modes
 
-- If telemetry collection is misconfigured (missing raw/unrendered mode for Windows), treat this as
-  a run validation failure.
-- If a component attempts unexpected network egress, fail the run and surface the violation in the
-  manifest.
+- If telemetry collection is misconfigured (example: missing raw/unrendered mode for Windows), the pipeline MUST treat this as a run validation failure.
+- If a component attempts unexpected network egress, the pipeline MUST fail the run and MUST surface the violation in the run manifest.

@@ -1,8 +1,6 @@
-<!-- docs/adr/ADR-0002-event-identity-and-provenance.md -->
-
 ---
-title: "ADR-0002: Event identity and provenance"
-description: "Defines deterministic event identity computation and provenance model for reproducible detection matching"
+title: 'ADR-0002: Event identity and provenance'
+description: Defines deterministic event identity computation and provenance model for reproducible detection matching
 status: proposed
 category: adr
 tags: [event-identity, provenance, ocsf, determinism, deduplication]
@@ -15,11 +13,11 @@ related:
 
 # ADR-0002: Event identity and provenance
 
-| Property  | Value                    |
-| --------- | ------------------------ |
-| Status    | proposed                 |
-| Date      | 2026-01-XX               |
-| Deciders  | TBD                      |
+| Property | Value      |
+| -------- | ---------- |
+| Status   | proposed   |
+| Date     | 2026-01-XX |
+| Deciders | TBD        |
 
 ## Context
 
@@ -105,7 +103,8 @@ Source-type selection rule (normative):
 - journald: cursor
 - Zeek: `uid`
 - EDR: stable event GUID
-- osquery: results log entry (v0.1 uses Tier 3; see [Osquery identity basis](#osquery-identity-basis-v01) below)
+- osquery: results log entry (v0.1 uses Tier 3; see
+  [Osquery identity basis](#osquery-identity-basis-v01) below)
 
 #### Tier 2: Stable stream cursor exists
 
@@ -464,10 +463,12 @@ With these inputs, `metadata.event_id` remains stable across:
 Use UUIDv4 generated at collection time for event identity.
 
 **Pros**:
+
 - Simple implementation
 - Guaranteed uniqueness without coordination
 
 **Cons**:
+
 - Not deterministic across replays or reprocessing
 - Breaks reproducibility requirement for detection matching
 - Cannot deduplicate events across collector restarts
@@ -479,25 +480,29 @@ Use UUIDv4 generated at collection time for event identity.
 Use `sha256(event_timestamp + payload_hash)` as event identity.
 
 **Pros**:
+
 - Deterministic for byte-identical events with identical timestamps
 
 **Cons**:
+
 - Timestamp precision drift across collectors causes identity divergence
 - Clock skew between hosts creates false duplicates or missed deduplication
 - Sub-second precision varies by source, creating inconsistent behavior
 
-**Why rejected**: Timestamp precision is not reliable enough for cross-collector determinism.
-The tiered approach allows using timestamps only when no better identifier exists (Tier 3).
+**Why rejected**: Timestamp precision is not reliable enough for cross-collector determinism. The
+tiered approach allows using timestamps only when no better identifier exists (Tier 3).
 
 ### Alternative 3: Source-only identity (no tiers)
 
 Require all sources to provide a native unique identifier; reject sources that don't.
 
 **Pros**:
+
 - Simpler implementation
 - Strongest determinism guarantees
 
 **Cons**:
+
 - Excludes important sources (syslog, some EDR exports, legacy formats)
 - Reduces coverage for real-world detection engineering scenarios
 
@@ -539,9 +544,9 @@ provides acceptable coverage while maintaining transparency about identity confi
 
 ## Changelog
 
-| Date       | Change                                                |
-| ---------- | ----------------------------------------------------- |
-| 2026-01-XX | Added Linux identity basis (auditd/journald/syslog)   |
-| 2026-01-XX | Added osquery identity basis (Tier 3)                 |
-| 2026-01-XX | Added alternatives considered section                 |
-| 2026-01-XX | Initial draft                                         |
+| Date       | Change                                              |
+| ---------- | --------------------------------------------------- |
+| 2026-01-XX | Added Linux identity basis (auditd/journald/syslog) |
+| 2026-01-XX | Added osquery identity basis (Tier 3)               |
+| 2026-01-XX | Added alternatives considered section               |
+| 2026-01-XX | Initial draft                                       |

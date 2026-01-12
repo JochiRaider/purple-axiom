@@ -18,6 +18,7 @@ update explicitly changes the pins.
 | -------------------------------------------------------------- | -------------: | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | OpenTelemetry Collector Contrib (otelcol-contrib distribution) |        0.143.1 | Telemetry collection                   | Pin the released distribution artifacts (`opentelemetry-collector-releases`). Upstream component source tags may differ by patch due to release automation. |
 | pySigma                                                        |          1.1.0 | Sigma parsing + compilation            | CI and production MUST use the same pySigma major/minor to avoid compilation drift.                                                                         |
+| pySigma-pipeline-ocsf                                          |          0.1.1 | Sigma-to-OCSF bridge (OCSF pipeline)   | Pin exact version to avoid field/logsource mapping drift that would destabilize compiled plans and golden fixtures.                                         |
 | DuckDB                                                         |          1.4.3 | Batch evaluator backend (`duckdb_sql`) | Pin exact version for stable query planning behavior across “golden run” fixtures.                                                                          |
 | osquery                                                        |         5.14.1 | Endpoint telemetry (osqueryd)          | Pin official packages for lab assets; CI fixtures should record `osqueryd --version` for provenance.                                                        |
 | OCSF schema                                                    |          1.7.0 | Normalization target                   | v0.1 is pinned to OCSF 1.7.0; see `docs/spec/050_normalization_ocsf.md` for migration policy and `docs/spec/120_config_reference.md` for config pin.        |
@@ -59,6 +60,8 @@ Toolchain baseline (v0.1):
   re-run Windows Event Log raw-mode conformance fixtures and checkpoint/rotation fixtures.
 - **pySigma upgrades:** treat as behavior-changing for rule parsing/modifier semantics; re-run rule
   compilation fixtures and “golden equivalence” backend gates.
+- **pySigma pipeline upgrades:** treat as behavior-changing for logsource routing assumptions and
+  field alias behavior; re-run rule compilation fixtures and “golden equivalence” backend gates.  
 - **DuckDB upgrades:** treat as behavior-changing for SQL execution and parquet scanning; re-run
   evaluator fixtures and report generation sanity checks.
 - **osquery upgrades:** treat as potentially behavior-changing for table schemas and event backends;

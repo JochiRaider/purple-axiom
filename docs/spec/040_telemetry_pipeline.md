@@ -54,6 +54,21 @@ Policy:
 - For every `windowseventlog` receiver instance, set `raw: true`.
 - Treat the raw XML as the canonical payload for later parsing and determinism.
 
+#### Validated upstream semantics (Contrib v0.143.1)
+
+Upstream receiver/operator documentation defines the following behavior:
+
+- `raw: true` causes the emitted OTel LogRecord `body` to be the original Windows Event XML string
+  (`<Event …>`), rather than a structured map.
+- `include_log_record_original: true` adds `attributes["log.record.original"]` containing the
+  original XML string (as controlled by `suppress_rendering_info`).
+- `suppress_rendering_info: true` avoids rendered/enriched “rendering info” collection, improving
+  determinism (at the cost of leaving some values unresolved).
+
+Note on versioning: OpenTelemetry Collector release notes state that `v0.143.0` and `v0.143.1`
+artifacts are equivalent; Purple Axiom treats the receiver semantics above as authoritative for the
+`otelcol-contrib` v0.143.1 distribution.
+
 #### Reference collector config (raw Windows Event Log receiver)
 
 This is a minimal per-channel excerpt showing the required placement of `raw: true`. It is not a
@@ -85,8 +100,8 @@ extensions:
 Normative requirements:
 
 - Every enabled `windowseventlog/*` receiver MUST set `raw: true`.
-- Every enabled `windowseventlog/*` receiver SHOULD set `suppress_rendering_info: true` unless an
-  operator has a documented requirement for rendered strings.
+- Every enabled `windowseventlog/*` receiver MUST set `suppress_rendering_info: true` to enforce
+  unrendered/deterministic capture.
 - When `raw: true`, receivers SHOULD set `include_log_record_original: true` to preserve
   `log.record.original` as a debugging and determinism escape hatch.
 - Receiver bookmarks MUST be persisted via a stable `storage` extension so restarts do not silently
@@ -97,8 +112,12 @@ Normative requirements:
 Telemetry validation MUST verify raw/unrendered collection at runtime by injecting a canary event
 and asserting:
 
-- The captured payload begins with `<Event` after trimming leading whitespace, and
-- The captured payload MUST NOT contain `<RenderingInfo>`.
+- The captured LogRecord `body` is a string.
+- The captured payload begins with `<Event` after trimming leading whitespace.
+- The captured payload MUST NOT contain `<RenderingInfo>` when `suppress_rendering_info: true`
+  (required by this spec).
+- If `attributes["log.record.original"]` is present, it MUST satisfy the same `<Event` prefix and
+  `<RenderingInfo>` absence checks as `body`.
 
 A reference canary is:
 
@@ -177,7 +196,7 @@ Notes:
 
 The `windowseventlog` receiver emits **OTel LogRecords**. The LogRecord body (`body`) may be either:
 
-- a string (commonly raw XML when `raw: true`), or
+- a string (the original Windows Event XML when `raw: true`), or
 - a structured map (when not in raw mode, or when the receiver populates parsed fields).
 
 Purple Axiom treats the LogRecord as the transport envelope and does not assume a single fixed body

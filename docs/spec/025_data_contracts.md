@@ -543,7 +543,7 @@ Recommended (for reproducibility and gap attribution):
 - Populate `rule_source = "sigma"` when the evaluator is Sigma-based.
 - Store Sigma-to-OCSF bridge provenance under `extensions.bridge`:
   - `mapping_pack_id` and `mapping_pack_version` (router + field aliases)
-  - `backend` (example: duckdb-sql, tenzir, other)
+  - `backend` (example: duckdb-sql v0.1, tenzir v0.2, other v0.3)
   - `compiled_at_utc`
   - `fallback_used` (boolean) when any `raw.*` fields were required
   - `unmapped_sigma_fields` (array) when compilation required dropping selectors or failing the rule

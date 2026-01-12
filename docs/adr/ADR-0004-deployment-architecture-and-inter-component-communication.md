@@ -1,20 +1,25 @@
-<!-- docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md -->
+---
+title: 'ADR-0004: Deployment architecture and inter-component communication'
+description: Defines the v0.1 deployment topology and inter-component communication contract.
+status: draft
+category: adr
+---
 
-# ADR-0004: Deployment architecture and inter-component communication (v0.1)
+# ADR-0004: Deployment architecture and inter-component communication
 
 ## Status
 
-Proposed
+Draft
 
 ## Context
 
 Purple Axiom v0.1 specifies a staged pipeline (lab provider, runner, telemetry, normalization,
-criteria evaluation, detection, scoring, reporting) and a local-first “run bundle” rooted at
+criteria evaluation, detection, scoring, reporting) and a local-first "run bundle" rooted at
 `runs/<run_id>/`. The specs already define:
 
-- a canonical OpenTelemetry Collector topology (agent tier, optional gateway tier),
-- run bundle layout and storage tiers,
-- deterministic writing rules for artifacts and datasets.
+- a canonical OpenTelemetry Collector topology (agent tier, optional gateway tier)
+- run bundle layout and storage tiers
+- deterministic writing rules for artifacts and datasets
 
 What is not yet explicit is the intended **deployment model** and the **communication pattern**
 between pipeline components, which impacts determinism, operability, and implementation choices
@@ -25,16 +30,16 @@ contract.
 
 ## Decision
 
-### 1) Normative v0.1 topology
+### Normative v0.1 topology
 
 Purple Axiom v0.1 MUST use a **single-host, local-first** topology with a **one-shot orchestrator**
 and **file-based stage coordination**.
 
-#### 1.1 Orchestrator (execution plane)
+#### Orchestrator (execution plane)
 
-- The pipeline MUST be driven by a single **orchestrator** running on the “run host” (the machine
+- The pipeline MUST be driven by a single **orchestrator** running on the "run host" (the machine
   that owns `runs/<run_id>/`).
-- The orchestrator MUST run as a \**one-shot process per run*- (invoked manually or via external
+- The orchestrator MUST run as a **one-shot process per run** (invoked manually or via external
   scheduling such as cron or systemd timers).
 - The orchestrator SHOULD execute the core pipeline stages **in a single process** for v0.1
   (monolith implementation), even if some steps invoke external binaries (executors, collectors,
@@ -42,21 +47,18 @@ and **file-based stage coordination**.
 
 Non-goal (v0.1): a required long-running daemon or scheduler control plane.
 
-#### 1.2 Telemetry plane (OpenTelemetry Collector tiers)
+#### Telemetry plane (OpenTelemetry Collector tiers)
 
 - Telemetry collection MUST follow the canonical OTel model:
-
   - **Agent tier (preferred):** Collector on each endpoint to read OS sources (for example, Windows
     Event Log with `raw: true`).
   - **Gateway tier (optional):** A collector service that receives OTLP from agents and applies
     buffering/fan-out.
-
 - OTLP MAY be used between Collector tiers (agent to gateway, gateway to sinks).
-
-- OTLP MUST NOT be required as a coordination mechanism between Purple Axiom’s core stages (runner,
+- OTLP MUST NOT be required as a coordination mechanism between Purple Axiom's core stages (runner,
   normalizer, evaluator, scorer, reporting). Core-stage coordination is file-based.
 
-#### 1.3 Run bundle (coordination and evidence plane)
+#### Run bundle (coordination and evidence plane)
 
 - The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate for all core stages.
 - Stages MUST communicate by reading and writing **contract-backed artifacts** under the run bundle
@@ -64,10 +66,10 @@ Non-goal (v0.1): a required long-running daemon or scheduler control plane.
 - The manifest (`runs/<run_id>/manifest.json`) MUST remain the authoritative index of what exists
   and which versions/config hashes were used.
 
-#### 1.4 Optional packaging (Docker Compose)
+#### Optional packaging (Docker Compose)
 
 Docker Compose MAY be provided for ease of installation and home lab setup, but in v0.1 it MUST be
-treated as packaging only:
+considered packaging only:
 
 - One-shot containers for stages (jobs) writing to a shared volume for `runs/`.
 - Optional long-running containers for supporting services (for example, a gateway collector, a
@@ -75,9 +77,9 @@ treated as packaging only:
 - Compose MUST NOT introduce a distributed control plane that changes stage semantics or determinism
   guarantees.
 
-### 2) Inter-component communication contract (v0.1)
+### Inter-component communication contract (v0.1)
 
-#### 2.1 Communication patterns
+#### Communication patterns
 
 Core stages MUST use one of the following mechanisms, in priority order:
 
@@ -88,7 +90,7 @@ Core stages MUST use one of the following mechanisms, in priority order:
 Core stages MUST NOT require service-to-service RPC between runner, normalizer, evaluator,
 detection, scoring, and reporting in v0.1.
 
-#### 2.2 Stable stage identifiers
+#### Stable stage identifiers
 
 Stage outcomes and stage-scoped outputs MUST use stable stage identifiers consistent with the
 pipeline:
@@ -106,9 +108,9 @@ pipeline:
 Substages MAY be expressed as dotted identifiers (for example, `lab_provider.connectivity`,
 `telemetry.windows_eventlog.raw_mode`) provided they remain stable and are only additive.
 
-### 3) Stage IO boundaries (normative)
+### Stage IO boundaries (normative)
 
-Each stage MUST be implementable as “read inputs from run bundle, write outputs to run bundle.”
+Each stage MUST be implementable as "read inputs from run bundle, write outputs to run bundle."
 Implementations MAY structure code internally as functions, classes, or subprocesses, but the
 observable contract is the filesystem.
 
@@ -130,47 +132,41 @@ Note: This ADR does not redefine the detailed contracts or schemas for these art
 constrains deployment and inter-stage communication such that existing and future contracts remain
 implementable and testable.
 
-### 4) Filesystem publish and completion semantics (normative)
+### Filesystem publish and completion semantics (normative)
 
 To preserve determinism and avoid partial reads:
 
-#### 4.1 Single-writer rule
+#### Single-writer rule
 
 - For a given `(run_id, stage_id)`, there MUST be at most one writer publishing stage outputs at a
   time.
 
-#### 4.2 Staging then atomic publish
+#### Staging then atomic publish
 
 For any stage that writes a directory or multi-file artifact set:
 
 1. The stage MUST write outputs into a staging location under the run bundle:
-
    - `runs/<run_id>/.staging/<stage_id>/...`
-
 1. The stage MUST validate required contracts for the outputs it intends to publish (schema
    validation where applicable).
-
 1. The stage MUST publish outputs by an atomic rename from staging into the final location under
    `runs/<run_id>/`.
-
 1. If the stage fails before publish, it MUST NOT create or partially populate the final output
    directory.
 
-#### 4.3 Completion requires outcome recording
+#### Completion requires outcome recording
 
 A stage MUST be considered complete only when:
 
 - its stage outcome has been recorded in the manifest (and in `logs/health.json` when enabled), and
-
 - its outputs are either:
-
   - published (for `success` and `warn_and_skip` outcomes), or
   - absent (for `fail_closed` outcomes).
 
-Stage outcome recording and failure classification are defined in a separate ADR (“Stage Outcomes
-and Failure Classification”).
+Stage outcome recording and failure classification are defined in the
+[stage outcomes ADR](ADR-0005-stage-outcomes-and-failure-classification.md).
 
-### 5) Error propagation and partial failures (v0.1)
+### Error propagation and partial failures (v0.1)
 
 - The orchestrator MUST derive `manifest.status` from the set of recorded stage outcomes using the
   normative derivation rules in the data contracts spec.
@@ -241,13 +237,10 @@ Orchestrator (one-shot, run host)
 The following may be added later without breaking v0.1 contracts if the filesystem stage IO
 boundaries remain stable:
 
-- A “local multi-process” mode where each stage is a separately invocable command, still reading and
+- A "local multi-process" mode where each stage is a separately invocable command, still reading and
   writing the same run bundle artifact contracts.
-
 - A long-running daemon that schedules runs and maintains a queue, provided:
-
   - it uses the same lock and atomic publish rules, and
   - UI actions do not bypass contract validation.
-
 - Remote execution runners or distributed collection backends, provided the run bundle still
   captures a complete, deterministic snapshot of inputs and outputs required for reproducibility.

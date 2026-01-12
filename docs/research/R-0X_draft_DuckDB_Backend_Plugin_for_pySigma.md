@@ -259,9 +259,9 @@ Sigma rules that use **only** the following constructs:
   - Numeric comparisons: `lt`, `lte`, `gt`, `gte` against numeric literals.
   - Null-safe inequality: `neq` compiled using `IS DISTINCT FROM`.
 
-The DuckDB backend MVP MUST reject (fail closed) any rule that requires **any other**
-standardized Sigma modifier, including (non-exhaustive): `contains`, `startswith`, `endswith`, `re`
-(and sub-modifiers), `exists`, `cidr`, time-part modifiers, `base64*`, `fieldref`, and `expand`.
+The DuckDB backend MVP MUST reject (fail closed) any rule that requires **any other** standardized
+Sigma modifier, including (non-exhaustive): `contains`, `startswith`, `endswith`, `re` (and
+sub-modifiers), `exists`, `cidr`, time-part modifiers, `base64*`, `fieldref`, and `expand`.
 
 Correlation rules (Sigma correlation) are **out of MVP scope** and MUST be rejected as
 non-executable.
@@ -269,23 +269,23 @@ non-executable.
 #### Phase 0 deliverable: fail-closed policy
 
 - The backend MUST implement a **compile-time** executability check.
-- If a rule is not within the MVP capability boundary, the backend MUST NOT emit partial SQL.
-  It MUST return a compilation failure with a machine-readable error code (see taxonomy below).
+- If a rule is not within the MVP capability boundary, the backend MUST NOT emit partial SQL. It
+  MUST return a compilation failure with a machine-readable error code (see taxonomy below).
 
 #### Phase 0 deliverable: error taxonomy skeleton
 
 The following taxonomy is a **skeleton** intended to stabilize implementation and tests. Codes are
 prefixed with `PA_SIGMA_` to disambiguate from upstream pySigma exceptions.
 
-| Code | Class | Trigger (compile-time) | Notes / expected remediation |
-|---|---|---|---|
-| `PA_SIGMA_E0001_UNSUPPORTED_RULE_TYPE` | Non-executable (MVP) | Rule type is not a basic detection rule (e.g., correlation) | Documented as out-of-scope for MVP. |
-| `PA_SIGMA_E0002_UNSUPPORTED_MODIFIER` | Non-executable (MVP) | Any modifier outside the MVP set is present | Where relevant, include `modifier`, `field`, and `gap_id` (e.g., `GAP-01`). |
-| `PA_SIGMA_E0003_UNSUPPORTED_OPERATOR` | Non-executable (MVP) | Operator not supported by MVP (e.g., wildcard semantics, regex semantics) | Use for cases where syntax implies operator behavior rather than an explicit modifier. |
-| `PA_SIGMA_E0004_TYPE_POLICY_VIOLATION` | Non-executable (MVP) | Numeric comparison applied to non-numeric literal, or casting policy rejects the comparison | Include `field`, `operator`, `value` summary, and the casting policy name/version. |
-| `PA_SIGMA_E0005_PLACEHOLDER_UNRESOLVED` | Non-executable (MVP) | Unexpanded placeholder remains (e.g., `expand` not applied upstream) | Indicates a pipeline contract failure; backend fails closed. |
-| `PA_SIGMA_E0006_BACKEND_OPTION_INVALID` | Configuration error | Backend option missing/invalid (e.g., `table_name` empty) | Fail closed before compilation. |
-| `PA_SIGMA_E0007_INTERNAL_INVARIANT` | Bug | Backend invariant violated (unexpected AST shape) | Treated as an implementation defect; should not occur for validated inputs. |
+| Code                                    | Class                | Trigger (compile-time)                                                                      | Notes / expected remediation                                                           |
+| --------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `PA_SIGMA_E0001_UNSUPPORTED_RULE_TYPE`  | Non-executable (MVP) | Rule type is not a basic detection rule (e.g., correlation)                                 | Documented as out-of-scope for MVP.                                                    |
+| `PA_SIGMA_E0002_UNSUPPORTED_MODIFIER`   | Non-executable (MVP) | Any modifier outside the MVP set is present                                                 | Where relevant, include `modifier`, `field`, and `gap_id` (e.g., `GAP-01`).            |
+| `PA_SIGMA_E0003_UNSUPPORTED_OPERATOR`   | Non-executable (MVP) | Operator not supported by MVP (e.g., wildcard semantics, regex semantics)                   | Use for cases where syntax implies operator behavior rather than an explicit modifier. |
+| `PA_SIGMA_E0004_TYPE_POLICY_VIOLATION`  | Non-executable (MVP) | Numeric comparison applied to non-numeric literal, or casting policy rejects the comparison | Include `field`, `operator`, `value` summary, and the casting policy name/version.     |
+| `PA_SIGMA_E0005_PLACEHOLDER_UNRESOLVED` | Non-executable (MVP) | Unexpanded placeholder remains (e.g., `expand` not applied upstream)                        | Indicates a pipeline contract failure; backend fails closed.                           |
+| `PA_SIGMA_E0006_BACKEND_OPTION_INVALID` | Configuration error  | Backend option missing/invalid (e.g., `table_name` empty)                                   | Fail closed before compilation.                                                        |
+| `PA_SIGMA_E0007_INTERNAL_INVARIANT`     | Bug                  | Backend invariant violated (unexpected AST shape)                                           | Treated as an implementation defect; should not occur for validated inputs.            |
 
 ##### Error payload shape (informative)
 
@@ -305,6 +305,553 @@ containing at least:
 - Produce a single “OCSF-in-DuckDB access note” (field access, list behavior, timestamp type).
 
 **Deliverable:** Data projection note + minimal fixtures demonstrating behavior.
+
+Phase 1 Deliverable for pySigma DuckDB Backend Plugin
+
+## **GAP-03 (Nested Fields) + GAP-08 (Timestamp Typing) Resolution**
+
+## 1. Executive Summary
+
+This note documents the empirically verified (or documented) behaviors for accessing OCSF-normalized
+data in DuckDB, specifically addressing:
+
+- **GAP-03**: Safe nested field access for OCSF STRUCT projections
+- **GAP-08**: Timestamp typing and time-part extraction
+
+**Key findings:**
+
+| Concern                | Purple Axiom Schema                     | DuckDB Access Strategy                            | Risk Level |
+| ---------------------- | --------------------------------------- | ------------------------------------------------- | ---------- |
+| Nested STRUCT access   | `metadata.uid`, `actor.user.name`, etc. | Dot notation with TRY_CAST or COALESCE guard      | Medium     |
+| Missing keys in STRUCT | Sparse nested objects                   | `struct_extract` throws; use `TRY(...)` wrapper   | High       |
+| LIST field membership  | `device.ips[]`, `metadata.labels[]`     | `list_contains()` or `unnest()`                   | Medium     |
+| Timestamp type         | `time` (int64 ms), `time_dt` (string)   | `time` for `date_part()`; cast to TIMESTAMP first | Low        |
+
+______________________________________________________________________
+
+## 2. Purple Axiom OCSF Schema Summary
+
+Per `docs/spec/045_storage_formats.md` and `docs/contracts/ocsf_event_envelope.schema.json`:
+
+### 2.1 Minimum Required Columns (Parquet)
+
+```
+time              INT64      -- ms since epoch, UTC (Tier 0)
+time_dt           VARCHAR    -- ISO-8601/RFC3339 string (convenience)
+class_uid         INT32      -- OCSF class identifier (Tier 0)
+category_uid      INT32      -- nullable
+type_uid          INT32      -- nullable
+severity_id       INT32      -- nullable
+```
+
+### 2.2 Nested STRUCT Columns
+
+```
+metadata          STRUCT     -- provenance object (required)
+  .uid            VARCHAR    -- MUST equal .event_id (ADR-0002)
+  .event_id       VARCHAR    -- deterministic idempotency key
+  .run_id         VARCHAR    -- UUID
+  .scenario_id    VARCHAR
+  .source_type    VARCHAR    -- e.g., 'sysmon', 'wineventlog', 'osquery'
+  .labels         VARCHAR[]  -- array of strings
+  ...
+
+device            STRUCT     -- nullable
+  .hostname       VARCHAR
+  .uid            VARCHAR
+  .ip             VARCHAR
+  .ips            VARCHAR[]  -- array of IPs
+
+actor             STRUCT     -- nullable
+  .user           STRUCT
+    .name         VARCHAR
+    .uid          VARCHAR
+  .process        STRUCT
+    .name         VARCHAR
+    .pid          INT32
+
+raw               STRUCT     -- preserved vendor fields (nullable)
+```
+
+______________________________________________________________________
+
+## 3. GAP-03: Nested Field Access
+
+### 3.1 Problem Statement
+
+DuckDB's `struct_extract()` (and dot notation which compiles to it) **throws an error** when
+accessing a key that does not exist in the STRUCT schema. This affects:
+
+- Sigma rules targeting fields that may be absent in some events
+- The `exists` modifier compilation
+- Safe access patterns for sparse nested objects
+
+### 3.2 Documented DuckDB Behavior
+
+**Dot notation:**
+
+```sql
+SELECT metadata.uid FROM events;           -- OK if 'uid' key exists in schema
+SELECT actor.user.name FROM events;        -- OK if full path exists
+SELECT actor.user.phone FROM events;       -- ERROR if 'phone' not in schema
+```
+
+**Key behaviors (DuckDB 1.0+):**
+
+1. Schema-defined keys: Dot access works; NULL if row value is NULL
+1. Schema-missing keys: Runtime error on `struct_extract`
+1. Entire STRUCT NULL: Accessing nested key returns NULL (no error)
+
+### 3.3 Recommended Access Strategies
+
+#### Strategy A: Schema-Guaranteed Fields (Tier 0/1)
+
+For fields guaranteed by Purple Axiom's contract, use direct dot notation:
+
+```sql
+-- Safe: Tier 0 contract-required
+SELECT metadata.uid, metadata.source_type, time, class_uid
+FROM ocsf_events;
+
+-- Safe: Tier 1 when populated
+SELECT device.hostname, actor.user.name
+FROM ocsf_events;
+```
+
+#### Strategy B: Sparse/Optional Fields (Tier 2+)
+
+For fields that may not exist in the STRUCT schema, use DuckDB's `TRY()` wrapper:
+
+```sql
+-- Returns NULL instead of throwing if path doesn't exist
+SELECT TRY(actor.process.parent.name) AS parent_name
+FROM ocsf_events;
+```
+
+#### Strategy C: Existence Checks (Sigma `exists` modifier)
+
+```sql
+-- Check if field is NOT NULL (works for schema-present fields)
+SELECT * FROM ocsf_events
+WHERE actor.user.name IS NOT NULL;
+
+-- For potentially schema-missing fields, guard with TRY:
+SELECT * FROM ocsf_events
+WHERE TRY(actor.process.parent.name) IS NOT NULL;
+```
+
+### 3.4 Backend Compilation Recommendations
+
+| Sigma Construct           | DuckDB SQL Pattern                         |
+| ------------------------- | ------------------------------------------ |
+| `field: value` (Tier 0/1) | `field = 'value'` or `field ILIKE 'value'` |
+| `field: value` (Tier 2+)  | `TRY(field) = 'value'`                     |
+| `field\|exists: true`     | `TRY(field) IS NOT NULL`                   |
+| `field\|exists: false`    | `TRY(field) IS NULL`                       |
+
+**MVP Decision:** For MVP, the backend SHOULD assume pipeline-provided field names are schema-valid
+and use direct dot notation. The `TRY()` wrapper is recommended for post-MVP or when targeting
+heterogeneous schemas.
+
+______________________________________________________________________
+
+## 4. GAP-07 (Related): LIST Field Semantics
+
+### 4.1 OCSF Array Fields in Purple Axiom
+
+```
+device.ips[]        VARCHAR[]   -- multiple IPs
+metadata.labels[]   VARCHAR[]   -- classification labels
+metadata.debug[]    VARCHAR[]   -- debug strings
+```
+
+### 4.2 DuckDB LIST Operations
+
+**Membership check (any element equals):**
+
+```sql
+-- Preferred: list_contains for scalar equality
+SELECT * FROM ocsf_events
+WHERE list_contains(device.ips, '10.0.0.1');
+
+-- Alternative: list_has_any for multiple candidate values
+SELECT * FROM ocsf_events
+WHERE list_has_any(device.ips, ['10.0.0.1', '192.168.1.1']);
+```
+
+**All elements match (Sigma `all` modifier on list):**
+
+```sql
+-- Check if ALL candidate values are present
+SELECT * FROM ocsf_events
+WHERE list_has_all(device.ips, ['10.0.0.1', '192.168.1.1']);
+```
+
+**Substring/pattern on list elements:**
+
+```sql
+-- Must unnest for LIKE/ILIKE on elements
+SELECT * FROM ocsf_events
+WHERE EXISTS (
+  SELECT 1 FROM unnest(device.ips) AS t(ip)
+  WHERE ip ILIKE '10.%'
+);
+```
+
+### 4.3 Backend Compilation Recommendations
+
+| Sigma Construct                    | Target Field Type | DuckDB SQL Pattern                                             |
+| ---------------------------------- | ----------------- | -------------------------------------------------------------- |
+| `ips: '10.0.0.1'`                  | LIST              | `list_contains(ips, '10.0.0.1')`                               |
+| `ips: ['10.0.0.1', '192.168.1.1']` | LIST              | `list_has_any(ips, [...])`                                     |
+| `ips\|all: [...]`                  | LIST              | `list_has_all(ips, [...])`                                     |
+| `ips\|contains: '10.'`             | LIST              | `EXISTS(SELECT 1 FROM unnest(ips) t(v) WHERE v ILIKE '%10.%')` |
+
+______________________________________________________________________
+
+## 5. GAP-08: Timestamp Typing
+
+### 5.1 Purple Axiom Timestamp Schema
+
+Per `docs/spec/045_storage_formats.md`:
+
+| Column    | Type    | Semantics                                                  |
+| --------- | ------- | ---------------------------------------------------------- |
+| `time`    | INT64   | Milliseconds since Unix epoch (UTC)                        |
+| `time_dt` | VARCHAR | ISO-8601/RFC3339 UTC string (e.g., `2026-01-08T14:30:00Z`) |
+
+**Contract:**
+
+- `time_dt` MUST be a deterministic rendering of `time` (no locale; UTC only)
+- Both are always present (Tier 0)
+
+### 5.2 DuckDB Timestamp Operations
+
+**Converting `time` (ms epoch) to TIMESTAMP:**
+
+```sql
+-- Method 1: epoch_ms() function (preferred)
+SELECT epoch_ms(time) AS ts FROM ocsf_events;
+
+-- Method 2: make_timestamp from microseconds
+SELECT make_timestamp(time * 1000) AS ts FROM ocsf_events;
+```
+
+**Extracting time parts (Sigma time modifiers):**
+
+```sql
+-- date_part on converted timestamp
+SELECT date_part('hour', epoch_ms(time)) AS hour FROM ocsf_events;
+SELECT date_part('day', epoch_ms(time)) AS day FROM ocsf_events;
+SELECT date_part('month', epoch_ms(time)) AS month FROM ocsf_events;
+SELECT date_part('year', epoch_ms(time)) AS year FROM ocsf_events;
+
+-- Also available: 'minute', 'second', 'week', 'dayofweek', 'dayofyear'
+```
+
+**Using `time_dt` string (alternative):**
+
+```sql
+-- Cast string to TIMESTAMP, then extract
+SELECT date_part('hour', CAST(time_dt AS TIMESTAMP)) AS hour
+FROM ocsf_events;
+```
+
+### 5.3 Timezone Considerations
+
+**Purple Axiom contract:** All timestamps are UTC-normalized.
+
+- `time` is epoch ms (inherently UTC)
+- `time_dt` is RFC3339 with `Z` suffix (explicit UTC)
+
+**DuckDB behavior:**
+
+- `TIMESTAMP` is timezone-naive (no TZ info stored)
+- `TIMESTAMPTZ` is timezone-aware (stores UTC, renders in local TZ)
+
+**Recommendation:** Use `TIMESTAMP` (not `TIMESTAMPTZ`) for Purple Axiom data since UTC is
+guaranteed. This avoids any local timezone rendering surprises.
+
+### 5.4 Backend Compilation Recommendations
+
+| Sigma Modifier     | DuckDB SQL Pattern                         |
+| ------------------ | ------------------------------------------ |
+| `time\|hour: 14`   | `date_part('hour', epoch_ms(time)) = 14`   |
+| `time\|day: 15`    | `date_part('day', epoch_ms(time)) = 15`    |
+| `time\|month: 6`   | `date_part('month', epoch_ms(time)) = 6`   |
+| `time\|year: 2026` | `date_part('year', epoch_ms(time)) = 2026` |
+| `time\|minute: 30` | `date_part('minute', epoch_ms(time)) = 30` |
+| `time\|week: 2`    | `date_part('week', epoch_ms(time)) = 2`    |
+
+______________________________________________________________________
+
+## 6. Minimal Fixtures
+
+The following SQL creates a minimal test dataset for validating the behaviors documented above.
+
+### 6.1 Fixture: Schema Definition
+
+```sql
+-- fixtures/gap_03_08/schema.sql
+-- Minimal OCSF-like schema for DuckDB backend testing
+
+CREATE TABLE ocsf_events (
+  -- Tier 0: Core envelope
+  time BIGINT NOT NULL,                    -- ms since epoch
+  time_dt VARCHAR NOT NULL,                -- ISO-8601 string
+  class_uid INTEGER NOT NULL,
+  
+  -- Tier 0: Metadata (nested STRUCT)
+  metadata STRUCT(
+    uid VARCHAR,
+    event_id VARCHAR,
+    run_id VARCHAR,
+    source_type VARCHAR,
+    labels VARCHAR[]
+  ) NOT NULL,
+  
+  -- Tier 1: Device (nullable nested STRUCT)
+  device STRUCT(
+    hostname VARCHAR,
+    uid VARCHAR,
+    ip VARCHAR,
+    ips VARCHAR[]
+  ),
+  
+  -- Tier 1/2: Actor (nullable nested STRUCT)
+  actor STRUCT(
+    "user" STRUCT(
+      name VARCHAR,
+      uid VARCHAR
+    ),
+    process STRUCT(
+      name VARCHAR,
+      pid INTEGER
+    )
+  ),
+  
+  -- Tier R: Raw retention
+  raw STRUCT(
+    provider VARCHAR,
+    event_id INTEGER
+  )
+);
+```
+
+### 6.2 Fixture: Sample Data
+
+```sql
+-- fixtures/gap_03_08/data.sql
+-- Insert test records covering edge cases
+
+INSERT INTO ocsf_events VALUES
+  -- Record 1: Full population
+  (
+    1736344200000,                          -- 2026-01-08T14:30:00Z
+    '2026-01-08T14:30:00Z',
+    1007,                                   -- Process Activity
+    {
+      uid: 'evt-001',
+      event_id: 'evt-001',
+      run_id: 'run-2026-01-08',
+      source_type: 'sysmon',
+      labels: ['test', 'process']
+    },
+    {
+      hostname: 'host-01',
+      uid: 'host-01-guid',
+      ip: '10.0.0.1',
+      ips: ['10.0.0.1', '192.168.1.100']
+    },
+    {
+      "user": { name: 'alice', uid: 'S-1-5-21-123' },
+      process: { name: 'powershell.exe', pid: 4242 }
+    },
+    { provider: 'Microsoft-Windows-Sysmon', event_id: 1 }
+  ),
+  
+  -- Record 2: Sparse actor (no user)
+  (
+    1736347800000,                          -- 2026-01-08T15:30:00Z
+    '2026-01-08T15:30:00Z',
+    1001,                                   -- File Activity
+    {
+      uid: 'evt-002',
+      event_id: 'evt-002',
+      run_id: 'run-2026-01-08',
+      source_type: 'sysmon',
+      labels: ['test', 'file']
+    },
+    {
+      hostname: 'host-02',
+      uid: NULL,
+      ip: '10.0.0.2',
+      ips: ['10.0.0.2']
+    },
+    {
+      "user": NULL,                         -- No user context
+      process: { name: 'cmd.exe', pid: 1234 }
+    },
+    { provider: 'Microsoft-Windows-Sysmon', event_id: 11 }
+  ),
+  
+  -- Record 3: NULL device (osquery scenario)
+  (
+    1736351400000,                          -- 2026-01-08T16:30:00Z
+    '2026-01-08T16:30:00Z',
+    1007,
+    {
+      uid: 'evt-003',
+      event_id: 'evt-003',
+      run_id: 'run-2026-01-08',
+      source_type: 'osquery',
+      labels: NULL                          -- No labels
+    },
+    NULL,                                   -- No device context
+    {
+      "user": { name: 'root', uid: '0' },
+      process: { name: 'bash', pid: 5678 }
+    },
+    NULL                                    -- No raw retention
+  );
+```
+
+### 6.3 Fixture: Validation Queries
+
+```sql
+-- fixtures/gap_03_08/validate_gap_03.sql
+-- GAP-03: Nested field access validation
+
+-- Test 1: Direct dot access on Tier 0 field (should succeed)
+SELECT metadata.uid, metadata.source_type FROM ocsf_events;
+
+-- Test 2: Nested STRUCT access with NULL parent
+SELECT device.hostname FROM ocsf_events;  -- Returns NULL for record 3
+
+-- Test 3: Deep nested access
+SELECT actor."user".name FROM ocsf_events;  -- Returns NULL for record 2
+
+-- Test 4: Existence check pattern
+SELECT *
+FROM ocsf_events
+WHERE actor."user".name IS NOT NULL;  -- Returns records 1, 3
+
+-- Test 5: LIST field membership
+SELECT *
+FROM ocsf_events
+WHERE list_contains(device.ips, '10.0.0.1');  -- Returns record 1
+
+-- Test 6: LIST any-of matching
+SELECT *
+FROM ocsf_events
+WHERE list_has_any(device.ips, ['10.0.0.2', '192.168.1.100']);  -- Records 1, 2
+
+-- Test 7: LIST contains with pattern (requires unnest)
+SELECT *
+FROM ocsf_events
+WHERE EXISTS (
+  SELECT 1 FROM unnest(device.ips) AS t(ip)
+  WHERE ip LIKE '10.%'
+);  -- Records 1, 2
+```
+
+```sql
+-- fixtures/gap_03_08/validate_gap_08.sql
+-- GAP-08: Timestamp typing validation
+
+-- Test 1: Convert epoch ms to timestamp
+SELECT time, epoch_ms(time) AS ts FROM ocsf_events;
+
+-- Test 2: Extract hour from epoch
+SELECT time, date_part('hour', epoch_ms(time)) AS hour
+FROM ocsf_events;
+-- Expected: 14, 15, 16
+
+-- Test 3: Extract date parts
+SELECT
+  time,
+  date_part('year', epoch_ms(time)) AS year,
+  date_part('month', epoch_ms(time)) AS month,
+  date_part('day', epoch_ms(time)) AS day
+FROM ocsf_events;
+-- Expected: 2026, 1, 8 for all
+
+-- Test 4: Filter by hour
+SELECT * FROM ocsf_events
+WHERE date_part('hour', epoch_ms(time)) = 14;  -- Record 1 only
+
+-- Test 5: Verify time_dt string parsing matches time epoch
+SELECT
+  time,
+  time_dt,
+  epoch_ms(time) AS from_epoch,
+  CAST(time_dt AS TIMESTAMP) AS from_string,
+  epoch_ms(time) = CAST(time_dt AS TIMESTAMP) AS match
+FROM ocsf_events;
+-- Expected: match = true for all
+```
+
+______________________________________________________________________
+
+## 7. Backend Implementation Checklist
+
+### 7.1 GAP-03 Resolution
+
+- [ ] Use direct dot notation for Tier 0/1 contract fields
+- [ ] Document assumption that pipeline-provided field names are schema-valid
+- [ ] Consider `TRY()` wrapper for post-MVP sparse field access
+- [ ] Implement `exists` modifier as `field IS NOT NULL`
+
+### 7.2 GAP-08 Resolution
+
+- [ ] Use `epoch_ms(time)` to convert ms epoch to TIMESTAMP
+- [ ] Use `date_part('x', epoch_ms(time))` for time modifiers
+- [ ] Document UTC-only assumption (no timezone conversion needed)
+
+### 7.3 GAP-07 Resolution (LIST fields)
+
+- [ ] Implement scalar equality on LIST as `list_contains(field, value)`
+- [ ] Implement multi-value OR on LIST as `list_has_any(field, [...])`
+- [ ] Implement `all` modifier on LIST as `list_has_all(field, [...])`
+- [ ] Implement pattern modifiers on LIST via `EXISTS(unnest(...)...)`
+
+______________________________________________________________________
+
+## 8. Open Questions for Follow-up
+
+1. **TRY() performance**: Is there measurable overhead from wrapping all field accesses in `TRY()`?
+   Requires benchmarking on real datasets.
+
+1. **Schema evolution**: When OCSF schema changes (new fields), do Parquet files written with older
+   schemas cause `struct_extract` errors? Mitigated by `union_by_name=true` but needs validation.
+
+1. **LIST + modifier chaining**: How should `ips|contains|all: ['10.', '192.']` compile? (All IPs
+   must contain both substrings, or each substring appears in at least one IP?)
+
+______________________________________________________________________
+
+## Appendix A: DuckDB Version Notes
+
+This note assumes DuckDB 1.0+. Key version-dependent behaviors:
+
+| Feature           | DuckDB Version | Notes                    |
+| ----------------- | -------------- | ------------------------ |
+| `TRY()` wrapper   | 0.9+           | Returns NULL on error    |
+| `epoch_ms()`      | 0.8+           | Converts ms to TIMESTAMP |
+| `list_contains()` | 0.3+           | Stable                   |
+| `list_has_any()`  | 0.9+           | Multi-value membership   |
+| `list_has_all()`  | 0.9+           | All-value membership     |
+
+______________________________________________________________________
+
+## Appendix B: References
+
+- Purple Axiom `docs/spec/045_storage_formats.md` (storage schema contract)
+- Purple Axiom `docs/spec/055_ocsf_field_tiers.md` (field tier definitions)
+- Purple Axiom `docs/contracts/ocsf_event_envelope.schema.json` (JSON Schema)
+- DuckDB Documentation: Nested Types (STRUCT, LIST)
+- DuckDB Documentation: Date/Time Functions
+- pySigma DuckDB Backend Draft: `R-0X_draft_DuckDB_Backend_Plugin_for_pySigma.md`
 
 ### Phase 2: String semantics and matching
 

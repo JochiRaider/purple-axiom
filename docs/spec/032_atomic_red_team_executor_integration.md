@@ -1,32 +1,44 @@
+---
+title: Atomic Red Team executor integration contract
+description: Defines the integration contract between Purple Axiom and Invoke-AtomicRedTeam for atomic actions.
+status: draft
+---
+
 <!-- docs/spec/032_atomic_red_team_executor_integration.md -->
 
-# Atomic Red Team Executor Integration Contract (v0.1)
+# Atomic Red Team executor integration contract
 
 This document defines the normative integration contract between Purple Axiom and the
-**Invoke-AtomicRedTeam** executor stack for `engine = "atomic"` actions.
+Invoke-AtomicRedTeam executor stack for `engine = "atomic"` actions. It specifies the following and
+is designed to make runs reproducible and cross-run comparable while preserving operator-debuggable
+evidence.
 
-It specifies:
+- Deterministic Atomic YAML parsing
+- Deterministic input resolution (defaults, overrides, template expansion)
+- Transcript capture and storage requirements (encoding, redaction, layout)
+- Cleanup invocation and cleanup verification workflow and artifacts
 
-- deterministic Atomic YAML parsing
-- deterministic input resolution (defaults, overrides, template expansion)
-- transcript capture and storage requirements (encoding, redaction, layout)
-- cleanup invocation and cleanup verification workflow and artifacts
+## Overview
 
-This contract is designed to make runs reproducible and cross-run comparable, while preserving
-operator-debuggable evidence.
+This spec defines how the runner discovers and parses Atomic YAML, resolves inputs, canonicalizes
+identity-bearing materials, captures transcripts, and records cleanup verification. It sets the
+deterministic behavior, evidence artifacts, and failure modes needed for cross-run comparability.
 
 ## Relationship to other specs
 
 This document is additive and MUST be read alongside:
 
-- `docs/spec/025_data_contracts.md` (hashing, `parameters.resolved_inputs_sha256`, run bundle
-  layout, command integrity fields)
-- `docs/spec/030_scenarios.md` (stable `action_key` basis, Atomic Test Plan scenarios)
-- `docs/spec/035_validation_criteria.md` (cleanup verification semantics and reason codes)
-- `docs/adr/ADR-0003-redaction-policy.md` (deterministic redaction requirements)
+- [Data contracts spec](025_data_contracts.md) for hashing, `parameters.resolved_inputs_sha256`, run
+  bundle layout, and command integrity fields
+- [Scenario model spec](030_scenarios.md) for stable `action_key` basis and Atomic Test Plan
+  scenarios
+- [Validation criteria spec](035_validation_criteria.md) for cleanup verification semantics and
+  reason codes
+- [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md) for deterministic redaction
+  requirements
 
 If this document conflicts with any of the above, the conflict MUST be resolved explicitly via a
-spec patch (do not implement “best effort” divergence).
+spec patch (do not implement "best effort" divergence).
 
 ## Definitions
 
@@ -34,11 +46,14 @@ spec patch (do not implement “best effort” divergence).
 
 For v0.1, the **reference executor** is the tuple:
 
-- PowerShell runtime: **PowerShell 7.4.x** (pinned in `SUPPORTED_VERSIONS.md`)
-- Invoke-AtomicRedTeam module: pinned exact version (pinned in `SUPPORTED_VERSIONS.md`)
+- PowerShell runtime: **PowerShell 7.4.x** (pinned in
+  [supported versions](../../SUPPORTED_VERSIONS.md))
+- Invoke-AtomicRedTeam module: pinned exact version (pinned in
+  [supported versions](../../SUPPORTED_VERSIONS.md))
 - Atomic Red Team content: pinned reference (commit SHA, tag, or vendored content hash)
 
-The runner MUST record these pins in run provenance (see “Runner evidence artifacts”).
+The runner MUST record these pins in run provenance (see
+[runner evidence artifacts](#contracted-runner-artifacts)).
 
 ### Atomic test identity
 
@@ -54,14 +69,14 @@ test identifier.
 represents environment-dependent Atomics payload roots and MUST NOT expand to a real path inside
 identity-bearing materials.
 
-## Contracted runner artifacts (filesystem layout)
+## Contracted runner artifacts
 
 Per-action evidence is stored under:
 
 - `runs/<run_id>/runner/actions/<action_id>/`
 
-The following files are RECOMMENDED by `docs/spec/045_storage_formats.md` and are REQUIRED by this
-contract when the corresponding feature is enabled:
+The following files are RECOMMENDED by the [storage formats spec](045_storage_formats.md) and are
+REQUIRED by this contract when the corresponding feature is enabled:
 
 - `stdout.txt` (required when execution is attempted)
 - `stderr.txt` (required when execution is attempted)
@@ -71,12 +86,12 @@ contract when the corresponding feature is enabled:
 - `cleanup_stderr.txt` (required when cleanup is invoked)
 - `cleanup_verification.json` (required when cleanup verification is enabled)
 
-The runner MUST also emit ground truth timeline entries as specified in
-`docs/spec/025_data_contracts.md`.
+The runner MUST also emit ground truth timeline entries as specified in the
+[data contracts spec](025_data_contracts.md).
 
-## 1. Atomic YAML parsing (normative)
+## Atomic YAML parsing
 
-### 1.1 Technique discovery
+### Technique discovery
 
 Given a technique id `technique_id`, the runner MUST locate the Atomic YAML source as:
 
@@ -85,7 +100,7 @@ Given a technique id `technique_id`, the runner MUST locate the Atomic YAML sour
 If the file does not exist, the runner MUST fail closed for the action with reason code
 `atomic_yaml_not_found`.
 
-### 1.2 YAML parser requirements
+### YAML parser requirements
 
 The runner MUST parse Atomic YAML using a pinned implementation (as part of the reference executor).
 Parsing MUST be deterministic for equivalent input bytes.
@@ -106,7 +121,7 @@ If `auto_generated_guid` is missing or empty, the runner MUST fail closed with r
 `missing_engine_test_id` unless the action is configured as `warn_and_skip` (in which case it MUST
 emit `skipped` with reason code `missing_engine_test_id`).
 
-### 1.3 Command list normalization
+### Command list normalization
 
 Atomic YAML may express commands as a scalar string or as a list. The runner MUST normalize both
 `executor.command` and `executor.cleanup_command` into a list of strings:
@@ -115,17 +130,17 @@ Atomic YAML may express commands as a scalar string or as a list. The runner MUS
 - If list, preserve list order exactly.
 - Empty strings MUST be rejected (fail closed with reason code `empty_command`).
 
-### 1.4 Supported platform gate
+### Supported platform gate
 
 If `supported_platforms` is present, the runner MUST evaluate it against the target asset OS family.
 
-- If the action’s target platform is not supported, the runner MUST emit `skipped` with reason code
+- If the action's target platform is not supported, the runner MUST emit `skipped` with reason code
   `unsupported_platform`.
 - The runner MUST NOT attempt execution on unsupported platforms.
 
-## 2. Input resolution (normative)
+## Input resolution
 
-### 2.1 Precedence ladder
+### Input resolution precedence
 
 Input resolution MUST follow this precedence (highest to lowest):
 
@@ -138,14 +153,14 @@ Interactive prompting MUST NOT be used for unattended automation:
 - If Invoke-AtomicRedTeam attempts to prompt due to missing required inputs, the runner MUST treat
   this as a failure and MUST fail closed with reason code `interactive_prompt_blocked`.
 
-### 2.2 Required inputs (no defaults)
+### Required inputs without defaults
 
 If an input argument key exists in YAML but has no `default` value:
 
 - The runner MUST require an override value.
 - If no override is provided, the runner MUST fail closed with reason code `missing_required_input`.
 
-### 2.3 Template expansion rules
+### Template expansion rules
 
 Template placeholders use the Atomic convention:
 
@@ -154,34 +169,28 @@ Template placeholders use the Atomic convention:
 The runner MUST perform placeholder substitution using the resolved input map:
 
 - Substitution MUST be exact-match by placeholder name.
-
 - Placeholder names MUST be treated as case-sensitive.
-
 - The runner MUST validate that all placeholders used in `executor.command` and
   `executor.cleanup_command` reference keys present in the resolved input map.
-
   - If any placeholder cannot be resolved, the runner MUST fail closed with reason code
     `unresolved_placeholder`.
 
-### 2.4 Resolved inputs fixed point
+### Resolved input fixed point
 
 Resolved inputs MAY reference other inputs (example: a default value containing `#{other_arg}`).
 
 To produce `resolved_inputs` deterministically, the runner MUST apply a fixed-point expansion:
 
 1. Start from the precedence-merged input map (`merged_inputs`).
-
 1. Iteratively substitute placeholders inside input values using the current map, until:
-
    - no value changes, or
    - `max_resolution_passes` is reached (v0.1 default: 8 passes)
-
 1. If `max_resolution_passes` is reached and values are still changing, the runner MUST fail closed
    with reason code `input_resolution_cycle_or_growth`.
 
 This algorithm MUST be deterministic for the same YAML bytes and the same override object.
 
-### 2.5 Canonicalization of environment-dependent Atomics paths
+### Canonicalization of environment-dependent Atomics paths
 
 Environment-dependent expansions MUST NOT participate in identity-bearing hashing.
 
@@ -198,51 +207,50 @@ runner MUST canonicalize occurrences of these expansions by replacing them with 
 This canonicalization applies to:
 
 - resolved input values, and
-- the canonical expanded command material (see Section 3)
+- the canonical expanded command material (see
+  [Canonical expanded command boundary](#canonical-expanded-command-boundary))
 
 The runner MUST record the actual expanded Atomics root path used for execution in `executor.json`
-as evidence (see Section 4).
+as evidence (see [Executor evidence file](#executor-evidence-file)).
 
-## 3. Identity-bearing hashes and command materials (normative)
+## Identity-bearing hashes and command materials
 
-### 3.1 `parameters.resolved_inputs_sha256` (required)
+### Resolved inputs hash
 
 For `engine = "atomic"` actions, `parameters.resolved_inputs_sha256` MUST be computed as specified
-in `docs/spec/025_data_contracts.md`:
+in the [data contracts spec](025_data_contracts.md):
 
-- `sha256_hex( canonical_json_bytes(resolved_inputs_redacted_canonical) )`
+- `sha256_hex(canonical_json_bytes(resolved_inputs_redacted_canonical))`
 
-Where `resolved_inputs_redacted_canonical` is:
+Where `resolved_inputs_redacted_canonical` is the resolved input map after:
 
-- the resolved input map after:
-
-  - precedence merge (Section 2.1)
-  - fixed-point resolution (Section 2.4)
-  - environment-dependent path canonicalization to `$ATOMICS_ROOT` (Section 2.5)
-  - redaction (Section 3.2)
+- precedence merge (see [Input resolution precedence](#input-resolution-precedence))
+- fixed-point resolution (see [Resolved input fixed point](#resolved-input-fixed-point))
+- environment-dependent path canonicalization to `$ATOMICS_ROOT` (see
+  [Canonicalization of environment-dependent Atomics paths](#canonicalization-of-environment-dependent-atomics-paths))
+- redaction (see [Redaction for hashing](#redaction-for-hashing))
 
 This hash MUST be computable without executing the Atomic test.
 
-### 3.2 Redaction for hashing (required)
+### Redaction for hashing
 
-Before hashing `resolved_inputs`, the runner MUST apply deterministic redaction per
-`docs/adr/ADR-0003-redaction-policy.md`:
+Before hashing `resolved_inputs`, the runner MUST apply deterministic redaction per the
+[redaction policy ADR](../adr/ADR-0003-redaction-policy.md):
 
 - plaintext secrets MUST NOT be stored in run bundles
-
 - secrets in `resolved_inputs` MUST be:
-
   - redacted deterministically, or
   - replaced with deterministic references (example: `secretref:<stable_id>`)
 
 When redaction is enabled, the runner MUST record redaction provenance in ground truth extensions as
-described in `docs/spec/025_data_contracts.md` and MUST ensure the run manifest includes:
+described in the [data contracts spec](025_data_contracts.md) and MUST ensure the run manifest
+includes:
 
 - `redaction_policy_id`
 - `redaction_policy_version`
 - `redaction_policy_sha256`
 
-### 3.3 Canonical expanded command boundary (required evidence)
+### Canonical expanded command boundary
 
 To support operator debugging and cross-run comparability, the runner MUST compute and record a
 **canonical expanded command** for both execution and cleanup:
@@ -255,25 +263,27 @@ The runner MUST record:
 - `command_post_merge` (list of strings, in order)
 - `cleanup_command_post_merge` (list of strings, in order, if cleanup exists)
 
-These command lists MUST apply `$ATOMICS_ROOT` canonicalization (Section 2.5).
+These command lists MUST apply `$ATOMICS_ROOT` canonicalization, as described in
+[Canonicalization of environment-dependent Atomics paths](#canonicalization-of-environment-dependent-atomics-paths).
 
 These command lists MUST be recorded as evidence and MUST NOT be used as part of `action_key` unless
-explicitly added to the action identity contract in `docs/spec/030_scenarios.md`.
+explicitly added to the action identity contract in the [scenario model spec](030_scenarios.md).
 
-### 3.4 Command integrity hash compatibility
+### Command integrity hash compatibility
 
-`docs/spec/025_data_contracts.md` defines `extensions.command_sha256` as an OPTIONAL integrity hash
-computed over a canonical `{executable, argv_redacted, ...}` object.
+The [data contracts spec](025_data_contracts.md) defines `extensions.command_sha256` as an OPTIONAL
+integrity hash computed over a canonical `{executable, argv_redacted, ...}` object.
 
 This document does not redefine that field.
 
-If the runner emits an integrity hash for the canonical expanded command strings (Section 3.3), it
-SHOULD use a separate field name to avoid conflicting semantics (example:
-`extensions.command_post_merge_sha256`) and MUST document the basis object and redaction behavior.
+If the runner emits an integrity hash for the canonical expanded command strings (see
+[Canonical expanded command boundary](#canonical-expanded-command-boundary)), it SHOULD use a
+separate field name to avoid conflicting semantics (example: `extensions.command_post_merge_sha256`)
+and MUST document the basis object and redaction behavior.
 
-## 4. Transcript capture and storage (normative)
+## Transcript capture and storage
 
-### 4.1 Structured execution record (ATTiRe)
+### Structured execution record (ATTiRe)
 
 The runner MUST enable `Attire-ExecutionLogger` for Invoke-AtomicRedTeam executions and MUST capture
 the structured output as an evidence artifact.
@@ -281,7 +291,6 @@ the structured output as an evidence artifact.
 Storage requirement:
 
 - The runner MUST store a per-action copy at:
-
   - `runs/<run_id>/runner/actions/<action_id>/attire.json`
 
 Normalization requirement:
@@ -290,7 +299,7 @@ Normalization requirement:
 - If the upstream logger produces different newlines, the runner MUST normalize them
   deterministically when copying.
 
-### 4.2 Stdout/stderr transcript files
+### Stdout and stderr transcript files
 
 For each attempted execution, the runner MUST store:
 
@@ -316,17 +325,17 @@ Capture semantics:
 - Invalid UTF-8 sequences MUST be handled deterministically (example: decode with replacement using
   U+FFFD).
 
-### 4.3 Redaction of transcripts
+### Redaction of transcripts
 
 When `security.redaction.enabled: true` (or equivalent), the runner MUST apply the effective
 redaction policy to transcripts before writing them.
 
 - The run bundle MUST be redacted-safe by default.
 - If redaction fails (example: cannot apply policy deterministically), the runner MUST fail closed
-  for the affected action and MUST withhold the transcript artifacts (see ADR-0003 fail-closed
-  behavior).
+  for the affected action and MUST withhold the transcript artifacts (see the
+  [redaction policy ADR](../adr/ADR-0003-redaction-policy.md) for fail-closed behavior).
 
-### 4.4 `executor.json` (required evidence)
+### Executor evidence file
 
 For each attempted execution, the runner MUST write:
 
@@ -346,9 +355,9 @@ Minimum required fields (v0.1):
 
 This file is evidence, not identity.
 
-## 5. Cleanup invocation and verification (normative)
+## Cleanup invocation and verification
 
-### 5.1 Cleanup invocation strategy
+### Cleanup invocation strategy
 
 When `runner.atomic.cleanup.invoke: true`:
 
@@ -360,29 +369,26 @@ When `runner.atomic.cleanup.invoke: true`:
 Rationale (normative): direct execution would require re-implementing Invoke-AtomicRedTeam
 substitution and executor semantics, which is not allowed for the v0.1 reference executor.
 
-### 5.2 Cleanup transcript capture
+### Cleanup transcript capture
 
-Cleanup invocation MUST capture transcripts and store them per Section 4.2.
+Cleanup invocation MUST capture transcripts and store them per
+[Stdout and stderr transcript files](#stdout-and-stderr-transcript-files).
 
-### 5.3 Cleanup verification checks
+### Cleanup verification checks
 
-When cleanup verification is enabled (see `docs/spec/035_validation_criteria.md`):
+When cleanup verification is enabled (see the
+[validation criteria spec](035_validation_criteria.md)):
 
 - The runner MUST execute the configured cleanup verification checks after cleanup completes.
-
 - The runner MUST write results to:
-
   - `runs/<run_id>/runner/actions/<action_id>/cleanup_verification.json`
 
 Result requirements:
 
 - The file MUST be deterministic:
-
   - stable ordering of results by `check_id` ascending
   - stable ordering of any nested arrays by stable key (if present)
-
 - Each result MUST include:
-
   - `check_id`
   - `type`
   - `target`
@@ -393,30 +399,29 @@ Result requirements:
 
 Reason code mapping:
 
-- For `pass | fail | indeterminate`, the runner MUST use the reason code mapping defined in
-  `docs/spec/035_validation_criteria.md`.
-
+- For `pass | fail | indeterminate`, the runner MUST use the reason code mapping defined in the
+  [validation criteria spec](035_validation_criteria.md).
 - For `skipped`, the runner MUST use a stable reason code (minimum recommended set):
-
   - `unsupported_platform`
   - `insufficient_privileges`
   - `exec_error`
   - `disabled_by_policy`
 
-### 5.4 Ground truth cleanup fields
+### Ground truth cleanup fields
 
 Ground truth timeline entries for the action MUST reflect cleanup execution and verification
-outcomes as specified by the ground truth contract in `docs/spec/025_data_contracts.md`, including a
-reference to `cleanup_verification.json` when produced.
+outcomes as specified by the ground truth contract in the
+[data contracts spec](025_data_contracts.md), including a reference to `cleanup_verification.json`
+when produced.
 
-## 6. Failure modes and stage outcomes (normative)
+## Failure modes and stage outcomes
 
 Failures in this contract MUST be observable in:
 
 - per-action ground truth status fields (where applicable)
 - runner evidence files (where applicable)
-- stage outcomes recorded in the run manifest per
-  `ADR-0005-stage-outcomes-and-failure-classification.md`
+- stage outcomes recorded in the run manifest per the
+  [stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
 
 At minimum, the runner MUST emit stable reason codes for these failure classes:
 
@@ -432,7 +437,7 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 - `cleanup_invoke_error`
 - `cleanup_verification_error`
 
-## 7. Verification hooks (normative)
+## Verification hooks
 
 Implementations MUST include fixture-backed tests that validate:
 
@@ -449,8 +454,35 @@ CI SHOULD include a golden fixture conformance test that runs a pinned Atomic te
 identical inputs and asserts:
 
 - identical `parameters.resolved_inputs_sha256`
-- identical `action_key` (per `docs/spec/030_scenarios.md`)
+- identical `action_key` (per the [scenario model spec](030_scenarios.md))
 - stable emission of required runner evidence files
 
-Fixture selection and gating (unit vs integration) are defined in
-`docs/spec/100_test_strategy_ci.md`.
+Fixture selection and gating (unit vs integration) are defined in the
+[test strategy and CI spec](100_test_strategy_ci.md).
+
+## Key decisions
+
+- Atomic YAML parsing, input resolution, and transcript handling are deterministic and
+  evidence-backed for cross-run comparability.
+- The runner canonicalizes environment-dependent Atomics paths to `$ATOMICS_ROOT` for
+  identity-bearing materials.
+- Cleanup uses Invoke-AtomicTest semantics and records verification artifacts for post-run
+  validation.
+- Failure modes emit stable reason codes tied to ground truth and stage outcomes.
+
+## References
+
+- [Data contracts spec](025_data_contracts.md)
+- [Scenario model spec](030_scenarios.md)
+- [Validation criteria spec](035_validation_criteria.md)
+- [Storage formats spec](045_storage_formats.md)
+- [Test strategy and CI spec](100_test_strategy_ci.md)
+- [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md)
+- [Stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
+- [Supported versions](../../SUPPORTED_VERSIONS.md)
+
+## Changelog
+
+| Date | Change                                       |
+| ---- | -------------------------------------------- |
+| TBD  | Style guide migration (no technical changes) |

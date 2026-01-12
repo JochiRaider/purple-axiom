@@ -28,6 +28,11 @@ locate authoritative information.
 - **`docs/research/`**: Transient or exploratory documents.
   - *Read when:* Investigating performance experiments or reliability studies.
 
+## Writing and Style References
+
+- **Markdown Style Guide**: `docs/MARKDOWN_STYLE_GUIDE.md`
+- **Markdown Quick Reference**: `docs/MARKDOWN_QUICK_REFERENCE.md`
+
 ## Agent Guidelines Hierarchy
 
 - **Global/Repo-wide**: `AGENTS.md` (Root)

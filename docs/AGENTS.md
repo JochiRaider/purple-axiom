@@ -19,6 +19,8 @@
 ## Navigation entrypoints (authoritative indexes)
 
 - **Global Docs Map**: `docs/DOCS_INDEX.md`
+- **Markdown Style Guide**: `docs/MARKDOWN_STYLE_GUIDE.md`
+- **Markdown Quick Reference**: `docs/MARKDOWN_QUICK_REFERENCE.md`
 - ADR navigation (decisions, consequences): `docs/adr/ADR_INDEX.md`
 - Spec navigation (normative requirements): `docs/spec/SPEC_INDEX.md`
 - Contract registry (schema catalog): `docs/contracts/index.json`

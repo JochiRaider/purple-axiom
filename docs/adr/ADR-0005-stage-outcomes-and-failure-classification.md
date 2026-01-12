@@ -1,10 +1,17 @@
+---
+title: 'ADR-0005: Stage outcomes and failure classification'
+description: Defines deterministic stage outcomes, reason codes, and failure taxonomy for v0.1 runs.
+status: draft
+category: adr
+---
+
 <!-- docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md -->
 
-# ADR-0005: Stage outcomes and failure classification (v0.1)
+# ADR-0005: Stage outcomes and failure classification
 
 ## Status
 
-Proposed
+Draft
 
 ## Context
 
@@ -17,10 +24,10 @@ Purple Axiom v0.1 requires deterministic, machine-readable failure classificatio
 
 The system already specifies:
 
-- a stable, staged pipeline (lab provider → runner → telemetry → normalization → validation →
-  detection → scoring → reporting → signing),
-- a local-first run bundle (`runs/<run_id>/…`) and manifest-driven reproducibility,
-- operability requirements for `logs/health.json`, run limits, and exit codes.
+- a stable, staged pipeline (lab provider -> runner -> telemetry -> normalization -> validation ->
+  detection -> scoring -> reporting -> signing)
+- a local-first run bundle (`runs/<run_id>/...`) and manifest-driven reproducibility
+- operability requirements for `logs/health.json`, run limits, and exit codes
 
 This ADR defines the normative behavior for stage outcomes, reason codes, and the failure taxonomy
 that the orchestrator and all stage implementations MUST follow.
@@ -29,16 +36,12 @@ that the orchestrator and all stage implementations MUST follow.
 
 1. **Every enabled stage MUST produce a deterministic stage outcome** (or a deterministic fatal exit
    when outcome recording is impossible due to lock or storage I/O constraints).
-
 1. **Stage outcomes are the sole inputs** to:
-
    - `manifest.status` derivation (`success | partial | failed`)
    - `logs/health.json` stage list
    - deterministic exit code selection (`0 | 10 | 20`)
-
 1. **Reason codes are stable tokens** (`lower_snake_case`) drawn from a normative catalog defined in
    this ADR.
-
 1. **Warnings do not belong in `logs/health.json`**. Warning-only information is written to
    `logs/warnings.jsonl` (optional) and/or `logs/run.log` (required).
 
@@ -70,7 +73,7 @@ that the implementation chooses to record):
 - `stage` (string): stable stage identifier
 - `status` (string): `success | failed | skipped`
 - `fail_mode` (string): `fail_closed | warn_and_skip`
-- `reason_code` (string, optional): stable token explaining failure/skip
+- `reason_code` (string, optional): stable token explaining failure or skip
 
 Implementations MAY include additional fields in the persisted representation (for example
 timestamps, counters, file pointers), but:
@@ -99,7 +102,7 @@ guarantees or is impossible due to storage I/O failure.
 In those exceptional cases:
 
 - the orchestrator MUST emit the failure to stderr
-- the orchestrator MUST exit with the correct process exit code (see “Exit codes”)
+- the orchestrator MUST exit with the correct process exit code (see "Exit codes")
 
 Rationale: two fatal conditions can prevent safe outcome writes:
 
@@ -168,7 +171,7 @@ If a stage fails with `fail_mode="fail_closed"`:
 - the orchestrator SHOULD still attempt to write final `manifest.json` and `logs/health.json` and
   record downstream skips
 
-**Exception:** When prevented by lock or I/O constraints (see “Outcome recording requirement”).
+**Exception:** When prevented by lock or I/O constraints (see "Outcome recording requirement").
 
 ## Exit codes
 
@@ -195,7 +198,7 @@ outcome-driven.
 Implementations SHOULD maintain a registry mapping `(stage, reason_code)` to default severity and
 policy overrides:
 
-```
+```text
 registry[(stage_id, reason_code)] -> {
   default_fail_mode: "fail_closed" | "warn_and_skip",
   override_rules: [...]
@@ -220,7 +223,7 @@ These reason codes MAY be used for any stage.
 | `config_schema_invalid`       | FATAL    | A required config artifact is schema-invalid (for example `manifest.json`, `plan.json`). |
 | `input_missing`               | FATAL    | Required upstream input artifact missing or unreadable.                                  |
 | `lock_acquisition_failed`     | FATAL    | Exclusive lock could not be acquired.                                                    |
-| `storage_io_error`            | FATAL    | Storage error prevents atomic writes (for example ENOSPC/EIO).                           |
+| `storage_io_error`            | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                        |
 | `blocked_by_upstream_failure` | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                          |
 
 ### Lab provider stage (`lab_provider`)
@@ -274,11 +277,8 @@ Cleanup verification policy (normative):
 
 - `cleanup.verification.status` in ground truth MUST be one of:
   `success | failed | indeterminate | skipped | not_applicable`.
-
 - `failed` and `indeterminate` are **not success**.
-
 - Default v0.1 behavior:
-
   - if runner stage `fail_mode=fail_closed`, a run MUST be marked `failed` when any action cleanup
     verification is `failed` or `indeterminate`
   - if runner stage `fail_mode=warn_and_skip`, cleanup verification failures MUST be recorded under
@@ -294,7 +294,7 @@ Minimum artifacts when enabled: `raw_parquet/**`, `manifest.json`
 
 | Reason code                   | Severity | Description                                                                                            |
 | ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `required_source_missing`     | FATAL    | Required telemetry source is not installed/configured (for example Sysmon).                            |
+| `required_source_missing`     | FATAL    | Required telemetry source is not installed or configured (for example Sysmon).                         |
 | `source_not_implemented`      | FATAL    | Source is enabled but not implemented in v0.1 (for example pcap placeholder).                          |
 | `collector_startup_failed`    | FATAL    | Collector cannot start (config parse error, binding failure).                                          |
 | `checkpoint_corruption_fatal` | FATAL    | Checkpoint is corrupt and automatic recovery failed.                                                   |
@@ -320,7 +320,7 @@ These codes MUST NOT be replaced by an aggregate code in the raw-mode substage o
 
 | Reason code                      | Severity  | Description                                                   |
 | -------------------------------- | --------- | ------------------------------------------------------------- |
-| `checkpoint_loss`                | NON-FATAL | Checkpoint lost/reset; replay occurred (dedupe mitigates).    |
+| `checkpoint_loss`                | NON-FATAL | Checkpoint lost or reset; replay occurred (dedupe mitigates). |
 | `publisher_metadata_unavailable` | NON-FATAL | Windows rendering metadata missing but raw record is present. |
 
 ### Normalization stage (`normalization`)
@@ -392,7 +392,7 @@ Run limit conditions MUST be recorded deterministically when they occur.
 | `oom_killed`            | `failed`   | `20`      | Process killed by OS OOM killer.                  |
 
 ^ Disk limit override: operators MAY configure disk limit behavior as hard fail; if so,
-`disk_limit_exceeded` yields `failed` / `20`.
+`disk_limit_exceeded` yields `failed` and `20`.
 
 ### Detection stage (`detection`)
 
@@ -405,7 +405,7 @@ Minimum artifacts when enabled: `detections/detections.jsonl`, `bridge/**`
 | Reason code                   | Severity | Description                                    |
 | ----------------------------- | -------- | ---------------------------------------------- |
 | `bridge_mapping_pack_invalid` | FATAL    | Bridge mapping pack missing or schema-invalid. |
-| `backend_driver_failed`       | FATAL    | Backend cannot open/mount dataset.             |
+| `backend_driver_failed`       | FATAL    | Backend cannot open or mount dataset.          |
 
 #### NON-FATAL reason codes (per-rule; rule-level fail-closed)
 
@@ -476,7 +476,7 @@ Default `fail_mode`: `fail_closed` (when enabled)
 
 | Reason code                     | Severity | Description                                     |
 | ------------------------------- | -------- | ----------------------------------------------- |
-| `signing_key_unavailable`       | FATAL    | Required signing key/material not available.    |
+| `signing_key_unavailable`       | FATAL    | Required signing key or material not available. |
 | `signature_write_failed`        | FATAL    | Signature artifacts could not be written.       |
 | `signature_verification_failed` | FATAL    | Self-verification of produced signature failed. |
 

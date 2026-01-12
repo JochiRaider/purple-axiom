@@ -1,8 +1,12 @@
-<!-- docs/spec/010_scope.md -->
+---
+title: Scope and non-goals
+description: Defines what is in scope for Purple Axiom v0.1 and what is explicitly out of scope.
+status: draft
+---
 
-# Scope and Non-Goals
+# Scope and non-goals
 
-## In-scope
+## In scope
 
 - Scenario execution orchestration (Atomic runner for v0.1; Caldera is a future candidate).
 - Telemetry collection from lab assets (endpoint sources required; network sensors are not required
@@ -12,17 +16,19 @@
 - Normalization to OCSF.
 - Rule evaluation and scoring.
 - Reporting and trend tracking.
-- Pluggable lab inventory resolution via a Lab Provider interface (manual first, Ludus next,
+- Pluggable lab inventory resolution via a lab provider interface (manual first, Ludus next,
   Terraform later).
 - Capturing a deterministic “lab inventory snapshot” per run for reproducibility and diffability.
 
-## Explicit non-goals (initially)
+## Explicit non-goals
+
+The following are explicit non-goals for initial releases, including v0.1:
 
 - Network sensor capture/ingestion (pcap/netflow) as a required v0.1 capability; only placeholder
   contracts are defined.
 - Exploit development, weaponization, or destructive testing.
 - Production deployment guidance for hostile environments.
-- “Full SIEM replacement.” The range produces artifacts; external SIEM ingestion is optional.
+- Full SIEM replacement. The range produces artifacts; external SIEM ingestion is optional.
 - A full-featured lab provisioning platform. Purple Axiom integrates with external lab providers; it
   does not replace them.
 - Coupling the project to a single lab provider or a single inventory format.

@@ -1,38 +1,35 @@
 # .mdformat.toml
 #
 # Repo-wide mdformat configuration (v0.1 toolchain).
+# See MARKDOWN_STYLE_GUIDE.md for authoring conventions.
 
-# Reflow paragraphs to keep source lines under control.
-# Options: "keep", "no", or an INTEGER column width. :contentReference[oaicite:1]{index=1}
+# Reflow paragraphs to 100 characters for readable source and efficient diffs.
 wrap = 100
 
-# Do not renumber ordered lists (keeps diffs stable).
+# Do not renumber ordered lists; keeps diffs stable when reordering.
 number = false
 
-# Normalize line endings in the repo.
+# Normalize to Unix line endings.
 end_of_line = "lf"
 
-# Keep mdformat's safety validation enabled (default).
-# (CLI exposes --no-validate to bypass if you ever need it.) :contentReference[oaicite:2]{index=2}
+# Reject malformed markdown output.
 validate = true
 
-# Explicitly enable only the extensions we rely on, even if additional plugins
-# are installed later (determinism).
+# Enable only the extensions we use and have installed.
+# Each extension requires its corresponding mdformat plugin package.
 #
-# mdformat plugin-provided extension names: :contentReference[oaicite:3]{index=3}
-# - mdformat-gfm: "gfm" (and "tables")
-# - mdformat-frontmatter: "frontmatter"
-# - mdformat-footnote: "footnote"
-# - mdformat-gfm-alerts: "gfm_alerts"
+# Installed plugins → extension names:
+#   mdformat-gfm         → "gfm" (tables, strikethrough, autolinks, tasklists)
+#   mdformat-frontmatter → "frontmatter" (YAML frontmatter preservation)
+#
+# NOTE: Only list extensions for plugins actually in pyproject.toml.
+# Adding extensions without the plugin installed causes silent fallback behavior.
 extensions = [
   "gfm",
   "frontmatter",
-  "footnote",
-  "gfm_alerts",
 ]
 
-# NOTE: `exclude = [...]` in the config file is Python 3.13+ only. Since your
-# toolchain is Python 3.12.3, do NOT add `exclude` here. :contentReference[oaicite:4]{index=4}
-# Instead, exclude via:
-# - pre-commit hook `exclude:` patterns, or
-# - command-line `--exclude` during ad hoc runs.
+# Exclusion patterns must be specified via:
+#   - pre-commit hook `exclude:` patterns, or
+#   - CLI `--exclude` flag
+# Config-file `exclude` requires Python 3.13+ (toolchain is 3.12.3).

@@ -1,6 +1,13 @@
-<!-- docs/research/R-02_DuckDB_Query_Plan_Stability_Conformance_Report_and_Harness_Requirements_v1-4-3.md -->
+---
+title: R-02 DuckDB query plan stability conformance report and harness requirements v1.4.3
+description: Defines a deterministic DuckDB conformance harness and report contract for plan and result stability.
+status: draft
+---
 
-# R-02: DuckDB Query Plan Stability Conformance Report and Harness Requirements (v1.4.3)
+# R-02 DuckDB query plan stability conformance report and harness requirements v1.4.3
+
+This report defines a deterministic conformance harness and report contract for DuckDB plan and
+result stability. It describes the matrix, artifact layout, and pass or fail criteria for v1.4.3.
 
 ## Status
 
@@ -26,7 +33,7 @@ Does DuckDB `1.4.3` produce stable, byte-identical artifacts for identical input
 - different CPU architectures (x86_64, ARM64)
 - patch and minor version bumps (example: `1.4.3` to `1.4.4`, `1.5.0`)
 
-“Stable artifacts” are broken into two dimensions:
+"Stable artifacts" are broken into two dimensions:
 
 - **Plan stability**: `EXPLAIN (FORMAT json)` plan representation
 - **Result stability**: query result set content, serialized deterministically
@@ -49,7 +56,7 @@ In scope:
 Out of scope:
 
 - performance benchmarking (EPS, latency)
-- correctness validation of Sigma logic beyond “same inputs produce same outputs”
+- correctness validation of Sigma logic beyond "same inputs produce same outputs"
 - full Parquet byte-identity guarantees for `COPY TO PARQUET` outputs (tracked separately if needed)
 
 ## Assumptions
@@ -61,9 +68,10 @@ Out of scope:
 
 ## Related normative artifacts
 
-- Contract schema: `docs/contracts/duckdb_conformance_report.schema.json`
-- CI integration requirements: `docs/spec/100_test_strategy_ci.md` section “DuckDB determinism
-  conformance harness (toolchain qualification)”
+- Contract schema:
+  [DuckDB conformance report schema](../contracts/duckdb_conformance_report.schema.json)
+- CI integration requirements: [Test strategy CI spec](../spec/100_test_strategy_ci.md) section
+  "DuckDB determinism conformance harness (toolchain qualification)"
 
 ## Conformance harness requirements
 
@@ -77,7 +85,7 @@ The harness MUST support the following axes:
 - `os`: `linux | macos | windows`
 - `arch`: `x86_64 | arm64`
 
-A “cell” is one combination of `(duckdb_version_semver, os, arch)`.
+A "cell" is one combination of `(duckdb_version_semver, os, arch)`.
 
 ### Deterministic DuckDB session settings
 
@@ -198,7 +206,7 @@ Required path conventions:
 
 A recommended per-cell layout is:
 
-```
+```text
 artifacts/duckdb_conformance/<report_id>/
   report.json
   cells/
@@ -286,7 +294,7 @@ Skip (explicit, non-fatal):
 Default policy (RECOMMENDED):
 
 - `result_hash_mismatch` MUST fail CI (fail closed)
-- `plan_hash_mismatch` SHOULD warn and MUST NOT fail CI unless “plan stability gate” is explicitly
+- `plan_hash_mismatch` SHOULD warn and MUST NOT fail CI unless "plan stability gate" is explicitly
   enabled
 
 ## Test matrix and reporting template
@@ -313,7 +321,7 @@ Version drift extensions (when executed):
 
 ### Acceptance criteria for v1.4.3 qualification
 
-To qualify DuckDB `1.4.3` as “supported” for Purple Axiom determinism purposes:
+To qualify DuckDB `1.4.3` as "supported" for Purple Axiom determinism purposes:
 
 - result stability MUST hold within version across supported OS and architectures
 - plan stability MAY drift; any drift MUST be recorded and attributable (via report artifacts)
@@ -339,7 +347,7 @@ These items are tracked here to guide interpretation of results and future harne
 
 ## Recommended upgrade path and fixture refresh policy
 
-- Treat DuckDB patch and minor upgrades as “conformance required” events.
+- Treat DuckDB patch and minor upgrades as "conformance required" events.
 
 - If only plan drift is observed:
 

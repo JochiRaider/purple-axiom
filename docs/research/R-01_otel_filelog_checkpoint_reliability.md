@@ -1,8 +1,16 @@
-<!-- docs/research/R-01_otel_filelog_checkpoint_reliability.md -->
+---
+title: R-01 validation report for OTel filelog checkpoint reliability for rotated NDJSON
+description: Defines a reproducible harness and acceptance criteria for OTel filelog offsets across log rotation.
+status: draft
+---
 
-# R-01 Validation report: OTel `filelog` checkpoint reliability for rotated NDJSON
+# R-01 validation report for OTel filelog checkpoint reliability for rotated NDJSON
 
-## 1) Scope
+This report defines a reproducible harness to validate OpenTelemetry Collector `filelog` checkpoint
+behavior for rotated NDJSON sources. It specifies the minimum matrix, metrics, and acceptance
+criteria used to evaluate loss and duplication outcomes.
+
+## Scope
 
 This report defines a repeatable validation harness and acceptance criteria for the OpenTelemetry
 Collector `filelog` receiver when ingesting NDJSON sources that may rotate (example:
@@ -24,7 +32,7 @@ Non-goals:
 - Proving correctness for arbitrary third-party log writers that violate NDJSON (partial lines,
   non-UTF8)
 
-## 2) Upstream behavior relied upon (documented)
+## Upstream behavior relied upon
 
 The `filelog` receiver can persist per-file read offsets when configured with a storage extension
 via the `storage` setting. The receiver stores (at least) the number of tracked files and, per file,
@@ -39,7 +47,7 @@ When ingesting compressed rotated logs, `filelog` supports `compression: gzip`. 
 expected to be appended to; recompressing and overwriting the full file content is not assumed to be
 safe.
 
-## 3) Reliability model (what can go wrong)
+## Reliability model
 
 Even with storage-backed offsets, the following failure modes matter for rotated NDJSON:
 
@@ -51,8 +59,8 @@ Even with storage-backed offsets, the following failure modes matter for rotated
 1. **File identity ambiguity**
 
    - `filelog` uses a fingerprint of initial bytes as part of file identity. Rotation modes that
-     reuse initial bytes (example: copy-truncate) can increase the chance of confusing “new file” vs
-     “old file,” resulting in replay duplication or gaps.
+     reuse initial bytes (example: copy-truncate) can increase the chance of confusing "new file" vs
+     "old file," resulting in replay duplication or gaps.
 
 1. **Checkpoint reset / corruption recovery**
 
@@ -61,13 +69,13 @@ Even with storage-backed offsets, the following failure modes matter for rotated
 
 1. **Writer buffering vs crash point**
 
-   - If the log writer does not flush/fsync frequently, the “expected” source stream may not be
+   - If the log writer does not flush/fsync frequently, the "expected" source stream may not be
      durable at the crash boundary. The harness therefore controls writer flush semantics to
      separate collector behavior from writer behavior.
 
-## 4) Validation harness design (reproducible)
+## Validation harness design
 
-### 4.1 Components
+### Components
 
 - **NDJSON writer**: emits one JSON object per line with a monotonic `seq` field and a stable
   `source_id`.
@@ -80,9 +88,9 @@ Even with storage-backed offsets, the following failure modes matter for rotated
 - **Analyzer**: computes loss/dup metrics from the sink output and compares to expected `seq`
   ranges.
 
-### 4.2 Control points (recorded for determinism)
+### Control points for determinism
 
-The harness MUST record all parameters in its run report (exact values, not “defaults”):
+The harness MUST record all parameters in its run report (exact values, not "defaults"):
 
 - OS + filesystem type (best effort)
 - `poll_interval`, `max_concurrent_files`, `fingerprint_size`, `start_at`, `include`/`exclude` globs
@@ -92,7 +100,7 @@ The harness MUST record all parameters in its run report (exact values, not “d
 - writer flush cadence (`flush_every_n_lines`, `fsync_every_n_lines`)
 - crash injection timing (by seq number or elapsed time)
 
-### 4.3 Deterministic expected stream
+### Deterministic expected stream
 
 The writer MUST emit an expected manifest:
 
@@ -100,7 +108,7 @@ The writer MUST emit an expected manifest:
 - `expected_seq_end`
 - `expected_total = expected_seq_end - expected_seq_start + 1`
 
-## 5) Test matrix (minimum)
+## Test matrix minimum
 
 The harness MUST execute, at minimum, the matrix below.
 
@@ -114,9 +122,9 @@ The harness MUST execute, at minimum, the matrix below.
 Optional (recommended) extensions to the matrix:
 
 - gzip-rotated segments (rename-and-create + gzip)
-- symlinked “current” file patterns
+- symlinked "current" file patterns
 
-## 6) Metrics (computed per matrix cell)
+## Metrics per matrix cell
 
 All metrics are computed over the captured sink output.
 
@@ -129,9 +137,9 @@ All metrics are computed over the captured sink output.
 - `parse_error_total`: lines that failed NDJSON parse at the receiver
 - `reorder_total`: count of observed inversions where `seq[i] < seq[i-1]` (diagnostic only)
 
-## 7) Acceptance criteria (pass/fail/indeterminate)
+## Acceptance criteria for pass, fail, and indeterminate
 
-### 7.1 Pass
+### Pass
 
 A matrix cell MUST be marked PASS when all of the following hold:
 
@@ -140,7 +148,7 @@ A matrix cell MUST be marked PASS when all of the following hold:
 
 Duplication is allowed. The report MUST still record `dup_total` and `dup_pct`.
 
-### 7.2 Fail
+### Fail
 
 A matrix cell MUST be marked FAIL when any of the following hold:
 
@@ -148,14 +156,14 @@ A matrix cell MUST be marked FAIL when any of the following hold:
 - the collector restarts with an empty offset database (checkpoint reset) without being explicitly
   commanded by the harness
 
-### 7.3 Indeterminate
+### Indeterminate
 
 A matrix cell MUST be marked INDETERMINATE when the harness cannot establish a durable expected
 stream at the crash boundary (example: writer configured with `fsync_every_n_lines = 0` and crash
 occurs before OS flush). The harness MUST surface the cause and MUST NOT count indeterminate results
 as passes.
 
-## 8) Output artifacts (required)
+## Output artifacts required
 
 Each harness run MUST produce:
 
@@ -166,7 +174,7 @@ Each harness run MUST produce:
 - Sink output file(s)
 - A machine-readable summary report (`json`, deterministic field ordering recommended)
 
-## 9) Spec impact
+## Spec impact
 
 The following spec changes are implied by this report:
 

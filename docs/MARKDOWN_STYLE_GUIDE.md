@@ -1,12 +1,18 @@
-# Markdown Style Guide
+---
+title: Markdown style guide
+description: Defines markdown conventions for readability, consistency, and deterministic diffs.
+status: v0.1
+---
 
-**Version**: 0.1 **Applies to**: All markdown files in the Purple Axiom repository
+# Markdown style guide
+
+Version 0.1. Applies to all markdown files in the Purple Axiom repository.
 
 This guide defines conventions for markdown authoring that optimize for human readability, agent/LLM
 comprehension, and diff stability. All contributors (human and automated) MUST follow these
 guidelines.
 
-## Guiding Principles
+## Guiding principles
 
 1. **Consistency over preference**: Follow the guide even when alternatives seem reasonable.
 1. **Searchability**: Use explicit, descriptive text that agents can locate and reference.
@@ -14,7 +20,7 @@ guidelines.
 1. **Context efficiency**: Structure content so agents can extract meaning without reading entire
    documents.
 
-## Tooling Constraints
+## Tooling constraints
 
 This repository uses `mdformat` with the following enforced settings:
 
@@ -30,13 +36,13 @@ Do not fight the formatter. Write content that formats cleanly under these rules
 
 ______________________________________________________________________
 
-## Document Structure
+## Document structure
 
-### File Naming
+### File naming
 
 Spec documents use numeric prefixes for ordering:
 
-```
+```text
 NNN_descriptive_name.md
 ```
 
@@ -53,7 +59,7 @@ Examples:
 
 ADRs use the pattern:
 
-```
+```text
 ADR-NNNN-short-description.md
 ```
 
@@ -61,24 +67,24 @@ ADR-NNNN-short-description.md
 - Use hyphens in the description portion
 - Keep descriptions under 50 characters
 
-### Required Frontmatter
+### Required frontmatter
 
 Every markdown document MUST include YAML frontmatter with at minimum:
 
 ```yaml
 ---
-title: "Human-Readable Document Title"
+title: "Human-readable document title"
 description: "One-sentence summary of document purpose and scope"
 status: draft | stable | deprecated
 ---
 ```
 
-#### Full Frontmatter Schema
+#### Full frontmatter schema
 
 ```yaml
 ---
 # Required fields
-title: "OCSF Normalization Specification"
+title: "OCSF normalization specification"
 description: "Defines mapping rules from raw telemetry to OCSF 1.7.0 envelopes"
 status: draft | stable | deprecated
 
@@ -99,7 +105,7 @@ superseded_by: null
 ---
 ```
 
-#### Status Definitions
+#### Status definitions
 
 | Status       | Meaning                                             |
 | ------------ | --------------------------------------------------- |
@@ -107,18 +113,18 @@ superseded_by: null
 | `stable`     | Approved for implementation; changes require review |
 | `deprecated` | Superseded; retained for historical reference only  |
 
-### Document Skeleton
+### Document skeleton
 
 Use this structure for spec documents:
 
 ```markdown
 ---
-title: "Document Title"
+title: "Document title"
 description: "One-sentence description"
 status: stable
 ---
 
-# Document Title
+# Document title
 
 Brief introductory paragraph (2-3 sentences) explaining what this document covers and why it
 matters. No heading for this section.
@@ -128,11 +134,11 @@ matters. No heading for this section.
 High-level summary suitable for someone skimming the document. Should answer: what problem does
 this solve, what approach does it take, and what are the key constraints?
 
-## [Primary Content Sections]
+## [Primary content sections]
 
 Main technical content organized by logical topic.
 
-## Key Decisions
+## Key decisions
 
 Summary of important decisions made in this document, with rationale. Link to ADRs where
 applicable.
@@ -153,16 +159,16 @@ ______________________________________________________________________
 
 ## Headings
 
-### Hierarchy Rules
+### Hierarchy rules
 
 1. **One H1 per document**: The H1 is the document title and MUST match the frontmatter `title`.
 1. **No skipped levels**: Do not jump from H2 to H4.
 1. **Maximum depth**: Prefer H2 and H3; use H4 sparingly; avoid H5 and H6.
 
 ```markdown
-# Document Title                    ← H1: exactly one per document
+# Document title                    ← H1: exactly one per document
 
-## Major Section                    ← H2: primary divisions
+## Major section                    ← H2: primary divisions
 
 ### Subsection                      ← H3: secondary divisions
 
@@ -171,7 +177,7 @@ ______________________________________________________________________
 ##### Avoid                         ← H5: restructure instead
 ```
 
-### Heading Text
+### Heading text
 
 - Use sentence case: "Event identity model" not "Event Identity Model"
 - Be specific and searchable: "OCSF field mapping rules" not "Rules"
@@ -187,7 +193,7 @@ ______________________________________________________________________
 ## `metadata.event_id` generation   ✗ Inline code in heading (avoid)
 ```
 
-### Heading Anchors
+### Heading anchors
 
 GitHub and most renderers auto-generate anchors from heading text. To ensure stable cross-document
 links:
@@ -197,9 +203,9 @@ links:
 
 ______________________________________________________________________
 
-## Paragraphs and Prose
+## Paragraphs and prose
 
-### Line Wrapping
+### Line wrapping
 
 Let mdformat handle wrapping at 100 characters. Write naturally without manual line breaks within
 paragraphs.
@@ -215,13 +221,13 @@ a concept. Manual breaks create
 unnecessary diff noise.
 ```
 
-### Paragraph Length
+### Paragraph length
 
 - Aim for 3-6 sentences per paragraph
 - Break up walls of text with headings or lists
 - Lead with the most important information
 
-### Section Summaries
+### Section summaries
 
 For complex sections, include a bold summary line immediately after the heading:
 
@@ -240,7 +246,7 @@ ______________________________________________________________________
 
 ## Lists
 
-### When to Use Lists
+### When to use lists
 
 Use lists for:
 
@@ -254,7 +260,7 @@ Do NOT use lists for:
 - Single-item "lists"
 - Deeply nested structures (restructure as sections instead)
 
-### Unordered Lists
+### Unordered lists
 
 Use hyphens (`-`) for unordered lists, not asterisks or plus signs:
 
@@ -264,7 +270,7 @@ Use hyphens (`-`) for unordered lists, not asterisks or plus signs:
 - Third item
 ```
 
-### Ordered Lists
+### Ordered lists
 
 Use `1.` for all items. The formatter preserves source numbers, and renderers auto-increment:
 
@@ -276,7 +282,7 @@ Use `1.` for all items. The formatter preserves source numbers, and renderers au
 
 This keeps diffs clean when reordering items.
 
-### List Item Length
+### List item length
 
 - Short items (single line): No trailing punctuation unless they're complete sentences
 - Long items (multiple sentences): Use full punctuation
@@ -296,7 +302,7 @@ Configuration steps:
 - Copy `range.example.yaml` to `range.yaml` and edit as needed.
 ```
 
-### Nested Lists
+### Nested lists
 
 Limit nesting to two levels. If you need more, restructure as subsections:
 
@@ -314,7 +320,7 @@ Limit nesting to two levels. If you need more, restructure as subsections:
     - Item A1a      ← restructure instead
 ```
 
-### Definition-Style Lists
+### Definition-style lists
 
 For term definitions, use bold terms followed by a colon:
 
@@ -330,7 +336,7 @@ ______________________________________________________________________
 
 ## Code
 
-### Inline Code
+### Inline code
 
 Use backticks for:
 
@@ -346,7 +352,7 @@ Do NOT use backticks for:
 - Product names: Purple Axiom, not `Purple Axiom`
 - General technical terms: OCSF, Sigma, JSON (unless referring to literal strings)
 
-### Code Blocks
+### Code blocks
 
 Always specify the language identifier:
 
@@ -377,7 +383,7 @@ Common language identifiers used in this project:
 - `toml` - Configuration files
 - `markdown` - Markdown examples
 
-### Command Examples
+### Command examples
 
 For shell commands, use `bash` and include the prompt only when showing interactive sessions:
 
@@ -398,7 +404,7 @@ $ echo $?
 
 ````
 
-### File Content Examples
+### File content examples
 
 When showing file contents, include a comment indicating the filename:
 
@@ -409,7 +415,7 @@ lab:
   provider: local
 ````
 
-### Directory Trees
+### Directory trees
 
 Use `text` language identifier for directory structures:
 
@@ -428,7 +434,7 @@ ______________________________________________________________________
 
 ## Tables
 
-### When to Use Tables
+### When to use tables
 
 Tables work well for:
 
@@ -442,7 +448,7 @@ Avoid tables for:
 - Deeply nested or variable structures
 - Content with very long cell values
 
-### Table Formatting
+### Table formatting
 
 - Include header row with column names
 - Use alignment appropriate to content (default left, numbers right)
@@ -456,7 +462,7 @@ Avoid tables for:
 | `timestamp`    | string | Yes      | ISO 8601 timestamp             |
 ```
 
-### Wide Tables
+### Wide tables
 
 If a table exceeds 100 characters, consider:
 
@@ -467,9 +473,9 @@ If a table exceeds 100 characters, consider:
 
 ______________________________________________________________________
 
-## Links and References
+## Links and references
 
-### Internal Links
+### Internal links
 
 Use relative paths for links within the repository:
 
@@ -489,7 +495,7 @@ For links to other directories, use relative paths from the current file:
 See [ADR-0002](../adrs/ADR-0002-event-identity-and-provenance.md).
 ```
 
-### Link Text
+### Link text
 
 Use descriptive link text that makes sense out of context:
 
@@ -504,7 +510,7 @@ See [here](055_ocsf_field_tiers.md) for more info.
 See [055_ocsf_field_tiers.md](055_ocsf_field_tiers.md).
 ```
 
-### External Links
+### External links
 
 For external resources, include enough context that the link destination is clear:
 
@@ -512,7 +518,7 @@ For external resources, include enough context that the link destination is clea
 See the [OCSF schema documentation](https://schema.ocsf.io/) for field definitions.
 ```
 
-### Reference-Style Links
+### Reference-style links
 
 For documents with many links to the same targets, use reference-style links at the bottom:
 
@@ -566,7 +572,7 @@ See *Designing Data-Intensive Applications* for background on event sourcing.
 
 ______________________________________________________________________
 
-## Special Sections
+## Special sections
 
 ### Admonitions
 
@@ -610,11 +616,11 @@ Use tables for inline changelogs:
 
 ______________________________________________________________________
 
-## Agent-Specific Patterns
+## Agent-specific patterns
 
 These patterns specifically improve comprehension by LLMs and automated agents.
 
-### Explicit Scope Statements
+### Explicit scope statements
 
 Start documents with clear scope boundaries:
 
@@ -631,7 +637,7 @@ This document does NOT cover:
 - Detection rule evaluation (see [Sigma detection](060_detection_sigma.md))
 ```
 
-### Normative Language
+### Normative language
 
 Use RFC 2119 keywords consistently for requirements:
 
@@ -649,7 +655,7 @@ Implementations SHOULD use deterministic ordering for JSON serialization.
 The `description` field MAY be omitted if no meaningful value exists.
 ```
 
-### Explicit Cross-References
+### Explicit cross-references
 
 When referring to other documents, include the document type and title:
 
@@ -660,7 +666,7 @@ computation.
 The configuration reference (docs/spec/120_config_reference.md) defines all valid keys.
 ```
 
-### Glossary References
+### Glossary references
 
 For key terms used across documents, reference the canonical definition:
 
@@ -676,9 +682,9 @@ Each **run bundle** ([glossary](glossary.md#run-bundle)) contains...
 
 ______________________________________________________________________
 
-## Common Mistakes
+## Common mistakes
 
-### Inconsistent Code Formatting
+### Inconsistent code formatting
 
 ```markdown
 <!-- Bad: mixing styles -->
@@ -688,7 +694,7 @@ The `run_id` field and the event_id field must match.
 The `run_id` field and the `event_id` field must match.
 ```
 
-### Orphaned Links
+### Orphaned links
 
 ```markdown
 <!-- Bad: link destination unclear -->
@@ -698,7 +704,7 @@ See [this document](050_normalization_ocsf.md) for details.
 See the [OCSF normalization specification](050_normalization_ocsf.md) for field mapping rules.
 ```
 
-### Over-Nesting
+### Over-nesting
 
 ```markdown
 <!-- Bad: too deep -->
@@ -716,7 +722,7 @@ See the [OCSF normalization specification](050_normalization_ocsf.md) for field 
 - Level 3 item B
 ```
 
-### Ambiguous Pronouns
+### Ambiguous pronouns
 
 ```markdown
 <!-- Bad: unclear referent -->
@@ -729,7 +735,7 @@ before forwarding.
 
 ______________________________________________________________________
 
-## Checklist for New Documents
+## Checklist for new documents
 
 Before committing a new markdown document, verify:
 

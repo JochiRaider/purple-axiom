@@ -51,6 +51,7 @@ v0.1 support (normative):
 Purple Axiom treats scenario execution as a staged lifecycle per action:
 
 1. **Resolve** inputs (explicit, repeatable parameter resolution)
+1. **Evaluate** and (optionally) satisfy prerequisites (Atomic `dependencies`)
 1. **Execute** (capture stdout/stderr + executor metadata)
 1. **Cleanup** (invoke cleanup command when applicable)
 1. **Cleanup verification** (verify post-conditions; "cleanup ran" is not sufficient)
@@ -62,8 +63,8 @@ The runner MUST persist:
   results).
 - For `engine = "atomic"` actions, the runner MUST implement the integration contract defined in the
   [Atomic Red Team executor integration spec](032_atomic_red_team_executor_integration.md)
-  (deterministic YAML parsing, input resolution, transcript capture, cleanup invocation, and cleanup
-  verification).
+  (deterministic YAML parsing, input resolution, prerequisites handling, transcript capture, cleanup
+  invocation, and cleanup verification).
 
 ## Stable action identity (join keys)
 

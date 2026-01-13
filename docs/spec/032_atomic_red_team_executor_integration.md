@@ -13,14 +13,16 @@ evidence.
 
 - Deterministic Atomic YAML parsing
 - Deterministic input resolution (defaults, overrides, template expansion)
+- Prerequisites (dependencies) evaluation and optional fetch workflow and evidence artifacts
 - Transcript capture and storage requirements (encoding, redaction, layout)
 - Cleanup invocation and cleanup verification workflow and artifacts
 
 ## Overview
 
 This spec defines how the runner discovers and parses Atomic YAML, resolves inputs, canonicalizes
-identity-bearing materials, captures transcripts, and records cleanup verification. It sets the
-deterministic behavior, evidence artifacts, and failure modes needed for cross-run comparability.
+identity-bearing materials, evaluates prerequisites, captures transcripts, and records cleanup
+verification. It sets the deterministic behavior, evidence artifacts, and failure modes needed for
+cross-run comparability.
 
 ## Relationship to other specs
 
@@ -79,6 +81,8 @@ REQUIRED by this contract when the corresponding feature is enabled:
 - `stdout.txt` (required when execution is attempted)
 - `stderr.txt` (required when execution is attempted)
 - `executor.json` (required for all attempted executions and cleanup runs)
+- `prereqs_stdout.txt` (required when prerequisites are evaluated)
+- `prereqs_stderr.txt` (required when prerequisites are evaluated)
 - `attire.json` (required when Invoke-AtomicRedTeam structured logging is enabled, see below)
 - `cleanup_stdout.txt` (required when cleanup is invoked)
 - `cleanup_stderr.txt` (required when cleanup is invoked)
@@ -122,7 +126,11 @@ emit `skipped` with reason code `missing_engine_test_id`).
 ### Command list normalization
 
 Atomic YAML may express commands as a scalar string or as a list. The runner MUST normalize both
-`executor.command` and `executor.cleanup_command` into a list of strings:
+`executor.command` and `executor.cleanup_command` into a list of strings. If `dependencies` are
+present, the runner MUST also normalize `dependencies[].prereq_command` and
+`dependencies[].get_prereq_command` into lists of strings using the same rules.
+
+Normalized command-bearing fields (when present) MUST preserve list order exactly:
 
 - If scalar, normalize to a single-element list.
 - If list, preserve list order exactly.
@@ -223,7 +231,8 @@ The runner MUST perform placeholder substitution using the resolved input map:
 - Substitution MUST be exact-match by placeholder name.
 - Placeholder names MUST be treated as case-sensitive.
 - The runner MUST validate that all placeholders used in `executor.command` and
-  `executor.cleanup_command` reference keys present in the resolved input map.
+  `executor.cleanup_command` (and, when present, `dependencies[].prereq_command` and
+  `dependencies[].get_prereq_command`) reference keys present in the resolved input map.
   - If any placeholder cannot be resolved, the runner MUST fail closed with reason code
     `unresolved_placeholder`.
 
@@ -333,6 +342,115 @@ If the runner emits an integrity hash for the canonical expanded command strings
 separate field name to avoid conflicting semantics (example: `extensions.command_post_merge_sha256`)
 and MUST document the basis object and redaction behavior.
 
+## Prerequisites and dependencies
+
+Atomic tests MAY declare prerequisites via a `dependencies` block. Each dependency commonly
+includes:
+
+- `prereq_command`: a command that checks whether a prerequisite is satisfied
+- `get_prereq_command`: a command that attempts to satisfy the prerequisite (often by downloading or
+  creating payloads)
+
+### Responsibility model (normative)
+
+- The runner MUST be capable of executing Atomic prerequisites for the selected test when
+  `dependencies` are present.
+- Lab Providers MAY pre-bake prerequisites into images, but the integration contract MUST NOT rely
+  on pre-baking as the only mechanism.
+- If prerequisites are not satisfied (and cannot be satisfied per policy), the runner MUST NOT
+  attempt the Atomic execution and MUST fail closed for the action with a stable prereq reason code
+  (see below).
+
+### Prerequisites policy
+
+The runner MUST expose a deterministic prerequisites policy. For v0.1, the policy is defined by:
+
+- `runner.atomic.prereqs.mode` (string enum)
+
+Allowed values:
+
+- `skip`: do not check or fetch prerequisites; proceed directly to execution
+- `check_only`: check prerequisites; if missing, do not execute
+- `check_then_get`: check prerequisites; if missing, attempt `get_prereq_command` then re-check
+- `get_only`: attempt `get_prereq_command` then check
+
+Default (v0.1): `check_then_get`
+
+Determinism requirements:
+
+- The effective mode MUST be recorded in `executor.json`.
+- Dependency processing order MUST match the YAML `dependencies[]` order exactly.
+- Command normalization, input placeholder substitution, and `$ATOMICS_ROOT` canonicalization MUST
+  be applied consistently to prerequisite commands using the same rules as for execution and cleanup
+  commands.
+
+### Prerequisites execution algorithm (normative)
+
+When `dependencies` are present and `runner.atomic.prereqs.mode != skip`, the runner MUST perform:
+
+1. For each dependency `d` in `dependencies[]` (in order):
+   1. Execute the normalized `d.prereq_command` after placeholder substitution.
+   1. If the prereq command indicates success (exit code `0`), mark the dependency `met` and
+      continue.
+   1. If the prereq command indicates failure (non-zero exit code):
+      - If the effective mode does not include `get`, mark dependency `missing` and continue.
+      - If the effective mode includes `get`:
+        1. If `d.get_prereq_command` is missing or empty, the runner MUST fail closed with reason
+           code `prereq_get_command_missing`.
+        1. Execute the normalized `d.get_prereq_command` after placeholder substitution.
+        1. Re-execute `d.prereq_command` (same rules as above).
+        1. If re-check succeeds, mark dependency `met_after_get`; otherwise mark `missing`.
+1. If any dependency is `missing`, the runner MUST NOT attempt the Atomic execution and MUST fail
+   closed for the action with reason code `prereq_unsatisfied`.
+
+Failure classification (normative):
+
+- If a prereq check command cannot be executed (transport failure, timeout, runner internal error),
+  the runner MUST fail closed with reason code `prereq_check_failed`.
+- If a get prereq command cannot be executed (transport failure, timeout, runner internal error),
+  the runner MUST fail closed with reason code `prereq_get_failed`.
+
+### Prerequisites logs and evidence artifacts
+
+When prerequisites are evaluated (`dependencies` present and `runner.atomic.prereqs.mode != skip`),
+the runner MUST write:
+
+- `runs/<run_id>/runner/actions/<action_id>/prereqs_stdout.txt`
+- `runs/<run_id>/runner/actions/<action_id>/prereqs_stderr.txt`
+
+These files MUST follow the same encoding/newline and redaction rules as other transcripts (see
+[Stdout and stderr transcript files](#stdout-and-stderr-transcript-files) and
+[Redaction of transcripts](#redaction-of-transcripts)).
+
+To keep prereq logs machine-checkable and deterministic, the runner SHOULD prefix each prerequisite
+command attempt with a delimiter line appended to `prereqs_stdout.txt`:
+
+- `==> prereq[<i>/<n>] <phase>: <description>`
+
+Where:
+
+- `<i>` is 1-based index into `dependencies[]`
+- `<n>` is total count of dependencies
+- `<phase>` is one of `check`, `get`, `recheck`
+- `<description>` is the dependency `description` after placeholder substitution (or a stable
+  placeholder if absent)
+
+### Executor evidence requirements (prereqs)
+
+When prerequisites are evaluated, `executor.json` MUST include a `prereqs` object with, at minimum:
+
+- `mode` (string; effective mode)
+- `dependencies_count` (integer)
+- `status` (`skipped | satisfied | unsatisfied | error`)
+- `dependencies` (array in YAML order), each with:
+  - `index` (1-based integer)
+  - `description` (string; substituted)
+  - `check_exit_code` (integer)
+  - `get_attempted` (boolean)
+  - `get_exit_code` (integer or null)
+  - `recheck_exit_code` (integer or null)
+  - `status` (`met | met_after_get | missing | error`)
+
 ## Transcript capture and storage
 
 ### Structured execution record (ATTiRe)
@@ -362,6 +480,12 @@ For each invoked cleanup, the runner MUST store:
 
 - `cleanup_stdout.txt`
 - `cleanup_stderr.txt`
+
+For each prerequisites evaluation (see
+[Prerequisites and dependencies](#prerequisites-and-dependencies)), the runner MUST store:
+
+- `prereqs_stdout.txt`
+- `prereqs_stderr.txt`
 
 Encoding and newline requirements (deterministic):
 
@@ -404,6 +528,8 @@ Minimum required fields (v0.1):
 - `exit_code` (integer)
 - `atomics_root_actual` (string, evidence-only actual path)
 - `command_shell_specific` (string or list of strings, evidence-only actual invocation form)
+- `prereqs` (object, required when prerequisites are evaluated; see
+  [Prerequisites and dependencies](#prerequisites-and-dependencies))
 
 This file is evidence, not identity.
 
@@ -484,6 +610,10 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 - `interactive_prompt_blocked`
 - `unresolved_placeholder`
 - `input_resolution_cycle_or_growth`
+- `prereq_check_failed`
+- `prereq_get_failed`
+- `prereq_get_command_missing`
+- `prereq_unsatisfied`
 - `redaction_failed`
 - `executor_invoke_error`
 - `cleanup_invoke_error`
@@ -503,6 +633,8 @@ Implementations MUST include fixture-backed tests that validate:
    not vary with actual filesystem paths.
 1. Transcript normalization: newline normalization and encoding rules produce byte-identical outputs
    for equivalent captured content.
+1. Prerequisites determinism: dependency order, logging artifacts, and prereq outcomes are stable
+   for identical inputs.
 1. Cleanup verification determinism: result ordering and reason code requirements are stable.
 
 CI SHOULD include a golden fixture conformance test that runs a pinned Atomic test twice with
@@ -521,6 +653,8 @@ Fixture selection and gating (unit vs integration) are defined in the
   evidence-backed for cross-run comparability.
 - The runner canonicalizes environment-dependent Atomics paths to `$ATOMICS_ROOT` for
   identity-bearing materials.
+- The runner is responsible for prerequisite evaluation and optional fetch, producing explicit
+  prereq artifacts and structured prereq outcomes to avoid relying on lab image pre-baking
 - Cleanup uses Invoke-AtomicTest semantics and records verification artifacts for post-run
   validation.
 - Failure modes emit stable reason codes tied to ground truth and stage outcomes.

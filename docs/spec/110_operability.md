@@ -1,6 +1,14 @@
-<!-- docs/spec/110_operability.md -->
+---
+title: Operability
+description: Defines health signals, validation gates, and operational safeguards for runs.
+status: draft
+---
 
 # Operability
+
+This document defines operational requirements for health visibility, resource constraints, and
+deterministic failure handling. It focuses on the signals and artifacts needed to keep runs
+observable and reproducible in unattended lab environments.
 
 Purple Axiom is intended to run continuously, unattended, on local lab infrastructure. Operability
 requirements focus on:
@@ -91,8 +99,9 @@ Normative requirements:
   them via configuration or asset-specific profiles.
 - The validator SHOULD record observed EPS and footprint statistics (CPU, RSS, raw bytes/sec) for
   each validated asset to make regressions and sizing errors detectable.
-  - Measurement methodology is specified in `040_telemetry_pipeline.md` §2 “Performance and
-    footprint controls (agent)”.
+  - Measurement methodology is specified in the
+    [telemetry pipeline specification](040_telemetry_pipeline.md) §2 "Performance and footprint
+    controls (agent)".
 
 Budgets are configuration-driven and surfaced in reports when exceeded.
 
@@ -141,7 +150,7 @@ A telemetry stage is only considered "validated" for an asset when a validation 
   - verified by a runtime canary:
     - captured XML begins with `<Event`
     - captured XML MUST NOT contain `<RenderingInfo>`
-    - see `040_telemetry_pipeline.md` §2
+    - see the [telemetry pipeline specification](040_telemetry_pipeline.md) §2
 
 Additional normative checks:
 
@@ -180,8 +189,9 @@ Additional normative checks:
   - binary fields honor `max_binary_bytes` and produce deterministic
     `binary_present/binary_oversize` signals
 
-The validator MUST write `runs/<run_id>/logs/telemetry_validation.json`, conforming to
-`docs/contracts/telemetry_validation.schema.json`; the manifest SHOULD include a pointer to it.
+The validator MUST write `runs/<run_id>/logs/telemetry_validation.json`, conforming to the
+[telemetry validation schema](../contracts/telemetry_validation.schema.json); the manifest SHOULD
+include a pointer to it.
 
 ## Health files (normative, v0.1)
 
@@ -224,8 +234,8 @@ This prevents "rule debugging" when the root cause is missing telemetry.
 
 ## Run limit enforcement (normative)
 
-When run limits are configured (see `operability.run_limits` in `120_config_reference.md`), the
-pipeline MUST behave as follows:
+When run limits are configured (see `operability.run_limits` in the
+[configuration reference](120_config_reference.md)), the pipeline MUST behave as follows:
 
 | Limit             | Exceeded behavior                      | Run status          | Exit code      | Accounting required                                                                                                                                                                            |
 | ----------------- | -------------------------------------- | ------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

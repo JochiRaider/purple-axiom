@@ -1,0 +1,11 @@
+title: Regex Usage
+id: 99999999-0000-0000-0000-000000000003
+status: test
+description: MUST fail with reason_code='unsupported_regex' (Spec 065: regex is out of scope for v0.1).
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        CommandLine|re: '.*malicious.*'
+    condition: selection

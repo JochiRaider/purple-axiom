@@ -1,0 +1,12 @@
+title: Unmapped Field without Fallback
+id: 99999999-0000-0000-0000-000000000002
+status: test
+description: MUST fail with reason_code='unmapped_field' (assuming raw fallback is disabled in test config).
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        # This field intentionally does not exist in the bridge alias map
+        UnknownProprietaryField: "Suspicious"
+    condition: selection

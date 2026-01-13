@@ -1,0 +1,3 @@
+{"time": 1700000000000, "class_uid": 1007, "metadata": {"event_id": "evt-1", "product": {"name": "windows"}}, "process": {"cmd_line": "C:\\Windows\\System32\\cmd.exe /c whoami", "file": {"name": "cmd.exe", "path": "C:\\Windows\\System32\\cmd.exe"}}}
+{"time": 1700000001000, "class_uid": 1007, "metadata": {"event_id": "evt-2", "product": {"name": "windows"}}, "process": {"cmd_line": "C:\\Windows\\System32\\svchost.exe -k netsvcs", "file": {"name": "svchost.exe", "path": "C:\\Windows\\System32\\svchost.exe"}}}
+{"time": 1700000002000, "class_uid": 4001, "metadata": {"event_id": "evt-3", "product": {"name": "windows"}}, "src_endpoint": {"port": 12345}, "dst_endpoint": {"port": 445}}

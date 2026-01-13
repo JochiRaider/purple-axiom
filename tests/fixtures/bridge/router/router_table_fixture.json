@@ -1,0 +1,27 @@
+{
+  "router_table_id": "fixture-router-01",
+  "router_table_version": "1.0.0",
+  "ocsf_version": "1.7.0",
+  "routes": [
+    {
+      "sigma_logsource": {
+        "category": "process_creation",
+        "product": "windows"
+      },
+      "ocsf_scope": {
+        "class_uids": [1007]
+      },
+      "notes": "Standard 1:1 mapping"
+    },
+    {
+      "sigma_logsource": {
+        "category": "file_access",
+        "product": "linux"
+      },
+      "ocsf_scope": {
+        "class_uids": [1001, 1003, 1005]
+      },
+      "notes": "Multi-class union: File System Activity, Kernel Activity, etc. Sorted ascending."
+    }
+  ]
+}

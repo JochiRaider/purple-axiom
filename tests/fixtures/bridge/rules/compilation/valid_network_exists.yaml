@@ -1,0 +1,13 @@
+title: Network Connection with Missing Destination
+id: 22222222-2222-2222-2222-222222222222
+status: test
+description: Validates existence and boolean logic.
+logsource:
+    category: network_connection
+    product: windows
+detection:
+    selection_port:
+        DestinationPort: 445
+    selection_no_hostname:
+        DestinationHostname|exists: false
+    condition: selection_port and selection_no_hostname

@@ -1,0 +1,11 @@
+title: Unknown Logsource
+id: 99999999-0000-0000-0000-000000000001
+status: test
+description: MUST fail with reason_code='unrouted_logsource'.
+logsource:
+    category: exotic_mainframe_logs
+    product: legacy_system
+detection:
+    selection:
+        Field: Value
+    condition: selection

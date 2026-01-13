@@ -14,6 +14,7 @@ sets small and prevent “read the entire ADR set” behavior.
 | `ADR-0003-redaction-policy.md`                                          | Redaction policy posture and redaction-related consequences |
 | `ADR-0004-deployment-architecture-and-inter-component-communication.md` | Deployment architecture and inter-component communication   |
 | `ADR-0005-stage-outcomes-and-failure-classification.md`                 | Stage outcomes and failure classification rules             |
+| `ADR-0006-plan-execution-model.md`                                      | Plan execution model and target cardinality                 |
 
 ## Common tasks (fast paths)
 
@@ -24,6 +25,7 @@ sets small and prevent “read the entire ADR set” behavior.
 | “What is the redaction policy and its implications?”           | `ADR-0003-redaction-policy.md`                                          |
 | “What is the deployment architecture and communication model?” | `ADR-0004-deployment-architecture-and-inter-component-communication.md` |
 | “How are stage outcomes and failures classified?”              | `ADR-0005-stage-outcomes-and-failure-classification.md`                 |
+| "How will multi-target testing work?"                          | `ADR-0006-plan-execution-model.md`                                      |
 
 ## Update rule (required)
 

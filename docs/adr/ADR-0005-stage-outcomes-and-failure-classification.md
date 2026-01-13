@@ -261,10 +261,14 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 | Reason code                    | Severity | Description                                                               |
 | ------------------------------ | -------- | ------------------------------------------------------------------------- |
 | `unstable_asset_id_resolution` | FATAL    | `target_asset_id` cannot be resolved deterministically.                   |
+| `plan_type_reserved`           | FATAL    | Plan type is reserved and not supported in this version.                  |
 | `executor_not_found`           | FATAL    | Required executor binary/module is missing.                               |
 | `ground_truth_write_failed`    | FATAL    | Cannot write `ground_truth.jsonl`.                                        |
 | `action_key_collision`         | FATAL    | Duplicate `action_key` within the run.                                    |
 | `cleanup_invocation_failed`    | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure). |
+
+- Multi-target iteration (matrix plans) is reserved for v0.2; v0.1 enforces 1:1 action-target
+  resolution.
 
 #### NON-FATAL reason codes
 
@@ -493,6 +497,7 @@ Default `fail_mode`: `fail_closed` (when enabled)
 ## References
 
 - [Data contracts specification](../spec/025_data_contracts.md)
+- [Plan execution model ADR](../adr/ADR-0006-plan-execution-model.md)
 
 ## Changelog
 

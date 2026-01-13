@@ -31,8 +31,9 @@ v0.1 support (normative):
 - The v0.1 runner MUST support **Atomic Test Plan** scenarios.
 - v0.1 runs MUST be single-scenario (exactly one `scenario_id` per run bundle). Multi-scenario plans
   and manifests are reserved for a future release.
-- **Caldera Operation** and **Mixed Plan** are reserved for a future release; if encountered, the
-  v0.1 runner MUST fail before execution with a clear error (and a stable `reason_code`).
+- **Caldera Operation**, **Mixed Plan**, and **Matrix Plan** are reserved for a future release; if
+  encountered, the v0.1 runner MUST fail before execution with a clear error (and a stable
+  `reason_code`: `plan_type_reserved`).
 
 1. Caldera operation (reserved; not supported in v0.1)
    - One or more adversary profiles or abilities
@@ -45,6 +46,11 @@ v0.1 support (normative):
 1. Mixed plan (reserved; not supported in v0.1)
    - A Caldera operation plus a set of Atomics
    - Used for "breadth + depth" runs
+1. Matrix plan (reserved; not supported in v0.1)
+   - Combinatorial expansion over declared axes (techniques, targets, input variants)
+   - Enables "run this test on ALL matching targets" workflows
+   - Produces multiple `action_id` entries within a single `run_id`
+   - See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for architectural rationale
 
 ## Execution model (runner requirements)
 
@@ -136,6 +142,21 @@ v0.1 determinism constraints (normative):
 - If a selector matches multiple assets, the runner/provider MUST select deterministically using a
   stable ordering over `lab.assets[].asset_id` (bytewise lexical ordering of UTF-8), and SHOULD
   record the selection rule in runner evidence so the choice is explainable.
+
+**Reserved: Multi-target iteration (v0.2+)**
+
+v0.1 does not support iterating a single plan action across multiple matched targets within one run.
+If this capability is required in v0.1, operators MUST either:
+
+- Generate separate run bundles per target, or
+- Use external orchestration to invoke multiple runs.
+
+A future release (v0.2) will introduce `matrix` plan semantics to support multi-target iteration
+within a single `run_id`. The `action_key` design (which includes `target_asset_id`) is
+forward-compatible with this expansion—each (test × target) pair will produce a distinct
+`action_key`.
+
+See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for the plan execution model decision.
 
 ## Ground truth timeline schema (seed)
 

@@ -1,5 +1,5 @@
 ---
-title: Specification Title
+title: Specification title
 description: One-sentence summary of what this specification defines
 status: draft
 category: spec
@@ -7,7 +7,7 @@ tags: []
 related: []
 ---
 
-# Specification Title
+# Specification title
 
 Brief introductory paragraph (2-3 sentences) explaining what this document covers and why it
 matters. State the key problem or need this specification addresses.
@@ -52,7 +52,7 @@ The following requirements use RFC 2119 keywords (MUST, SHOULD, MAY).
 
 **Another constraint**: Description of this constraint.
 
-## [Primary Content Section]
+## [Primary content section]
 
 **Summary**: One-sentence overview of what this section covers.
 
@@ -75,7 +75,7 @@ nested:
 
 More detailed content.
 
-## [Secondary Content Section]
+## [Secondary content section]
 
 Additional technical content organized by topic.
 

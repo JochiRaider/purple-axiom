@@ -1,10 +1,8 @@
 ---
 title: Sigma-to-OCSF bridge
 description: Defines the routing, aliasing, and backend adapter contract for executing Sigma over OCSF.
-status: draft # TODO: confirm status
+status: draft 
 ---
-
-<!-- docs/spec/065_sigma_to_ocsf_bridge.md -->
 
 # Sigma-to-OCSF bridge
 

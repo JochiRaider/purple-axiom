@@ -1,11 +1,19 @@
-<!-- docs/spec/070_scoring_metrics.md -->
+---
+title: Scoring and metrics
+description: Defines scoring metrics, gates, thresholds, and default weights for run evaluation.
+status: draft
+---
 
-# Scoring and Metrics
+# Scoring and metrics
+
+This document defines how Purple Axiom computes scoring metrics, applies quality gates, and
+interprets results for CI and operator reporting. It establishes default thresholds and weightings
+for v0.1 while keeping evaluation deterministic and auditable.
 
 ## Concepts
 
 - Ground truth action: a known technique/test execution (with timestamp + target)
-- Detection: a rule hit mapped to run_id + technique_id
+- Detection: a rule hit mapped to `run_id` + `technique_id`
 
 ### Normalization coverage gate (Tier 1 Core Common)
 
@@ -18,7 +26,8 @@ run as schema-invalid.
 
 The pipeline **MUST** compute:
 
-- `tier1_field_coverage_pct` as defined in `055_ocsf_field_tiers.md`
+- `tier1_field_coverage_pct` as defined in the
+  [OCSF field tiers specification](055_ocsf_field_tiers.md)
 - `tier1_field_coverage_state` in `{ ok, below_threshold, indeterminate_no_events }`
 - `tier1_field_coverage_threshold_pct` (default `0.80`)
 

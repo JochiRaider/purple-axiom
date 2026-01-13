@@ -1,12 +1,20 @@
-<!-- docs/mappings/coverage_matrix.md -->
+---
+title: OCSF field mapping completeness matrix v0.1 MVP
+description: Defines the v0.1 mapping-profile conformance checklist for Tier 1 and Tier 2 fields.
+status: draft
+---
 
-# OCSF Field Mapping Completeness Matrix (v0.1 MVP)
+# OCSF field mapping completeness matrix v0.1 MVP
+
+This document defines the mapping-profile conformance checklist for the v0.1 normalizer and the Tier
+1 and Tier 2 field paths each source type must map when authoritative input is present.
 
 This document defines a **mapping-profile conformance checklist** for the v0.1 normalizer.
 
-It complements (and is referenced by) `docs/spec/055_ocsf_field_tiers.md`:
+It complements (and is referenced by) the
+[OCSF field tiers reference](../spec/055_ocsf_field_tiers.md):
 
-- `055` defines the **tier model** and run-level Tier 1 coverage metric.
+- The OCSF field tiers reference defines the **tier model** and run-level Tier 1 coverage metric.
 - This file defines **which Tier 1 and Tier 2 field paths the mapping profiles MUST be able to
   populate**, per `source_type`, when authoritative input is present.
 
@@ -27,7 +35,7 @@ In scope `source_type` rows (v0.1 MVP):
 Out of scope for this v0.1 matrix:
 
 - Network sensor sources (Zeek, Suricata, firewall logs)
-- EDR “findings” sources (alerts/notables), unless explicitly added as a v0.1 source
+- EDR "findings" sources (alerts/notables), unless explicitly added as a v0.1 source
 
 ______________________________________________________________________
 
@@ -43,7 +51,7 @@ Each cell is one of: `R`, `O`, `N/A`.
     - deterministic local context snapshotted into the run (example: `/etc/passwd` snapshot if you
       choose to support UID→name).
   - The mapping profile **MUST NOT** infer or fabricate semantic values that are not present.
-  - If the source provides an explicit “unknown” marker, the mapping profile **MAY** emit an
+  - If the source provides an explicit "unknown" marker, the mapping profile **MAY** emit an
     explicit unknown convention, provided it is deterministic and tested.
 
 - `O` (Optional mapping target)
@@ -54,7 +62,7 @@ Each cell is one of: `R`, `O`, `N/A`.
 
   - The field is not applicable for that source, and **MUST remain absent**.
 
-### “Authoritative value exists” (conformance rule)
+### Authoritative value exists (conformance rule)
 
 A value is considered authoritative if it is:
 
@@ -80,22 +88,24 @@ Rationale codes are included in `R` cells to keep the tables compact.
 
 ______________________________________________________________________
 
-## Tier 1 matrix (Core Common)
+## Tier 1 matrix for core common fields
 
 ### Relationship to Tier 0 (envelope contract)
 
 This matrix covers Tier 1 (Core Common) fields only. Tier 0 (Core Envelope) fields are
-contract-required per `055_ocsf_field_tiers.md` and are not repeated here. Key Tier 0 requirements:
+contract-required per the [OCSF field tiers reference](../spec/055_ocsf_field_tiers.md) and are not
+repeated here. Key Tier 0 requirements:
 
 - `metadata.uid` MUST equal `metadata.event_id` (ADR-0002).
 - `metadata.run_id`, `metadata.scenario_id`, `metadata.source_type` MUST be present.
-- See `055` for the complete Tier 0 field list.
+- See the OCSF field tiers reference for the complete Tier 0 field list.
 
-Tier 1 is “core common” per `055`. This matrix makes Tier 1 **mapping-profile-checkable**.
+Tier 1 is "core common" per the OCSF field tiers reference. This matrix makes Tier 1
+**mapping-profile-checkable**.
 
 Notes:
 
-- Some Tier 1 fields are “conditionally applicable” for a given `source_type`. Where that is common,
+- Some Tier 1 fields are "conditionally applicable" for a given `source_type`. Where that is common,
   the cell is `O` and the Tier 2 family tables define the stricter requirements.
 - For the device IP pivot, implementations vary between a scalar `device.ip` and an array
   `device.ips[]`. For conformance to this matrix:
@@ -137,14 +147,14 @@ Tier 1 rationale notes (per row):
 
 ______________________________________________________________________
 
-## Tier 2 matrices (Core Class Minimums used in v0.1)
+## Tier 2 matrices for core class minimums in v0.1
 
-Tier 2 requirements apply **when the event is mapped into the corresponding family/class** (per
-`055` Tier 2).
+Tier 2 requirements apply **when the event is mapped into the corresponding family or class** (per
+the OCSF field tiers reference Tier 2).
 
 To keep CI implementable, Tier 2 is expressed as a small set of family-specific tables.
 
-### Tier 2A: Authentication and authorization (Windows Security)
+### Tier 2A authentication and authorization for Windows Security
 
 | source_type      | actor.user.name | actor.user.uid | status_id | src_endpoint.ip | src_endpoint.port | target.user.name | target.user.uid |
 | ---------------- | --------------- | -------------- | --------: | --------------- | ----------------- | ---------------- | --------------- |
@@ -156,13 +166,13 @@ To keep CI implementable, Tier 2 is expressed as a small set of family-specific 
 Notes:
 
 - `status_id` represents the success/failure (or equivalent) outcome representation referenced in
-  `055` Tier 2B.
+  the OCSF field tiers reference Tier 2B.
 - `src_endpoint.*` is optional because only a subset of Windows Security auth events include a
   remote source address/port.
 - `target.user.*` is optional because not all auth events have a distinct target principal beyond
   `actor.user`.
 
-### Tier 2B: Process and execution activity (Windows Security, Sysmon, osquery, auditd)
+### Tier 2B process and execution activity for Windows Security, Sysmon, osquery, and auditd
 
 | source_type      | activity_id | actor.process.name | actor.process.pid | actor.process.cmd_line | actor.process.parent_process.pid | actor.user.uid | actor.user.name |
 | ---------------- | ----------- | ------------------ | ----------------- | ---------------------- | -------------------------------- | -------------- | --------------- |
@@ -183,7 +193,7 @@ Notes:
   choose to populate `actor.process.name` from the basename of an executable path only if this
   derivation is explicitly defined and tested.
 
-### Tier 2C: Network and connection activity (Sysmon, osquery)
+### Tier 2C network and connection activity for Sysmon and osquery
 
 | source_type      | src_endpoint.ip | src_endpoint.port | dst_endpoint.ip | dst_endpoint.port |
 | ---------------- | --------------- | ----------------- | --------------- | ----------------- |
@@ -199,7 +209,7 @@ Notes:
 - For osquery `socket_events`, port availability depends on the table/back-end; treat as optional
   unless the raw provides them.
 
-### Tier 2D: File system activity (Sysmon, osquery, auditd)
+### Tier 2D file system activity for Sysmon, osquery, and auditd
 
 | source_type      | file.name | file.parent_folder | file.path | actor.process.pid | actor.process.name | actor.user.uid |
 | ---------------- | --------: | -----------------: | --------: | ----------------: | -----------------: | -------------: |
@@ -211,8 +221,9 @@ Notes:
 Notes:
 
 - For **osquery `file_events`**, initiating process attribution is not available in v0.1. Therefore
-  `actor.process.*` is `N/A` and **MUST NOT be inferred**. (This matches the “known mapping
-  limitations” approach in `042_osquery_integration.md`.)
+  `actor.process.*` is `N/A` and **MUST NOT be inferred**. This matches the "known mapping
+  limitations" approach in the
+  [osquery integration specification](../spec/042_osquery_integration.md).
 - `file.path` and `file.name`/`file.parent_folder` relationship:
   - When a source provides a full path (example: Sysmon `TargetFilename`), mapping profiles MUST
     populate `file.path` directly from the source.
@@ -228,7 +239,7 @@ Notes:
 
 ______________________________________________________________________
 
-## CI conformance requirements (how to verify this matrix)
+## CI conformance requirements for this matrix
 
 To make this matrix mechanically checkable, v0.1 CI SHOULD include a fixture-backed conformance
 suite.
@@ -262,7 +273,7 @@ For each fixture, the conformance test MUST assert:
 - All `R` fields for the applicable Tier 2 family table are present.
 - All `N/A` fields are absent (this is a determinism requirement, not merely a completeness rule).
 
-Presence semantics should match `055` Tier 1 “Presence semantics”.
+Presence semantics should match the OCSF field tiers reference Tier 1 "Presence semantics".
 
 ### Failure reporting (recommended)
 

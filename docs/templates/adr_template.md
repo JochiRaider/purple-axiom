@@ -1,5 +1,5 @@
 ---
-title: 'ADR-NNNN: Decision Title'
+title: 'ADR-NNNN: Decision title'
 description: One-sentence summary of the decision
 status: draft
 category: adr
@@ -9,7 +9,7 @@ supersedes:
 superseded_by:
 ---
 
-# ADR-NNNN: Decision Title
+# ADR-NNNN: Decision title
 
 | Property  | Value                                                     |
 | --------- | --------------------------------------------------------- |
@@ -49,9 +49,9 @@ Explain why this decision was made. Include:
 - Trade-offs that were considered
 - Risks and how they are mitigated
 
-## Alternatives Considered
+## Alternatives considered
 
-### Alternative 1: Name
+### Alternative 1: name
 
 Brief description of this alternative.
 
@@ -67,7 +67,7 @@ Brief description of this alternative.
 
 **Why rejected**: One-sentence explanation.
 
-### Alternative 2: Name
+### Alternative 2: name
 
 Brief description of this alternative.
 
@@ -97,7 +97,7 @@ Brief description of this alternative.
 
 - Change that is neither positive nor negative but worth noting
 
-## Implementation Notes
+## Implementation notes
 
 Optional section for implementation guidance, migration steps, or technical details that don't
 belong in the core decision but are useful for implementers.

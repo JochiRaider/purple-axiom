@@ -1,20 +1,27 @@
-<!-- docs/spec/080_reporting.md -->
+---
+title: Reporting
+description: Defines reporting artifacts, required outputs, and trending keys for run evaluation.
+status: draft
+---
 
 # Reporting
 
+This document defines the reporting artifacts, sections, and required outputs for Purple Axiom runs.
+It also specifies the stable keys used for trending across historical runs.
+
 ## Artifact bundle (per run)
 
-- manifest.json
-- ground_truth.jsonl
-- criteria/manifest.json
-- criteria/criteria.jsonl
-- criteria/results.jsonl
-- runner/ (per-action transcripts + cleanup verification evidence)
-- ocsf_events.jsonl (or parquet)
-- bridge/ (mapping pack snapshot, compiled plans, bridge coverage)
-- detections.jsonl
-- report.html
-- scoring/summary.json
+- `manifest.json`
+- `ground_truth.jsonl`
+- `criteria/manifest.json`
+- `criteria/criteria.jsonl`
+- `criteria/results.jsonl`
+- `runner/` (per-action transcripts + cleanup verification evidence)
+- `ocsf_events.jsonl` (or Parquet)
+- `bridge/` (mapping pack snapshot, compiled plans, bridge coverage)
+- `detections.jsonl`
+- `report.html`
+- `scoring/summary.json`
 
 ## Report sections (seed)
 
@@ -55,14 +62,14 @@
 
 - Regression summary (when baseline provided)
 
-  - baseline run_id and comparable keys
+  - baseline `run_id` and comparable keys
   - pass/fail status vs thresholds
   - deltas for coverage/latency/gap taxonomy
 
 ## Trend tracking (optional)
 
-- Maintain a history table keyed by (scenario_id, rule_set_version, pipeline_version,
-  bridge_mapping_pack_version).
+- Maintain a history table keyed by (`scenario_id`, `rule_set_version`, `pipeline_version`,
+  `bridge_mapping_pack_version`).
   - Source: `manifest.extensions.bridge.mapping_pack_version` (or equivalent) when not present in
     `manifest.versions`.
 - Emit regression alerts when coverage/latency deviates beyond thresholds.
@@ -72,13 +79,13 @@
 The following JSON outputs MUST be produced for v0.1 runs (unless the corresponding stage is
 explicitly disabled):
 
-| File                               | Purpose                                                    | Primary contract                     |
-| ---------------------------------- | ---------------------------------------------------------- | ------------------------------------ |
-| `manifest.json`                    | Run-level provenance and outcomes                          | `manifest.schema.json`               |
-| `scoring/summary.json`             | Operator-facing rollup (coverage, latency, fidelity, gaps) | `summary.schema.json`                |
-| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality and coverage                  | `bridge_coverage.schema.json`        |
-| `normalized/mapping_coverage.json` | OCSF normalization coverage and missing core fields        | `mapping_coverage.schema.json`       |
-| `criteria/manifest.json`           | Criteria pack snapshot metadata                            | `criteria_pack_manifest.schema.json` |
+| File                               | Purpose                                                    | Primary contract                                                                 |
+| ---------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `manifest.json`                    | Run-level provenance and outcomes                          | [manifest schema](../contracts/manifest.schema.json)                             |
+| `scoring/summary.json`             | Operator-facing rollup (coverage, latency, fidelity, gaps) | [summary schema](../contracts/summary.schema.json)                               |
+| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality and coverage                  | [bridge coverage schema](../contracts/bridge_coverage.schema.json)               |
+| `normalized/mapping_coverage.json` | OCSF normalization coverage and missing core fields        | [mapping coverage schema](../contracts/mapping_coverage.schema.json)             |
+| `criteria/manifest.json`           | Criteria pack snapshot metadata                            | [criteria pack manifest schema](../contracts/criteria_pack_manifest.schema.json) |
 
 ## Trending keys (normative)
 

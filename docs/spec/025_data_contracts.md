@@ -99,9 +99,9 @@ verification.
 
 - All JSON Schema contracts under `docs/contracts/` MUST be authored for JSON Schema Draft 2020-12.
 - Implementations MUST use a validator that supports Draft 2020-12 semantics.
-- If a contract schema declares a `$schema` value that is not Draft 2020-12, the implementation
-  MUST treat this as a configuration error and MUST fail closed for any stage that requires the
-  affected contract.
+- If a contract schema declares a `$schema` value that is not Draft 2020-12, the implementation MUST
+  treat this as a configuration error and MUST fail closed for any stage that requires the affected
+  contract.
 
 ### Reference resolution (local-only, normative)
 
@@ -182,8 +182,8 @@ Minimum publish-gate coverage (v0.1):
   - `criteria/**` artifacts that have contracts (criteria pack snapshot, criteria results)
   - `normalized/**` artifacts that have contracts (OCSF event envelope for JSONL outputs, mapping
     coverage, mapping profile snapshot)
-  - `bridge/**` artifacts that have contracts (router tables, mapping pack snapshots, compiled plans,
-    bridge coverage)
+  - `bridge/**` artifacts that have contracts (router tables, mapping pack snapshots, compiled
+    plans, bridge coverage)
   - `detections/detections.jsonl`
   - `scoring/summary.json`
   - `logs/telemetry_validation.json` when telemetry validation is enabled
@@ -212,8 +212,9 @@ v0.1 baseline canaries (non-exhaustive; see operability and telemetry specs for 
 - Telemetry checkpointing storage integrity (`telemetry.checkpointing.storage_integrity`)
 - Resource budget enforcement and footprint reporting where required
 
-Authoritative definitions for these canaries, reason codes, and required evidence pointers are in the
-[operability spec](110_operability.md) and the [telemetry pipeline spec](040_telemetry_pipeline.md).
+Authoritative definitions for these canaries, reason codes, and required evidence pointers are in
+the [operability spec](110_operability.md) and the
+[telemetry pipeline spec](040_telemetry_pipeline.md).
 
 ## Run bundle layout
 

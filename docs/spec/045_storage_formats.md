@@ -1,6 +1,6 @@
 ---
-title: "Storage formats"
-description: "Defines storage tiers, formats, and schema evolution expectations for run artifacts."
+title: Storage formats
+description: Defines storage tiers, formats, and schema evolution expectations for run artifacts.
 status: draft # TODO: confirm status
 ---
 
@@ -83,9 +83,8 @@ Runner evidence notes:
 
 - Executor transcripts (stdout/stderr) and executor metadata are treated as Tier 1 evidence, not
   Tier 0 logs.
-- Redaction is optional per run (see the
-  [security and safety specification](090_security_safety.md) and
-  [ADR-0003: Redaction policy](../adr/ADR-0003-redaction-policy.md)):
+- Redaction is optional per run (see the [security and safety specification](090_security_safety.md)
+  and [ADR-0003: Redaction policy](../adr/ADR-0003-redaction-policy.md)):
   - When `security.redaction.enabled: true`, transcripts MUST be redacted-safe prior to promotion
     into standard long-term artifacts.
   - When `security.redaction.enabled: false`, transcripts MUST be withheld from standard long-term

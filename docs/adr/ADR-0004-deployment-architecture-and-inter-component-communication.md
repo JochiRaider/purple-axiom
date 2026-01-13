@@ -149,8 +149,8 @@ For any stage that writes a directory or multi-file artifact set:
    - `runs/<run_id>/.staging/<stage_id>/...`
 1. The stage MUST validate required contracts for the outputs it intends to publish (schema
    validation where applicable).
-1. Contract validation behavior (dialect, `$ref` restrictions, deterministic error reporting) 
-   is defined in `docs/spec/025_data_contracts.md` see Validation engine and publish gates.   
+1. Contract validation behavior (dialect, `$ref` restrictions, deterministic error reporting) is
+   defined in `docs/spec/025_data_contracts.md` see Validation engine and publish gates.
 1. The stage MUST publish outputs by an atomic rename from staging into the final location under
    `runs/<run_id>/`.
 1. If the stage fails before publish, it MUST NOT create or partially populate the final output

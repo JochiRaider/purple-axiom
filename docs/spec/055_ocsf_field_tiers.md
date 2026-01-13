@@ -190,13 +190,13 @@ into MUST.
 
 Purple Axiom treats a small set of pivots as core common because they unlock most triage workflows.
 
-| Object or field               | Recommendation | Notes                                                  |
-| ----------------------------- | -------------: | ------------------------------------------------------ |
-| `device.hostname`             |         SHOULD | Stable host identifier when available.                 |
-| `device.uid`                  |         SHOULD | Stable host ID when available.                         |
-| `device.ip` or `device.ips[]` |         SHOULD | Prefer `device.ips[]` when multiple.                   |
-| `actor.user`                  |         SHOULD | Normalize principal identity into a stable user shape. |
-| `actor.process`               |         SHOULD | Normalize process identity where applicable.           |
+| Object or field               | Recommendation | Notes                                                                                                           |
+| ----------------------------- | -------------: | --------------------------------------------------------------------------------------------------------------- |
+| `device.hostname`             |         SHOULD | Stable host identifier when available.                                                                          |
+| `device.uid`                  |         SHOULD | Stable host ID when available.                                                                                  |
+| `device.ip` or `device.ips[]` |         SHOULD | Prefer `device.ips[]` when multiple.                                                                            |
+| `actor.user`                  |         SHOULD | Normalize principal identity into the Tier 2 standard user shape (see Tier 2: Standard actor identity shapes).  |
+| `actor.process`               |         SHOULD | Normalize process identity into the Tier 2 standard process shape (see Tier 2: Standard actor identity shapes). |
 
 ### Message and observables
 
@@ -239,6 +239,56 @@ or class set.
 This section is intentionally framed by **event families** rather than exact class lists, because
 `class_uid` values and shapes vary by pinned OCSF version. The normalizer should implement these as
 mapping profiles per `source_type`.
+
+### Standard actor identity shapes
+
+This section defines a **Tier 2 identity profile** for `actor.user` and `actor.process`. Its purpose
+is to prevent cross-source drift (example: one source populates `actor.user.name` only while another
+populates `actor.user.uid` only) by defining:
+
+- the preferred stable identifiers,
+- platform-specific semantics, and
+- canonicalization rules that are deterministic across implementations.
+
+Normative requirements:
+
+- Mapping profiles MUST follow these shapes whenever they emit `actor.user` and/or `actor.process`.
+- Mappings MUST NOT infer or fabricate semantic values that are not present in authoritative raw
+  input (or deterministically derived from run context).
+- Mappings MUST NOT perform environment-dependent lookups (example: resolving username from UID or
+  SID) to populate these fields.
+- Empty-string values (after trimming) MUST be treated as absent (field omitted).
+
+#### `actor.user` (Tier 2 standard user shape)
+
+| Field             | Requirement | Canonicalization and semantics                                                                                                                                                                                                                                                                                                                    |
+| ----------------- | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actor.user.uid`  |      SHOULD | Stable principal identifier. MUST be a string across platforms to avoid type drift in long-term storage. Windows: MUST be the SID string in canonical `S-1-...` form (no surrounding whitespace). POSIX (Linux/macOS): MUST be the base-10 string representation of the numeric UID, with no leading zeros (except UID `0` represented as `"0"`). |
+| `actor.user.name` |      SHOULD | Human-readable principal name when present in authoritative raw input. Windows: if domain and username are provided separately, SHOULD be rendered as `DOMAIN\user` using a single backslash separator. MUST NOT be synthesized via directory services or local account lookup.                                                                   |
+
+Canonical validity checks (recommended, deterministic):
+
+- If `actor.user.uid` is populated on Windows, it SHOULD match `^S-1-\d+(-\d+)+$`. If it does not,
+  the mapping SHOULD omit `actor.user.uid` and preserve the original value in an unmapped/raw area.
+- If `actor.user.uid` is populated on POSIX, it SHOULD match `^(0|[1-9]\d*)$`. If it does not, the
+  mapping SHOULD omit `actor.user.uid` and preserve the original value in an unmapped/raw area.
+
+#### `actor.process` (Tier 2 standard process shape)
+
+| Field                    | Requirement | Canonicalization and semantics                                                                                                                                                                                                                                                                                      |
+| ------------------------ | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actor.process.pid`      |      SHOULD | Process identifier as an integer when present. If the authoritative raw input provides a base-10 numeric string, the mapping SHOULD parse it deterministically. Values MUST be non-negative. If parsing fails, the mapping SHOULD omit `actor.process.pid` and preserve the original value in an unmapped/raw area. |
+| `actor.process.name`     |      SHOULD | Process image name (basename only). If the authoritative raw input provides a full path but no name field, the mapping SHOULD derive `actor.process.name` deterministically as the final path segment. The mapping MUST NOT perform filesystem lookups to resolve name from PID or path.                            |
+| `actor.process.path`     |         MAY | Full executable path when present in authoritative raw input. The mapping MUST NOT expand environment variables, resolve symlinks, or otherwise perform filesystem-dependent normalization.                                                                                                                         |
+| `actor.process.cmd_line` |         MAY | Command line when present in authoritative raw input. Redaction (if enabled) is governed elsewhere; this section only defines field intent and shape.                                                                                                                                                               |
+
+Applicability and absence:
+
+- When a source does not provide initiating process identifiers (example: osquery
+  `ntfs_journal_events` on Windows), `actor.process` MUST be absent for those events and MUST NOT be
+  backfilled from other telemetry sources.
+- When a source does not provide user attribution for those events, `actor.user` MUST be absent and
+  MUST NOT be backfilled from other telemetry sources.
 
 ### Process and execution activity
 

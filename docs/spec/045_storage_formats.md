@@ -1,3 +1,9 @@
+---
+title: "Storage formats"
+description: "Defines storage tiers, formats, and schema evolution expectations for run artifacts."
+status: draft # TODO: confirm status
+---
+
 <!-- docs/spec/045_storage_formats.md -->
 
 # Storage formats
@@ -60,8 +66,8 @@ Format:
   - Windows EVTX (optional, see Windows section)
   - PCAP (if added later)
   - Tool-native output files
-  - osquery results logs (NDJSON) preserved under `runs/<run_id>/raw/osquery/` (see
-    `042_osquery_integration.md`)
+  - osquery results logs (NDJSON) preserved under `runs/<run_id>/raw/osquery/` (see the
+    [osquery integration specification](042_osquery_integration.md))
   - Runner transcripts and executor metadata:
     - per-action stdout/stderr transcripts
     - executor metadata (exit codes, durations, executor version)
@@ -79,8 +85,9 @@ Runner evidence notes:
 
 - Executor transcripts (stdout/stderr) and executor metadata are treated as Tier 1 evidence, not
   Tier 0 logs.
-- Redaction is optional per run (see `090_security_safety.md` and
-  `docs/adr/ADR-0003-redaction-policy.md`):
+- Redaction is optional per run (see the
+  [security and safety specification](090_security_safety.md) and
+  [ADR-0003: Redaction policy](../adr/ADR-0003-redaction-policy.md)):
   - When `security.redaction.enabled: true`, transcripts MUST be redacted-safe prior to promotion
     into standard long-term artifacts.
   - When `security.redaction.enabled: false`, transcripts MUST be withheld from standard long-term
@@ -155,7 +162,8 @@ Examples:
   - Windows event data
   - Sysmon exports
   - Linux syslog or journald exports
-  - osquery results (event format NDJSON; see `042_osquery_integration.md`)
+  - osquery results (event format NDJSON; see the
+    [osquery integration specification](042_osquery_integration.md))
 - Normalized OCSF events
 - Derived tables used in scoring (optional)
 

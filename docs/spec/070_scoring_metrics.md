@@ -152,3 +152,15 @@ scoring:
   unless a stage-level `fail_closed` condition is met.
 - Threshold evaluation MUST be based on metrics emitted in `scoring/summary.json` (or
   `report/summary.json` if exported), and the report MUST enumerate which thresholds failed.
+
+## References
+
+- [OCSF field tiers specification](055_ocsf_field_tiers.md)
+- [Sigma to OCSF bridge specification](065_sigma_to_ocsf_bridge.md)
+- [Test strategy CI specification](100_test_strategy_ci.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

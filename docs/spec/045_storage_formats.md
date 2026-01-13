@@ -582,3 +582,15 @@ Use this table as the default decision logic:
 
 This yields consistency across the storage system without losing the ability to preserve
 high-fidelity Windows artifacts when needed.
+
+## References
+
+- [OSquery integration specification](042_osquery_integration.md)
+- [Security and safety specification](090_security_safety.md)
+- [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

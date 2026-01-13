@@ -86,3 +86,9 @@ Each detection instance includes:
 - [pySigma library (SigmaHQ/pySigma)](https://github.com/SigmaHQ/pySigma)
 
 [sigma-bridge]: 065_sigma_to_ocsf_bridge.md
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

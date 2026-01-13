@@ -534,3 +534,19 @@ Start with the event families that cover the majority of safe adversary emulatio
 
 Expand iteratively, using bridge coverage metrics to guide where mapping work has the highest
 scoring impact.
+
+## References
+
+- [Detection rules specification](060_detection_sigma.md)
+- [Supported versions reference](../../SUPPORTED_VERSIONS.md)
+- [Test strategy CI specification](100_test_strategy_ci.md)
+- [Bridge router table schema](../contracts/bridge_router_table.schema.json)
+- [Bridge compiled plan schema](../contracts/bridge_compiled_plan.schema.json)
+- [Bridge mapping pack schema](../contracts/bridge_mapping_pack.schema.json)
+- [Bridge coverage schema](../contracts/bridge_coverage.schema.json)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

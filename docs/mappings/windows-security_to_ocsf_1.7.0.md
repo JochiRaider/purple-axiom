@@ -1,15 +1,15 @@
-<!-- docs/mappings/windows-security_to_ocsf_1.7.0.md -->
+---
+title: Windows Security to OCSF 1.7.0 mapping profile v0.1
+description: Defines the Windows Security Event Log mapping profile for Purple Axiom's OCSF 1.7.0 normalizer.
+status: draft
+---
 
-# Windows Security → OCSF 1.7.0 Mapping Profile (v0.1)
+# Windows Security to OCSF 1.7.0 mapping profile v0.1
 
-## Status
-
-Draft (v0.1 target)
+This document defines the Windows Security Event Log mapping profile for Purple Axiom's OCSF 1.7.0
+normalizer. It describes the routing and field mapping expectations for v0.1.
 
 ## Purpose
-
-This document defines the Windows Event Log **Security channel** mapping profile for Purple Axiom’s
-OCSF v1.7.0 normalizer.
 
 It is designed to be:
 
@@ -35,9 +35,9 @@ In scope:
 Out of scope (v0.1):
 
 - Full Windows Security catalog coverage
-- Domain Controller-specific “Account Logon” events unless explicitly enabled and routed
+- Domain Controller-specific "Account Logon" events unless explicitly enabled and routed
 
-## Mapping stance: OCSF-native fields plus Purple pivots
+## Mapping stance for OCSF-native fields plus Purple pivots
 
 This profile uses a dual-fielding strategy:
 
@@ -51,7 +51,7 @@ Requirements:
 - If a value is not authoritative, the field MUST be absent (not null, not empty string).
 - If multiple possible inputs exist, the profile MUST define a stable precedence order.
 
-### “Purple pivots”
+### Purple pivots
 
 Purple pivots are optional convenience fields used for cross-event joins. If used, they SHOULD be
 placed under a stable extension namespace (recommended: `extensions.purple.*`) unless the project
@@ -79,7 +79,7 @@ The normalizer is expected to receive Windows Event Log records with:
 
 The mapping MUST NOT depend on localized renderings of the event message text.
 
-### Canonicalization rules (determinism)
+### Canonicalization rules for determinism
 
 All canonicalization is applied prior to mapping:
 
@@ -92,7 +92,7 @@ All canonicalization is applied prior to mapping:
   - MUST be preserved exactly as emitted (e.g., `S-1-5-21-...`).
 - IP addresses:
   - MUST be emitted in normalized textual form.
-  - Placeholder values such as `-` MUST be treated as “absent”.
+  - Placeholder values such as `-` MUST be treated as "absent".
 
 ## Classification and identifiers
 
@@ -105,7 +105,7 @@ Routing is based on `(provider, channel, event_id)`.
 
 If an event_id is not routable in v0.1:
 
-- The normalizer MUST emit a stage outcome indicating “unmapped_event_id” (warn-and-skip), OR emit
+- The normalizer MUST emit a stage outcome indicating "unmapped_event_id" (warn-and-skip), OR emit
   an OCSF `base_event` with an explicit `unmapped` payload, depending on pipeline policy.
 
 ### OCSF classification fields
@@ -131,14 +131,15 @@ or ingestion time). This profile assumes a project-wide event identity decision 
 the Windows Security mapping MUST provide the required basis fields (record_id, channel, provider,
 computer, event_id, time_created).
 
-### `metadata.uid` requirement
+### Metadata uid requirement
 
-Per `055_ocsf_field_tiers.md` Tier 0 and ADR-0002:
+Per the [OCSF field tiers reference](../spec/055_ocsf_field_tiers.md) Tier 0 and
+[ADR-0002 Event identity and provenance](../adr/ADR-0002-event-identity-and-provenance.md):
 
 - `metadata.uid` MUST be present on every emitted event.
 - `metadata.uid` MUST equal `metadata.event_id`.
 
-## Field mapping: shared (all Windows Security events)
+## Field mapping for all Windows Security events
 
 This section defines the baseline field population rules that apply to all routed events.
 
@@ -152,12 +153,12 @@ This section defines the baseline field population rules that apply to all route
     only in case normalization (`device.name` preserves original case; `device.hostname` is
     lowercased).
 - `device.ip` MUST be populated only when an authoritative device IP exists in the raw event.
-- If multiple authoritative IPs exist, `device.ip` SHOULD be the stable “primary” IP and the full
+- If multiple authoritative IPs exist, `device.ip` SHOULD be the stable "primary" IP and the full
   set MAY be emitted to `extensions.purple.device.ips[]` (sorted, de-duplicated).
 
-### Actor user (Subject vs Target)
+### Actor user for subject vs target
 
-Windows Security frequently provides both “Subject” and “Target/New Logon” fields.
+Windows Security frequently provides both "Subject" and "Target/New Logon" fields.
 
 This profile defines:
 
@@ -180,11 +181,11 @@ At minimum:
 If the project uses additional provenance fields (receiver_id, pipeline_id), this mapping SHOULD
 populate them, but they MUST NOT participate in event identity hashing.
 
-## Routed event families (v0.1)
+## Routed event families for v0.1
 
 This section lists v0.1-required Windows Security event IDs and their OCSF mapping.
 
-### 1) Authentication (logon/logoff)
+### Authentication for logon and logoff
 
 Class:
 
@@ -205,7 +206,7 @@ Classification (normative):
 |             4634 | Logoff                               |  2 (Logoff) | 1 (Success) |
 |             4647 | User initiated logoff (if collected) |  2 (Logoff) | 1 (Success) |
 
-#### Field mapping rules (4624/4625)
+#### Field mapping rules for 4624/4625
 
 Authoritative inputs commonly include:
 
@@ -240,7 +241,7 @@ No inference:
 - The normalizer MUST NOT derive IP from `WorkstationName`.
 - The normalizer MUST NOT synthesize a domain when `TargetDomainName` is absent.
 
-### 2) Process Activity (process creation/termination)
+### Process activity for process creation and termination
 
 Class:
 
@@ -259,7 +260,7 @@ Classification (normative):
 |             4688 | Process creation    |    1 (Launch) | 1 (Success) |
 |             4689 | Process termination | 2 (Terminate) | 1 (Success) |
 
-#### Field mapping rules (4688)
+#### Field mapping rules for 4688
 
 Authoritative inputs commonly include:
 
@@ -289,7 +290,7 @@ No inference:
 
 - The normalizer MUST NOT infer `process.hash` or `process.integrity` from unrelated fields.
 
-### 3) Account Change (user lifecycle)
+### Account change for user lifecycle
 
 Class:
 
@@ -313,7 +314,7 @@ Rules:
 - `target.user.*` SHOULD describe the account being modified (the user lifecycle object).
 - `actor.user.*` SHOULD describe the initiator (commonly the Subject fields), when present.
 
-### 4) Group Management (membership changes)
+### Group management for membership changes
 
 Class:
 
@@ -335,7 +336,7 @@ Rules:
 - `target.user.*` SHOULD be the member affected when authoritative identifiers exist.
 - `actor.user.*` SHOULD be the initiator when present.
 
-### 5) Event Log Activity (audit log tampering)
+### Event log activity for audit log tampering
 
 Class:
 
@@ -360,23 +361,23 @@ Rules (1102):
 
 This profile is designed to work with an applicability-aware coverage model:
 
-- Fields are only “required” when authoritative values exist.
+- Fields are only "required" when authoritative values exist.
 - Fields that cannot exist for an event family MUST remain absent.
 
 The canonical field applicability expectations for v0.1 are maintained in:
 
-- `docs/mappings/coverage_matrix.md`
+- [Coverage matrix](coverage_matrix.md)
 
-This profile SHOULD publish a machine-readable “applicability manifest” (follow-on work) that
+This profile SHOULD publish a machine-readable "applicability manifest" (follow-on work) that
 states, per `(event_id, class_uid)`, which Tier 1 and Tier 2 fields are expected to be present when
 authoritative.
 
-## Known limitations (v0.1)
+## Known limitations for v0.1
 
 - Authentication events:
   - Some Windows event IDs provide incomplete network context (IpAddress placeholders, missing
     port).
-  - Domain controller “Account Logon” events are not covered unless explicitly enabled.
+  - Domain controller "Account Logon" events are not covered unless explicitly enabled.
 - File and registry activity:
   - Security channel events can represent access checks and do not always cleanly map to a single
     file/registry action without inference. v0.1 SHOULD prefer `activity_id = 0` (Unknown) over
@@ -385,7 +386,7 @@ authoritative.
   - Any redaction policy MUST be applied before emitting normalized fields, and before writing
     report artifacts.
 
-## Verification hooks (CI)
+## Verification hooks for CI
 
 Minimum conformance tests for this profile:
 
@@ -401,7 +402,7 @@ Minimum conformance tests for this profile:
 
 1. Coverage tests:
 
-   - Coverage computation MUST treat non-authoritative fields as “not applicable” and MUST NOT count
+   - Coverage computation MUST treat non-authoritative fields as "not applicable" and MUST NOT count
      them as missing.
    - Baselines MUST be derived from a representative Windows Security fixture corpus.
 

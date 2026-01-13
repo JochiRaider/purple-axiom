@@ -122,3 +122,16 @@ If transcripts cannot be safely redacted, they MUST be withheld. Implementations
 
 - If telemetry collection is misconfigured (example: missing raw/unrendered mode for Windows), the pipeline MUST treat this as a run validation failure.
 - If a component attempts unexpected network egress, the pipeline MUST fail the run and MUST surface the violation in the run manifest.
+
+## References
+
+- [Telemetry pipeline specification](040_telemetry_pipeline.md)
+- [Data contracts specification](025_data_contracts.md)
+- [Configuration reference](120_config_reference.md)
+- [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

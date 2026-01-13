@@ -202,3 +202,18 @@ runs. It focuses on deterministic outputs, pinned-version conformance, and regre
 1. Evaluate detections (Sigma) and score gaps
 1. Produce report + machine-readable summary
 1. Compare to baseline and fail the pipeline when thresholds are violated
+
+## References
+
+- [OCSF mapping profile authoring guide](../mappings/ocsf_mapping_profile_authoring_guide.md)
+- [Sigma to OCSF bridge specification](065_sigma_to_ocsf_bridge.md)
+- [Operability specification](110_operability.md)
+- [Telemetry pipeline specification](040_telemetry_pipeline.md)
+- [DuckDB conformance report schema](../contracts/duckdb_conformance_report.schema.json)
+- [Supported versions reference](../../SUPPORTED_VERSIONS.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

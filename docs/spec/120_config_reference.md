@@ -625,3 +625,23 @@ Minimum validation (MVP):
 Recommended next step:
 
 - Introduce a JSON Schema for `range.yaml` and enforce it in CI.
+
+## References
+
+- [Lab providers specification](015_lab_providers.md)
+- [Atomic Red Team executor integration specification](032_atomic_red_team_executor_integration.md)
+- [Telemetry pipeline specification](040_telemetry_pipeline.md)
+- [OSquery integration specification](042_osquery_integration.md)
+- [Normalization specification](050_normalization_ocsf.md)
+- [Data contracts specification](025_data_contracts.md)
+- [Sigma to OCSF bridge specification](065_sigma_to_ocsf_bridge.md)
+- [Scoring and metrics specification](070_scoring_metrics.md)
+- [Operability specification](110_operability.md)
+- [Security and safety specification](090_security_safety.md)
+- [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

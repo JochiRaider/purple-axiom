@@ -103,3 +103,17 @@ dimensions for joining historical runs:
 Non-goal:
 
 - `run_id` is unique per execution and MUST NOT be used as a trending key.
+
+## References
+
+- [Manifest schema](../contracts/manifest.schema.json)
+- [Summary schema](../contracts/summary.schema.json)
+- [Bridge coverage schema](../contracts/bridge_coverage.schema.json)
+- [Mapping coverage schema](../contracts/mapping_coverage.schema.json)
+- [Criteria pack manifest schema](../contracts/criteria_pack_manifest.schema.json)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

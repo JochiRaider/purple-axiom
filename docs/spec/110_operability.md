@@ -258,3 +258,15 @@ Minimum accounting fields (normative):
 - `behavior` (`partial|hard_fail`)
 - `stage` (stable stage identifier)
 - `truncated_at_utc` (ISO-8601, required for disk truncation)
+
+## References
+
+- [Telemetry pipeline specification](040_telemetry_pipeline.md)
+- [Configuration reference](120_config_reference.md)
+- [Telemetry validation schema](../contracts/telemetry_validation.schema.json)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

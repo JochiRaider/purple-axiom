@@ -1,6 +1,16 @@
+---
+title: Configuration reference
+description: Defines the configuration surface, defaults, and validation expectations for runs.
+status: draft # TODO: confirm status
+---
+
 <!-- docs/spec/120_config_reference.md -->
 
-# Configuration Reference
+# Configuration reference
+
+This document defines the configuration surface for Purple Axiom and the rules for precedence,
+determinism, and validation. It focuses on operator-facing configuration inputs and their
+expectations across pipeline stages.
 
 This document defines the configuration surface for Purple Axiom. Configuration is intended to be:
 
@@ -29,7 +39,7 @@ Secrets rule:
 
 ## Top-level keys
 
-### `lab`
+### Lab (lab)
 
 Defines the lab inventory and any range-scoped context required for orchestration and scoring.
 
@@ -55,8 +65,9 @@ Common keys:
 
 Inventory artifact formats (normative subset):
 
-- `json`: Ansible inventory JSON static subset (RECOMMENDED). See `015_lab_providers.md` "Inventory
-  artifact formats and adapter rules".
+- `json`: Ansible inventory JSON static subset (RECOMMENDED). See the
+  [lab providers specification](015_lab_providers.md) "Inventory artifact formats and adapter
+  rules".
 - `ansible_yaml`: static Ansible YAML inventory subset (no dynamic inventory plugins).
 - `ansible_ini`: static Ansible INI inventory subset (no dynamic inventory scripts).
 
@@ -73,7 +84,7 @@ Notes:
 - When `provider != manual`, Purple Axiom resolves provider inventory into `lab.assets` at run start
   and records the snapshot and hash in the manifest.
 
-### `runner`
+### Runner (runner)
 
 Controls scenario execution. The runner is responsible for producing ground truth events in
 `ground_truth.jsonl`.
@@ -95,7 +106,7 @@ Common keys:
     `invoke_atomic_red_team | atomic_operator | other`
     - `invoke_atomic_red_team`: execute Atomics via the PowerShell Invoke-AtomicRedTeam module
       (reference executor for v0.1; MUST conform to
-      `docs/spec/032_atomic_red_team_executor_integration.md`)
+      [atomic red team executor integration specification](032_atomic_red_team_executor_integration.md))
     - `atomic_operator`: execute Atomics via a cross-platform runner (Python), suitable for
       Linux/macOS targets
   - `timeout_seconds` (optional, default: 300): per-test execution timeout
@@ -121,7 +132,7 @@ Determinism guidance:
 - The runner should record its version and inputs in the manifest.
 - Allowlists and denylists should be explicit and versioned.
 
-### `telemetry`
+### Telemetry (telemetry)
 
 Controls collection and staging of raw telemetry in `raw/`.
 
@@ -186,15 +197,16 @@ Common keys:
     - `output_path` (required): destination directory under the run bundle `raw/` where osquery raw
       logs are staged (example: `raw/osquery/`)
 
-See `042_osquery_integration.md` for format requirements, OTel receiver examples, normalization
-routing, and fixtures.
+See the [osquery integration specification](042_osquery_integration.md) for format requirements,
+OTel receiver examples, normalization routing, and fixtures.
 
 Notes:
 
 - For Windows Event Log sources, the referenced OTel Collector config MUST set `raw: true` for every
   enabled `windowseventlog/*` receiver.
 - For v0.1, the config SHOULD also set `suppress_rendering_info: true` and a persistent `storage`
-  extension for bookmarks (see `040_telemetry_pipeline.md` §2).
+  extension for bookmarks (see the [telemetry pipeline specification](040_telemetry_pipeline.md)
+  §2).
 - OTel Collector configuration shape is owned by upstream OTel. Purple Axiom only references the
   path and hashes it.
 - `telemetry.otel.checkpoint_corruption` does not generate collector configuration. It is a policy
@@ -213,7 +225,7 @@ extraction):
     - `enabled` (optional, default: true)
     - `dir` (optional, default: `raw/evidence/blobs/wineventlog/`)
 
-### `normalization`
+### Normalization (normalization)
 
 Controls raw-to-OCSF transformation and the normalized store written under `normalized/`.
 
@@ -231,7 +243,7 @@ Common keys:
 Notes (v0.1):
 
 - Purple Axiom v0.1 pins `ocsf_version = "1.7.0"`. OCSF schema update/migration policy is defined in
-  `050_normalization_ocsf.md`.
+  the [normalization specification](050_normalization_ocsf.md).
 - `strict_mode` (default: true)
   - When true, normalization failures produce a run-level failure unless explicitly allowlisted.
 - `raw_preservation` (optional)
@@ -244,7 +256,7 @@ Notes (v0.1):
     - `row_group_size` (optional)
     - `partitioning` (optional): list (example: `["class_uid"]`)
 
-### `validation`
+### Validation (validation)
 
 Controls criteria-pack evaluation (expected telemetry) and cleanup verification reporting.
 
@@ -283,9 +295,10 @@ Notes:
 
 - Criteria evaluation SHOULD operate on the normalized OCSF store (not raw events).
 - When `fail_mode: fail_closed`, criteria evaluation errors MUST produce a criteria stage outcome of
-  `failed`, and `manifest.status` MUST be derived per `025_data_contracts.md` (“Status derivation”).
+  `failed`, and `manifest.status` MUST be derived per the
+  [data contracts specification](025_data_contracts.md) ("Status derivation").
 
-### `detection`
+### Detection (detection)
 
 Controls evaluation over normalized OCSF events and outputs to `detections/`.
 
@@ -308,8 +321,9 @@ Common keys:
         with a stable `reason_code`. The detection stage outcome SHOULD be `success` unless the
         stage cannot produce outputs at all.
     - `raw_fallback_enabled` (default: true)
-    - Controls whether rules may reference `raw.*` per `065_sigma_to_ocsf_bridge.md` (“Fallback
-      policy (`raw.*`)”).
+    - Controls whether rules may reference `raw.*` per the
+      [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md) ("Fallback policy
+      (raw.\*)").
     - When `false`, any rule requiring `raw.*` MUST be marked non-executable with
       `reason_code: "raw_fallback_disabled"`.
     - When `true`, any fallback use MUST be accounted for via `extensions.bridge.fallback_used=true`
@@ -324,12 +338,13 @@ Common keys:
 
 Notes:
 
-- The Sigma-to-OCSF Bridge is specified in `065_sigma_to_ocsf_bridge.md`. This config selects the
-  mapping pack and backend behavior.
+- The Sigma-to-OCSF bridge is specified in the
+  [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md). This config selects the mapping
+  pack and backend behavior.
 - `fail_closed` is the recommended default so rules that cannot be routed or mapped are reported as
   non-executable rather than silently producing “no matches”.
 
-### `scoring`
+### Scoring (scoring)
 
 Controls the scoring model and classification taxonomy written under `scoring/`.
 
@@ -368,7 +383,7 @@ Common keys:
     - `latency_weight`: factor for time-to-detection.
     - `fidelity_weight`: factor for match quality (exact vs partial vs weak).
 
-### `reporting`
+### Reporting (reporting)
 
 Controls report generation and output locations.
 
@@ -386,7 +401,7 @@ Common keys:
       redaction enablement switch.
     - Pipeline redaction enablement is controlled by `security.redaction.enabled`.
 
-### `operability` (optional)
+### Operability (optional, operability)
 
 Controls operational safety and runtime behavior (see also `110_operability.md`).
 
@@ -402,12 +417,12 @@ Common keys:
   - `max_memory_mb` (optional): maximum resident memory usage.
 - `health`
   - `emit_health_files` (default: true)
-    - When `true`, the pipeline MUST write `runs/<run_id>/logs/health.json` (minimum schema in
-      `110_operability.md`, “Health files (normative, v0.1)”).
-    - When `false`, the pipeline MUST still compute `manifest.status` per `025_data_contracts.md`
-      (“Status derivation”).
+    - When `true`, the pipeline MUST write `runs/<run_id>/logs/health.json` (minimum schema in the
+      [operability specification](110_operability.md), "Health files (normative, v0.1)").
+    - When `false`, the pipeline MUST still compute `manifest.status` per the
+      [data contracts specification](025_data_contracts.md) ("Status derivation").
 
-### `security` (optional)
+### Security (optional, security)
 
 Controls security boundaries and hardening (see also `090_security_safety.md`).
 
@@ -420,7 +435,7 @@ Common keys:
     - When `false`, the run is explicitly unredacted and the pipeline MUST withhold sensitive
       evidence from standard long-term locations unless quarantined.
   - `policy_ref` (optional): reference to a redaction policy file (format defined in
-    `docs/adr/ADR-0003-redaction-policy.md`)
+    [ADR-0003: Redaction policy](../adr/ADR-0003-redaction-policy.md))
   - `limits` (optional)
     - `max_token_chars` (optional)
     - `max_summary_chars` (optional)
@@ -448,7 +463,7 @@ Common keys:
       - Disabled by default for MVP.
       - Strongly RECOMMENDED for compliance/audit/export workflows.
     - When `enabled: true`, the pipeline MUST emit bundle integrity artifacts as specified in
-      `025_data_contracts.md` ("Run bundle signing").
+      [data contracts specification](025_data_contracts.md) ("Run bundle signing").
     - If signing is enabled but cannot be completed (missing key material, invalid key format,
       signing I/O error), the pipeline MUST fail closed.
   - `key_ref` (required when enabled): reference to signing private key material (never inline)
@@ -461,7 +476,7 @@ Common keys:
   - `trusted_key_ids` (optional): list of allowed `key_id` values for verification/export gating
     - `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
 
-## Example `range.yaml`
+## Example range.yaml
 
 ```yaml
 lab:
@@ -471,7 +486,7 @@ lab:
     format: ansible_yaml
     refresh: on_run_start
     snapshot_to_run_bundle: true
-  assets:  # optional overlays (stable asset_id + tags); provider supplies hostname/ip  
+  assets:  # optional overlays (stable asset_id + tags); provider supplies hostname/ip
     - asset_id: win11-test-01
       os: windows
       role: endpoint
@@ -589,7 +604,7 @@ security:
     enabled: false
 ```
 
-## OTel Collector config reference
+## OTel collector config reference
 
 Purple Axiom does not redefine the OpenTelemetry Collector configuration schema. The collector
 config is referenced by path (`telemetry.otel.config_path`) and is hashed into the run manifest for

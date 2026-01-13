@@ -1,12 +1,18 @@
-# Markdown Quick Reference
+---
+title: Markdown quick reference
+description: Condensed reference for the repository markdown style guide.
+status: v0.1
+---
+
+# Markdown quick reference
 
 Condensed reference for the [full style guide](MARKDOWN_STYLE_GUIDE.md).
 
-## Frontmatter (Required)
+## Frontmatter required
 
 ```yaml
 ---
-title: "Document Title"
+title: "Document title"
 description: "One-sentence summary"
 status: draft | stable | deprecated
 ---
@@ -15,8 +21,8 @@ status: draft | stable | deprecated
 ## Headings
 
 ```markdown
-# Document Title              ← One per document, matches frontmatter title
-## Major Section              ← Primary divisions
+# Document title              ← One per document, matches frontmatter title
+## Major section              ← Primary divisions
 ### Subsection                ← Secondary divisions (prefer stopping here)
 #### Detail                   ← Use sparingly
 ```
@@ -103,7 +109,7 @@ Never: `[here](link)` or `[click here](link)`
 > **Important**: Critical information.
 ```
 
-## Normative Keywords
+## Normative keywords
 
 | Keyword    | Meaning              |
 | ---------- | -------------------- |
@@ -113,17 +119,17 @@ Never: `[here](link)` or `[click here](link)`
 | SHOULD NOT | Discouraged          |
 | MAY        | Optional             |
 
-## Section Summary Pattern
+## Section summary pattern
 
 ```markdown
-## Complex Section
+## Complex section
 
 **Summary**: One-sentence overview of what this section covers.
 
 Detailed content follows...
 ```
 
-## Pre-Commit Checklist
+## Pre-commit checklist
 
 - [ ] Frontmatter: `title`, `description`, `status`
 - [ ] Single H1 = frontmatter title

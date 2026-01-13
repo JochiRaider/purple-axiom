@@ -546,7 +546,7 @@ provides acceptable coverage while maintaining transparency about identity confi
 
 | Date       | Change                                              |
 | ---------- | --------------------------------------------------- |
-| 2026-01-XX | Added Linux identity basis (auditd/journald/syslog) |
+| 2026-01-12 | Added Linux identity basis (auditd/journald/syslog) |
 | 2026-01-XX | Added osquery identity basis (Tier 3)               |
 | 2026-01-XX | Added alternatives considered section               |
 | 2026-01-XX | Initial draft                                       |

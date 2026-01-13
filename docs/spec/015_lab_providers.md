@@ -261,3 +261,13 @@ Recommended approach:
 - Provider credentials are secrets and MUST be referenced, not embedded.
 - Inventory snapshots MUST NOT contain secrets (no passwords, tokens, private keys).
 - Provider operations that mutate infrastructure MUST be explicitly enabled and logged.
+
+## References
+
+- [Configuration reference](120_config_reference.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

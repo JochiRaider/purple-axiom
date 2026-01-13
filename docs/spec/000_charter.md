@@ -49,3 +49,13 @@ Normative:
 - One-click run: scenario → telemetry → normalize → score → report.
 - A re-run MUST produce identical outputs given the same inputs, or MUST clearly document sources of
   nondeterminism.
+
+## References
+
+- TBD / Needs Confirmation.
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

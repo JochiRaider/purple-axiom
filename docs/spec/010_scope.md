@@ -40,3 +40,13 @@ The following are explicit non-goals for initial releases, including v0.1:
 - All components are run with least privilege.
 - Lab assets may be provisioned out-of-band (Ludus, Terraform, manual), but Purple Axiom records the
   resolved inventory used for each run.
+
+## References
+
+- TBD / Needs Confirmation.
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

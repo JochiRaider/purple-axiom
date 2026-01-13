@@ -489,3 +489,13 @@ Default `fail_mode`: `fail_closed` (when enabled)
   and safe failure behavior.
 - Policy-dependent overrides are explicitly constrained and deterministic (configuration-driven
   only).
+
+## References
+
+- [Data contracts specification](../spec/025_data_contracts.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

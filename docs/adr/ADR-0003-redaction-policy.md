@@ -350,3 +350,13 @@ Minimum required cases (baseline):
 - Runner transcripts can be stored as evidence-tier artifacts without leaking secrets by default.
 - EVTX retention remains possible but requires explicit operator intent. Binary artifacts are not
   redacted in-place and MUST be governed separately in storage policy.
+
+## References
+
+- [Security and safety specification](../spec/090_security_safety.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

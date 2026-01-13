@@ -246,3 +246,14 @@ boundaries remain stable:
   - UI actions do not bypass contract validation.
 - Remote execution runners or distributed collection backends, provided the run bundle still
   captures a complete, deterministic snapshot of inputs and outputs required for reproducibility.
+
+## References
+
+- [Stage outcomes and failure classification ADR](ADR-0005-stage-outcomes-and-failure-classification.md)
+- [Data contracts specification](../spec/025_data_contracts.md)
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

@@ -26,3 +26,13 @@ to ensure reproducible scoring.
 
 - Improves regression tracking and reproducibility across runs.
 - Requires discipline around manifest completeness and version pin hygiene.
+
+## References
+
+- TBD / Needs Confirmation.
+
+## Changelog
+
+| Date       | Change            |
+| ---------- | ----------------- |
+| 2026-01-12 | Formatting update |

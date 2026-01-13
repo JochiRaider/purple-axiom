@@ -449,8 +449,13 @@ Common keys:
   - `unredacted_dir` (optional, default: `unredacted/`): relative directory under the run bundle
     root for quarantined evidence
 - `secrets`
-  - `provider` (optional): `env | file | keychain | custom`
+  - `provider` (optional): `env | file | keychain | custom` (default: `env`)
   - `refs` (optional): map of named secret refs
+    - Each value MUST be a secret reference string (see below).
+  - `custom` (optional, required when `provider: custom`)
+    - `executable` (required): absolute path to the custom secret provider CLI
+    - `timeout_seconds` (optional, default: 5): per lookup execution timeout
+    - `max_stdout_bytes` (optional, default: 65536): maximum stdout bytes accepted
 - `network`
   - `allow_outbound` (default: false)
   - `allowlist` (optional): list of CIDRs/domains when outbound is enabled
@@ -473,6 +478,72 @@ Common keys:
       emit Ed25519 signatures.
   - `trusted_key_ids` (optional): list of allowed `key_id` values for verification/export gating
     - `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
+
+#### Secret reference strings
+
+A **secret reference string** identifies secret material without embedding the secret value in
+configuration files.
+
+Secret reference strings MUST use the form `<provider>:<selector>`.
+
+Supported providers (v0.1):
+
+- `env:<VAR_NAME>`
+  - Reads the secret value from an environment variable.
+- `file:<PATH>`
+  - Reads the secret value from a local file.
+- `keychain:<SELECTOR>`
+  - Reads the secret value from an OS keychain entry.
+  - The `SELECTOR` syntax is implementation-defined.
+- `custom:<REF_KEY>`
+  - Resolves the secret value by calling the custom secret provider CLI.
+
+Validation rules (normative):
+
+- Config keys that end with `_ref` MUST be secret reference strings.
+- When `security.secrets.provider` is set, the implementation MUST reject secret references using a
+  different provider.
+- Implementations MUST treat all resolved secret values as sensitive and MUST NOT write them into
+  run bundles, logs, or reports.
+
+#### Custom secret provider CLI contract
+
+When `security.secrets.provider: custom` is enabled, Purple Axiom resolves secret references of the
+form `custom:<REF_KEY>` using an operator-supplied executable.
+
+Configuration:
+
+- The executable path MUST be provided as `security.secrets.custom.executable`.
+- The executable path MUST be absolute.
+
+Invocation (normative):
+
+- The implementation MUST execute the provider directly (no shell).
+- For each lookup, the implementation MUST invoke:
+  - argv[0] = `security.secrets.custom.executable`
+  - argv[1] = `get`
+  - argv[2] = `<REF_KEY>`
+- The implementation MUST enforce `timeout_seconds`.
+- The implementation MUST enforce `max_stdout_bytes`.
+
+Stdout format (normative):
+
+- On success (exit code 0), stdout MUST contain the resolved secret value encoded as UTF-8.
+- If stdout ends with exactly one line terminator (`\n` or `\r\n`), the implementation MUST strip
+  that terminator.
+- The implementation MUST treat all remaining stdout bytes as the secret value.
+
+Failure behavior (normative):
+
+- Any non-zero exit code MUST be treated as lookup failure.
+- On lookup failure, the pipeline MUST fail closed when the secret is required to proceed.
+
+Operability guidance (non-normative):
+
+- Implementations SHOULD avoid logging provider stderr by default; if recorded for debugging, it
+  SHOULD be subject to redaction.
+- Implementations MAY cache resolved secrets in memory for the duration of a run, but MUST NOT
+  persist them.
 
 ## Example range.yaml
 

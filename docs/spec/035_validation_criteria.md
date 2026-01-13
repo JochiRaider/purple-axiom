@@ -471,6 +471,7 @@ Each expected signal defines a predicate over normalized OCSF events.
       - `field` (string; dotted path, for example `device.hostname` or `metadata.source_type`)
       - `op` (string: `equals`, `one_of`, `exists`, `contains`)
       - `value` (optional; required for `equals`, `one_of`, `contains`)
+      - `case_sensitive` (optional bool, default true; applies to string comparisons only)
 - `min_count` (optional int, default 1)
 - `max_count` (optional int)
 - `within_seconds` (optional int; defaults to the entry time window)
@@ -481,6 +482,57 @@ Notes:
   over time, but the MVP must be implementable without a full query language.
 - Matching is performed against event-time (`time`) with respect to the ground truth action
   `timestamp_utc`.
+
+#### Constraint matching semantics (normative)
+
+Constraint matching is performed per event by evaluating all constraints in a predicate using
+logical AND.
+
+Field resolution:
+
+- `field` MUST be resolved as a dotted path against the normalized event object.
+- If the path cannot be resolved, the constraint MUST evaluate to false (including
+  `op = exists`).
+
+Operator semantics (minimum, normative):
+
+- `exists`: true iff the resolved value is present and is not JSON null.
+- `equals`: true iff the resolved value equals the expected `value`.
+- `one_of`: true iff the resolved value equals at least one element of the expected `value`
+  array.
+- `contains`: true iff the resolved value (string) contains the expected `value` (string) as
+  a substring.
+
+Type rules (minimum, normative):
+
+- `equals` and `one_of` MUST support comparison over JSON scalar types (string, number,
+  boolean).
+- If the resolved value is an array or object, the operator MUST evaluate to false (no deep
+  matching in v0.1).
+- For `one_of`, the expected `value` MUST be an array of scalars; otherwise the operator MUST
+  evaluate to false.
+- For `contains`, both the resolved value and expected `value` MUST be strings; otherwise the
+  operator MUST evaluate to false.
+
+Case sensitivity:
+
+- `case_sensitive` applies only when both operands are strings (for `equals`, each `one_of`
+  element, and `contains`).
+- If `case_sensitive` is omitted, it defaults to true.
+- If `case_sensitive` is false, comparisons MUST apply Unicode default case folding
+  (locale-independent) to both operands before evaluating equality or substring containment.
+  Implementations MUST NOT apply Unicode normalization.
+
+Pack authoring guidance (non-normative):
+
+- For `selectors.os = windows`, packs SHOULD set `case_sensitive: false` when comparing Windows
+  filesystem paths or registry key paths to reflect platform case-insensitivity.
+
+Required conformance fixtures (constraint matching):
+
+- `case_sensitive: false`: observed `c:\windows\system32\cmd.exe` MUST match expected
+  `C:\Windows\System32\cmd.exe` under `op = equals`.
+- `case_sensitive: true`: the same observed/expected pair MUST NOT match under `op = equals`.
 
 ### Cleanup verification model
 

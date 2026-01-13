@@ -75,6 +75,146 @@ Schemas live in:
 Each schema includes a `contract_version` constant. The contract version is bumped only when the
 contract meaningfully changes (new required fields, semantics changes, or validation tightening).
 
+## Validation engine and publish gates
+
+This section is normative for how Purple Axiom enforces artifact contracts at runtime. It defines
+JSON Schema dialect requirements, reference resolution rules, deterministic error reporting, and the
+minimum validation scope at stage publish boundaries.
+
+This section uses the term "contract validation" to refer to schema validation of artifacts. It is
+distinct from the pipeline stage named `validation`, which refers to criteria evaluation and cleanup
+verification.
+
+### Definitions
+
+- Contract validation: Validation of an artifact instance against its associated JSON Schema
+  contract and any contract-scoped invariants defined by this spec.
+- Publish gate: The final validation step a stage performs after writing outputs in staging and
+  before atomically publishing them into the run bundle.
+- Runtime canary: A stage-executed check that validates runtime behavior or data quality properties
+  that are not expressible as JSON Schema (for example, raw Windows Event Log mode), and whose
+  outcome is recorded in health artifacts.
+
+### JSON Schema dialect (normative)
+
+- All JSON Schema contracts under `docs/contracts/` MUST be authored for JSON Schema Draft 2020-12.
+- Implementations MUST use a validator that supports Draft 2020-12 semantics.
+- If a contract schema declares a `$schema` value that is not Draft 2020-12, the implementation
+  MUST treat this as a configuration error and MUST fail closed for any stage that requires the
+  affected contract.
+
+### Reference resolution (local-only, normative)
+
+To preserve determinism and prevent network-dependent behavior:
+
+- Implementations MUST resolve `$ref` using local, repository-supplied schema resources only.
+- Implementations MUST NOT fetch remote references over the network (for example, `http://` or
+  `https://`) during validation.
+- Implementations MUST fail closed if any `$ref` resolves outside the local contract registry root
+  (`docs/contracts/`) or an explicitly embedded equivalent.
+- Relative `$ref` values MUST be resolved relative to the referencing schema document location.
+
+### Deterministic error ordering and error caps (normative)
+
+Contract validation outputs MUST be deterministic to support regression testing and stable failure
+classification.
+
+For any artifact that fails contract validation, implementations MUST produce a bounded list of
+validation errors with deterministic ordering:
+
+Minimum error fields (per error):
+
+- `artifact_path`: run-relative path using POSIX separators (`/`)
+- `contract`: contract identifier (for example, the schema filename)
+- `instance_path`: JSON Pointer to the failing instance location
+- `schema_path`: JSON Pointer to the failing schema location
+- `message`: human-readable error message
+- `line_number`: REQUIRED for JSONL validation errors (1-indexed), omitted otherwise
+
+Ordering (normative):
+
+- Errors MUST be sorted by the tuple below using UTF-8 byte order (no locale):
+  1. `artifact_path`
+  1. `line_number` (treat missing as `0`)
+  1. `instance_path`
+  1. `schema_path`
+  1. `message`
+
+Error caps (normative):
+
+- Implementations MUST apply a maximum error cap per artifact (`max_errors_per_artifact`).
+- If not configured, `max_errors_per_artifact` MUST default to `50`.
+- When the cap is reached, implementations MUST:
+  - set `errors_truncated=true` in the validation summary, and
+  - stop collecting additional errors for that artifact (deterministically).
+
+### Validation scope and timing
+
+#### Publish-gate contract validation (required)
+
+For any stage that publishes contract-backed artifacts:
+
+- The stage MUST write outputs to `runs/<run_id>/.staging/<stage_id>/...` and MUST perform contract
+  validation as a publish gate before atomic publish.
+- A stage MUST NOT publish contract-invalid artifacts into their final locations under
+  `runs/<run_id>/`.
+
+Validation by artifact type:
+
+- JSON artifacts (single JSON object):
+  - The stage MUST validate the full document against its contract schema before publish.
+- JSONL artifacts:
+  - The stage MUST validate each line (each JSON object) against its contract schema.
+  - The stage MAY validate incrementally while writing the JSONL file, but the publish gate MUST
+    ensure the complete file has been validated.
+- Parquet datasets:
+  - The stage MUST validate the dataset schema (required columns, types, and nullability rules as
+    specified) before publish.
+  - Row-by-row validation is not required at publish time unless a contract explicitly requires it.
+
+Minimum publish-gate coverage (v0.1):
+
+- When produced, the following artifacts MUST be contract-validated at publish time by the stage
+  that publishes them:
+  - `manifest.json`
+  - `ground_truth.jsonl`
+  - `runner/**` artifacts that have contracts (for example, executor evidence, cleanup verification)
+  - `criteria/**` artifacts that have contracts (criteria pack snapshot, criteria results)
+  - `normalized/**` artifacts that have contracts (OCSF event envelope for JSONL outputs, mapping
+    coverage, mapping profile snapshot)
+  - `bridge/**` artifacts that have contracts (router tables, mapping pack snapshots, compiled plans,
+    bridge coverage)
+  - `detections/detections.jsonl`
+  - `scoring/summary.json`
+  - `logs/telemetry_validation.json` when telemetry validation is enabled
+  - any optional placeholder artifacts that are emitted in v0.1 (for example, PCAP or NetFlow
+    manifests) when present
+
+Failure behavior (normative):
+
+- If publish-gate contract validation fails for a required artifact, the stage MUST record a failed
+  stage outcome with a stable `reason_code`, and MUST follow the configured `fail_mode` semantics
+  (`fail_closed` halts the run; `warn_and_skip` permits continuation with deterministic degradation
+  evidence).
+
+#### Runtime canaries (required only where specified)
+
+Runtime canaries validate runtime behavior and data quality properties that are not expressible in
+JSON Schema. They do not replace publish-gate contract validation.
+
+- A stage MUST execute any runtime canaries that are required by the applicable stage specs when the
+  corresponding feature is enabled.
+- Canary outcomes MUST be recorded as stage outcomes (including dotted substages where specified).
+
+v0.1 baseline canaries (non-exhaustive; see operability and telemetry specs for full details):
+
+- Telemetry Windows Event Log raw mode canary (`telemetry.windows_eventlog.raw_mode`)
+- Telemetry checkpointing storage integrity (`telemetry.checkpointing.storage_integrity`)
+- Resource budget enforcement and footprint reporting where required
+
+Authoritative definitions for these canaries, reason codes, and required evidence pointers are in the
+[operability spec](110_operability.md) and the [telemetry pipeline spec](040_telemetry_pipeline.md).
+
 ## Run bundle layout
 
 A run bundle is stored at `runs/<run_id>/` and follows this layout:

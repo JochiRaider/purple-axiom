@@ -1,10 +1,8 @@
 ---
 title: Configuration reference
 description: Defines the configuration surface, defaults, and validation expectations for runs.
-status: draft # TODO: confirm status
+status: draft
 ---
-
-<!-- docs/spec/120_config_reference.md -->
 
 # Configuration reference
 

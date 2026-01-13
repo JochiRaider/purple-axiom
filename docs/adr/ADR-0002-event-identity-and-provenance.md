@@ -267,8 +267,95 @@ Rules:
 - The cursor MUST be stable under reprocessing of the same stored artifact.
 - The cursor MUST be represented as a string (example encodings: `li:<decimal>` for line index;
   `bo:<decimal>` for byte offset).
+- Implementations MUST NOT use ephemeral collector file offsets unless those offsets are persisted with
+  the stored artifact and are stable for that artifact under reprocessing.
+
+#### Network flows (NetFlow/IPFIX and derived session logs) (provisional)
+
+Network telemetry ingestion (pcap, NetFlow) is a v0.1 placeholder contract, but operators MAY plug in
+custom sources. When a custom source produces normalized Network Activity events, the pipeline still
+requires a deterministic `metadata.event_id` / `metadata.uid` identity basis.
+
+This section defines a provisional identity basis for flow and session style records to enable
+attemptable integrations while preserving the event identity invariants.
+
+##### Tier selection (normative)
+
+1. If the source provides a stable per-flow identifier scoped to the emitting sensor (example:
+   Zeek `uid`), the normalizer MUST use Tier 1.
+1. Otherwise, if flow records are read from a stored artifact included in the run bundle (file,
+   table, or object store) and a stable per-record cursor can be persisted as evidence, the
+   normalizer MUST use Tier 2 with `stream.name` and `stream.cursor`.
+1. Otherwise, the normalizer MAY use Tier 3 fingerprinting. Tier 3 for flows MUST be treated as
+   lower confidence due to possible collisions.
+
+##### Tier 1 identity basis (stable flow identifier) (normative)
+
+When a stable per-flow identifier is available, the identity basis MUST be:
+
+- `source_type`: implementation-defined, but MUST be stable (recommended: `zeek_conn`, `suricata_eve`)
+- `origin.host`: emitting sensor identity (from the source record, not the collector)
+- `origin.flow_id`: source-native flow identifier (opaque string)
+
+Rules:
+
+- `origin.flow_id` MUST be treated as an opaque string (no numeric parsing or reformatting).
+- If `origin.flow_id` cannot be extracted deterministically, the normalizer MUST fall back per the
+  tier selection rules and MUST record the chosen `metadata.identity_tier`.
+
+##### Tier 2 identity basis (stored artifact cursor) (normative)
+
+When flow records are collected from a stored artifact, the identity basis MUST be:
+
+- `source_type`: stable discriminator (recommended: `netflow`)
+- `origin.host`: emitting exporter / observation point identity
+- `stream.name`: stable identifier of the stored artifact (example: `netflow.jsonl`)
+- `stream.cursor`: stable per-record cursor within that stored artifact (example: `li:<decimal>`)
+
+Rules:
+
+- Cursor stability and representation rules are identical to Syslog Tier 2.
 - Implementations MUST NOT use an ephemeral collector read offset unless it is persisted with the
   stored artifact and remains stable for that artifact under reprocessing.
+
+##### Tier 3 identity basis (5-tuple + start time) (normative)
+
+When neither Tier 1 nor Tier 2 inputs exist, the identity basis MUST include at minimum:
+
+- `source_type`: stable discriminator (recommended: `netflow`)
+- `origin.host`: emitting exporter / observation point identity
+- `flow.start_time_ms`: flow start time in ms since epoch, UTC
+- `flow.src_ip`: source IP address (string)
+- `flow.src_port`: source port (integer)
+- `flow.dst_ip`: destination IP address (string)
+- `flow.dst_port`: destination port (integer)
+- `flow.transport`: transport identifier (prefer IANA protocol number; else lowercase name)
+
+Optional fields that MAY be included when available (recommended to reduce collisions):
+
+- `flow.end_time_ms`
+- `flow.packets`
+- `flow.bytes`
+- `flow.tcp_flags`
+- `flow.direction`
+- `origin.observation_domain_id`
+
+Rules:
+
+- `flow.start_time_ms` MUST reflect event origin time and MUST NOT incorporate ingest time or
+  `metadata.observed_time`.
+- Implementations SHOULD canonicalize IP address strings prior to hashing (for example, IPv6 to a
+  compressed lowercase form) but MUST apply any such transform deterministically and consistently
+  across runs.
+- Collisions are possible. Implementations MUST treat Tier 3 flow identities as non-unique and MUST
+  preserve enough evidence to debug collisions (at minimum: identity basis fields plus any optional
+  fields present in the source record).
+
+##### Verification hooks (normative)
+
+If any of the recommended network `source_type` values are implemented, the implementation MUST add
+fixture vectors in the same style as the existing identity basis fixtures, including at least one
+intentional-collision fixture to validate deterministic collision handling.
 
 #### Linux identity basis fixtures (normative)
 

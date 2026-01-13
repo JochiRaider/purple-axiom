@@ -63,7 +63,8 @@ Minimum collector metrics to track:
 
 The pipeline MUST enforce upper bounds:
 
-- **Disk**: per-run maximum raw retention size, per-run maximum normalized store size.
+- **disk**: per-run max raw retention size `max_raw_bytes_per_run`, per-run max normalized store size
+  `max_normalized_bytes_per_run`.
 - **Memory**: collector memory limit (via memory limiter) and normalizer process RSS guardrails.
 - **CPU**: continuous runs should not starve endpoints; target sustained CPU under a configurable
   threshold.
@@ -103,7 +104,14 @@ Normative requirements:
     [telemetry pipeline specification](040_telemetry_pipeline.md) §2 "Performance and footprint
     controls (agent)".
 
-Budgets are configuration-driven and surfaced in reports when exceeded.
+Budgets are configuration-driven and enforced deterministically during telemetry validation.
+
+- For telemetry validation, missing required budget configuration or missing required measurements MUST
+  fail closed with stable reason codes (see "Telemetry validation (gating)" and
+  "Resource budget quality gate (validation)").
+- For other stages, budgets MAY be surfaced in reports without failing the run, but any such
+  non-telemetry budget reporting MUST NOT change the run status unless explicitly specified by this
+  document.
 
 ## Resiliency and backpressure
 
@@ -179,6 +187,27 @@ Additional normative checks:
   - If the canary is observed in a Parquet dataset, the validator SHOULD also include a minimal
     `row_locator` (for example, `event_record_id` and `provider`) sufficient to re-query the dataset
     deterministically.
+- disk capacity preflight (hard fail / fail closed) before the validation window begins:
+  - The validator MUST compute `free_bytes_at_runs_root` for the filesystem containing the resolved
+    runs root directory (the directory that contains `runs/<run_id>/`; typically
+    `reporting.output_dir`).
+  - `free_bytes_at_runs_root` MUST use the OS "bytes available to the current user" API
+    (for example, POSIX `statvfs.f_bavail * f_frsize` or Windows `GetDiskFreeSpaceEx`'s
+    `FreeBytesAvailable`).
+  - The validator MUST compute:
+    - `disk_headroom_bytes` (default `2147483648` (2 GiB) unless configured)
+    - `required_free_bytes = max_raw_bytes_per_run + max_normalized_bytes_per_run + disk_headroom_bytes`
+  - If `free_bytes_at_runs_root < required_free_bytes`, the run MUST fail closed:
+    - `health.json` stage: `telemetry.disk.preflight`
+    - `status=failed`, `fail_mode=fail_closed`, `reason_code=disk_free_space_insufficient`
+    - run status: `failed`
+  - If any required value cannot be computed, the run MUST fail closed with stable reason codes:
+    - `reason_code=disk_metrics_missing` when free bytes cannot be computed (missing path, permissions,
+      unsupported platform API, etc.)
+    - `reason_code=resource_budgets_unconfigured` when `max_raw_bytes_per_run` and/or
+      `max_normalized_bytes_per_run` are unset/unknown
+  - The validator MUST record `free_bytes_at_runs_root`, `required_free_bytes`, and the three inputs
+    used to compute it in `telemetry_validation.json` for deterministic debugging.    
 - stable parsing of required identity fields (channel, provider, record id)
 - successful parsing when rendered message strings are missing (manifest/publisher metadata failures
   must not be fatal)
@@ -207,6 +236,14 @@ Configured targets (per validated asset):
 - `rss_target_p95_bytes` (integer): RSS target at p95 in bytes, derived from
   `otelcol_process_memory_rss`.
 
+Configured targets (per run):
+
+- `max_raw_bytes_per_run` (integer): maximum allowed raw retention bytes for the run.
+- `max_normalized_bytes_per_run` (integer): maximum allowed normalized store bytes for the run.
+
+If either disk budget is unset/unknown, the validator MUST fail closed with
+`reason_code=resource_budgets_unconfigured`.
+
 Target resolution (v0.1):
 
 - If an explicit per-asset footprint budget is configured, the validator MUST use it.
@@ -224,6 +261,15 @@ If the required measurements cannot be computed (missing collector self-telemetr
 series, or the sustained EPS target was not met), the validator MUST fail closed with
 `reason_code=resource_metrics_missing` or `reason_code=eps_target_not_met`.
 
+Required measurements (per run):
+
+- `raw_bytes_written_total` and `normalized_bytes_written_total`, computed deterministically as
+  specified in "Deterministic disk measurement rules (normative)".
+- These totals MUST be computed at the time the validator emits `health.json` for the run.
+
+If the disk totals cannot be computed (missing paths, permissions, IO error during enumeration, etc.),
+the validator MUST fail closed with `reason_code=disk_metrics_missing`.
+
 #### Tolerance and evaluation (normative)
 
 To reduce false negatives from measurement noise, budget enforcement uses a deterministic tolerance.
@@ -232,6 +278,9 @@ Defaults (v0.1):
 
 - CPU tolerance: `max(1.0 percentage point, 10% of cpu_target_p95_pct)`
 - RSS tolerance: `max(64 MiB, 10% of rss_target_p95_bytes)`
+- Disk tolerance (per budget): `max(64 MiB, ceil(0.01 * budget_bytes))`
+  - `64 MiB` MUST be interpreted as `67108864` bytes.
+  - `ceil()` MUST be applied after multiplication and MUST produce an integer number of bytes.
 
 A budget is considered exceeded when:
 
@@ -253,12 +302,28 @@ Reason codes (stable tokens):
 
 - `resource_budget_cpu_exceeded`
 - `resource_budget_rss_exceeded`
-- `resource_budget_multiple_exceeded` (when both CPU and RSS exceed)
+- `resource_budget_disk_exceeded` (exactly one of raw/normalized disk budgets exceeded)
+- `resource_budget_disk_multiple_exceeded` (both raw and normalized disk budgets exceeded)
+- `resource_budget_multiple_exceeded` (two or more budgets exceeded, except "disk-only" case above)
 - `resource_budgets_unconfigured` (fail-closed)
 - `resource_metrics_missing` (fail-closed)
+- `disk_metrics_missing` (fail-closed)
 - `eps_target_not_met` (fail-closed)
 
-When both CPU and RSS exceed, `reason_code` MUST be `resource_budget_multiple_exceeded`.
+Reason code selection (normative):
+
+Let `exceeded` be the set of exceeded budget dimensions across:
+`cpu`, `rss`, `raw_disk`, `normalized_disk`.
+
+- If `exceeded` is empty, `status=success`.
+- If `exceeded` contains only `cpu`, use `resource_budget_cpu_exceeded`.
+- If `exceeded` contains only `rss`, use `resource_budget_rss_exceeded`.
+- If `exceeded` contains exactly one of `raw_disk` or `normalized_disk`, use
+  `resource_budget_disk_exceeded`.
+- If `exceeded` is exactly `{raw_disk, normalized_disk}`, use
+  `resource_budget_disk_multiple_exceeded`.
+- Otherwise (any other combination of 2+ exceeded dimensions), use
+  `resource_budget_multiple_exceeded`.
 
 The validator SHOULD record the observed p95 values, targets, tolerances, and the window definition
 in `runs/<run_id>/logs/telemetry_validation.json` to make regressions reviewable.
@@ -317,12 +382,22 @@ When run limits are configured (see `operability.run_limits` in the
 | `max_disk_gb`     | Stop gracefully and finalize artifacts | `partial` (default) | `10` (default) | Record `reason_code=disk_limit_exceeded` with the truncation timestamp and disk watermark in `logs/health.json`, and include a `limits_exceeded[]` entry in `manifest.extensions.operability`. |
 | `max_memory_mb`   | Hard-fail (OOM is fatal)               | `failed`            | `20`           | Record `reason_code=memory_limit_exceeded` (or `oom_killed`) in `logs/health.json`.                                                                                                            |
 
+The pipeline MUST record run-limit enforcement outcomes under `health.json` stage
+`stage: "operability.run_limits"`.
+
 Disk limit configurability (normative):
 
 - If `operability.run_limits.disk_limit_behavior=hard_fail`, exceeding `max_disk_gb` MUST produce
   `failed` (exit code `20`) instead of `partial`.
 - Regardless of behavior, the report output MUST explicitly state which stages were truncated and
   the time window captured.
+
+Disk enforcement during telemetry validation is defined in:
+- "Telemetry validation (gating)" (disk capacity preflight; fail closed), and
+- "Resource budget quality gate (validation)" (disk budget quality gate; warn-and-skip / partial).
+
+`operability.run_limits.max_disk_gb` is a separate runtime safeguard (stop/truncate behavior) and
+MUST NOT be treated as equivalent to the per-run sizing budgets.
 
 Minimum accounting fields (normative):
 

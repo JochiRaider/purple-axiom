@@ -189,6 +189,80 @@ Additional normative checks:
   - binary fields honor `max_binary_bytes` and produce deterministic
     `binary_present/binary_oversize` signals
 
+### Resource budget quality gate (validation)
+
+The telemetry validator MUST evaluate collector footprint against configured budget targets during
+the same steady-state window used to compute sustained EPS.
+
+This section defines the fail semantics for the "footprint within configured budgets at target event
+rate" gate and provides deterministic run outcome mapping when budgets are exceeded.
+
+#### Inputs (normative)
+
+Configured targets (per validated asset):
+
+- `cpu_target_p95_pct` (number): CPU utilization target at p95, expressed as percent of **1 vCPU**
+  (single-core equivalent).
+  - CPU percent MUST be computed as: `cpu_pct = rate(otelcol_process_cpu_seconds[1m]) * 100`.
+- `rss_target_p95_bytes` (integer): RSS target at p95 in bytes, derived from
+  `otelcol_process_memory_rss`.
+
+Target resolution (v0.1):
+
+- If an explicit per-asset footprint budget is configured, the validator MUST use it.
+- Otherwise, the validator MUST use the planning defaults in
+  [EPS baselines](#eps-baselines-planning-targets-v01) for the asset's `role`.
+- If neither applies, the validator MUST fail closed with
+  `reason_code=resource_budgets_unconfigured`.
+
+Required measurements (per asset):
+
+- A 10-minute steady-state window where `sustained_eps_observed >= sustained_eps_target`.
+- `cpu_pct_p95` and `rss_bytes_p95` computed over that same window.
+
+If the required measurements cannot be computed (missing collector self-telemetry, missing EPS
+series, or the sustained EPS target was not met), the validator MUST fail closed with
+`reason_code=resource_metrics_missing` or `reason_code=eps_target_not_met`.
+
+#### Tolerance and evaluation (normative)
+
+To reduce false negatives from measurement noise, budget enforcement uses a deterministic tolerance.
+
+Defaults (v0.1):
+
+- CPU tolerance: `max(1.0 percentage point, 10% of cpu_target_p95_pct)`
+- RSS tolerance: `max(64 MiB, 10% of rss_target_p95_bytes)`
+
+A budget is considered exceeded when:
+
+- `cpu_pct_p95 > cpu_target_p95_pct + cpu_tolerance`
+- `rss_bytes_p95 > rss_target_p95_bytes + rss_tolerance`
+
+#### Health accounting and outcomes (normative)
+
+The validator MUST emit a `health.json.stages[]` entry with `stage: "telemetry.resource_budgets"`.
+
+Outcome mapping (quality gate semantics):
+
+- If no budgets are exceeded, the stage MUST be `status=success`.
+- If one or more budgets are exceeded, the stage MUST be `status=failed` with
+  `fail_mode=warn_and_skip`, and the overall run `manifest.status` MUST be `partial` unless it is
+  already `failed` for another reason.
+
+Reason codes (stable tokens):
+
+- `resource_budget_cpu_exceeded`
+- `resource_budget_rss_exceeded`
+- `resource_budget_multiple_exceeded` (when both CPU and RSS exceed)
+- `resource_budgets_unconfigured` (fail-closed)
+- `resource_metrics_missing` (fail-closed)
+- `eps_target_not_met` (fail-closed)
+
+When both CPU and RSS exceed, `reason_code` MUST be `resource_budget_multiple_exceeded`.
+
+The validator SHOULD record the observed p95 values, targets, tolerances, and the window definition
+in `runs/<run_id>/logs/telemetry_validation.json` to make regressions reviewable.
+
 The validator MUST write `runs/<run_id>/logs/telemetry_validation.json`, conforming to the
 [telemetry validation schema](../contracts/telemetry_validation.schema.json); the manifest SHOULD
 include a pointer to it.

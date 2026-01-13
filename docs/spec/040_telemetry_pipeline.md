@@ -354,7 +354,9 @@ self-telemetry:
   - `otelcol_exporter_enqueue_failed_log_records`
   - `otelcol_exporter_send_failed_log_records`
 - **CPU and memory (collector process)**:
-  - CPU: `rate(otelcol_process_cpu_seconds[1m])` (convert to percent using host core count)
+  - CPU: `rate(otelcol_process_cpu_seconds[1m])` (convert to percent of 1 vCPU by multiplying by
+    100; if reporting as percent of total host capacity, divide by logical core count and record
+    the denominator used)
   - RSS: `otelcol_process_memory_rss` (bytes)
 
 Normative requirements:

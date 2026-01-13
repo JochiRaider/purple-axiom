@@ -38,6 +38,15 @@ runs. It focuses on deterministic outputs, pinned-version conformance, and regre
 - Rule compilation tests: Sigma -> evaluation plan (authoritative supported subset and
   non-executable classification:
   [Sigma-to-OCSF bridge: backend adapter contract](065_sigma_to_ocsf_bridge.md#backend-adapter-contract-normative-v01)).
+- Add fixtures for `duckdb_sql` compilation patterns:
+  - Case-insensitive equality (`lower(field) = lower(value)`) and `neq` (`IS DISTINCT FROM`).
+  - LIKE/ILIKE escaping for `$`, `%`, and `_`.
+  - Regex acceptance and rejection:
+    - Accept RE2-compatible patterns.
+    - Reject PCRE-only constructs with `unsupported_regex` and a stable `PA_SIGMA_...` code in the
+      explanation.
+  - LIST-typed field semantics:
+    - `list_contains`, `list_has_any`, `list_has_all` selection based on schema type.
 - Bridge router multi-class routing tests:
   - Given a `logsource.category` routed to multiple `class_uid` values, compilation MUST scope
     evaluation to the union (`IN (...)` / OR semantics).

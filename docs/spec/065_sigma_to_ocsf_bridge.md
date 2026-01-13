@@ -368,67 +368,131 @@ Out of scope in v0.1 (MUST be marked non-executable when encountered):
 - Temporal aggregation semantics (for example: `count()`, `near`, `within`, “threshold” rules)
 - Field modifiers that require binary transforms (example: `base64`, `utf16`, `windash`) unless the
   mapping pack has already materialized an equivalent normalized value
-- Regex matching (Sigma `|re`) unless explicitly enabled and validated for the pinned backend and
-  rule corpus
+- PCRE-only regex constructs (lookaround, backreferences, etc.). Regex matching is supported only in
+  an RE2-compatible subset; non-conforming patterns MUST be treated as Non-executable.
 
 #### DuckDB SQL adapter requirements (duckdb_sql, normative)
 
-This subsection defines deterministic mapping rules from the supported Sigma subset to DuckDB SQL.
-If any required mapping cannot be performed, the rule MUST be marked non-executable with the most
-specific applicable `reason_code`.
+This section defines the backend adapter contract for compiling Sigma expressions into DuckDB SQL.
+This contract is aligned with research report R-03 (DuckDB backend plugin for pySigma).
 
-1. Field expression resolution
+#### MVP compilation gate
 
-- After pipelines and aliasing, each Sigma field reference MUST resolve to exactly one of:
-  - an OCSF dot-path, or
-  - a backend expression string suitable for the target dataset schema.
-- If resolution yields:
-  - no target: `unmapped_field`
-  - multiple targets: `ambiguous_field_alias`
+MVP compilation is allowed only when **all** required constructs are **Supported** by this section.
+Anything marked **Requires validation** MUST be treated as **Non-executable** until promoted to
+Supported by a recorded experiment.
 
-2. Null and missing semantics (deterministic)
+#### Supported capability surface (v0.1)
 
-- If a resolved field expression evaluates to NULL for an event row:
-  - `exists:true` MUST evaluate to false
-  - `exists:false` MUST evaluate to true
-  - all other comparisons MUST evaluate to false
+The `duckdb_sql` adapter MUST support the following constructs for v0.1:
 
-3. Equality and list membership
+- Boolean OR: list values (default) compile to parenthesized OR chains.
+- Boolean AND: `all` modifier compiles to parenthesized AND chains.
+- Equality: implicit equality comparisons.
+  - For string-typed comparisons, matching MUST be case-insensitive by default.
+- Inequality: `|neq` modifier (NULL-safe).
+- String modifiers: `|contains`, `|startswith`, `|endswith` (case-insensitive).
+- Existence: `|exists` (`IS NOT NULL` / `IS NULL` depending on positive vs negated context).
+- Numeric comparisons: `|lt`, `|lte`, `|gt`, `|gte`.
+- Regex match: `|re` with RE2-compatible patterns only; unsupported constructs are Non-executable.
+  DuckDB regex functions use RE2 and accept option flags. :contentReference[oaicite:0]{index=0}
+- Timestamp extraction: `|hour`, `|day`, `|month`, `|year` against the canonical `time` field.
+- LIST semantics: equality against LIST-typed fields MUST mean any element matches. The adapter MUST
+  use DuckDB list functions when the field is LIST-typed. :contentReference[oaicite:1]{index=1}
 
-- `field: v` MUST compile to a type-strict equality predicate.
-- `field: [v1, v2, ...]` MUST compile to membership semantics equivalent to `field IN (...)`.
-- For determinism and diffability, the adapter MUST emit list literals in a stable order:
-  - sort scalars by canonical JSON ordering (numbers as numbers, strings by UTF-8 byte order).
+#### Deferred (post-MVP)
 
-4. Relational operators (numeric only)
+The following constructs are explicitly deferred and MUST be treated as Non-executable in v0.1:
 
-- `lt/lte/gt/gte` MUST be supported only when the value is numeric and the resolved field is a
-  numeric-typed expression for the dataset. Otherwise: `unsupported_value_type`.
+- CIDR match (`|cidr`) pending extension packaging and type policy decisions.
+- Base64 transforms (`|base64`, `|base64offset`).
+- Field reference (`|fieldref`) pending typing policy.
+- Case-sensitive mode (`|cased`) beyond the DuckDB regex option surface.
 
-5. String matching (contains/startswith/endswith)
+#### SQL compilation requirements (normative)
 
-- The adapter MUST compile string matching using deterministic escaping semantics.
-- Wildcards MUST NOT be inferred from raw values. Only the Sigma modifier controls wildcarding.
-- The adapter MUST escape any characters that would be interpreted as pattern wildcards in the SQL
-  construct chosen by the implementation.
-- If the resolved field is not a string expression: `unsupported_value_type`.
+1. Identifiers and quoting:
 
-6. Regex (`|re`)
+   - Field references MUST be quoted with double quotes when required (reserved keywords,
+     punctuation), using a deterministic quoting function.
 
-- Regex matching is out of scope for v0.1 by default.
-- If regex is encountered, the adapter MUST mark the rule non-executable with `unsupported_regex`,
-  unless regex support has been explicitly implemented and validated by fixtures for the pinned
-  DuckDB version.
+1. Nested fields:
 
-7. Deterministic SQL emission To keep compiled plans diffable and stable, the adapter SHOULD
-   (recommended) follow these emission rules:
+   - Struct access MUST use DuckDB dot notation (for example, `actor.user.uid`).
 
-- Use a stable, fixed ordering for predicates:
-  - routed class filter first,
-  - router `filters[]` next in their stored order,
-  - then selector predicates in a deterministic traversal order.
-- Emit stable whitespace and keyword casing (choose one style and keep it invariant).
-- Ensure the compiled plan records the backend determinism settings used at execution time.
+1. Equality, inequality, and membership (scalar fields):
+
+   - Scalar equality MUST compile to `field = value` for non-string types.
+   - For string-typed equality, the adapter MUST compile case-insensitive semantics using:
+     - `lower(field) = lower(value)`
+   - Inequality (`|neq`) MUST compile NULL-safe using:
+     - `field IS DISTINCT FROM value`
+   - List values on scalar fields MUST compile to membership semantics:
+     - For non-string types: `field IN (v1, v2, ...)`
+     - For string-typed membership: `lower(field) IN (lower(v1), lower(v2), ...)`
+   - Ordering: list value expansions MUST preserve the input order from the Sigma rule and MUST NOT
+     be reordered as a “determinism” technique.
+
+1. LIST-typed field semantics:
+
+   - If the resolved field expression is LIST-typed, scalar comparisons MUST mean “any element
+     matches” and MUST compile using DuckDB list functions:
+     - Single value: `list_contains(field, value)`
+     - Multiple values (default OR semantics): `list_has_any(field, [values...])`
+     - `all` modifier: `list_has_all(field, [values...])` :contentReference[oaicite:2]{index=2}
+   - Pattern matching against LIST-typed fields MUST unnest and use `EXISTS` with a correlated
+     predicate (exact formatting is implementation-defined, semantics are normative).
+
+1. Boolean combinations:
+
+   - Default selector expansion MUST compile to parenthesized OR chains.
+   - `all` expansion MUST compile to parenthesized AND chains.
+   - Parentheses are REQUIRED for determinism and to avoid precedence ambiguity.
+
+1. String matching and wildcards:
+
+   - `contains`, `startswith`, and `endswith` MUST compile to `ILIKE` patterns with an explicit
+     `ESCAPE` character.
+   - The adapter MUST use `$` as the escape character and MUST escape `$`, `%`, and `_` in user
+     provided values before embedding them in patterns.
+   - Canonical patterns:
+     - contains: `field ILIKE '%' || value || '%' ESCAPE '$'`
+     - startswith: `field ILIKE value || '%' ESCAPE '$'`
+     - endswith: `field ILIKE '%' || value ESCAPE '$'`
+
+1. Regex (`|re`) support (RE2-only):
+
+   - Regex matching MUST compile to `regexp_matches(field, pattern[, options])`.
+     :contentReference[oaicite:3]{index=3}
+   - The adapter MUST validate patterns as RE2-compatible at compile time.
+   - PCRE-only constructs (lookahead, lookbehind, backreferences, atomic groups, etc.) MUST be
+     rejected as Non-executable with reason_code `unsupported_regex`.
+   - Options mapping:
+     - `|re|i` MUST compile with option `i` (case-insensitive).
+       :contentReference[oaicite:4]{index=4}
+     - `|re|m` MUST compile with a newline-sensitive option (`m` or its DuckDB equivalents).
+       :contentReference[oaicite:5]{index=5}
+     - `|re|s` MUST compile with option `s` (non-newline sensitive).
+       :contentReference[oaicite:6]{index=6}
+
+1. Timestamp extraction:
+
+   - The adapter MUST treat `time` as INT64 epoch milliseconds (UTC) and MUST compile date-part
+     operations using `epoch_ms(time)` and `date_part()`.
+
+1. Failure reporting:
+
+   - When a rule cannot be compiled, the bridge MUST record a Non-executable compiled plan entry
+     with:
+     - a stable `reason_code`, and
+     - a deterministic `explanation` string.
+   - For backend-originated compilation failures, the `explanation` MUST include the stable backend
+     error code prefix `PA_SIGMA_...` (as defined by R-03) to support deterministic aggregation.
+
+1. Determinism requirements:
+
+   - Generated SQL MUST be stable with fixed parenthesization, deterministic literal escaping,
+     deterministic identifier quoting, and preserved input ordering for list expansions.
 
 #### Non-executable classification mapping (normative)
 

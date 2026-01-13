@@ -312,6 +312,12 @@ Common keys:
       aliases)
     - `mapping_pack_version` (optional, recommended): pin for reproducibility
     - `backend` (default: `duckdb_sql`): `duckdb_sql | tenzir | other`
+    - `backend_options` (object, optional)
+      - Passed through to the selected backend adapter at initialization.
+      - For `duckdb_sql`, the following keys are supported:
+        - `table_name` (string, default: `events`): table or view name used in the `FROM` clause.
+        - `output_format` (string, default: `default`): formatting profile for SQL emission. This
+          option MUST NOT change SQL semantics, only presentation.
     - `fail_mode` (default: `fail_closed`): `fail_closed | warn_and_skip`
       - `fail_closed`: bridge/backend errors that prevent evaluating enabled rules (routing,
         compilation, backend execution) MUST cause the detection stage outcome to be `failed`.

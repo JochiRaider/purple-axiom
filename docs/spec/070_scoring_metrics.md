@@ -84,8 +84,9 @@ mode), since it changes operator expectations and the interpretability of scorin
   - normalization_gap: events exist but required OCSF fields are missing (normalizer coverage issue)
   - bridge_gap_mapping: OCSF fields exist but the Sigma-to-OCSF Bridge lacks aliases or router
     entries required by the rule (addressable via mapping pack work)
-  - bridge_gap_feature: Rule requires Sigma features outside the MVP-supported subset (regex,
-    correlation, aggregation, unsupported modifiers); not addressable without backend enhancement
+  - bridge_gap_feature: Rule requires Sigma features outside the MVP-supported subset (correlation,
+    aggregation, deferred modifiers like `cidr`, or PCRE-only regex constructs); not addressable
+    without backend enhancement
   - bridge_gap_other: Bridge compilation or evaluation failed for reasons not classified above
     (catch-all for unexpected failures)
   - rule_logic_gap: fields present and rule executable, but rule did not fire
@@ -124,18 +125,18 @@ gating and score computation.
 
 The scoring stage MUST map compiled plan `reason_code` values to gap categories as follows:
 
-| `reason_code` (from compiled plan) | Gap Category         | Notes                                          |
-| ---------------------------------- | -------------------- | ---------------------------------------------- |
-| `unmapped_field`                   | `bridge_gap_mapping` | Field alias missing in mapping pack            |
-| `unroutable_logsource`             | `bridge_gap_mapping` | No router entry for Sigma logsource            |
-| `raw_fallback_disabled`            | `bridge_gap_mapping` | Rule needs raw.\* but policy disallows         |
-| `ambiguous_field_alias`            | `bridge_gap_mapping` | Multiple conflicting aliases                   |
-| `unsupported_regex`                | `bridge_gap_feature` | Regex modifier not in MVP subset               |
-| `unsupported_modifier`             | `bridge_gap_feature` | Modifier (base64, windash, etc.) not supported |
-| `unsupported_operator`             | `bridge_gap_feature` | Operator semantics not implementable           |
-| `unsupported_value_type`           | `bridge_gap_feature` | Value type incompatible with operator          |
-| `backend_compile_error`            | `bridge_gap_other`   | Unexpected compilation failure                 |
-| `backend_eval_error`               | `bridge_gap_other`   | Runtime evaluation failure                     |
+| `reason_code` (from compiled plan) | Gap Category         | Notes                                                                                           |
+| ---------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
+| `unmapped_field`                   | `bridge_gap_mapping` | Field alias missing in mapping pack                                                             |
+| `unroutable_logsource`             | `bridge_gap_mapping` | No router entry for Sigma logsource                                                             |
+| `raw_fallback_disabled`            | `bridge_gap_mapping` | Rule needs raw.\* but policy disallows                                                          |
+| `ambiguous_field_alias`            | `bridge_gap_mapping` | Multiple conflicting aliases                                                                    |
+| `unsupported_regex`                | `bridge_gap_feature` | Regex pattern or options rejected by policy (RE2-only; PCRE-only constructs are Non-executable) |
+| `unsupported_modifier`             | `bridge_gap_feature` | Modifier (base64, windash, etc.) not supported                                                  |
+| `unsupported_operator`             | `bridge_gap_feature` | Operator semantics not implementable                                                            |
+| `unsupported_value_type`           | `bridge_gap_feature` | Value type incompatible with operator                                                           |
+| `backend_compile_error`            | `bridge_gap_other`   | Unexpected compilation failure                                                                  |
+| `backend_eval_error`               | `bridge_gap_other`   | Runtime evaluation failure                                                                      |
 
 Unknown reason codes MUST be classified as `bridge_gap_other` and SHOULD trigger a warning log.
 

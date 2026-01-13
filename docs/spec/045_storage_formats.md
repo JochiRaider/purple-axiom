@@ -1,7 +1,7 @@
 ---
 title: Storage formats
 description: Defines storage tiers, formats, and schema evolution expectations for run artifacts.
-status: draft 
+status: draft
 ---
 
 # Storage formats

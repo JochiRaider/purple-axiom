@@ -1,15 +1,15 @@
-<!-- docs/mappings/windows-sysmon_to_ocsf_1.7.0.md -->
+---
+title: "Windows Sysmon to OCSF 1.7.0 mapping profile v0.1"
+description: "Defines the Windows Sysmon mapping profile for Purple Axiom's OCSF 1.7.0 normalizer."
+status: draft
+---
 
-# Windows Sysmon → OCSF 1.7.0 Mapping Profile (v0.1)
+# Windows Sysmon to OCSF 1.7.0 mapping profile v0.1
 
-## Status
-
-Draft (v0.1 target)
+This document defines the Windows Sysmon mapping profile for Purple Axiom's OCSF 1.7.0
+normalizer. It describes the routing and field mapping expectations for v0.1.
 
 ## Purpose
-
-This document defines the Windows Sysmon (Operational channel) mapping profile for Purple Axiom’s
-OCSF v1.7.0 normalizer.
 
 It is designed to be:
 
@@ -38,7 +38,7 @@ Out of scope (v0.1):
 - Registry events (12/13/14) and other Sysmon families not listed above
 - Any behavior requiring inference (e.g., protocol-number derivation from protocol names)
 
-## Mapping stance: OCSF-native fields plus Purple pivots
+## Mapping stance for OCSF-native fields plus Purple pivots
 
 This profile uses a dual-fielding strategy:
 
@@ -52,7 +52,7 @@ Requirements:
 - If a value is not authoritative, the field MUST be absent (not null, not empty string).
 - If multiple possible inputs exist, the profile MUST define a stable precedence order.
 
-### “Purple pivots” namespace
+### Purple pivots namespace
 
 Purple pivots (when used) SHOULD be placed under:
 
@@ -78,7 +78,7 @@ The normalizer is expected to receive Windows Event Log records for Sysmon with:
 
 The mapping MUST NOT depend on localized renderings of the event message text.
 
-### Canonicalization rules (determinism)
+### Canonicalization rules for determinism
 
 Canonicalization is applied prior to mapping.
 
@@ -98,7 +98,7 @@ Users (`User` field in Sysmon EventData):
   - `actor.user.name = NAME`
 - Otherwise populate:
   - `actor.user.name = User`
-- Placeholder values such as `-` or empty MUST be treated as “absent”.
+- Placeholder values such as `-` or empty MUST be treated as "absent".
 
 PIDs:
 
@@ -140,7 +140,7 @@ Routing is based on `(provider, channel, event_id)`.
 
 If an event_id is not routable in v0.1:
 
-- The normalizer MUST emit a stage outcome indicating “unmapped_event_id” (warn-and-skip), OR emit
+- The normalizer MUST emit a stage outcome indicating "unmapped_event_id" (warn-and-skip), OR emit
   an OCSF `base_event` with an explicit `unmapped` payload, depending on pipeline policy.
 
 ### OCSF classification fields
@@ -166,14 +166,15 @@ or ingestion time). This profile assumes a project-wide event identity decision 
 mapping MUST provide required basis fields (record_id, channel, provider, computer, event_id,
 time_created).
 
-### `metadata.uid` requirement
+### Metadata uid requirement
 
-Per `055_ocsf_field_tiers.md` Tier 0 and ADR-0002:
+Per the [OCSF field tiers reference](../spec/055_ocsf_field_tiers.md) Tier 0 and
+[ADR-0002 Event identity and provenance](../adr/ADR-0002-event-identity-and-provenance.md):
 
 - `metadata.uid` MUST be present on every emitted event.
 - `metadata.uid` MUST equal `metadata.event_id`.
 
-## Field mapping: shared (all routed Sysmon events)
+## Field mapping for all routed Sysmon events
 
 ### Device
 
@@ -205,11 +206,11 @@ At minimum:
 - `metadata.log_name` SHOULD be `Microsoft-Windows-Sysmon/Operational`.
 - `metadata.source_event_id` MUST be the raw record id when present.
 
-## Routed event families (v0.1)
+## Routed event families for v0.1
 
 This section lists v0.1-required Sysmon event IDs and their OCSF mapping.
 
-### 1) Process Activity (process creation/termination)
+### Process activity for process creation and termination
 
 Class:
 
@@ -230,7 +231,7 @@ Classification (normative):
 Note: OCSF 1.7.0 Process Activity uses `activity_id = 2` for Terminate, aligning with Windows
 Security event 4689 mapping.
 
-#### Field mapping rules (Event ID 1: Process creation)
+#### Field mapping rules for Event ID 1 (process creation)
 
 Authoritative inputs commonly include:
 
@@ -258,7 +259,7 @@ Parent process (initiator context):
 Hashes:
 
 - If `Hashes` is present, the normalizer SHOULD populate `process.file.hashes[]` using the parsing
-  and ordering rules defined in “Canonicalization rules”.
+  and ordering rules defined in "Canonicalization rules".
 - If `Hashes` parsing fails, `process.file.hashes[]` MUST be absent and the raw value MAY be
   preserved under `extensions.purple.sysmon.hashes_raw`.
 
@@ -267,7 +268,7 @@ No inference:
 - The normalizer MUST NOT attempt to infer signer, integrity, or reputation metadata from the
   presence or absence of hash values.
 
-#### Field mapping rules (Event ID 5: Process terminated)
+#### Field mapping rules for Event ID 5 (process terminated)
 
 Authoritative inputs commonly include:
 
@@ -280,7 +281,7 @@ Rules:
 - `process.uid` SHOULD be populated from `ProcessGuid` when present.
 - `process.file.path` MUST be populated from `Image` when present.
 
-### 2) Network Activity (network connection)
+### Network activity for network connection
 
 Class:
 
@@ -297,7 +298,7 @@ Classification (normative):
 | --------------: | ------------------ | ----------: |
 |               3 | Network connection |    1 (Open) |
 
-#### Field mapping rules (Event ID 3)
+#### Field mapping rules for Event ID 3
 
 Authoritative inputs commonly include:
 
@@ -324,7 +325,7 @@ Protocol:
 - `Protocol` MUST NOT be converted to a protocol number (inference).
 - `Protocol` MAY be preserved under `extensions.purple.sysmon.protocol` for v0.1.
 
-### 3) File System Activity (file create)
+### File system activity for file create
 
 Class:
 
@@ -341,7 +342,7 @@ Classification (normative):
 | --------------: | ----------- | ----------: |
 |              11 | File create |  1 (Create) |
 
-#### Field mapping rules (Event ID 11)
+#### Field mapping rules for Event ID 11
 
 Authoritative inputs commonly include:
 
@@ -365,7 +366,7 @@ No inference:
 
 - The normalizer MUST NOT infer file hashes or file owner metadata from this event family.
 
-### 4) DNS Activity (DNS query)
+### DNS activity for DNS query
 
 Class:
 
@@ -382,7 +383,7 @@ Classification (normative):
 | --------------: | ----------- | ----------: |
 |              22 | DNS query   |   1 (Query) |
 
-#### Field mapping rules (Event ID 22)
+#### Field mapping rules for Event ID 22
 
 Authoritative inputs commonly include:
 
@@ -406,21 +407,21 @@ Rules:
 
 This profile is designed to work with an applicability-aware coverage model:
 
-- Fields are only “required” when authoritative values exist.
+- Fields are only "required" when authoritative values exist.
 - Fields that cannot exist for an event family MUST remain absent.
 
 The canonical field applicability expectations for v0.1 are maintained in:
 
-- `docs/mappings/coverage_matrix.md`
+- [Coverage matrix](coverage_matrix.md)
 
-## Known limitations (v0.1)
+## Known limitations for v0.1
 
 - Sysmon coverage depends on the deployed Sysmon configuration (event IDs may not be enabled).
 - DNS query visibility (Event ID 22) is environment- and config-dependent.
 - Command line fields may contain secrets; any redaction policy MUST be applied before emitting
   normalized fields and before writing report artifacts.
 
-## Verification hooks (CI)
+## Verification hooks for CI
 
 Minimum conformance tests for this profile:
 
@@ -436,7 +437,7 @@ Minimum conformance tests for this profile:
 
 1. Coverage tests:
 
-   - Coverage computation MUST treat non-authoritative fields as “not applicable” and MUST NOT count
+   - Coverage computation MUST treat non-authoritative fields as "not applicable" and MUST NOT count
      them as missing.
 
 Artifacts and fixtures (recommended layout):

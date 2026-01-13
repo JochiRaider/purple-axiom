@@ -1,6 +1,16 @@
+---
+title: Sigma-to-OCSF bridge
+description: Defines the routing, aliasing, and backend adapter contract for executing Sigma over OCSF.
+status: draft # TODO: confirm status
+---
+
 <!-- docs/spec/065_sigma_to_ocsf_bridge.md -->
 
-# Sigma-to-OCSF Bridge
+# Sigma-to-OCSF bridge
+
+This document defines the Sigma-to-OCSF bridge contract for compiling Sigma rules into executable
+plans over OCSF events. It covers routing, aliasing, backend adapter requirements, and deterministic
+artifacts for evaluation.
 
 ## Problem statement
 
@@ -55,7 +65,7 @@ An OCSF query scope:
 - optional: producer/source predicates via `filters[]` expressed as OCSF filter objects
   (`{path, op, value}`; see below)
 
-### Producer predicates (`filters[]`)
+### Producer predicates (filters array)
 
 Producer predicates are an optional, structured narrowing mechanism for routing and evaluation. They
 exist to disambiguate producer-specific subsets within a routed class scope (example: Windows Event
@@ -67,8 +77,9 @@ fallback under a clearly identified producer).
 When present, producer predicates MUST be expressed as an array of **OCSF filter objects** matching
 the shape used in:
 
-- `docs/contracts/bridge_router_table.schema.json` (`routes[].filters[]`)
-- `docs/contracts/bridge_compiled_plan.schema.json` (`compilation.routed_scope.filters[]`)
+- [Bridge router table schema](../contracts/bridge_router_table.schema.json) (`routes[].filters[]`)
+- [Bridge compiled plan schema](../contracts/bridge_compiled_plan.schema.json)
+  (`compilation.routed_scope.filters[]`)
 
 Each filter object MUST have:
 
@@ -178,7 +189,7 @@ Recommended structure (conceptual):
 - `normalizers[sigma_field] -> value transforms` (case folding, path normalization, enum
   harmonization)
 
-### Fallback policy (`raw.*`)
+### Fallback policy (raw field fallback)
 
 A controlled escape hatch is permitted for MVP:
 
@@ -186,8 +197,8 @@ A controlled escape hatch is permitted for MVP:
   - the event is still within the correct OCSF class scope, and
   - provenance clearly identifies the producer/source
 - If fallback is used, it MUST be recorded (see “Bridge provenance in detections”).
-- Fallback enablement MUST be controlled by `detection.sigma.bridge.raw_fallback_enabled` (see
-  `120_config_reference.md`).
+- Fallback enablement MUST be controlled by `detection.sigma.bridge.raw_fallback_enabled` (see the
+  [configuration reference](120_config_reference.md)).
 - If fallback is used, `extensions.bridge.fallback_used` MUST be `true` in emitted detection
   instances.
 - Any list of fallback-related fields (example: `extensions.bridge.unmapped_sigma_fields`) MUST be
@@ -242,12 +253,13 @@ Backend execution:
 
 Version pinning (normative):
 
-- The `duckdb_sql` backend MUST use the pinned DuckDB version defined in `SUPPORTED_VERSIONS.md`.
+- The `duckdb_sql` backend MUST use the pinned DuckDB version defined in the
+  [supported versions reference](../../SUPPORTED_VERSIONS.md).
 - The bridge MUST record the effective runtime versions used for:
   - DuckDB (library/runtime version),
   - pySigma (library version), in backend provenance within each compiled plan.
-- If the effective version differs from the pins, the evaluator stage MUST fail closed (see version
-  drift policy in `SUPPORTED_VERSIONS.md`).
+- If the effective version differs from the pins, the evaluator stage MUST fail closed (see the
+  version drift policy in the [supported versions reference](../../SUPPORTED_VERSIONS.md)).
 
 ### Streaming backend (optional v0.2)
 
@@ -272,8 +284,9 @@ At least one of the following MUST be true to justify adding or enabling Tenzir:
 ### Backend conformance gates (CI)
 
 Any backend implementation (including `duckdb_sql` and `tenzir` in v0.2) MUST satisfy the following
-Conformance fixtures for these gates are defined in `docs/spec/100_test_strategy_ci.md#unit-tests`
-(rule compilation, multi-class routing) and `docs/spec/100_test_strategy_ci.md#integration-tests`
+Conformance fixtures for these gates are defined in
+[test strategy CI: unit tests](100_test_strategy_ci.md#unit-tests) (rule compilation, multi-class
+routing) and [test strategy CI: integration tests](100_test_strategy_ci.md#integration-tests)
 (DuckDB determinism conformance harness).
 
 - **Golden equivalence (supported subset)**: for a pinned fixture corpus and a pinned Sigma subset,
@@ -360,7 +373,7 @@ Out of scope in v0.1 (MUST be marked non-executable when encountered):
 - Regex matching (Sigma `|re`) unless explicitly enabled and validated for the pinned backend and
   rule corpus
 
-#### DuckDB SQL adapter requirements (`duckdb_sql`, normative)
+#### DuckDB SQL adapter requirements (duckdb_sql, normative)
 
 This subsection defines deterministic mapping rules from the supported Sigma subset to DuckDB SQL.
 If any required mapping cannot be performed, the rule MUST be marked non-executable with the most
@@ -442,12 +455,12 @@ testable:
 - `router_table.json` (required)
 
   - Snapshot of `logsource` routing (Sigma category to OCSF scope).
-  - Schema: `bridge_router_table.schema.json`.
+  - Schema: [bridge router table schema](../contracts/bridge_router_table.schema.json).
 
 - `mapping_pack_snapshot.json` (required)
 
   - Snapshot of the full bridge inputs (router + alias map + fallback policy).
-  - Schema: `bridge_mapping_pack.schema.json`.
+  - Schema: [bridge mapping pack schema](../contracts/bridge_mapping_pack.schema.json).
   - `mapping_pack_sha256` MUST be computed over stable mapping inputs and MUST NOT include
     run-specific fields.
 
@@ -456,14 +469,14 @@ testable:
   - `compiled_plans/<rule_id>.plan.json` (required for each evaluated rule)
   - Deterministic compilation output for the chosen backend (SQL or IR), including non-executable
     reasons.
-  - Schema: `bridge_compiled_plan.schema.json` per file.
+  - Schema: [bridge compiled plan schema](../contracts/bridge_compiled_plan.schema.json) per file.
   - For `duckdb_sql`, the plan MUST include the effective DuckDB determinism settings recorded in
     backend provenance (see above).
 
 - `coverage.json` (required)
 
   - Summary metrics and top failure modes (unrouted categories, unmapped fields, fallback usage).
-  - Schema: `bridge_coverage.schema.json`.
+  - Schema: [bridge coverage schema](../contracts/bridge_coverage.schema.json).
 
 These artifacts are intentionally small and diffable, and they enable CI to distinguish:
 

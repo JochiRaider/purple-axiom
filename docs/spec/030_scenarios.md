@@ -4,8 +4,6 @@ description: "Defines scenario types, execution model, action identity, and grou
 status: draft
 ---
 
-<!-- docs/spec/030_scenarios.md -->
-
 # Scenario model
 
 This document defines the scenario model used by Purple Axiom, covering how scenarios describe targets, actions, and execution constraints. It also specifies the runner requirements for identity, determinism, and ground truth artifacts.

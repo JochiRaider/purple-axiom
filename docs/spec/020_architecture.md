@@ -4,8 +4,6 @@ description: "Defines the high-level system flow, components, and extension poin
 status: draft
 ---
 
-<!-- docs/spec/020_architecture.md -->
-
 # Architecture
 
 This document describes the high-level architecture of Purple Axiom, including the primary components, execution flow, and supported extension points.

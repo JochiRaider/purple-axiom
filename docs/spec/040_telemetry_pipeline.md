@@ -4,8 +4,6 @@ description: Defines telemetry capture topology, Windows Event Log collection in
 status: draft
 ---
 
-<!-- docs/spec/040_telemetry_pipeline.md -->
-
 # Telemetry pipeline
 
 Purple Axiom treats telemetry as an input dataset that must be reproducible and analyzable without

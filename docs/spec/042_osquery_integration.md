@@ -4,8 +4,6 @@ description: Defines v0.1 osquery ingestion, staging, normalization, and conform
 status: draft
 ---
 
-<!-- docs/spec/042_osquery_integration.md -->
-
 # osquery integration (telemetry and normalization)
 
 This document defines the v0.1 integration path for osquery as a telemetry source.

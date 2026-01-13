@@ -1,6 +1,12 @@
-<!-- docs/spec/000_charter.md -->
+---
+title: 'Project charter: Continuous purple-team range'
+description: Defines Purple Axiom’s mission, MVP outcomes, intended users, normative dependencies, and definition of done.
+status: draft
+category: spec
+tags: [charter, scope]
+---
 
-# Project Charter: Continuous Purple-Team Range
+# Project charter: Continuous purple-team range
 
 ## Summary
 
@@ -14,29 +20,32 @@ scorecards.
   measurable detection outcomes.
 - Enable regression testing for detections, telemetry pipelines, and schema mappings.
 
-## Primary outcomes (MVP)
+## Primary outcomes
+
+MVP outcomes:
 
 - Deterministic scenario execution logs (ground truth timeline).
 - Telemetry pipeline producing normalized OCSF events.
 - Rule evaluation producing technique-level detection results.
-- Human-readable report + machine-readable JSON artifact.
+- Human-readable report and a machine-readable JSON artifact.
 
 ## Users
 
 - Detection engineers
-- SOC analysts validating visibility/detections
-- Purple teams / continuous security testing operators
+- SOC analysts validating visibility and detections
+- Purple teams and continuous security testing operators
 
-## Key upstream dependencies (normative)
+## Key upstream dependencies
 
-- Caldera for automated emulation (or pluggable runner) (ref: Caldera docs).
+Normative:
+
 - Atomic Red Team test library (optional but recommended).
 - OpenTelemetry Collector pipeline for logs.
 - OCSF schema as the canonical normalized event model.
 - Sigma rules for detection portability.
 
-## Definitions of done
+## Definition of done
 
 - One-click run: scenario → telemetry → normalize → score → report.
-- Re-run produces identical outputs given same inputs (or clearly documented sources of
-  nondeterminism).
+- A re-run MUST produce identical outputs given the same inputs, or MUST clearly document sources of
+  nondeterminism.

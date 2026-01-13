@@ -4,8 +4,6 @@ description: Defines the integration contract between Purple Axiom and Invoke-At
 status: draft
 ---
 
-<!-- docs/spec/032_atomic_red_team_executor_integration.md -->
-
 # Atomic Red Team executor integration contract
 
 This document defines the normative integration contract between Purple Axiom and the

@@ -4,8 +4,6 @@ description: Defines criteria pack structure, drift detection, matching, and cle
 status: draft
 ---
 
-<!-- docs/spec/035_validation_criteria.md -->
-
 # Validation criteria packs
 
 Purple Axiom externalizes expected telemetry and cleanup verification expectations into criteria

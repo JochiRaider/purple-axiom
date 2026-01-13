@@ -158,6 +158,8 @@ runs. It focuses on deterministic outputs, pinned-version conformance, and regre
 ## CI gates (seed)
 
 - Schema validation of produced OCSF events
+- Schema validation of effective configuration (`range.yaml`) against
+  `docs/contracts/range_config.schema.json`
 - Pinned-version consistency checks (fail closed):
   - `manifest.normalization.ocsf_version` (when present), `mapping_profile_snapshot.ocsf_version`,
     and bridge mapping pack `ocsf_version` (when present) MUST match.

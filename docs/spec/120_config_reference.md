@@ -686,16 +686,33 @@ Recommended practice:
 
 ## Validation expectations
 
-Minimum validation (MVP):
+Minimum validation (v0.1, normative):
 
-- YAML parses successfully.
-- Required keys are present for enabled components (example: `telemetry.otel.config_path` when
-  `telemetry.otel.enabled: true`).
-- Config inputs are hashed and recorded in `manifest.json`.
+- YAML MUST parse successfully using a safe YAML 1.2 loader.
+- Duplicate YAML mapping keys MUST be rejected (fail closed) for all configuration inputs (including
+  `range.yaml` and `scenario.yaml`).
+- The effective configuration (after applying precedence and overrides) MUST validate against
+  `docs/contracts/range_config.schema.json` (JSON Schema draft 2020-12).
+- Unknown keys MUST be rejected by schema validation at every object boundary. The only exception is
+  `extensions`, which is reserved for forward-compatible, implementation-defined keys.
+- On schema validation failure, the pipeline MUST fail closed before executing any stage and MUST
+  report `reason_code=config_schema_invalid` (see
+  [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)).
 
-Recommended next step:
+Deterministic error reporting (v0.1):
 
-- Introduce a JSON Schema for `range.yaml` and enforce it in CI.
+- Implementations MUST emit a stable, machine-readable list of schema violations.
+- Violations MUST be sorted lexicographically by `(instance_location, schema_location, message)`
+  before output (to avoid library-dependent ordering).
+- Each violation entry MUST include:
+  - `instance_location`: JSON Pointer into the effective config (RFC 6901)
+  - `schema_location`: JSON Pointer into the schema
+  - `message`: human-readable summary
+
+CI requirements (v0.1):
+
+- CI MUST validate all committed example configs and the configuration example embedded in this
+  document against `docs/contracts/range_config.schema.json`.
 
 ## References
 

@@ -1,13 +1,13 @@
 ---
-title: "Windows Sysmon to OCSF 1.7.0 mapping profile v0.1"
-description: "Defines the Windows Sysmon mapping profile for Purple Axiom's OCSF 1.7.0 normalizer."
+title: Windows Sysmon to OCSF 1.7.0 mapping profile v0.1
+description: Defines the Windows Sysmon mapping profile for Purple Axiom's OCSF 1.7.0 normalizer.
 status: draft
 ---
 
 # Windows Sysmon to OCSF 1.7.0 mapping profile v0.1
 
-This document defines the Windows Sysmon mapping profile for Purple Axiom's OCSF 1.7.0
-normalizer. It describes the routing and field mapping expectations for v0.1.
+This document defines the Windows Sysmon mapping profile for Purple Axiom's OCSF 1.7.0 normalizer.
+It describes the routing and field mapping expectations for v0.1.
 
 ## Purpose
 

@@ -1,0 +1,662 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Purple Axiom range.yaml configuration (v0.1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lab": { "$ref": "#/$defs/lab" },
+    "runner": { "$ref": "#/$defs/runner" },
+    "telemetry": { "$ref": "#/$defs/telemetry" },
+    "normalization": { "$ref": "#/$defs/normalization" },
+    "validation": { "$ref": "#/$defs/validation" },
+    "detection": { "$ref": "#/$defs/detection" },
+    "scoring": { "$ref": "#/$defs/scoring" },
+    "reporting": { "$ref": "#/$defs/reporting" },
+    "operability": { "$ref": "#/$defs/operability" },
+    "security": { "$ref": "#/$defs/security" },
+    "extensions": { "$ref": "#/$defs/extensions" }
+  },
+  "required": ["lab", "runner", "telemetry", "normalization", "reporting", "security"],
+  "$defs": {
+    "extensions": {
+      "type": "object",
+      "description": "Forward-compatible extension point. Keys are implementation-defined.",
+      "additionalProperties": true
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "secret_ref": {
+      "type": "string",
+      "pattern": "^(env|file|keychain|custom):.+$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+    },
+    "attck_technique_id": {
+      "type": "string",
+      "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"
+    },
+    "string_array": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+
+    "lab": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["manual", "ludus", "terraform", "other"]
+        },
+        "inventory": { "$ref": "#/$defs/lab_inventory" },
+        "assets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/lab_asset" }
+        },
+        "networks": { "$ref": "#/$defs/lab_networks" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["provider"],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provider": { "const": "manual" } },
+            "required": ["provider"]
+          },
+          "then": { "required": ["assets"] }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": { "enum": ["ludus", "terraform", "other"] }
+            },
+            "required": ["provider"]
+          },
+          "then": { "required": ["inventory"] }
+        }
+      ]
+    },
+    "lab_inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "format": {
+          "type": "string",
+          "enum": ["ludus_json", "terraform_state", "manual_json", "other"]
+        },
+        "refresh": { "type": "string", "enum": ["always", "cache", "never"] },
+        "snapshot_to_run_bundle": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["path"]
+    },
+    "lab_asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": { "type": "string", "minLength": 1 },
+        "hostname": { "type": "string" },
+        "ip": { "type": "string" },
+        "os": { "type": "string", "enum": ["windows", "linux", "macos", "other"] },
+        "role": { "type": "string" },
+        "tags": { "$ref": "#/$defs/string_array" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["asset_id", "os"]
+    },
+    "lab_networks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cidrs": { "$ref": "#/$defs/string_array" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["caldera", "atomic", "custom"] },
+        "caldera": { "$ref": "#/$defs/runner_caldera" },
+        "atomic": { "$ref": "#/$defs/runner_atomic" },
+        "custom": { "$ref": "#/$defs/runner_custom" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["type"],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "caldera" } },
+            "required": ["type"]
+          },
+          "then": { "required": ["caldera"] }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "atomic" } },
+            "required": ["type"]
+          },
+          "then": { "required": ["atomic"] }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "custom" } },
+            "required": ["type"]
+          },
+          "then": { "required": ["custom"] }
+        }
+      ]
+    },
+    "runner_caldera": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": { "$ref": "#/$defs/path" },
+        "api_token_ref": { "$ref": "#/$defs/secret_ref" },
+        "verify_tls": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["endpoint", "api_token_ref"]
+    },
+    "runner_atomic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "executor": {
+          "type": "string",
+          "enum": ["invoke_atomic_red_team", "atomic_operator", "custom"]
+        },
+        "atomics_root": { "$ref": "#/$defs/path" },
+        "tools_root": { "$ref": "#/$defs/path" },
+        "execution_logger_enabled": { "type": "boolean" },
+        "execution_logger_path": { "$ref": "#/$defs/path" },
+        "target_selector": { "$ref": "#/$defs/runner_target_selector" },
+        "technique_allowlist": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/attck_technique_id" }
+        },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["executor"]
+    },
+    "runner_custom": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "working_dir": { "$ref": "#/$defs/path" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["command"]
+    },
+    "runner_target_selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["explicit", "by_tag", "by_role", "all"]
+        },
+        "asset_ids": { "$ref": "#/$defs/string_array" },
+        "tags": { "$ref": "#/$defs/string_array" },
+        "roles": { "$ref": "#/$defs/string_array" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["strategy"]
+    },
+
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "otel": { "$ref": "#/$defs/telemetry_otel" },
+        "sources": { "$ref": "#/$defs/telemetry_sources" },
+        "payload_limits": { "$ref": "#/$defs/telemetry_payload_limits" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["otel"]
+    },
+    "telemetry_otel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "config_path": { "$ref": "#/$defs/path" },
+        "channels": { "$ref": "#/$defs/string_array" },
+        "bookmarks": { "$ref": "#/$defs/telemetry_otel_bookmarks" },
+        "checkpoint_corruption": { "$ref": "#/$defs/telemetry_otel_checkpoint_corruption" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "not": {
+              "properties": { "enabled": { "const": false } },
+              "required": ["enabled"]
+            }
+          },
+          "then": { "required": ["config_path"] }
+        }
+      ]
+    },
+    "telemetry_otel_bookmarks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["persisted", "ephemeral"] },
+        "checkpoint_dir": { "$ref": "#/$defs/path" },
+        "flush_interval_seconds": { "type": "integer", "minimum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "telemetry_otel_checkpoint_corruption": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["fail_closed", "recreate_fresh"] },
+        "require_fsync": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "telemetry_sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "osquery": { "$ref": "#/$defs/telemetry_osquery" },
+        "pcap": { "$ref": "#/$defs/telemetry_pcap" },
+        "netflow": { "$ref": "#/$defs/telemetry_netflow" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "telemetry_osquery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "config_path": { "$ref": "#/$defs/path" },
+        "results_log_path": { "$ref": "#/$defs/path" },
+        "log_format": { "type": "string", "enum": ["event_ndjson", "batch_json"] },
+        "otel_ingest": { "$ref": "#/$defs/telemetry_osquery_otel_ingest" },
+        "output_path": { "$ref": "#/$defs/path" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "telemetry_osquery_otel_ingest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "receiver_id": { "type": "string", "minLength": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "telemetry_pcap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "interface": { "type": "string" },
+        "output_path": { "$ref": "#/$defs/path" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "telemetry_netflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "listen": { "type": "string" },
+        "output_path": { "$ref": "#/$defs/path" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "telemetry_payload_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_event_bytes": { "type": "integer", "minimum": 1 },
+        "max_sidecar_bytes": { "type": "integer", "minimum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ocsf_version": { "type": "string", "minLength": 1 },
+        "mapping_profiles": { "$ref": "#/$defs/string_array" },
+        "source_type_mapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "dedupe": { "$ref": "#/$defs/normalization_dedupe" },
+        "raw_preservation": { "$ref": "#/$defs/normalization_raw_preservation" },
+        "output": { "$ref": "#/$defs/normalization_output" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["ocsf_version"]
+    },
+    "normalization_dedupe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "basis": { "type": "string", "enum": ["event_id", "event_id_and_time", "none"] },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "normalization_raw_preservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["none", "headers_only", "full"] },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "normalization_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": { "type": "string", "enum": ["parquet"] },
+        "parquet": { "$ref": "#/$defs/normalization_output_parquet" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "normalization_output_parquet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "compression": { "type": "string", "enum": ["zstd", "snappy", "none"] },
+        "row_group_size": { "type": "integer", "minimum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "criteria_pack": { "$ref": "#/$defs/validation_criteria_pack" },
+        "evaluation": { "$ref": "#/$defs/validation_evaluation" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "not": {
+              "properties": { "enabled": { "const": false } },
+              "required": ["enabled"]
+            }
+          },
+          "then": { "required": ["criteria_pack"] }
+        }
+      ]
+    },
+    "validation_criteria_pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pack_id": { "type": "string", "minLength": 1 },
+        "pack_version": { "$ref": "#/$defs/semver" },
+        "search_paths": { "$ref": "#/$defs/string_array" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["pack_id"]
+    },
+    "validation_evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strict_mode": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["sigma", "none"] },
+        "sigma": { "$ref": "#/$defs/detection_sigma" },
+        "join": { "$ref": "#/$defs/detection_join" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "detection_sigma": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "rule_paths": { "$ref": "#/$defs/string_array" },
+        "rule_set_version": { "type": "string" },
+        "bridge": { "$ref": "#/$defs/detection_sigma_bridge" },
+        "limits": { "$ref": "#/$defs/detection_sigma_limits" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "not": {
+              "properties": { "enabled": { "const": false } },
+              "required": ["enabled"]
+            }
+          },
+          "then": { "required": ["rule_paths"] }
+        }
+      ]
+    },
+    "detection_sigma_bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mapping_pack": { "$ref": "#/$defs/path" },
+        "mapping_pack_version": { "$ref": "#/$defs/semver" },
+        "backend": { "type": "string", "enum": ["duckdb"] },
+        "fail_mode": { "type": "string", "enum": ["fail_closed", "warn_and_skip"] },
+        "raw_fallback_enabled": { "type": "boolean" },
+        "compile_cache_dir": { "$ref": "#/$defs/path" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["mapping_pack"]
+    },
+    "detection_sigma_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_rules": { "type": "integer", "minimum": 1 },
+        "max_selectors": { "type": "integer", "minimum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "detection_join": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_window_seconds": { "type": "integer", "minimum": 1 },
+        "max_matches_per_detection": { "type": "integer", "minimum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "scoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "gap_taxonomy": { "$ref": "#/$defs/string_array" },
+        "thresholds": { "$ref": "#/$defs/scoring_thresholds" },
+        "weights": { "$ref": "#/$defs/scoring_weights" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "scoring_thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_detection_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "min_telemetry_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "scoring_weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "detections": { "type": "number" },
+        "telemetry": { "type": "number" },
+        "quality": { "type": "number" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "output_dir": { "$ref": "#/$defs/path" },
+        "emit_html": { "type": "boolean" },
+        "emit_json": { "type": "boolean" },
+        "include_debug_sections": { "type": "boolean" },
+        "redaction": { "$ref": "#/$defs/reporting_redaction" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["output_dir"]
+    },
+    "reporting_redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["strict", "allow_unredacted"] },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "operability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logging": { "$ref": "#/$defs/operability_logging" },
+        "run_limits": { "$ref": "#/$defs/operability_run_limits" },
+        "health": { "$ref": "#/$defs/operability_health" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "operability_logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["debug", "info", "warning", "error"]
+        },
+        "structured": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "operability_run_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_runtime_seconds": { "type": "integer", "minimum": 1 },
+        "max_disk_bytes": { "type": "integer", "minimum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "operability_health": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "emit_health_files": { "type": "boolean" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "redaction": { "$ref": "#/$defs/security_redaction" },
+        "secrets": { "$ref": "#/$defs/security_secrets" },
+        "network": { "$ref": "#/$defs/security_network" },
+        "signing": { "$ref": "#/$defs/security_signing" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "security_redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "policy_ref": { "$ref": "#/$defs/path" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "security_secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["env", "file", "keychain", "custom"]
+        },
+        "custom": { "$ref": "#/$defs/security_secrets_custom" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["provider"],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provider": { "const": "custom" } },
+            "required": ["provider"]
+          },
+          "then": { "required": ["custom"] }
+        }
+      ]
+    },
+    "security_secrets_custom": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "executable": { "$ref": "#/$defs/path" },
+        "args": { "$ref": "#/$defs/string_array" },
+        "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "required": ["executable"]
+    },
+    "security_network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_outbound": { "type": "boolean" },
+        "allowlist": { "$ref": "#/$defs/string_array" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    },
+    "security_signing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "key_ref": { "$ref": "#/$defs/secret_ref" },
+        "algorithm": { "type": "string", "enum": ["ed25519"] },
+        "key_format": { "type": "string", "enum": ["ed25519_seed_base64"] },
+        "trusted_key_ids": { "$ref": "#/$defs/string_array" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      }
+    }
+  }
+}

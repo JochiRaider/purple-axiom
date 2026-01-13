@@ -256,16 +256,27 @@ Validation:
 Key semantics:
 
 - `run_id` is the unique identifier for the run bundle folder.
+
 - `run_id` MUST be a UUID string (RFC 4122, canonical hyphenated form) and MUST be validated as a
   UUID.
+
 - `run_id` is unique per execution and MUST NOT be reused across replays.
+
 - Stable joins across replays MUST use `action_key` and other stable basis fields; `action_key` MUST
   NOT incorporate `run_id`.
+
 - `status` reflects the overall run outcome:
+
   - `success`: pipeline completed and artifacts are present and valid
   - `partial`: pipeline produced some outputs but one or more stages failed
   - `failed`: run failed early or outputs are not usable
+
 - `inputs.*_sha256` are SHA-256 hashes of the exact configs used.
+
+- `scenario.scenario_id` is the stable scenario identifier for the run.
+
+- v0.1 run bundles MUST be single-scenario. Multi-scenario manifests are reserved for a future
+  release.
 
 Status derivation (normative):
 
@@ -878,8 +889,15 @@ Required invariants:
    - `criteria.results.run_id` for every criteria result (when present)
 1. `manifest.scenario.scenario_id` must match:
    - `ground_truth.scenario_id` for every line
-   - `normalized.metadata.scenario_id` for every event (unless explicitly multi-scenario)
+   - `normalized.metadata.scenario_id` for every event
    - `summary.scenario_id`
+1. Scenario cardinality (v0.1):
+   - The set of distinct scenario IDs observed in `ground_truth.scenario_id` across all lines MUST
+     contain exactly one value.
+   - The set of distinct scenario IDs observed in `normalized.metadata.scenario_id` across all
+     normalized events MUST contain exactly one value.
+   - Multi-scenario runs are reserved in v0.1. If more than one distinct scenario ID is observed,
+     implementations MUST fail closed with `reason_code=contract.multi_scenario_reserved`.
 1. Time bounds:
    - All `ground_truth.timestamp_utc` and normalized event times must be within
      `[manifest.started_at_utc, manifest.ended_at_utc]` when `ended_at_utc` is present, allowing a

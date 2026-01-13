@@ -491,24 +491,21 @@ logical AND.
 Field resolution:
 
 - `field` MUST be resolved as a dotted path against the normalized event object.
-- If the path cannot be resolved, the constraint MUST evaluate to false (including
-  `op = exists`).
+- If the path cannot be resolved, the constraint MUST evaluate to false (including `op = exists`).
 
 Operator semantics (minimum, normative):
 
 - `exists`: true iff the resolved value is present and is not JSON null.
 - `equals`: true iff the resolved value equals the expected `value`.
-- `one_of`: true iff the resolved value equals at least one element of the expected `value`
-  array.
-- `contains`: true iff the resolved value (string) contains the expected `value` (string) as
-  a substring.
+- `one_of`: true iff the resolved value equals at least one element of the expected `value` array.
+- `contains`: true iff the resolved value (string) contains the expected `value` (string) as a
+  substring.
 
 Type rules (minimum, normative):
 
-- `equals` and `one_of` MUST support comparison over JSON scalar types (string, number,
-  boolean).
-- If the resolved value is an array or object, the operator MUST evaluate to false (no deep
-  matching in v0.1).
+- `equals` and `one_of` MUST support comparison over JSON scalar types (string, number, boolean).
+- If the resolved value is an array or object, the operator MUST evaluate to false (no deep matching
+  in v0.1).
 - For `one_of`, the expected `value` MUST be an array of scalars; otherwise the operator MUST
   evaluate to false.
 - For `contains`, both the resolved value and expected `value` MUST be strings; otherwise the
@@ -516,8 +513,8 @@ Type rules (minimum, normative):
 
 Case sensitivity:
 
-- `case_sensitive` applies only when both operands are strings (for `equals`, each `one_of`
-  element, and `contains`).
+- `case_sensitive` applies only when both operands are strings (for `equals`, each `one_of` element,
+  and `contains`).
 - If `case_sensitive` is omitted, it defaults to true.
 - If `case_sensitive` is false, comparisons MUST apply Unicode default case folding
   (locale-independent) to both operands before evaluating equality or substring containment.

@@ -217,14 +217,14 @@ emitted in `logs/health.json` without a spec update.
 
 These reason codes MAY be used for any stage.
 
-| Reason code                   | Severity | Description                                                                              |
-| ----------------------------- | -------- | ---------------------------------------------------------------------------------------- |
-| `redaction_policy_error`      | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.      |
-| `config_schema_invalid`       | FATAL    | A required config artifact is schema-invalid (for example `manifest.json`, `plan.json`). |
-| `input_missing`               | FATAL    | Required upstream input artifact missing or unreadable.                                  |
-| `lock_acquisition_failed`     | FATAL    | Exclusive lock could not be acquired.                                                    |
-| `storage_io_error`            | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                        |
-| `blocked_by_upstream_failure` | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                          |
+| Reason code                   | Severity | Description                                                                                            |
+| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `redaction_policy_error`      | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                    |
+| `config_schema_invalid`       | FATAL    | A required config artifact is schema-invalid (for example `range.yaml`, `manifest.json`, `plan.json`). |
+| `input_missing`               | FATAL    | Required upstream input artifact missing or unreadable.                                                |
+| `lock_acquisition_failed`     | FATAL    | Exclusive lock could not be acquired.                                                                  |
+| `storage_io_error`            | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                      |
+| `blocked_by_upstream_failure` | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                        |
 
 ### Lab provider stage (`lab_provider`)
 

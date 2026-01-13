@@ -29,6 +29,8 @@ available.
 v0.1 support (normative):
 
 - The v0.1 runner MUST support **Atomic Test Plan** scenarios.
+- v0.1 runs MUST be single-scenario (exactly one `scenario_id` per run bundle). Multi-scenario plans
+  and manifests are reserved for a future release.
 - **Caldera Operation** and **Mixed Plan** are reserved for a future release; if encountered, the
   v0.1 runner MUST fail before execution with a clear error (and a stable `reason_code`).
 

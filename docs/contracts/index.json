@@ -80,6 +80,10 @@
     {
       "name": "netflow_manifest.schema.json",
       "purpose": "Manifest enumerating netflow capture/log files for a run (placeholder contract; v0.1)."
+    },
+    {
+      "name": "range_config.schema.json",
+      "purpose": "<TODO>"
     }
   ],
   "notes": [

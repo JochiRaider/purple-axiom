@@ -1,0 +1,1 @@
+{"case_id": "disabled_redaction_posture", "description": "Ensures enabled=false withholds content from standard artifacts via deterministic placeholder", "config": {"security.redaction.enabled": false}, "input": "This input contains a secret: password=12345", "expected": "<WITHHELD_BY_REDACTION_POLICY policy_id=pa-redaction policy_version=1.0.0>"}

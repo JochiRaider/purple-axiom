@@ -1,0 +1,30 @@
+# Plan for testing Checkpoint Loss Replay (Spec: 100_test_strategy_ci.md)
+fixture_id: "reliability_checkpoint_loss_v1"
+description: "Validates that deleting checkpoints and re-processing inputs results in correct deduplication."
+
+steps:
+  - name: "Initial Run"
+    action: "normalize"
+    inputs: ["tests/fixtures/reliability/checkpoint_loss/raw_events.json"]
+    args:
+      run_id: "run-checkpoint-test-01"
+
+  - name: "Simulate Checkpoint Loss"
+    action: "delete_directory"
+    target: "runs/run-checkpoint-test-01/logs/telemetry_checkpoints/"
+
+  - name: "Replay Run"
+    action: "normalize"
+    inputs: ["tests/fixtures/reliability/checkpoint_loss/raw_events.json"]
+    args:
+      run_id: "run-checkpoint-test-01" # Reusing Run ID to trigger dedupe logic against existing state
+
+assertions:
+  - metric: "dedupe_duplicates_dropped_total"
+    operator: "greater_than"
+    value: 0
+    note: "Must identify duplicate event_ids from the previous run despite local checkpoint loss."
+
+  - check: "unique_event_ids"
+    expected_count: 3
+    note: "evt-001, evt-002, evt-003 should be the only unique IDs in the output."

@@ -1,0 +1,87 @@
+{
+  "policy_format": "pa.redaction_policy.v1",
+  "policy_id": "pa-redaction",
+  "policy_version": "1.0.0",
+  "limits": {
+    "max_token_chars": 128,
+    "max_summary_chars": 512,
+    "max_field_chars": 4096
+  },
+  "cli": {
+    "secret_flags": [
+      "--password",
+      "--pass",
+      "--token",
+      "--api-key",
+      "--apikey",
+      "--client-secret",
+      "--secret",
+      "--key"
+    ],
+    "secret_flag_prefixes": [
+      "-password",
+      "-pass",
+      "-token",
+      "-apikey",
+      "-secret",
+      "-key",
+      "/password",
+      "/pass",
+      "/token"
+    ],
+    "secret_bare_flags": ["-p"],
+    "flag_value_separators": ["=", ":"]
+  },
+  "uri": {
+    "redact_userinfo": true
+  },
+  "regex_redactions": [
+    {
+      "rule_id": "private_key_block",
+      "pattern": "-----BEGIN ([A-Z ]+)?PRIVATE KEY-----[\\s\\S]*?-----END ([A-Z ]+)?PRIVATE KEY-----",
+      "replacement": "<REDACTED:PRIVATE_KEY>"
+    },
+    {
+      "rule_id": "jwt",
+      "pattern": "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}",
+      "replacement": "<REDACTED:JWT>"
+    },
+    {
+      "rule_id": "bearer_token",
+      "pattern": "(?i)\\bBearer\\s+[A-Za-z0-9._=-]{20,}",
+      "replacement": "Bearer <REDACTED:TOKEN>"
+    },
+    {
+      "rule_id": "aws_access_key_id",
+      "pattern": "\\b(AKIA|ASIA)[0-9A-Z]{16}\\b",
+      "replacement": "<REDACTED:AWS_ACCESS_KEY_ID>"
+    },
+    {
+      "rule_id": "hex_blob",
+      "pattern": "\\b[0-9a-fA-F]{64,}\\b",
+      "replacement": "<REDACTED:HEX_BLOB>"
+    },
+    {
+      "rule_id": "base64_blob",
+      "pattern": "\\b[A-Za-z0-9+/]{80,}={0,2}\\b",
+      "replacement": "<REDACTED:BASE64_BLOB>"
+    },
+    {
+      "rule_id": "kv_password",
+      "pattern": "(?i)\\b(password|passwd|pwd|passphrase|secret|token|apikey|api_key|access[_-]?key|client[_-]?secret)\\b\\s*[:=]\\s*\\S+",
+      "replacement": "$1=<REDACTED>"
+    }
+  ],
+  "post_checks": [
+    {
+      "check_id": "no_private_key",
+      "pattern": "-----BEGIN ([A-Z ]+)?PRIVATE KEY-----",
+      "severity": "error"
+    },
+    {
+      "check_id": "no_jwt",
+      "pattern": "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}",
+      "severity": "error"
+    }
+  ]
+}

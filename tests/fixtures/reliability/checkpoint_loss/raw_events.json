@@ -1,0 +1,22 @@
+[
+  {
+    "metadata": { "event_id": "evt-001", "product": "test-source" },
+    "data": { "msg": "Event 1 - Base" }
+  },
+  {
+    "metadata": { "event_id": "evt-002", "product": "test-source" },
+    "data": { "msg": "Event 2 - Base" }
+  },
+  {
+    "metadata": { "event_id": "evt-001", "product": "test-source" },
+    "data": { "msg": "Event 1 - Duplicate (should be dropped)" }
+  },
+  {
+    "metadata": { "event_id": "evt-003", "product": "test-source" },
+    "data": { "msg": "Event 3 - Base" }
+  },
+  {
+    "metadata": { "event_id": "evt-002", "product": "test-source" },
+    "data": { "msg": "Event 2 - Duplicate (should be dropped)" }
+  }
+]

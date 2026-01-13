@@ -1,0 +1,15 @@
+{
+  "contract_version": "0.1.0",
+  "pack_id": "cp-drift-test",
+  "pack_version": "1.0.0",
+  "generated_at_utc": "2025-01-01T12:00:00Z",
+  "criteria_count": 1,
+  "criteria_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "upstreams": [
+    {
+      "engine": "atomic_red_team",
+      "source_ref": "T1059.001",
+      "source_tree_sha256": "aaaabbbbccccddddeeeeffff1111222233334444555566667777888899990000"
+    }
+  ]
+}

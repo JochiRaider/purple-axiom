@@ -1,0 +1,11 @@
+{"case_id": "regex_jwt_removal", "mode": "text", "input": "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", "expected": "Authorization: Bearer <REDACTED:JWT>"}
+{"case_id": "regex_private_key", "mode": "text", "input": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQD\n-----END PRIVATE KEY-----", "expected": "<REDACTED:PRIVATE_KEY>"}
+{"case_id": "regex_bearer_token", "mode": "text", "input": "Authorization: Bearer abcd1234abcd1234abcd1234abcd1234", "expected": "Authorization: Bearer <REDACTED:TOKEN>"}
+{"case_id": "regex_aws_key", "mode": "text", "input": "Using key AKIAIOSFODNN7EXAMPLE for access", "expected": "Using key <REDACTED:AWS_ACCESS_KEY_ID> for access"}
+{"case_id": "regex_kv_password", "mode": "text", "input": "DB_PASSWORD=SuperSecret123!", "expected": "DB_PASSWORD=<REDACTED>"}
+{"case_id": "uri_userinfo_redaction", "mode": "text", "input": "https://admin:my_password@example.com/resource", "expected": "https://admin:<REDACTED>@example.com/resource"}
+{"case_id": "cli_separate_flag", "mode": "argv", "input": ["my-app", "--password", "hunter2", "--verbose"], "expected": ["my-app", "--password", "<REDACTED>", "--verbose"]}
+{"case_id": "cli_inline_flag", "mode": "argv", "input": ["my-app", "--token=secret_value_123"], "expected": ["my-app", "--token=<REDACTED>"]}
+{"case_id": "cli_bare_flag", "mode": "argv", "input": ["my-app", "-p", "secret_value_123"], "expected": ["my-app", "-p", "<REDACTED>"]}
+{"case_id": "cli_mixed_flags", "mode": "argv", "input": ["curl", "-H", "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", "https://api.example.com"], "expected": ["curl", "-H", "Authorization: Bearer <REDACTED:JWT>", "https://api.example.com"]}
+{"case_id": "truncation_determinism_token", "mode": "text", "input": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "expected": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA<TRUNCATED len=130 sha256=460067645d947113175f72462615c04060851892305583159074060596350742>"}

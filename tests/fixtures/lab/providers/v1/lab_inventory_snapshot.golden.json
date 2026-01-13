@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "provider_format": "json",
+  "hosts": [
+    {
+      "name": "linux-worker-01",
+      "ip": "10.0.1.5",
+      "groups": ["linux_nodes"],
+      "vars": {
+        "ansible_host": "10.0.1.5",
+        "ansible_port": 22,
+        "ansible_user": "admin"
+      }
+    },
+    {
+      "name": "win-worker-01",
+      "ip": "10.0.1.10",
+      "groups": ["windows_nodes"],
+      "vars": {
+        "ansible_connection": "winrm",
+        "ansible_host": "10.0.1.10"
+      }
+    }
+  ]
+}

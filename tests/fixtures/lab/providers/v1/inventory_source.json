@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "hostvars": {
+      "linux-worker-01": {
+        "ansible_host": "10.0.1.5",
+        "ansible_user": "admin",
+        "ansible_port": 22,
+        "ansible_ssh_pass": "SuperSecretPassword!",
+        "custom_tag": "web-server"
+      },
+      "win-worker-01": {
+        "ansible_host": "10.0.1.10",
+        "ansible_connection": "winrm",
+        "ansible_password": "AnotherSecret123"
+      }
+    }
+  },
+  "all": {
+    "children": ["linux_nodes", "windows_nodes"]
+  },
+  "linux_nodes": {
+    "hosts": ["linux-worker-01"]
+  },
+  "windows_nodes": {
+    "hosts": ["win-worker-01"]
+  }
+}

@@ -1,7 +1,7 @@
 ---
 title: 'ADR-0002: Event identity and provenance'
 description: Defines deterministic event identity computation and provenance model for reproducible detection matching
-status: proposed
+status: draft
 category: adr
 tags: [event-identity, provenance, ocsf, determinism, deduplication]
 related:

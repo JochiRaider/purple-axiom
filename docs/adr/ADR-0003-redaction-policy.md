@@ -1,7 +1,7 @@
 ---
 title: 'ADR-0003: Redaction policy'
 description: Defines a deterministic, contract-driven redaction policy, including fail-closed semantics, provenance requirements, and CI test vectors.
-status: proposed
+status: draft
 category: adr
 tags: [redaction, security, determinism, contracts]
 related:

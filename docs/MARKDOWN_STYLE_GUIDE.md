@@ -1,7 +1,7 @@
 ---
 title: Markdown style guide
 description: Defines markdown conventions for readability, consistency, and deterministic diffs.
-status: v0.1
+status: stable
 ---
 
 # Markdown style guide

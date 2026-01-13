@@ -1,7 +1,7 @@
 ---
 title: Markdown quick reference
 description: Condensed reference for the repository markdown style guide.
-status: v0.1
+status: stable
 ---
 
 # Markdown quick reference

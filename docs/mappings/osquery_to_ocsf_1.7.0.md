@@ -1,14 +1,19 @@
-<!-- docs/mappings/osquery_to_ocsf_1.7.0.md -->
+---
+title: osquery to OCSF 1.7.0 mapping profile v0.1
+description: Defines the osquery mapping profile for Purple Axiom's OCSF 1.7.0 normalizer.
+status: draft
+---
 
-# osquery → OCSF 1.7.0 Mapping Profile (v0.1)
+# osquery to OCSF 1.7.0 mapping profile v0.1
+
+This document defines the osquery mapping profile for Purple Axiom's OCSF 1.7.0 normalizer. It
+describes the routing and field mapping expectations for v0.1.
 
 ## Status
 
 Draft (v0.1 target)
 
 ## Purpose
-
-This document defines the **osquery** mapping profile for Purple Axiom’s OCSF v1.7.0 normalizer.
 
 It is designed to be:
 
@@ -37,9 +42,9 @@ Out of scope (v0.1):
 - osquery batch formats (unless explicitly enabled and fixture-covered)
 - Full coverage of all osquery tables and platform-specific event families
 
-## Mapping stance: OCSF-core plus Purple pivots
+## Mapping stance for OCSF-core plus Purple pivots
 
-This profile follows the project’s “OCSF-core plus pivots” strategy:
+This profile follows the project's "OCSF-core plus pivots" strategy:
 
 1. **OCSF-native primary fields MUST be populated** when authoritative source values exist.
 1. **Convenience pivots MAY be populated** to support cross-source joins, but MUST NOT conflict with
@@ -63,11 +68,12 @@ pivot”. This profile SHOULD prefer `device.ips[]` for consistency and multi-IP
 
 This profile assumes the canonical osquery ingestion and staging defined in:
 
-- `docs/spec/042_osquery_integration.md` (telemetry + raw staging + identity basis)
-- `docs/spec/050_normalization_ocsf.md` (pinned OCSF version, envelope requirements, coverage
-  artifacts)
-- `docs/spec/055_ocsf_field_tiers.md` and `docs/mappings/coverage_matrix.md` (tier semantics and CI
-  conformance)
+- [osquery integration specification](../spec/042_osquery_integration.md) (telemetry, raw staging,
+  identity basis)
+- [OCSF normalization specification](../spec/050_normalization_ocsf.md) (pinned OCSF version,
+  envelope requirements, coverage artifacts)
+- [OCSF field tiers reference](../spec/055_ocsf_field_tiers.md) and
+  [coverage matrix](coverage_matrix.md) (tier semantics and CI conformance)
 
 ### Expected raw input shape
 
@@ -84,7 +90,7 @@ The normalizer is expected to receive osquery scheduled results lines containing
 The mapping MUST NOT depend on locale-specific fields such as `calendarTime` for identity, ordering,
 or routing.
 
-## Canonicalization rules (determinism)
+## Canonicalization rules for determinism
 
 Canonicalization is applied prior to mapping and hashing.
 
@@ -147,7 +153,7 @@ Category UID values (OCSF 1.7.0):
 - `1` = System Activity
 - `4` = Network Activity
 
-Unrouted behavior (normative):
+**Unrouted behavior (normative)**:
 
 - The normalizer MUST NOT guess a `class_uid` for an unknown `query_name`.
 - Unknown `query_name` rows MUST be preserved in `raw/` and MUST be counted as unrouted/unmapped in
@@ -167,15 +173,18 @@ Rules:
 - `category_uid` SHOULD be set when known for the class.
 - `severity_id` MAY be set if an authoritative mapping exists; otherwise it MUST be absent.
 - For `action = "snapshot"` rows, `activity_id` MUST be `99` (Other) because snapshot rows represent
-  point-in-time state observations rather than discrete activity events. This aligns with
-  `042_osquery_integration.md` "Known Mapping Limitations".
+  point-in-time state observations rather than discrete activity events. This aligns with the
+  [osquery integration specification](../spec/042_osquery_integration.md) "Known Mapping
+  Limitations".
 
-### Event identity and `metadata.uid`
+### Event identity and metadata.uid
 
 osquery does not provide a stable record id. Therefore osquery-derived `metadata.event_id` is Tier
 3\.
 
-Normative requirements (per ADR-0002 and `055_ocsf_field_tiers.md` Tier 0):
+Normative requirements (per
+[ADR-0002 Event identity and provenance](../adr/ADR-0002-event-identity-and-provenance.md) and the
+[OCSF field tiers reference](../spec/055_ocsf_field_tiers.md) Tier 0):
 
 - `metadata.uid` MUST be present and MUST equal `metadata.event_id`.
 - `metadata.event_id` MUST be computed from the osquery identity basis defined below.
@@ -220,11 +229,11 @@ When `action == "snapshot"` and the record contains a `snapshot` array:
 
 - The full original snapshot array MUST still be preserved under `unmapped.osquery.raw_json`.
 
-## Field mapping: shared (all osquery events)
+## Field mapping for all osquery events
 
 This section defines baseline field population rules that apply to all routed osquery records.
 
-### Metadata (source provenance)
+### Metadata for source provenance
 
 At minimum:
 
@@ -265,7 +274,7 @@ Rules:
 - UID to name resolution MUST NOT perform external lookups. If the project supports UID to name
   mapping, it MUST be derived only from a deterministic, snapshotted local context.
 
-### Raw retention and unmapped preservation (`unmapped.*` namespace)
+### Raw retention and unmapped preservation in the unmapped namespace
 
 For every routed osquery record, the normalizer MUST preserve:
 
@@ -279,16 +288,17 @@ Namespace rationale:
 - This profile uses `unmapped.<source_type>.*` rather than `raw.*` to clearly indicate that these
   fields were not mapped to OCSF-native fields (as opposed to being intentionally retained raw
   evidence).
-- The `unmapped` namespace aligns with `050_normalization_ocsf.md` "route unmapped fields into an
-  explicit `unmapped` / `raw` object so nothing is silently dropped".
+- The `unmapped` namespace aligns with the
+  [OCSF normalization specification](../spec/050_normalization_ocsf.md) "route unmapped fields into
+  an explicit `unmapped` / `raw` object so nothing is silently dropped".
 - Implementations MAY additionally populate `raw.*` for forensic evidence retention if the project
   requires both namespaces.
 
-## Routed event families (v0.1)
+## Routed event families for v0.1
 
 This section defines the v0.1 required osquery routes and their minimal field mapping obligations.
 
-### 1) `process_events` → Process Activity
+### Process events to Process Activity
 
 Class:
 
@@ -317,11 +327,10 @@ Minimum mapping obligations (when authoritative values exist):
 
   - If no path is present, `actor.process.name` MUST be absent.
 
-Redaction note:
+> **Note**: Any command-line fields MUST be filtered by the effective redaction policy before
+> emission.
 
-- Any command-line fields MUST be filtered by the effective redaction policy before emission.
-
-### 2) `socket_events` → Network Activity
+### Socket events to Network Activity
 
 Class:
 
@@ -355,17 +364,14 @@ Process attribution:
 - `actor.process.name` SHOULD be derived from an authoritative process path when available;
   otherwise absent.
 
-### 3) `file_events` → File System Activity
+### File events to File System Activity
 
 Class:
 
 - File System Activity (`class_uid = 1001`)
 
-Known limitation (normative):
-
-- Initiating process attribution is not available from `file_events` in v0.1.
-
-  - Therefore `actor.process.*` is `N/A` for this route and MUST NOT be inferred.
+> **Important**: Initiating process attribution is not available from `file_events` in v0.1.
+> Therefore `actor.process.*` is `N/A` for this route and MUST NOT be inferred.
 
 Minimum mapping obligations (when authoritative values exist):
 
@@ -385,7 +391,7 @@ Minimum mapping obligations (when authoritative values exist):
 
 This profile is designed to work with the applicability-aware coverage model defined by:
 
-- `docs/mappings/coverage_matrix.md`
+- [Coverage matrix](coverage_matrix.md)
 
 Normative conformance requirements:
 
@@ -393,7 +399,7 @@ Normative conformance requirements:
 - Fields marked `N/A` for osquery routes (example: `actor.process.*` for `file_events`) MUST remain
   absent.
 
-## Verification hooks (CI)
+## Verification hooks for CI
 
 Minimum conformance tests for this profile:
 
@@ -427,7 +433,7 @@ Minimum fixture set (aligned to the coverage matrix CI requirements):
 
   - `tests/fixtures/normalized/ocsf/1.7.0/osquery/**`
 
-## Known limitations (v0.1)
+## Known limitations for v0.1
 
 - `file_events` lacks initiating process attribution. Any detections requiring actor process context
   for file writes MUST use a different source (example: audit-based process file events) rather than

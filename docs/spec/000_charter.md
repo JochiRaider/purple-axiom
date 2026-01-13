@@ -134,18 +134,25 @@ minimum:
 
 ## Key upstream dependencies
 
-Normative dependencies are those relied upon by the v0.1 pipeline contracts:
+Normative dependencies are those relied upon by the v0.1 pipeline contracts. Pinned versions live in
+[SUPPORTED_VERSIONS.md](../../SUPPORTED_VERSIONS.md).
 
 - **Atomic Red Team** as the primary v0.1 scenario plan type (other plan types are reserved). See
   the [scenarios specification](030_scenarios.md).
-- **OpenTelemetry Collector** as the default telemetry collection mechanism (privileged, hardened,
-  and minimized per the security boundary requirements). See the
+- **OpenTelemetry Collector Contrib** as the default telemetry collection mechanism (privileged,
+  hardened, and minimized per the security boundary requirements). See the
   [security and safety specification](090_security_safety.md).
-- **OCSF** as the canonical normalized event model (the `normalized/**` store is the input to
+- **OCSF schema** as the canonical normalized event model (the `normalized/**` store is the input to
   detection and scoring stages). See the
   [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
-- **Sigma** as the detection portability layer (evaluated in the detection stage). See the
+- **Sigma toolchain (pySigma + pySigma-pipeline-ocsf)** as the detection portability layer and
+  Sigma-to-OCSF bridge (evaluated in the detection stage). See the
   [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+- **DuckDB** as the batch evaluator backend.
+- **pyarrow** as the Parquet scanning and schema inspection backend.
+- **jsonschema** as the contract validation engine.
+- **osquery** as the endpoint telemetry source (osqueryd).
+- **PowerShell** as the Atomic executor runner.
 
 ## Definition of done
 

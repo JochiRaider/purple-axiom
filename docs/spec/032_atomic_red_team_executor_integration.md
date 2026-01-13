@@ -130,11 +130,65 @@ Atomic YAML may express commands as a scalar string or as a list. The runner MUS
 
 ### Supported platform gate
 
-If `supported_platforms` is present, the runner MUST evaluate it against the target asset OS family.
+If `supported_platforms` is present, the runner MUST evaluate it against the target asset OS family
+as resolved from the run-scoped inventory snapshot (see
+[Inventory snapshot consumption](#inventory-snapshot-consumption)).
 
 - If the action's target platform is not supported, the runner MUST emit `skipped` with reason code
   `unsupported_platform`.
 - The runner MUST NOT attempt execution on unsupported platforms.
+
+## Target resolution and remote execution
+
+This section defines how the runner turns `target_asset_id` into a concrete connection address for
+`engine = "atomic"` actions.
+
+### Inventory snapshot consumption
+
+For any `engine = "atomic"` action, the runner MUST resolve `target_asset_id` using the run-scoped
+inventory snapshot produced by the lab provider stage (see the
+[lab providers spec](015_lab_providers.md)).
+
+Source of truth (v0.1):
+
+- `runs/<run_id>/logs/lab_inventory_snapshot.json`
+
+Resolution rules (normative):
+
+1. Parse `lab_inventory_snapshot.json` as JSON.
+1. Locate the target asset in `lab.assets[]` where `asset_id == target_asset_id`.
+   - If no match exists, the runner MUST fail closed with reason code `target_asset_not_found`.
+   - If multiple matches exist, the runner MUST fail closed with reason code
+     `target_asset_id_not_unique`.
+1. Determine `connection_address`:
+   - If `ip` is present and non-empty, use `ip`.
+   - Else if `hostname` is present and non-empty, use `hostname`.
+   - Else the runner MUST fail closed with reason code `target_connection_address_missing`.
+
+Determinism requirements:
+
+- The `connection_address` selection MUST follow the fixed precedence above.
+- The runner MUST NOT consult environment variables or provider APIs to resolve `connection_address`
+  at execution time.
+- `connection_address` is evidence-only and MUST NOT contribute to `action_key` or identity-bearing
+  hashes.
+
+Ground truth enrichment:
+
+- The runner SHOULD populate `resolved_target.hostname`, `resolved_target.ip`, and
+  `resolved_target.provider_asset_ref` in `ground_truth.jsonl` from the inventory snapshot per the
+  [scenario model spec](030_scenarios.md).
+
+### Invoke-AtomicRedTeam remote mapping
+
+For remote Windows execution, the runner MUST translate `connection_address` into a PowerShell
+remoting session and then execute `Invoke-AtomicTest` within that session:
+
+- `connection_address` MUST map to `New-PSSession -ComputerName <connection_address>`.
+- The created PSSession MUST be passed to `Invoke-AtomicTest` via `-Session <PSSession>`.
+
+If a remoting session cannot be created, the runner MUST fail closed with reason code
+`executor_invoke_error` (and SHOULD include error details in `stderr.txt` and `executor.json`).
 
 ## Input resolution
 
@@ -434,6 +488,9 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 - `executor_invoke_error`
 - `cleanup_invoke_error`
 - `cleanup_verification_error`
+- `target_asset_not_found`
+- `target_asset_id_not_unique`
+- `target_connection_address_missing`
 
 ## Verification hooks
 

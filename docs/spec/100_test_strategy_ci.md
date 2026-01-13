@@ -1,6 +1,13 @@
-<!-- docs/spec/100_test_strategy_ci.md -->
+---
+title: Test strategy and CI
+description: Defines the unit, integration, and CI gating expectations for deterministic runs.
+status: draft
+---
 
-# Test Strategy and CI
+# Test strategy and CI
+
+This document defines the required unit tests, integration fixtures, and CI gates for Purple Axiom
+runs. It focuses on deterministic outputs, pinned-version conformance, and regression protection.
 
 ## Unit tests
 
@@ -17,7 +24,8 @@
 - Mapping pack conformance tests: mapping YAML MUST parse deterministically (no duplicate keys, no
   anchors/aliases/merge keys), routing MUST be overlap-free, and
   `normalized/mapping_profile_snapshot.json` MUST include hashes for the complete mapping material
-  boundary defined by `docs/mappings/ocsf_mapping_profile_authoring_guide.md`.
+  boundary defined by the
+  [OCSF mapping profile authoring guide](../mappings/ocsf_mapping_profile_authoring_guide.md).
 - OCSF schema regression tests: representative normalized fixtures MUST validate against the pinned
   OCSF version used by v0.1.
 - Parquet schema evolution tests (normalized store):
@@ -29,7 +37,7 @@
     if none exist).
 - Rule compilation tests: Sigma -> evaluation plan (authoritative supported subset and
   non-executable classification:
-  `docs/spec/065_sigma_to_ocsf_bridge.md#backend-adapter-contract-normative-v01`).
+  [Sigma-to-OCSF bridge: backend adapter contract](065_sigma_to_ocsf_bridge.md#backend-adapter-contract-normative-v01)).
 - Bridge router multi-class routing tests:
   - Given a `logsource.category` routed to multiple `class_uid` values, compilation MUST scope
     evaluation to the union (`IN (...)` / OR semantics).
@@ -53,7 +61,7 @@
 ## Integration tests
 
 - DuckDB determinism conformance harness (toolchain qualification; default backend semantics:
-  `docs/spec/065_sigma_to_ocsf_bridge.md#3-evaluator-backend-adapter`):
+  [Sigma-to-OCSF bridge: evaluator backend adapter](065_sigma_to_ocsf_bridge.md#3-evaluator-backend-adapter)):
 
   - Purpose: qualify DuckDB (version × OS × arch) for deterministic evaluation outputs over fixed
     Parquet fixtures and fixed SQL queries, and record drift across patch/minor upgrades.
@@ -69,7 +77,8 @@
     - Require a deterministic total ordering of rows (RECOMMENDED: outermost `ORDER BY ALL`).
   - The harness MUST emit a consolidated report:
     - Path (CI artifact): `artifacts/duckdb_conformance/<report_id>/report.json`
-    - The report MUST conform to `docs/contracts/duckdb_conformance_report.schema.json`.
+    - The report MUST conform to the
+      [DuckDB conformance report schema](../contracts/duckdb_conformance_report.schema.json).
   - Failure classification MUST be explicit per cell and per query:
     - Harness internal failures (e.g., init/execute/parse/encode) MUST be recorded as `status=fail`
       with a stable `reason_code`.
@@ -95,7 +104,7 @@
   - Inject a canary event and assert the captured payload begins with `<Event` and MUST NOT contain
     `<RenderingInfo>`.
   - The validator MUST record the outcome as `health.json` stage
-    `telemetry.windows_eventlog.raw_mode` (see `110_operability.md`).
+    `telemetry.windows_eventlog.raw_mode` (see the [operability specification](110_operability.md)).
 
 - Windows Event Log raw/unrendered failure-mode tests:
 
@@ -154,7 +163,7 @@
     and bridge mapping pack `ocsf_version` (when present) MUST match.
 - External dependency version matrix (fail closed; v0.1):
   - CI MUST run the integration and “golden run” fixtures using the pinned dependency versions in
-    `SUPPORTED_VERSIONS.md`.
+    the [supported versions reference](../../SUPPORTED_VERSIONS.md).
   - CI MUST fail if any runtime dependency version differs from the pins for an enabled stage.
   - Minimum pinned set (v0.1):
     - OpenTelemetry Collector Contrib (otelcol-contrib distribution): `0.143.1`
@@ -174,11 +183,12 @@
 - Report generation sanity checks
 - Artifact manifest completeness check
 - Cross-artifact invariants:
-  - run_id/scenario_id consistency
-  - referential integrity (detections reference existing event_ids)
+  - `run_id`/`scenario_id` consistency
+  - referential integrity (detections reference existing `event_id` values)
   - inventory snapshot hash matches manifest input hash
   - when `operability.health.emit_health_files=true`, `runs/<run_id>/logs/health.json` MUST exist
-    and MUST satisfy the minimum schema in `110_operability.md` (“Health files (normative, v0.1)”).
+    and MUST satisfy the minimum schema in the [operability specification](110_operability.md)
+    ("Health files (normative, v0.1)").
 - Regression gates (configurable thresholds):
   - technique coverage must not drop more than X relative to baseline
   - latency percentiles must not exceed Y

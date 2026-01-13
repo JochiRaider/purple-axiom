@@ -158,7 +158,9 @@
               "criteria_unavailable",
               "criteria_misconfigured",
               "normalization_gap",
-              "bridge_gap",
+              "bridge_gap_mapping",
+              "bridge_gap_feature",
+              "bridge_gap_other",
               "rule_logic_gap",
               "cleanup_verification_failed"
             ],

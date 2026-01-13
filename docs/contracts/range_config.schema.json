@@ -506,8 +506,21 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "min_detection_rate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "min_telemetry_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "min_technique_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_allowed_latency_seconds": { "type": "integer", "minimum": 1 },
+        "min_tier1_field_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_missing_telemetry_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_normalization_gap_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_bridge_gap_mapping_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_bridge_gap_feature_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_bridge_gap_other_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_bridge_gap_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "deprecated": true,
+          "description": "DEPRECATED: Use subcategory rates instead."
+        },
         "extensions": { "$ref": "#/$defs/extensions" }
       }
     },

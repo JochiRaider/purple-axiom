@@ -371,8 +371,12 @@ Common keys:
       `missing_telemetry` (0.0-1.0).
     - `max_normalization_gap_rate`: maximum fraction of executed techniques classified as
       `normalization_gap` (0.0-1.0).
-    - `max_bridge_gap_rate`: maximum fraction of executed techniques classified as `bridge_gap`
-      (0.0-1.0).
+    - `max_bridge_gap_mapping_rate`: maximum fraction of executed techniques classified as
+      `bridge_gap_mapping` (0.0-1.0). Default: 0.10.
+    - `max_bridge_gap_feature_rate`: maximum fraction of executed techniques classified as
+      `bridge_gap_feature` (0.0-1.0). Default: 0.40.
+    - `max_bridge_gap_other_rate`: maximum fraction of executed techniques classified as
+      `bridge_gap_other` (0.0-1.0). Default: 0.02.
 - `weights` (optional): allow scores to emphasize certain categories.
   - v0.1 defaults (normative) if omitted: `coverage_weight=0.60`, `latency_weight=0.25`,
     `fidelity_weight=0.15`.
@@ -459,6 +463,23 @@ Common keys:
 - `network`
   - `allow_outbound` (default: false)
   - `allowlist` (optional): list of CIDRs/domains when outbound is enabled
+  - Outbound gating (normative):
+    - `security.network.allow_outbound` is a global gate for outbound egress.
+    - A run MUST treat outbound egress as permitted only when:
+      - `security.network.allow_outbound: true`, and
+      - `scenario.safety.allow_network: true` for the selected scenario.
+    - If either is `false`, outbound egress MUST be treated as denied for the run.
+    - `security.network.allowlist` applies only when outbound egress is permitted.
+  - `egress_canary` (optional): provider-controlled sentinel used to validate outbound isolation
+    enforcement when outbound egress is denied
+    - `address` (required when enabled): literal IP address (no DNS)
+    - `port` (required): TCP port to probe
+    - `timeout_ms` (optional, default: 2000): bounded connect timeout
+    - `required_on_deny` (optional, default: true)
+      - When `true`, and effective outbound policy is denied for the run, telemetry validation MUST
+        fail closed if the canary is missing or incomplete.
+      - When `false`, implementations MAY treat the egress canary as best-effort and record a
+        `skipped` outcome with deterministic reasons.
 - `signing` (optional)
   - `enabled` (default: false)
   - `key_ref` (required when enabled): reference to signing private key material (never inline)
@@ -645,9 +666,11 @@ scoring:
   gap_taxonomy:
     - missing_telemetry
     - criteria_unavailable
-    - criteria_misconfigured    
+    - criteria_misconfigured
     - normalization_gap
-    - bridge_gap
+    - bridge_gap_mapping
+    - bridge_gap_feature
+    - bridge_gap_other
     - rule_logic_gap
     - cleanup_verification_failed
   thresholds:
@@ -730,6 +753,7 @@ CI requirements (v0.1):
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                                                  |
+| ---------- | ----------------------------------------------------------------------- |
+| 2026-01-13 | Define security.network.egress_canary for outbound isolation validation |
+| 2026-01-12 | Formatting update                                                       |

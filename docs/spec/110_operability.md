@@ -187,6 +187,34 @@ Additional normative checks:
   - If the canary is observed in a Parquet dataset, the validator SHOULD also include a minimal
     `row_locator` (for example, `event_record_id` and `provider`) sufficient to re-query the dataset
     deterministically.
+- outbound egress deny posture enforcement (required when effective outbound policy is denied):
+  - The validator MUST compute `effective_allow_outbound` as the logical AND of:
+    - `scenario.safety.allow_network`, and
+    - `security.network.allow_outbound` from `range.yaml`.
+  - When `effective_allow_outbound=false`, the validator MUST run a TCP connect canary from the
+    target asset to `security.network.egress_canary`.
+    - The canary MUST be considered enabled when `security.network.egress_canary.required_on_deny`
+      is `true` (default) and effective outbound policy is denied.
+    - When the canary is enabled but `security.network.egress_canary` is missing or incomplete, the
+      run MUST fail closed.
+  - The validator MUST emit a `health.json.stages[]` entry with
+    `stage: "telemetry.network.egress_policy"`.
+  - When the egress canary check fails, `reason_code` MUST be one of:
+    - `egress_canary_unconfigured` (no canary endpoint configured when required)
+    - `egress_probe_unavailable` (probe could not be executed on the asset)
+    - `egress_violation` (probe succeeded despite deny policy)
+  - The validator MUST record deterministic evidence in
+    `runs/<run_id>/logs/telemetry_validation.json` under `network_egress_policy` with, at minimum:
+    - `asset_id` (string)
+    - `effective_allow_outbound` (bool)
+    - `canary` (object):
+      - `address` (string; literal IP address)
+      - `port` (int)
+      - `timeout_ms` (int)
+    - `probe_observed` (object):
+      - `outcome` (one of `blocked | reachable | error`)
+      - `error_code` (optional string; ASCII `lower_snake_case` when present)
+  - A `reachable` outcome when `effective_allow_outbound=false` MUST fail the run (fail closed).
 - disk capacity preflight (hard fail / fail closed) before the validation window begins:
   - The validator MUST compute `free_bytes_at_runs_root` for the filesystem containing the resolved
     runs root directory (the directory that contains `runs/<run_id>/`; typically
@@ -417,6 +445,7 @@ Minimum accounting fields (normative):
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                                   |
+| ---------- | -------------------------------------------------------- |
+| 2026-01-13 | Add network egress canary to telemetry validation gating |
+| 2026-01-12 | Formatting update                                        |

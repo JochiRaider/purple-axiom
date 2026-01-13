@@ -320,6 +320,20 @@ When enabled, the Windows raw-mode canary MUST be recorded as a substage outcome
 
 These codes MUST NOT be replaced by an aggregate code in the raw-mode substage outcome.
 
+#### Network egress policy canary (substage: `telemetry.network.egress_policy`)
+
+When effective outbound policy is denied for the run, the validator MUST record a substage outcome
+`telemetry.network.egress_policy` in `logs/health.json`.
+
+If this substage fails, the telemetry stage MUST fail closed. The telemetry stage MAY use the same
+`reason_code` as the substage outcome.
+
+`reason_code` for this substage MUST be constrained to:
+
+- `egress_canary_unconfigured` (no canary endpoint configured when required)
+- `egress_probe_unavailable` (probe could not be executed on the asset)
+- `egress_violation` (probe succeeded despite deny policy)
+
 #### NON-FATAL reason codes
 
 | Reason code                      | Severity  | Description                                                   |
@@ -501,6 +515,7 @@ Default `fail_mode`: `fail_closed` (when enabled)
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                                  |
+| ---------- | ------------------------------------------------------- |
+| 2026-01-13 | Add telemetry.network.egress_policy canary reason codes |
+| 2026-01-12 | Formatting update                                       |

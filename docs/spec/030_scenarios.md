@@ -72,6 +72,36 @@ The runner MUST persist:
   (deterministic YAML parsing, input resolution, prerequisites handling, transcript capture, cleanup
   invocation, and cleanup verification).
 
+## Safety controls
+
+Scenarios declare safety constraints under `scenario.safety`. These constraints are normative run
+inputs and MUST NOT be treated as advisory hints.
+
+### allow_network
+
+`scenario.safety.allow_network` declares whether the scenario is permitted to have outbound network
+egress from target assets.
+
+Effective outbound policy (normative):
+
+- The effective outbound allow decision MUST be the logical AND of:
+  - `scenario.safety.allow_network`, and
+  - `security.network.allow_outbound` from `range.yaml` (see the configuration reference).
+- If either value is `false`, outbound egress MUST be treated as denied for the run.
+
+Enforcement responsibility (normative):
+
+- The lab provider MUST enforce the effective outbound posture at the lab boundary (segmentation,
+  firewall rules, security groups, or equivalent).
+- The runner MUST NOT be the primary enforcement mechanism for outbound isolation. The runner MAY
+  apply defense-in-depth measures when available, but the run MUST remain safe if runner-side
+  controls are bypassed or unavailable.
+
+Verification hook:
+
+- When effective outbound policy is denied, telemetry validation MUST perform the network egress
+  canary check defined in the telemetry pipeline and operability specifications.
+
 ## Stable action identity (join keys)
 
 v0.1 constraint (normative):
@@ -124,6 +154,44 @@ Expected telemetry is externalized into criteria packs (see the
 **scenario_version**: semver or date-based
 
 **run_id**: unique per execution
+
+## Safety controls
+
+The `safety` object constrains how a scenario may be executed in a lab. Safety controls are
+normative run constraints and MUST NOT be treated as advisory hints.
+
+### allow_network
+
+`safety.allow_network` controls whether the run is permitted to have **outbound network egress**
+from scenario target assets.
+
+Definitions (normative):
+
+- **Outbound egress** means network connections from scenario target assets to destinations outside
+  the lab's internal control plane (for example the public Internet, upstream corporate networks, or
+  any non-lab routed networks).
+- `allow_network` does not prohibit lab-internal traffic required for Purple Axiom to function (for
+  example telemetry export to an in-lab collector). Lab-internal allowlists are provider and
+  deployment specific.
+
+Effective policy (normative):
+
+- The effective outbound policy MUST be the logical AND of:
+  - `scenario.safety.allow_network`, and
+  - `security.network.allow_outbound` from `range.yaml` (see the configuration reference).
+- If either value is `false`, outbound egress MUST be treated as **denied** for the run.
+
+Enforcement responsibility (normative):
+
+- The **Lab Provider** is responsible for enforcement of outbound egress posture for scenario target
+  assets. When effective outbound policy is **denied**, the provider MUST enforce an egress-deny
+  posture using lab-level controls (for example VLAN segmentation, virtual switch policy, lab
+  firewall rules, hypervisor security groups, or equivalent).
+- Enforcement MUST NOT rely on scenario payload compliance. A test that ignores the flag MUST still
+  be prevented from establishing outbound egress by the lab posture.
+- The **Runner MUST NOT** be the primary enforcement mechanism for `allow_network`. The runner MAY
+  apply defense-in-depth measures (for example host firewall tightening) when available, but the run
+  MUST remain safe even if runner-side controls are bypassed or unavailable.
 
 ## Target selection (seed)
 
@@ -282,6 +350,7 @@ Ground truth is emitted as JSONL, one action per line.
 
 ## Changelog
 
-| Date | Change                                       |
-| ---- | -------------------------------------------- |
-| TBD  | Style guide migration (no technical changes) |
+| Date       | Change                                             |
+| ---------- | -------------------------------------------------- |
+| 2026-01-13 | Define allow_network enforcement + validation hook |
+| TBD        | Style guide migration (no technical changes)       |

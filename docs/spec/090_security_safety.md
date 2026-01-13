@@ -33,6 +33,15 @@ Key constraints:
 - Evidence artifacts (telemetry and transcripts) MUST follow the configured redaction posture, with
   deterministic withheld/quarantine semantics when redaction is disabled.
 
+Scenario safety interaction (normative):
+
+- Scenario-level network intent is expressed by `scenario.safety.allow_network` (see the
+  [scenario model](030_scenarios.md)).
+- Enforcement of outbound egress posture MUST be performed at the lab boundary by the lab provider
+  or equivalent lab controls. The runner MUST NOT be treated as a sufficient isolation mechanism.
+- The effective outbound policy is the logical AND of `scenario.safety.allow_network` and
+  `security.network.allow_outbound` (see the [configuration reference](120_config_reference.md)).
+
 ## Core principles
 
 - Local-first, isolated lab by default.

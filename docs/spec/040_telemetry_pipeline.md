@@ -136,6 +136,20 @@ A reference canary is:
 
 - `eventcreate /L APPLICATION /T INFORMATION /ID 9001 /SO EventCreate /D "PurpleAxiom raw-mode canary"`
 
+Network egress enforcement check (required when outbound egress is denied):
+
+- When effective outbound policy is denied (see `scenario.safety.allow_network` and
+  `security.network.allow_outbound`), telemetry validation MUST attempt a TCP connect probe from the
+  target asset to the configured `security.network.egress_canary` endpoint.
+- `security.network.egress_canary.address` MUST be a literal IP address (no DNS) and MUST refer to a
+  provider-controlled sentinel that is reachable when outbound egress is allowed and unreachable
+  when outbound egress is denied.
+- The probe MUST use a bounded timeout (default 2000 ms unless configured) and MUST be evaluated
+  only by connect success/failure (no HTTP semantics).
+- If the probe succeeds while outbound egress is denied, telemetry validation MUST fail closed as an
+  egress policy violation (see the operability and stage outcome specifications for reason codes and
+  required evidence fields).
+
 ### Manifest independence and publisher metadata failures
 
 Windows Event Log rendering (human-readable message strings) depends on provider metadata and OS
@@ -709,6 +723,7 @@ records that trigger `RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` MUST be skippe
 
 ## Changelog
 
-| Date | Change                                       |
-| ---- | -------------------------------------------- |
-| TBD  | Style guide migration (no technical changes) |
+| Date       | Change                                            |
+| ---------- | ------------------------------------------------- |
+| 2026-01-13 | Add network egress canary to telemetry validation |
+| TBD        | Style guide migration (no technical changes)      |

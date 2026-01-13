@@ -98,6 +98,22 @@ Every emitted normalized event MUST include the following fields.
 | `metadata.normalizer_version` |        MUST | Normalizer build/version.                                                                                                                                                                         |
 | `metadata.source_type`        |        MUST | Source discriminator (example: `wineventlog`, `sysmon`, `osquery`).                                                                                                                               |
 
+#### Provisional network telemetry source types (v0.1)
+
+Spec 010 reserves pcap and NetFlow ingestion as placeholder contracts, but operators MAY enable
+custom network sources. When doing so, normalized Network Activity events MUST still satisfy the
+Tier 0 envelope requirements, including deterministic `metadata.event_id` and `metadata.uid`.
+
+For v0.1, the following `metadata.source_type` values are reserved for custom network sources:
+
+- `netflow` (NetFlow v5/v9, IPFIX-derived flow records)
+- `pcap_flow` (flows derived from pcap or similar sessionization)
+- `zeek_conn` (Zeek `conn.log` derived flow/session records)
+- `suricata_eve` (Suricata EVE flow/session records)
+
+Event identity for these sources is defined in ADR-0002 under “Network flows (provisional)”,
+including a Tier 3 fallback based on 5-tuple plus flow start time.
+
 ### Strong recommendations
 
 These fields SHOULD be included when available, but are not contract-required.

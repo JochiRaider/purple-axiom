@@ -267,22 +267,22 @@ Rules:
 - The cursor MUST be stable under reprocessing of the same stored artifact.
 - The cursor MUST be represented as a string (example encodings: `li:<decimal>` for line index;
   `bo:<decimal>` for byte offset).
-- Implementations MUST NOT use ephemeral collector file offsets unless those offsets are persisted with
-  the stored artifact and are stable for that artifact under reprocessing.
+- Implementations MUST NOT use ephemeral collector file offsets unless those offsets are persisted
+  with the stored artifact and are stable for that artifact under reprocessing.
 
 #### Network flows (NetFlow/IPFIX and derived session logs) (provisional)
 
-Network telemetry ingestion (pcap, NetFlow) is a v0.1 placeholder contract, but operators MAY plug in
-custom sources. When a custom source produces normalized Network Activity events, the pipeline still
-requires a deterministic `metadata.event_id` / `metadata.uid` identity basis.
+Network telemetry ingestion (pcap, NetFlow) is a v0.1 placeholder contract, but operators MAY plug
+in custom sources. When a custom source produces normalized Network Activity events, the pipeline
+still requires a deterministic `metadata.event_id` / `metadata.uid` identity basis.
 
 This section defines a provisional identity basis for flow and session style records to enable
 attemptable integrations while preserving the event identity invariants.
 
 ##### Tier selection (normative)
 
-1. If the source provides a stable per-flow identifier scoped to the emitting sensor (example:
-   Zeek `uid`), the normalizer MUST use Tier 1.
+1. If the source provides a stable per-flow identifier scoped to the emitting sensor (example: Zeek
+   `uid`), the normalizer MUST use Tier 1.
 1. Otherwise, if flow records are read from a stored artifact included in the run bundle (file,
    table, or object store) and a stable per-record cursor can be persisted as evidence, the
    normalizer MUST use Tier 2 with `stream.name` and `stream.cursor`.
@@ -293,7 +293,8 @@ attemptable integrations while preserving the event identity invariants.
 
 When a stable per-flow identifier is available, the identity basis MUST be:
 
-- `source_type`: implementation-defined, but MUST be stable (recommended: `zeek_conn`, `suricata_eve`)
+- `source_type`: implementation-defined, but MUST be stable (recommended: `zeek_conn`,
+  `suricata_eve`)
 - `origin.host`: emitting sensor identity (from the source record, not the collector)
 - `origin.flow_id`: source-native flow identifier (opaque string)
 

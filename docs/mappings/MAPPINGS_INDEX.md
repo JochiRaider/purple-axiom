@@ -25,6 +25,7 @@ This index does not duplicate normative pipeline semantics. When you need stage-
 | `windows-security_to_ocsf_1.7.0.md`       | Windows Security (Event Log: Security) mapping rules to OCSF 1.7.0; routing intent and field mapping  |
 | `windows-sysmon_to_ocsf_1.7.0.md`         | Windows Sysmon mapping rules to OCSF 1.7.0; event-ID-based routing intent and field mapping           |
 | `osquery_to_ocsf_1.7.0.md`                | osquery scheduled-results mapping rules to OCSF 1.7.0; `query_name` routing intent and field mapping  |
+| `linux-auditd_to_ocsf_1.7.0.md`            | Linux auditd mapping rules to OCSF 1.7.0; audit record routing and field mapping                       |
 | `AGENTS.md`                               | Agent instructions for `docs/mappings/*`                                                              |
 | `MAPPINGS_INDEX.md`                       | This index                                                                                            |
 

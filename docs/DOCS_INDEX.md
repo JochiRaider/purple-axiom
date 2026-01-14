@@ -13,6 +13,7 @@ locate authoritative information.
 | **Decisions**      | `docs/adr/ADR_INDEX.md`           | **Context and history** of architectural choices (ADRs).                 |
 | **Contracts**      | `docs/contracts/index.json`       | **JSON Schemas** for validation of artifacts (e.g., manifest, events).   |
 | **Mappings**       | `docs/mappings/MAPPINGS_INDEX.md` | **Mapping specs** and coverage expectations per `source_type`.           |
+| **Research**       | `docs/research/RESEARCH_INDEX.md` | **Exploratory reports** and conformance studies (non-normative).          |
 
 ## Directory Guide
 

@@ -6,11 +6,10 @@ status: draft
 
 # R-07 osquery to OCSF Mapping Completeness
 
-## Status
+This report evaluates osquery evented table coverage in the current osquery to OCSF 1.7.0 mapping
+profile and highlights priority gaps for v0.1.
 
-Draft (research report; mapping profile assessed as of 2026-01-14)
-
-## Summary
+## Overview
 
 This report answers:
 
@@ -26,29 +25,26 @@ This report answers:
 unmapped, including `user_events` (Linux authentication), eBPF-based tables, process-attributed file
 events, and YARA scanning results.
 
-## Inputs and scope
+## Scope
 
-### In-scope artifacts
+This document covers:
 
 - Project mapping profile: `osquery_to_ocsf_1.7.0.md` (local file)
 - osquery integration specification: `042_osquery_integration.md` (local file)
 - osquery evented tables documentation
 
-### Out of scope
+This document does NOT cover:
 
-- Implementing new mappings (this document identifies gaps and verification hooks only).
-- Non-evented osquery tables (snapshot-only tables like `processes`, `users`, etc.).
-- Windows Event Log sources collected via osquery (see R-06 for Windows Security coverage).
+- Implementing new mappings (this document identifies gaps and verification hooks only)
+- Non-evented osquery tables (snapshot-only tables like `processes`, `users`, etc.)
+- Windows Event Log sources collected via osquery (see R-06 for Windows Security coverage)
 
 ## Methodology
 
 1. Extract "routed event families" and explicit `query_name` coverage from
    `osquery_to_ocsf_1.7.0.md`.
-
 1. Compare against the osquery evented tables catalog across platforms.
-
 1. For each table:
-
    - Mark as **Mapped** if present in the mapping profile's routed families.
    - If mapped, record the **OCSF class_uid** and documented field coverage.
    - Assign a **gap priority** using the criteria below.
@@ -67,11 +63,11 @@ events, and YARA scanning results.
 
 ### Currently routed query names (v0.1)
 
-| Query name       | Platform          | OCSF target class        | `class_uid` | Coverage | Gap priority |
-| ---------------- | ----------------- | ------------------------ | ----------: | -------- | ------------ |
-| `process_events` | Linux, macOS      | Process Activity         |        1007 | Strong   | OK           |
-| `socket_events`  | Linux, macOS      | Network Activity         |        4001 | Strong   | OK           |
-| `file_events`    | Linux, macOS, Win | File System Activity     |        1001 | Partial  | OK (limited) |
+| Query name       | Platform          | OCSF target class    | `class_uid` | Coverage | Gap priority |
+| ---------------- | ----------------- | -------------------- | ----------: | -------- | ------------ |
+| `process_events` | Linux, macOS      | Process Activity     |        1007 | Strong   | OK           |
+| `socket_events`  | Linux, macOS      | Network Activity     |        4001 | Strong   | OK           |
+| `file_events`    | Linux, macOS, Win | File System Activity |        1001 | Partial  | OK (limited) |
 
 ### Unmapped evented tables (gaps)
 
@@ -83,12 +79,12 @@ events, and YARA scanning results.
 
 #### Process activity alternatives
 
-| Table name             | Platform | Suggested OCSF class | Coverage | Gap priority |
-| ---------------------- | -------- | -------------------- | -------- | ------------ |
-| `bpf_process_events`   | Linux    | Process Activity     | None     | P0           |
-| `bpf_socket_events`    | Linux    | Network Activity     | None     | P0           |
-| `process_etw_events`   | Windows  | Process Activity     | None     | P1           |
-| `es_process_events`    | macOS    | Process Activity     | None     | P1           |
+| Table name           | Platform | Suggested OCSF class | Coverage | Gap priority |
+| -------------------- | -------- | -------------------- | -------- | ------------ |
+| `bpf_process_events` | Linux    | Process Activity     | None     | P0           |
+| `bpf_socket_events`  | Linux    | Network Activity     | None     | P0           |
+| `process_etw_events` | Windows  | Process Activity     | None     | P1           |
+| `es_process_events`  | macOS    | Process Activity     | None     | P1           |
 
 #### File activity with process attribution
 
@@ -114,11 +110,11 @@ events, and YARA scanning results.
 
 #### Hardware and system events
 
-| Table name        | Platform          | Suggested OCSF class   | Coverage | Gap priority |
-| ----------------- | ----------------- | ---------------------- | -------- | ------------ |
-| `hardware_events` | Linux, macOS      | Device Config State    | None     | P1           |
-| `disk_events`     | macOS             | Device Config State    | None     | P2           |
-| `syslog_events`   | Linux             | Event Log Activity     | None     | P2           |
+| Table name        | Platform     | Suggested OCSF class | Coverage | Gap priority |
+| ----------------- | ------------ | -------------------- | -------- | ------------ |
+| `hardware_events` | Linux, macOS | Device Config State  | None     | P1           |
+| `disk_events`     | macOS        | Device Config State  | None     | P2           |
+| `syslog_events`   | Linux        | Event Log Activity   | None     | P2           |
 
 ## Field coverage analysis
 
@@ -141,9 +137,9 @@ coverage because events are not present in normalized outputs.
   process context for file writes MUST use `process_file_events` (Linux) or `es_process_file_events`
   (macOS) instead.
 
-- **`socket_events` (Network Activity):** routed to **Network Activity (4001)** with strong
-  endpoint coverage. Direction inference is best-effort based on action (`connect`, `accept`,
-  `bind`). This table is **not available on Windows**.
+- **`socket_events` (Network Activity):** routed to **Network Activity (4001)** with strong endpoint
+  coverage. Direction inference is best-effort based on action (`connect`, `accept`, `bind`). This
+  table is **not available on Windows**.
 
 - **`process_events` (Process Activity):** routed to **Process Activity (1007)** with strong
   coverage. User attribution depends on audit configuration; `actor.user.uid` is populated when
@@ -349,10 +345,10 @@ The mapping profile documents several known limitations for v0.1:
 1. **Platform-specific backend differences:** eBPF tables require kernel >= 4.18. Audit-based tables
    conflict with auditd. EndpointSecurity tables require Full Disk Access on macOS.
 
-## References (descriptive)
+## References
 
-- osquery documentation: Process Auditing
-- osquery documentation: File Integrity Monitoring
-- osquery documentation: YARA Scanning
-- Fleet documentation: osquery evented tables overview
-- osquery GitHub: evented table specifications
+- osquery documentation: Process Auditing (TBD / Needs confirmation)
+- osquery documentation: File Integrity Monitoring (TBD / Needs confirmation)
+- osquery documentation: YARA Scanning (TBD / Needs confirmation)
+- Fleet documentation: osquery evented tables overview (TBD / Needs confirmation)
+- osquery GitHub: evented table specifications (TBD / Needs confirmation)

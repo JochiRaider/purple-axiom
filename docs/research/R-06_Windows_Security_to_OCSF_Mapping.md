@@ -6,16 +6,15 @@ status: draft
 
 # R-06 Windows Security to OCSF Mapping Completeness
 
-## Status
+This report evaluates Windows Security Event ID coverage in the current Windows Security to OCSF
+1.7.0 mapping profile and highlights priority gaps for v0.1.
 
-Draft (research report; mapping profile assessed as of 2026-01-14)
-
-## Summary
+## Overview
 
 This report answers:
 
-- Which Windows Security Event IDs are **currently mapped** to OCSF classes by the project's
-  Windows Security → OCSF 1.7.0 mapping profile.
+- Which Windows Security Event IDs are **currently mapped** to OCSF classes by the project's Windows
+  Security → OCSF 1.7.0 mapping profile.
 - Which Event IDs are **unmapped** (coverage gaps), and a **P0/P1/P2** priority classification for
   closing those gaps.
 - Which mapped Event IDs have **partial field coverage** that is likely to impact downstream
@@ -26,29 +25,26 @@ five event families (Authentication, Process Activity, Account Change, Group Man
 Activity) into OCSF classes. Many high-value Security channel events remain unmapped, including
 object access, privilege use, scheduled task operations, and service installation events.
 
-## Inputs and scope
+## Scope
 
-### In-scope artifacts
+This document covers:
 
 - Project mapping profile: `windows-security_to_ocsf_1.7.0.md` (local file)
 - Windows Security Event Log catalog (Microsoft documentation)
 - Sigma logsource categories dependent on Windows Security events
 
-### Out of scope
+This document does NOT cover:
 
-- Implementing new mappings (this document identifies gaps and verification hooks only).
-- Sysmon event coverage (see R-05 for Sysmon gaps).
-- Non-Security channel Windows Event Logs (System, Application, etc.) except where noted.
+- Implementing new mappings (this document identifies gaps and verification hooks only)
+- Sysmon event coverage (see R-05 for Sysmon gaps)
+- Non-Security channel Windows Event Logs (System, Application, etc.) except where noted
 
 ## Methodology
 
 1. Extract "routed event families" and explicit Event ID coverage from
    `windows-security_to_ocsf_1.7.0.md`.
-
 1. Compare against the Windows Security Event ID catalog for common detection-relevant events.
-
 1. For each Event ID:
-
    - Mark as **Mapped** if present in the mapping profile's routed families.
    - If mapped, record the **OCSF class_uid** and **activity_id** described by the profile.
    - Assign a **gap priority** using the criteria below.
@@ -71,94 +67,94 @@ execution coverage.
 
 ### Currently routed event families (v0.1)
 
-| Event ID | Windows Security event               | Current OCSF mapping (from profile)       | Coverage | Gap priority |
-| -------: | ------------------------------------ | ----------------------------------------- | -------- | ------------ |
-|     4624 | Successful logon                     | Authentication (3002) / Logon             | Strong   | OK           |
-|     4625 | Failed logon                         | Authentication (3002) / Logon             | Strong   | OK           |
-|     4634 | Logoff                               | Authentication (3002) / Logoff            | Strong   | OK           |
-|     4647 | User initiated logoff                | Authentication (3002) / Logoff            | Strong   | OK           |
-|     4688 | Process creation                     | Process Activity (1007) / Launch          | Strong   | OK           |
-|     4689 | Process termination                  | Process Activity (1007) / Terminate       | Strong   | OK           |
-|     4720 | User account created                 | Account Change (3001) / Create            | Moderate | OK           |
-|     4722 | User account enabled                 | Account Change (3001) / Enable            | Moderate | OK           |
-|     4725 | User account disabled                | Account Change (3001) / Disable           | Moderate | OK           |
-|     4726 | User account deleted                 | Account Change (3001) / Delete            | Moderate | OK           |
-|     4740 | Account locked out                   | Account Change (3001) / Lock              | Moderate | OK           |
-|     4728 | Member added to global group         | Group Management (3006) / AddUser         | Moderate | OK           |
-|     4729 | Member removed from global group     | Group Management (3006) / RemoveUser      | Moderate | OK           |
-|     4732 | Member added to local group          | Group Management (3006) / AddUser         | Moderate | OK           |
-|     4733 | Member removed from local group      | Group Management (3006) / RemoveUser      | Moderate | OK           |
-|     4756 | Member added to universal group      | Group Management (3006) / AddUser         | Moderate | OK           |
-|     4757 | Member removed from universal group  | Group Management (3006) / RemoveUser      | Moderate | OK           |
-|     1102 | Audit log cleared                    | Event Log Activity (1008) / Clear         | Strong   | OK           |
+| Event ID | Windows Security event              | Current OCSF mapping (from profile)  | Coverage | Gap priority |
+| -------: | ----------------------------------- | ------------------------------------ | -------- | ------------ |
+|     4624 | Successful logon                    | Authentication (3002) / Logon        | Strong   | OK           |
+|     4625 | Failed logon                        | Authentication (3002) / Logon        | Strong   | OK           |
+|     4634 | Logoff                              | Authentication (3002) / Logoff       | Strong   | OK           |
+|     4647 | User initiated logoff               | Authentication (3002) / Logoff       | Strong   | OK           |
+|     4688 | Process creation                    | Process Activity (1007) / Launch     | Strong   | OK           |
+|     4689 | Process termination                 | Process Activity (1007) / Terminate  | Strong   | OK           |
+|     4720 | User account created                | Account Change (3001) / Create       | Moderate | OK           |
+|     4722 | User account enabled                | Account Change (3001) / Enable       | Moderate | OK           |
+|     4725 | User account disabled               | Account Change (3001) / Disable      | Moderate | OK           |
+|     4726 | User account deleted                | Account Change (3001) / Delete       | Moderate | OK           |
+|     4740 | Account locked out                  | Account Change (3001) / Lock         | Moderate | OK           |
+|     4728 | Member added to global group        | Group Management (3006) / AddUser    | Moderate | OK           |
+|     4729 | Member removed from global group    | Group Management (3006) / RemoveUser | Moderate | OK           |
+|     4732 | Member added to local group         | Group Management (3006) / AddUser    | Moderate | OK           |
+|     4733 | Member removed from local group     | Group Management (3006) / RemoveUser | Moderate | OK           |
+|     4756 | Member added to universal group     | Group Management (3006) / AddUser    | Moderate | OK           |
+|     4757 | Member removed from universal group | Group Management (3006) / RemoveUser | Moderate | OK           |
+|     1102 | Audit log cleared                   | Event Log Activity (1008) / Clear    | Strong   | OK           |
 
 ### Unmapped event families (gaps)
 
 #### Object access events
 
-| Event ID | Windows Security event                 | Current OCSF mapping | Coverage | Gap priority |
-| -------: | -------------------------------------- | -------------------- | -------- | ------------ |
-|     4656 | Handle to object requested             | Unmapped (no route)  | None     | P1           |
-|     4658 | Handle to object closed                | Unmapped (no route)  | None     | P2           |
-|     4660 | Object deleted                         | Unmapped (no route)  | None     | P1           |
-|     4663 | Attempt to access object               | Unmapped (no route)  | None     | P0           |
+| Event ID | Windows Security event     | Current OCSF mapping | Coverage | Gap priority |
+| -------: | -------------------------- | -------------------- | -------- | ------------ |
+|     4656 | Handle to object requested | Unmapped (no route)  | None     | P1           |
+|     4658 | Handle to object closed    | Unmapped (no route)  | None     | P2           |
+|     4660 | Object deleted             | Unmapped (no route)  | None     | P1           |
+|     4663 | Attempt to access object   | Unmapped (no route)  | None     | P0           |
 
 #### Scheduled task events
 
-| Event ID | Windows Security event         | Current OCSF mapping | Coverage | Gap priority |
-| -------: | ------------------------------ | -------------------- | -------- | ------------ |
-|     4698 | Scheduled task created         | Unmapped (no route)  | None     | P0           |
-|     4699 | Scheduled task deleted         | Unmapped (no route)  | None     | P1           |
-|     4700 | Scheduled task enabled         | Unmapped (no route)  | None     | P1           |
-|     4701 | Scheduled task disabled        | Unmapped (no route)  | None     | P1           |
-|     4702 | Scheduled task updated         | Unmapped (no route)  | None     | P1           |
+| Event ID | Windows Security event  | Current OCSF mapping | Coverage | Gap priority |
+| -------: | ----------------------- | -------------------- | -------- | ------------ |
+|     4698 | Scheduled task created  | Unmapped (no route)  | None     | P0           |
+|     4699 | Scheduled task deleted  | Unmapped (no route)  | None     | P1           |
+|     4700 | Scheduled task enabled  | Unmapped (no route)  | None     | P1           |
+|     4701 | Scheduled task disabled | Unmapped (no route)  | None     | P1           |
+|     4702 | Scheduled task updated  | Unmapped (no route)  | None     | P1           |
 
 #### Service events
 
-| Event ID | Windows Security event         | Current OCSF mapping | Coverage | Gap priority |
-| -------: | ------------------------------ | -------------------- | -------- | ------------ |
-|     4697 | Service installed              | Unmapped (no route)  | None     | P0           |
+| Event ID | Windows Security event | Current OCSF mapping | Coverage | Gap priority |
+| -------: | ---------------------- | -------------------- | -------- | ------------ |
+|     4697 | Service installed      | Unmapped (no route)  | None     | P0           |
 
 #### Privilege use events
 
-| Event ID | Windows Security event                       | Current OCSF mapping | Coverage | Gap priority |
-| -------: | -------------------------------------------- | -------------------- | -------- | ------------ |
-|     4672 | Special privileges assigned to new logon     | Unmapped (no route)  | None     | P0           |
-|     4673 | Privileged service called                    | Unmapped (no route)  | None     | P1           |
-|     4674 | Operation attempted on privileged object     | Unmapped (no route)  | None     | P1           |
+| Event ID | Windows Security event                   | Current OCSF mapping | Coverage | Gap priority |
+| -------: | ---------------------------------------- | -------------------- | -------- | ------------ |
+|     4672 | Special privileges assigned to new logon | Unmapped (no route)  | None     | P0           |
+|     4673 | Privileged service called                | Unmapped (no route)  | None     | P1           |
+|     4674 | Operation attempted on privileged object | Unmapped (no route)  | None     | P1           |
 
 #### Additional authentication events
 
-| Event ID | Windows Security event                       | Current OCSF mapping | Coverage | Gap priority |
-| -------: | -------------------------------------------- | -------------------- | -------- | ------------ |
-|     4648 | Logon using explicit credentials             | Unmapped (no route)  | None     | P0           |
-|     4649 | Replay attack detected                       | Unmapped (no route)  | None     | P1           |
-|     4675 | SIDs filtered                                | Unmapped (no route)  | None     | P2           |
+| Event ID | Windows Security event           | Current OCSF mapping | Coverage | Gap priority |
+| -------: | -------------------------------- | -------------------- | -------- | ------------ |
+|     4648 | Logon using explicit credentials | Unmapped (no route)  | None     | P0           |
+|     4649 | Replay attack detected           | Unmapped (no route)  | None     | P1           |
+|     4675 | SIDs filtered                    | Unmapped (no route)  | None     | P2           |
 
 #### Domain controller authentication events (Account Logon)
 
-| Event ID | Windows Security event                       | Current OCSF mapping | Coverage | Gap priority |
-| -------: | -------------------------------------------- | -------------------- | -------- | ------------ |
-|     4768 | Kerberos TGT requested                       | Unmapped (no route)  | None     | P1           |
-|     4769 | Kerberos service ticket requested            | Unmapped (no route)  | None     | P1           |
-|     4770 | Kerberos service ticket renewed              | Unmapped (no route)  | None     | P2           |
-|     4771 | Kerberos pre-authentication failed           | Unmapped (no route)  | None     | P1           |
-|     4776 | NTLM credential validation                   | Unmapped (no route)  | None     | P1           |
+| Event ID | Windows Security event             | Current OCSF mapping | Coverage | Gap priority |
+| -------: | ---------------------------------- | -------------------- | -------- | ------------ |
+|     4768 | Kerberos TGT requested             | Unmapped (no route)  | None     | P1           |
+|     4769 | Kerberos service ticket requested  | Unmapped (no route)  | None     | P1           |
+|     4770 | Kerberos service ticket renewed    | Unmapped (no route)  | None     | P2           |
+|     4771 | Kerberos pre-authentication failed | Unmapped (no route)  | None     | P1           |
+|     4776 | NTLM credential validation         | Unmapped (no route)  | None     | P1           |
 
 #### Policy change events
 
-| Event ID | Windows Security event                       | Current OCSF mapping | Coverage | Gap priority |
-| -------: | -------------------------------------------- | -------------------- | -------- | ------------ |
-|     4719 | System audit policy changed                  | Unmapped (no route)  | None     | P0           |
-|     4739 | Domain policy changed                        | Unmapped (no route)  | None     | P1           |
-|     4713 | Kerberos policy changed                      | Unmapped (no route)  | None     | P2           |
+| Event ID | Windows Security event      | Current OCSF mapping | Coverage | Gap priority |
+| -------: | --------------------------- | -------------------- | -------- | ------------ |
+|     4719 | System audit policy changed | Unmapped (no route)  | None     | P0           |
+|     4739 | Domain policy changed       | Unmapped (no route)  | None     | P1           |
+|     4713 | Kerberos policy changed     | Unmapped (no route)  | None     | P2           |
 
 #### Security group enumeration events
 
-| Event ID | Windows Security event                       | Current OCSF mapping | Coverage | Gap priority |
-| -------: | -------------------------------------------- | -------------------- | -------- | ------------ |
-|     4798 | User's local group membership enumerated     | Unmapped (no route)  | None     | P1           |
-|     4799 | Security-enabled local group enumerated      | Unmapped (no route)  | None     | P1           |
+| Event ID | Windows Security event                   | Current OCSF mapping | Coverage | Gap priority |
+| -------: | ---------------------------------------- | -------------------- | -------- | ------------ |
+|     4798 | User's local group membership enumerated | Unmapped (no route)  | None     | P1           |
+|     4799 | Security-enabled local group enumerated  | Unmapped (no route)  | None     | P1           |
 
 ## Field coverage analysis
 
@@ -167,16 +163,16 @@ coverage because events are not present in normalized outputs.
 
 ### Pivot coverage for routed Event IDs
 
-| Event ID | OCSF class        | Actor user | Target user | Device  | Process | Network endpoint |
-| -------- | ----------------- | ---------- | ----------- | ------- | ------- | ---------------- |
-| 4624     | Authentication    | Yes        | No          | Yes     | No      | Partial          |
-| 4625     | Authentication    | Yes        | No          | Yes     | No      | Partial          |
-| 4634     | Authentication    | Yes        | No          | Yes     | No      | No               |
-| 4647     | Authentication    | Yes        | No          | Yes     | No      | No               |
-| 4688     | Process Activity  | Yes        | No          | Yes     | Yes     | No               |
-| 4689     | Process Activity  | Yes        | No          | Yes     | Yes     | No               |
-| 4720     | Account Change    | Partial    | Yes         | Yes     | No      | No               |
-| 1102     | Event Log Activity| Partial    | No          | Yes     | No      | No               |
+| Event ID | OCSF class         | Actor user | Target user | Device | Process | Network endpoint |
+| -------- | ------------------ | ---------- | ----------- | ------ | ------- | ---------------- |
+| 4624     | Authentication     | Yes        | No          | Yes    | No      | Partial          |
+| 4625     | Authentication     | Yes        | No          | Yes    | No      | Partial          |
+| 4634     | Authentication     | Yes        | No          | Yes    | No      | No               |
+| 4647     | Authentication     | Yes        | No          | Yes    | No      | No               |
+| 4688     | Process Activity   | Yes        | No          | Yes    | Yes     | No               |
+| 4689     | Process Activity   | Yes        | No          | Yes    | Yes     | No               |
+| 4720     | Account Change     | Partial    | Yes         | Yes    | No      | No               |
+| 1102     | Event Log Activity | Partial    | No          | Yes    | No      | No               |
 
 ### Notable partial coverage (current routed set)
 
@@ -213,8 +209,7 @@ These Event IDs commonly underpin high-value detection content:
 - **4656/4660 (Handle request/Object deleted)** — file system audit correlation
 - **4673/4674 (Privilege use)** — sensitive privilege exercise monitoring
 - **4699–4702 (Scheduled task lifecycle)** — complete task monitoring
-- **4768/4769/4771/4776 (DC authentication)** — Kerberos/NTLM attack detection on domain
-  controllers
+- **4768/4769/4771/4776 (DC authentication)** — Kerberos/NTLM attack detection on domain controllers
 - **4798/4799 (Group enumeration)** — reconnaissance detection
 
 ### P2 gaps (defer unless scenario-driven)
@@ -376,10 +371,10 @@ The mapping profile documents several known limitations for v0.1:
 1. **Command line and sensitive fields:** Redaction policy must be applied before emitting
    normalized fields.
 
-## References (descriptive)
+## References
 
-- Microsoft Learn: Windows Security Event documentation
-- Microsoft Learn: Appendix L - Events to Monitor
-- Ultimate Windows Security: Event ID encyclopedia
-- SigmaHQ: Logsource documentation
-- SigmaHQ rule repository (size/scale)
+- Microsoft Learn: Windows Security Event documentation (TBD / Needs confirmation)
+- Microsoft Learn: Appendix L - Events to Monitor (TBD / Needs confirmation)
+- Ultimate Windows Security: Event ID encyclopedia (TBD / Needs confirmation)
+- SigmaHQ logsource documentation (TBD / Needs confirmation)
+- SigmaHQ rule repository (size/scale) (TBD / Needs confirmation)

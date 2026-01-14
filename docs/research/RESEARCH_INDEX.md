@@ -21,7 +21,6 @@ in specs or ADRs.
 | `R-05_Sysmon-to-OCSF_mapping.md`                                    | Sysmon EventID mapping coverage and gap prioritization against OCSF 1.7.0            |
 | `R-06_Windows_Security_to_OCSF_Mapping.md`                          | Windows Security Event ID mapping coverage and gap prioritization against OCSF 1.7.0 |
 | `R-07_osquery_to_OCSF_Mapping.md`                                   | osquery evented table mapping coverage and gap prioritization against OCSF 1.7.0     |
-| `RESEARCH_INDEX.md`                                                 | This index                                                                           |
 
 ## Common tasks (fast paths)
 

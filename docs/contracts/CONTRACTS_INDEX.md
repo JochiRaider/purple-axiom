@@ -34,6 +34,7 @@ Rows are sorted lexicographically by filename.
 | `netflow_manifest.schema.json`          | Schema for NetFlow/flow artifacts (placeholder / optional)       |
 | `ocsf_event_envelope.schema.json`       | Schema for normalized OCSF event envelope                        |
 | `pcap_manifest.schema.json`             | Schema for pcap artifacts (placeholder / optional)               |
+| `range_config.schema.json`              | Schema for range.yaml configuration inputs                       |
 | `runner_executor_evidence.schema.json`  | Schema for runner/executor evidence outputs                      |
 | `summary.schema.json`                   | Schema for run-level summary outputs                             |
 | `telemetry_validation.schema.json`      | Schema for telemetry validation outputs                          |

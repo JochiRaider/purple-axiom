@@ -6,6 +6,15 @@ status: draft
 
 # Python style and quality policy
 
+This policy defines Python coding, formatting, typing, testing, and determinism expectations for
+contributors and local coding agents.
+
+## Overview
+
+The policy aligns Python implementation practices with CI gates and deterministic artifact
+requirements. Tooling is authoritative where configured, and conventions fill gaps only when tooling
+does not enforce a behavior.
+
 ## Purpose
 
 This policy defines Python implementation standards for this repository. It is optimized for local
@@ -16,16 +25,16 @@ desired behavior.
 
 ## Scope
 
-In scope:
+This document covers:
 
-- Python source code, scripts, and tooling in this repository.
-- Formatting, linting, typing, testing, and golden fixture generation.
-- Determinism and safety requirements for artifact-producing code paths.
+- Python source code, scripts, and tooling in this repository
+- Formatting, linting, typing, testing, and golden fixture generation
+- Determinism and safety requirements for artifact-producing code paths
 
-Out of scope:
+This document does NOT cover:
 
-- Non-Python code style policies (Markdown is governed by the Markdown policy/tooling).
-- Deployment/runtime orchestration policies unless explicitly implemented in Python.
+- Non-Python code style policies (Markdown is governed by the Markdown policy/tooling)
+- Deployment/runtime orchestration policies unless explicitly implemented in Python
 
 ## Toolchain and CI pins (normative for CI and guidance for local)
 
@@ -52,12 +61,12 @@ Toolchain baseline (v0.1):
 
 ## Environment management (uv)
 
-- The project uses a `uv`-managed virtual environment for development and CI execution.
+- The project uses a `uv`-managed virtual environment for development and CI execution
 - Contributors MUST run Python tooling via `uv run <tool>` (for example, `uv run pytest`) to ensure
-  the intended environment is used.
+  the intended environment is used
 - The repository SHOULD standardize the virtual environment location (recommended: `.venv/`) and
-  ensure it is ignored by Git.
-- CI MUST verify `uv --version` matches the pinned version before running any gates.
+  ensure it is ignored by Git
+- CI MUST verify `uv --version` matches the pinned version before running any gates
 
 ## Canonical quality gates
 
@@ -81,11 +90,11 @@ TODO: record the exact commands once `pyproject.toml`, task runners, and CI work
 
 ## Formatting and linting (ruff)
 
-- Ruff is the single source of truth for formatting and lint rules.
-- Contributors MUST NOT manually “style format” code beyond what ruff produces.
-- Lint suppressions MUST be local and justified with a short comment.
-- New and modified files MUST be formatted and lint-clean before review unless a staged migration
-  is explicitly declared.
+- Ruff is the single source of truth for formatting and lint rules
+- Contributors MUST NOT manually “style format” code beyond what ruff produces
+- Lint suppressions MUST be local and justified with a short comment
+- New and modified files MUST be formatted and lint-clean before review unless a staged migration is
+  explicitly declared
 
 TODO: record the selected ruff rule sets and any project-specific exceptions once the
 `pyproject.toml` config is created.
@@ -96,8 +105,8 @@ TODO: record the selected ruff rule sets and any project-specific exceptions onc
   - public functions/classes,
   - module entrypoints,
   - artifact-producing code paths.
-- Internal helper functions SHOULD be typed when non-trivial.
-- Prefer `pathlib.Path` over raw strings for filesystem paths.
+- Internal helper functions SHOULD be typed when non-trivial
+- Prefer `pathlib.Path` over raw strings for filesystem paths
 - Avoid `Any` unless explicitly justified; if used, constrain it as close to the boundary as
   possible.
 
@@ -110,59 +119,59 @@ interfaces stabilize).
   - public modules that define stable interfaces (schemas, contracts, canonicalization),
   - public functions/classes exported as part of a library surface,
   - CLI entrypoints and subcommands.
-- Docstrings SHOULD be present for other non-trivial functions.
-- Docstrings MUST NOT contain secrets or unredacted sensitive material.
+- Docstrings SHOULD be present for other non-trivial functions
+- Docstrings MUST NOT contain secrets or unredacted sensitive material
 
 ## Determinism requirements
 
 Because this project depends on reproducibility:
 
-- Code that emits artifacts MUST produce stable output given the same inputs.
+- Code that emits artifacts MUST produce stable output given the same inputs
 - Ordering MUST be explicit when it affects serialization:
-  - Sort keys MUST be documented.
-  - Never rely on filesystem iteration order.
-- Randomness MUST be seeded and the seed MUST be recorded in the run bundle if applicable.
-- Timestamps MUST be timezone-explicit; avoid implicit local-time behavior.
+  - Sort keys MUST be documented
+  - Never rely on filesystem iteration order
+- Randomness MUST be seeded and the seed MUST be recorded in the run bundle if applicable
+- Timestamps MUST be timezone-explicit; avoid implicit local-time behavior
 
 ## Error handling
 
-- Use exceptions for programmer errors and unrecoverable stage failures.
-- For expected operational failures (missing file, missing mapping, missing required input),
-  raise a domain-specific exception type and ensure the caller can classify it.
-- Error messages MUST be actionable and MUST avoid leaking secrets or sensitive data.
+- Use exceptions for programmer errors and unrecoverable stage failures
+- For expected operational failures (missing file, missing mapping, missing required input), raise a
+  domain-specific exception type and ensure the caller can classify it.
+- Error messages MUST be actionable and MUST avoid leaking secrets or sensitive data
 
 TODO: define the repository error taxonomy once stage outcome classification is implemented.
 
 ## Logging and redaction
 
-- Logging MUST NOT emit secrets. Use placeholder values and reference IDs.
-- When logging structured data, avoid dumping entire events unless the redaction policy permits it.
-- Any “debug dump” feature MUST be opt-in and MUST be compatible with the redaction policy.
+- Logging MUST NOT emit secrets. Use placeholder values and reference IDs
+- When logging structured data, avoid dumping entire events unless the redaction policy permits it
+- Any “debug dump” feature MUST be opt-in and MUST be compatible with the redaction policy
 
 TODO: link to the redaction policy ADR once its path is finalized.
 
 ## Testing and fixtures (pytest, pytest-regressions)
 
-- New behavior MUST include tests.
-- Regression tests MUST be deterministic and stable across OS and filesystem differences.
-- Golden fixtures MUST be generated only under pinned toolchain versions.
-- Test data MUST NOT include secrets; use synthetic or redacted values.
+- New behavior MUST include tests
+- Regression tests MUST be deterministic and stable across OS and filesystem differences
+- Golden fixtures MUST be generated only under pinned toolchain versions
+- Test data MUST NOT include secrets; use synthetic or redacted values
 
 ## Dependency management (uv)
 
-- Dependencies MUST be added intentionally and recorded in the repo’s lockfile workflow.
+- Dependencies MUST be added intentionally and recorded in the repo’s lockfile workflow
 - New dependencies SHOULD be pinned or constrained in a way compatible with the repo’s version-pin
   policy (top-level pins in CI, transitives via lockfile).
-- Avoid large transitive dependency trees unless justified.
+- Avoid large transitive dependency trees unless justified
 
 TODO: define the exact workflow for adding dependencies once `uv.lock` and `pyproject.toml` are in
 place.
 
 ## File layout conventions (initial)
 
-- Production code SHOULD live under a single import root (recommended: `src/` layout).
-- Tooling and scripts SHOULD live under a separate directory (recommended: `tools/`).
-- Tests SHOULD mirror package layout (recommended: `tests/`).
+- Production code SHOULD live under a single import root (recommended: `src/` layout)
+- Tooling and scripts SHOULD live under a separate directory (recommended: `tools/`)
+- Tests SHOULD mirror package layout (recommended: `tests/`)
 
 TODO: finalize the layout once implementation begins.
 
@@ -170,7 +179,7 @@ TODO: finalize the layout once implementation begins.
 
 This policy is satisfied when:
 
-- The repository exposes canonical commands for format, lint, type-check, and test.
-- CI enforces the pinned toolchain and fails on mismatches.
-- Golden fixtures are never blessed from unpinned local toolchains.
-- Determinism constraints are explicitly enforced where artifacts are emitted.
+- The repository exposes canonical commands for format, lint, type-check, and test
+- CI enforces the pinned toolchain and fails on mismatches
+- Golden fixtures are never blessed from unpinned local toolchains
+- Determinism constraints are explicitly enforced where artifacts are emitted

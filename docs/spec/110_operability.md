@@ -82,17 +82,48 @@ Definitions:
   interval.
 
 Planning baseline targets (initial defaults; operators SHOULD replace with measured baselines for
-their lab):
+their lab). Empirical measurement methodology and guidance for replacing these defaults is defined
+in [R-04 EPS baseline quantification](../research/R-04_EPS_baseline_quantification.md):
 
-| Asset role                | Telemetry profile                                        | Sustained EPS target | Burst EPS target (p95 1m) | Collector CPU target (p95) | Collector RSS target (p95) | Raw write estimate (MB/s)† |
-| ------------------------- | -------------------------------------------------------- | -------------------: | ------------------------: | -------------------------: | -------------------------: | -------------------------: |
-| Windows endpoint          | Windows Event Log (Application/Security/System) + Sysmon |                   50 |                       150 |             ≤ 5% of 1 vCPU |                   ≤ 350 MB |                    0.1–0.9 |
-| Windows domain controller | Windows Event Log (Application/Security/System)          |                  300 |                     1,000 |            ≤ 15% of 1 vCPU |                   ≤ 500 MB |                    0.6–6.0 |
-| Linux server              | auditd + osquery (evented + scheduled)                   |                  100 |                       300 |            ≤ 10% of 1 vCPU |                   ≤ 250 MB |                    0.2–1.8 |
+| Asset role                | Telemetry profile                                               | Sustained EPS target | Burst EPS target (p95 1m) | Collector CPU target (p95) | Collector RSS target (p95) | Raw write estimate (MB/s)† |
+| ------------------------- | --------------------------------------------------------------- | -------------------: | ------------------------: | -------------------------: | -------------------------: | -------------------------: |
+| Windows endpoint          | Windows Event Log (Application + Security + Sysmon)             |                   50 |                       150 |             ≤ 5% of 1 vCPU |                   ≤ 350 MB |                    0.1–0.9 |
+| Windows domain controller | Windows Event Log (Application + Security + Directory Services) |                  300 |                      1000 |            ≤ 10% of 1 vCPU |                   ≤ 500 MB |                    0.6–6.0 |
+| Linux server              | auditd + osquery (evented + scheduled)                          |                  100 |                       300 |             ≤ 5% of 1 vCPU |                   ≤ 250 MB |                    0.2–1.8 |
 
 † Raw write estimate assumes 2–6 KB average serialized event payload per record and is intended only
 for order-of-magnitude disk sizing. Implementations MUST measure and report observed raw bytes per
 second during validation.
+
+#### EPS baseline artifact (recommended)
+
+Implementations that perform EPS baseline quantification (for example, to tune or replace the
+planning defaults above) SHOULD write `runs/<run_id>/logs/eps_baseline.json`.
+
+`eps_baseline.json` MUST be treated as an analytical artifact and MUST NOT affect run status. When
+present, it MUST include, at minimum:
+
+- `schema_version` (string; MUST be `pa:eps_baseline:v1`)
+- `asset_role` (string; MUST match the asset role used for target resolution)
+- `time_window`:
+  - `warmup_seconds` (integer)
+  - `sustained_window_seconds` (integer; MUST be `600`)
+  - `burst_window_seconds` (integer; MUST be `60`)
+- `eps`:
+  - `sustained_mean` (number)
+  - `burst_p95_1m` (number)
+- `resources`:
+  - `cpu_p95_pct` (number)
+  - `rss_p95_bytes` (integer)
+- `disk`:
+  - `raw_bytes_written_total` (integer)
+  - `normalized_bytes_written_total` (integer)
+- `inputs`:
+  - `scenario_id` (string)
+  - `atomic_tests` (array of strings; MUST be sorted by UTF-8 byte order)
+
+Measurement methodology and replacement criteria are defined in
+[R-04 EPS baseline quantification](../research/R-04_EPS_baseline_quantification.md).
 
 Normative requirements:
 
@@ -440,12 +471,14 @@ Minimum accounting fields (normative):
 ## References
 
 - [Telemetry pipeline specification](040_telemetry_pipeline.md)
+- [R-04 EPS baseline quantification](../research/R-04_EPS_baseline_quantification.md)
 - [Configuration reference](120_config_reference.md)
 - [Telemetry validation schema](../contracts/telemetry_validation.schema.json)
 
 ## Changelog
 
-| Date       | Change                                                   |
-| ---------- | -------------------------------------------------------- |
-| 2026-01-13 | Add network egress canary to telemetry validation gating |
-| 2026-01-12 | Formatting update                                        |
+| Date       | Change                                                        |
+| ---------- | ------------------------------------------------------------- |
+| 2026-01-13 | Add EPS baseline link and eps_baseline.json artifact contract |
+| 2026-01-13 | Add network egress canary to telemetry validation gating      |
+| 2026-01-12 | Formatting update                                             |

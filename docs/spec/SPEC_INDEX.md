@@ -20,6 +20,7 @@ in `docs/spec/` so agents do not need to load every document to find the authori
 | `035_validation_criteria.md`                  | Criteria evaluation semantics and cleanup verification model    |
 | `040_telemetry_pipeline.md`                   | Telemetry collection invariants and capture requirements        |
 | `042_osquery_integration.md`                  | Osquery collection path and normalization expectations          |
+| `044_unix_log_ingestion.md`                   | Unix log ingestion paths, dedupe policy, and audit correlation  |
 | `045_storage_formats.md`                      | Storage formats and schema evolution expectations               |
 | `050_normalization_ocsf.md`                   | Normalization rules into OCSF and mapping approach              |
 | `055_ocsf_field_tiers.md`                     | OCSF field tiers and coverage expectations                      |
@@ -50,6 +51,7 @@ in `docs/spec/` so agents do not need to load every document to find the authori
 | “What does cleanup verification mean?”             | `035_validation_criteria.md`                  | `030_scenarios.md`                                                                    |
 | “What telemetry must be captured?”                 | `040_telemetry_pipeline.md`                   | `042_osquery_integration.md`                                                          |
 | “How is osquery ingested?”                         | `042_osquery_integration.md`                  | `040_telemetry_pipeline.md`, `050_normalization_ocsf.md`                              |
+| “How are Unix logs ingested?”                      | `044_unix_log_ingestion.md`                   | `040_telemetry_pipeline.md`, `050_normalization_ocsf.md`                              |
 | “How do we normalize into OCSF?”                   | `050_normalization_ocsf.md`                   | `055_ocsf_field_tiers.md`                                                             |
 | “What coverage is required for OCSF fields?”       | `055_ocsf_field_tiers.md`                     | `070_scoring_metrics.md`                                                              |
 | “How are detections represented?”                  | `060_detection_sigma.md`                      | `065_sigma_to_ocsf_bridge.md`                                                         |

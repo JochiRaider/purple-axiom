@@ -21,6 +21,7 @@ repos:
 
       - id: mdformat
         name: mdformat
-        entry: uv run mdformat .
+        entry: uv run mdformat
         language: system
-        pass_filenames: false
+        types_or: [markdown]
+        exclude: '(^|/)(AGENTS\.md|.*_INDEX\.md)$'

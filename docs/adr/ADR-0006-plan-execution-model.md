@@ -7,10 +7,6 @@ category: adr
 
 # ADR-0006: Plan execution model and target cardinality
 
-## Status
-
-Draft
-
 ## Context
 
 Purple Axiom v0.1 enforces a strict 1:1 relationship between an action and a target asset:

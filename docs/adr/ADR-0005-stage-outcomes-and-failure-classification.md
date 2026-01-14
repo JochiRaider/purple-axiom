@@ -5,8 +5,6 @@ status: draft
 category: adr
 ---
 
-<!-- docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md -->
-
 # ADR-0005: Stage outcomes and failure classification
 
 ## Status

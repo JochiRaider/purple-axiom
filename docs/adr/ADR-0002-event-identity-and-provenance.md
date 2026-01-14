@@ -13,12 +13,6 @@ related:
 
 # ADR-0002: Event identity and provenance
 
-| Property | Value      |
-| -------- | ---------- |
-| Status   | proposed   |
-| Date     | 2026-01-XX |
-| Deciders | TBD        |
-
 ## Context
 
 Purple Axiom requires a stable, deterministic event identifier to support:

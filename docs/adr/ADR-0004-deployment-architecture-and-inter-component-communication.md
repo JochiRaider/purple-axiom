@@ -7,10 +7,6 @@ category: adr
 
 # ADR-0004: Deployment architecture and inter-component communication
 
-## Status
-
-Draft
-
 ## Context
 
 Purple Axiom v0.1 specifies a staged pipeline (lab provider, runner, telemetry, normalization,

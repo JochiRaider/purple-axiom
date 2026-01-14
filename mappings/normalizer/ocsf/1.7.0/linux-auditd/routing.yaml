@@ -1,0 +1,76 @@
+# mappings/normalizer/ocsf/1.7.0/linux-auditd/routing.yaml
+format_version: 1
+
+routing:
+  # Linux auditd does not use provider/channel discriminators.
+  provider: null
+  channel: null
+
+  # Primary routing is by record_type.
+  # For SYSCALL records, secondary routing by syscall number determines OCSF class.
+  # The aggregator must provide record_type and fields.syscall for proper routing.
+  routing_key: record_type
+  secondary_routing_key: fields.syscall
+
+routes:
+  # --- Process Activity (execve family) ---
+  # SYSCALL records with exec-family syscalls route to Process Activity.
+  - route_id: syscall_exec
+    match:
+      record_types: ["SYSCALL"]
+      syscalls: ["59", "322"]  # execve, execveat (x86_64)
+    class_map: classes/process_activity_1007.yaml
+
+  # --- File System Activity ---
+  # SYSCALL records with file-family syscalls route to File System Activity.
+  - route_id: syscall_file
+    match:
+      record_types: ["SYSCALL"]
+      syscalls:
+        - "2"     # open
+        - "257"   # openat
+        - "85"    # creat
+        - "87"    # unlink
+        - "263"   # unlinkat
+        - "82"    # rename
+        - "264"   # renameat
+        - "90"    # chmod
+        - "268"   # fchmodat
+        - "92"    # chown
+        - "260"   # fchownat
+    class_map: classes/file_system_activity_1001.yaml
+
+  # --- Network Activity ---
+  # SYSCALL records with network-family syscalls route to Network Activity.
+  - route_id: syscall_network
+    match:
+      record_types: ["SYSCALL"]
+      syscalls:
+        - "41"    # socket
+        - "42"    # connect
+        - "43"    # accept
+        - "44"    # sendto
+        - "45"    # recvfrom
+        - "49"    # bind
+        - "50"    # listen
+        - "288"   # accept4
+    class_map: classes/network_activity_4001.yaml
+
+  # --- Authentication ---
+  # USER_* records route to Authentication.
+  - route_id: user_auth
+    match:
+      record_types:
+        - "USER_AUTH"
+        - "USER_LOGIN"
+        - "USER_LOGOUT"
+        - "USER_ACCT"
+        - "USER_START"
+        - "USER_END"
+    class_map: classes/authentication_3002.yaml
+
+# Unrouted record types and syscalls:
+# - SYSCALL records with syscalls not listed above are unrouted.
+# - Record types not listed (AVC, CONFIG_CHANGE, DAEMON_*, etc.) are unrouted.
+# - Unrouted events MUST be counted in mapping_coverage.json.
+# - Unrouted events SHOULD be preserved in raw/ per Tier R guidance.

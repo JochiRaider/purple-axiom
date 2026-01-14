@@ -1,0 +1,120 @@
+# mappings/normalizer/ocsf/1.7.0/linux-auditd/classes/process_activity_1007.yaml
+format_version: 1
+
+class_map:
+  class_uid: 1007
+  class_name: Process Activity
+  category_uid: 1
+
+  # Routing key is syscall number (as string).
+  # Both execve (59) and execveat (322) map to Launch activity.
+  event_id_map:
+    "59": {activity_id: 1, activity_name: "Launch"}     # execve
+    "322": {activity_id: 1, activity_name: "Launch"}    # execveat
+
+emit:
+  # --- Classification ---
+  class_uid:
+    const_from_class: true
+
+  category_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  status_id:
+    from: fields.success
+    transforms: [trim_ascii, map_success_to_status_id]
+
+  # --- Process (the launched process) ---
+  process.pid:
+    from: fields.pid
+    transforms: [trim_ascii, parse_int]
+
+  process.file.path:
+    from: fields.exe
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  process.name:
+    from: fields.exe
+    transforms: [trim_ascii, absent_if_placeholder, extract_basename]
+
+  process.cmd_line:
+    from: fields.proctitle
+    transforms: [trim_ascii, absent_if_placeholder, decode_hex_proctitle]
+
+  process.cwd:
+    from: fields.cwd
+    transforms: [trim_ascii, absent_if_placeholder, decode_hex_if_encoded]
+
+  # --- Actor (parent process context) ---
+  actor.process.pid:
+    from: fields.ppid
+    transforms: [trim_ascii, parse_int]
+
+  # --- Actor User ---
+  # Precedence: auid (audit/login UID) > uid > euid
+  # auid tracks the original login identity across privilege changes.
+  actor.user.uid:
+    from: fields.auid
+    transforms: [trim_ascii, absent_if_placeholder, absent_if_unset_uid, to_string]
+    fallback:
+      from: fields.uid
+      transforms: [trim_ascii, absent_if_placeholder, absent_if_unset_uid, to_string]
+
+  # actor.user.name is N/A unless UID-to-name snapshot is configured.
+  # Do not populate from raw audit data (uid-to-name requires external resolution).
+
+  # --- Unmapped auditd-specific fields ---
+  unmapped.auditd.uid:
+    from: fields.uid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.euid:
+    from: fields.euid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.suid:
+    from: fields.suid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.fsuid:
+    from: fields.fsuid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.auid:
+    from: fields.auid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.gid:
+    from: fields.gid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.egid:
+    from: fields.egid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.comm:
+    from: fields.comm
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.key:
+    from: fields.key
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.tty:
+    from: fields.tty
+    transforms: [trim_ascii, absent_if_placeholder]
+
+no_inference:
+  forbidden_derivations:
+    - actor.user.name_from_uid_lookup
+    - process.parent_from_ppid_lookup
+    - process.integrity_from_path

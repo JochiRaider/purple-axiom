@@ -1,0 +1,109 @@
+# mappings/normalizer/ocsf/1.7.0/linux-auditd/profile.yaml
+format_version: 1
+
+profile:
+  profile_id: linux_auditd_to_ocsf_1.7.0
+  profile_version: "0.1.0"
+  ocsf_version: "1.7.0"
+
+source:
+  source_pack_id: linux-auditd
+  event_source_type: linux_auditd
+  product_name: auditd
+  log_name: audit.log
+
+  # Linux auditd does not use provider/channel routing discriminators.
+  provider: null
+  channel: null
+
+inputs:
+  raw_shape_version: 1
+  # Required fields in aggregated audit event input.
+  # The aggregator must correlate multi-record events before passing to normalizer.
+  required_fields:
+    - audit_msg_id
+    - record_type
+    - hostname
+    - fields
+
+includes:
+  canonicalization: canonicalization.yaml
+  routing: routing.yaml
+
+shared_emit:
+  # --- Time ---
+  # Audit timestamp is embedded in audit_msg_id; aggregator should extract to fields.timestamp_ms
+  time:
+    from: fields.timestamp_ms
+    transforms: [parse_int]
+
+  # --- Device ---
+  device.name:
+    from: hostname
+    transforms: [trim_ascii]
+
+  device.hostname:
+    from: hostname
+    transforms: [trim_ascii, lowercase_ascii]
+
+  # --- Metadata ---
+  metadata.source_type:
+    const: linux_auditd
+
+  metadata.log_provider:
+    const: auditd
+
+  metadata.log_name:
+    from: log_source
+    transforms: [trim_ascii, absent_if_placeholder]
+    default: "audit.log"
+
+  metadata.product.name:
+    const: auditd
+
+  metadata.source_event_id:
+    from: audit_msg_id
+    transforms: [trim_ascii]
+
+  # --- Unmapped namespace for auditd-specific fields ---
+  unmapped.auditd.audit_msg_id:
+    from: audit_msg_id
+    transforms: [trim_ascii]
+
+  unmapped.auditd.record_type:
+    from: record_type
+    transforms: [trim_ascii]
+
+  unmapped.auditd.syscall:
+    from: fields.syscall
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.success:
+    from: fields.success
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.exit:
+    from: fields.exit
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.session_id:
+    from: fields.ses
+    transforms: [trim_ascii, absent_if_placeholder]
+
+identity:
+  # Tier 1 identity per ADR-0002 for aggregated audit events.
+  algorithm: "pa:eid:v1"
+  identity_source_type: linux_auditd
+  basis:
+    source_type_const: linux_auditd
+    origin.host_from: hostname
+    origin.audit_node_from: fields.node
+    origin.audit_msg_id_from: audit_msg_id
+  prehash_normalization:
+    origin.host: [trim_ascii, lowercase_ascii]
+    origin.audit_node: [trim_ascii, absent_if_placeholder]
+    # CRITICAL: audit_msg_id must be preserved exactly - no parsing or normalization
+    origin.audit_msg_id: [trim_ascii]
+
+outputs:
+  set_uid_equal_event_id: true

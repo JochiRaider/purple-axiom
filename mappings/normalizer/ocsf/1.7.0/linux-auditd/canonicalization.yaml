@@ -1,0 +1,202 @@
+# mappings/normalizer/ocsf/1.7.0/linux-auditd/canonicalization.yaml
+format_version: 1
+
+constants:
+  placeholder_values:
+    - ""
+    - "-"
+    - "NULL"
+    - "null"
+    - "(null)"
+    - "N/A"
+    - "?"
+    - "(none)"
+
+  # UID value indicating "unset" or "no user" (4294967295 = 0xFFFFFFFF)
+  unset_uid_values:
+    - "4294967295"
+    - "-1"
+
+  # Audit success/failure values
+  success_values:
+    - "yes"
+    - "1"
+
+  failure_values:
+    - "no"
+    - "0"
+
+  # Syscall families for routing (x86_64)
+  # These are used by routing.yaml to determine OCSF class
+  exec_syscalls_x86_64:
+    - "59"    # execve
+    - "322"   # execveat
+
+  file_syscalls_x86_64:
+    - "2"     # open
+    - "257"   # openat
+    - "85"    # creat
+    - "87"    # unlink
+    - "263"   # unlinkat
+    - "82"    # rename
+    - "264"   # renameat
+    - "90"    # chmod
+    - "268"   # fchmodat
+    - "92"    # chown
+    - "260"   # fchownat
+
+  network_syscalls_x86_64:
+    - "42"    # connect
+    - "43"    # accept
+    - "288"   # accept4
+    - "49"    # bind
+    - "50"    # listen
+    - "44"    # sendto
+    - "45"    # recvfrom
+    - "41"    # socket
+
+transforms:
+  # --- String helpers ---
+  trim_ascii:
+    kind: string
+    op: trim_ascii_whitespace
+
+  lowercase_ascii:
+    kind: string
+    op: lowercase_ascii
+
+  to_string:
+    kind: scalar
+    op: to_string
+
+  # --- Numeric parsing ---
+  parse_int:
+    kind: scalar
+    op: parse_int
+    args:
+      base: 10
+
+  parse_port_int:
+    kind: scalar
+    op: parse_int
+    args:
+      base: 10
+      min: 0
+      max: 65535
+
+  # --- Presence / placeholders ---
+  absent_if_placeholder:
+    kind: presence
+    op: absent_if_in_set
+    args:
+      set_ref: constants.placeholder_values
+
+  absent_if_unset_uid:
+    kind: presence
+    op: absent_if_in_set
+    args:
+      set_ref: constants.unset_uid_values
+
+  # --- Path helpers ---
+  extract_basename:
+    kind: string
+    op: extract_basename
+    args:
+      separators: "/"
+
+  extract_parent_folder:
+    kind: string
+    op: extract_parent_folder
+    args:
+      separators: "/"
+
+  # --- Network ---
+  normalize_ip:
+    kind: network
+    op: normalize_ip_text
+    args:
+      allow_ipv4: true
+      allow_ipv6: true
+
+  # --- Auditd-specific transforms ---
+
+  # Decode hex-encoded proctitle to UTF-8 string
+  # proctitle is often hex-encoded with null bytes as argument separators
+  decode_hex_proctitle:
+    kind: string
+    op: decode_hex_string
+    args:
+      replace_nulls_with: " "
+      on_error: absent
+
+  # Decode hex-encoded path/name fields
+  decode_hex_if_encoded:
+    kind: string
+    op: decode_hex_string
+    args:
+      detect_encoding: true
+      on_error: passthrough
+
+  # Parse SOCKADDR hex structure to extract IP address
+  # Returns the IP portion of the saddr structure
+  parse_saddr_ip:
+    kind: network
+    op: parse_audit_saddr_ip
+    args:
+      on_error: absent
+
+  # Parse SOCKADDR hex structure to extract port
+  parse_saddr_port:
+    kind: network
+    op: parse_audit_saddr_port
+    args:
+      on_error: absent
+
+  # Map audit success field to OCSF status_id
+  # success="yes" -> 1 (Success), success="no" -> 2 (Failure)
+  map_success_to_status_id:
+    kind: scalar
+    op: map_value
+    args:
+      mapping:
+        "yes": 1
+        "1": 1
+        "no": 2
+        "0": 2
+      default: null
+
+  # Map audit res field to OCSF status_id (for USER_* records)
+  # res="success" -> 1, res="failed" -> 2
+  map_res_to_status_id:
+    kind: scalar
+    op: map_value
+    args:
+      mapping:
+        "success": 1
+        "failed": 2
+      default: null
+
+  # Combine CWD and relative path to absolute path
+  resolve_path_with_cwd:
+    kind: string
+    op: resolve_relative_path
+    args:
+      cwd_field: fields.cwd
+      on_error: passthrough
+
+  # --- Identity ---
+  jcs_canonical_json_bytes:
+    kind: identity
+    op: jcs_canonical_json_bytes
+
+  sha256_trunc128_hex:
+    kind: identity
+    op: sha256_trunc128_hex
+    args:
+      bytes: 16
+
+  prefix_pa_eid_v1:
+    kind: identity
+    op: prefix_string
+    args:
+      prefix: "pa:eid:v1:"

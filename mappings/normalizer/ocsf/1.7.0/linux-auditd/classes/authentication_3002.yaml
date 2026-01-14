@@ -1,0 +1,102 @@
+# mappings/normalizer/ocsf/1.7.0/linux-auditd/classes/authentication_3002.yaml
+format_version: 1
+
+class_map:
+  class_uid: 3002
+  class_name: Authentication
+  category_uid: 3
+
+  # Routing key is record_type (as string).
+  event_id_map:
+    "USER_AUTH": {activity_id: 1, activity_name: "Logon"}
+    "USER_LOGIN": {activity_id: 1, activity_name: "Logon"}
+    "USER_ACCT": {activity_id: 1, activity_name: "Logon"}
+    "USER_START": {activity_id: 1, activity_name: "Logon"}
+    "USER_LOGOUT": {activity_id: 2, activity_name: "Logoff"}
+    "USER_END": {activity_id: 2, activity_name: "Logoff"}
+
+emit:
+  # --- Classification ---
+  class_uid:
+    const_from_class: true
+
+  category_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  # USER_* records use "res" field for result (success/failed)
+  status_id:
+    from: fields.res
+    transforms: [trim_ascii, map_res_to_status_id]
+
+  # --- Actor User ---
+  # For USER_* records, auid is the authenticating user.
+  # acct field may contain the account name directly.
+  actor.user.uid:
+    from: fields.auid
+    transforms: [trim_ascii, absent_if_placeholder, absent_if_unset_uid, to_string]
+    fallback:
+      from: fields.uid
+      transforms: [trim_ascii, absent_if_placeholder, absent_if_unset_uid, to_string]
+
+  # acct is authoritative for USER_* records (not a lookup)
+  actor.user.name:
+    from: fields.acct
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  # --- Source Endpoint ---
+  # For remote logins, addr contains the source IP.
+  src_endpoint.ip:
+    from: fields.addr
+    transforms: [trim_ascii, absent_if_placeholder, normalize_ip]
+
+  # hostname may contain source hostname for remote logins.
+  src_endpoint.hostname:
+    from: fields.hostname
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  # --- Session context ---
+  # terminal/tty for the authentication session
+  unmapped.auditd.terminal:
+    from: fields.terminal
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.tty:
+    from: fields.tty
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  # PAM/authentication context
+  unmapped.auditd.op:
+    from: fields.op
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.grantors:
+    from: fields.grantors
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.exe:
+    from: fields.exe
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.pid:
+    from: fields.pid
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.subj:
+    from: fields.subj
+    transforms: [trim_ascii, absent_if_placeholder]
+
+no_inference:
+  forbidden_derivations:
+    # Do not infer target user (most USER_* events are self-authentication).
+    - target.user_from_context
+    # Do not infer authentication method or service from grantors.
+    - auth_protocol_from_grantors

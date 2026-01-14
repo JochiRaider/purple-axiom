@@ -1,0 +1,124 @@
+# mappings/normalizer/ocsf/1.7.0/linux-auditd/classes/network_activity_4001.yaml
+format_version: 1
+
+class_map:
+  class_uid: 4001
+  class_name: Network Activity
+  category_uid: 4
+
+  # Routing key is syscall number (as string).
+  # Activity mapping based on syscall semantics.
+  event_id_map:
+    "41": {activity_id: 0, activity_name: "Unknown"}    # socket (creation, not connection)
+    "42": {activity_id: 1, activity_name: "Open"}       # connect
+    "43": {activity_id: 1, activity_name: "Open"}       # accept
+    "288": {activity_id: 1, activity_name: "Open"}      # accept4
+    "49": {activity_id: 4, activity_name: "Bind"}       # bind
+    "50": {activity_id: 5, activity_name: "Listen"}     # listen
+    "44": {activity_id: 6, activity_name: "Send"}       # sendto
+    "45": {activity_id: 7, activity_name: "Receive"}    # recvfrom
+
+emit:
+  # --- Classification ---
+  class_uid:
+    const_from_class: true
+
+  category_uid:
+    const_from_class: true
+
+  activity_id:
+    from_event_id_map: activity_id
+
+  type_uid:
+    op: compute_type_uid
+    args:
+      class_uid_from_class: true
+      activity_id_from_event_id_map: true
+
+  status_id:
+    from: fields.success
+    transforms: [trim_ascii, map_success_to_status_id]
+
+  # --- Endpoints ---
+  # The SOCKADDR record provides saddr as a hex-encoded socket address structure.
+  # For connect/sendto: saddr is the destination.
+  # For bind/accept: saddr may be local or peer depending on syscall.
+
+  # Destination endpoint (for connect, sendto)
+  dst_endpoint.ip:
+    when:
+      event_id_in: ["42", "44"]  # connect, sendto
+    from: fields.saddr
+    transforms: [trim_ascii, absent_if_placeholder, parse_saddr_ip]
+
+  dst_endpoint.port:
+    when:
+      event_id_in: ["42", "44"]  # connect, sendto
+    from: fields.saddr
+    transforms: [trim_ascii, absent_if_placeholder, parse_saddr_port]
+
+  # Source endpoint (for bind, accept)
+  src_endpoint.ip:
+    when:
+      event_id_in: ["43", "49", "288"]  # accept, bind, accept4
+    from: fields.saddr
+    transforms: [trim_ascii, absent_if_placeholder, parse_saddr_ip]
+
+  src_endpoint.port:
+    when:
+      event_id_in: ["43", "49", "288"]  # accept, bind, accept4
+    from: fields.saddr
+    transforms: [trim_ascii, absent_if_placeholder, parse_saddr_port]
+
+  # --- Actor Process ---
+  actor.process.pid:
+    from: fields.pid
+    transforms: [trim_ascii, parse_int]
+
+  actor.process.file.path:
+    from: fields.exe
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  actor.process.name:
+    from: fields.exe
+    transforms: [trim_ascii, absent_if_placeholder, extract_basename]
+
+  actor.process.cmd_line:
+    from: fields.proctitle
+    transforms: [trim_ascii, absent_if_placeholder, decode_hex_proctitle]
+
+  # --- Actor User ---
+  actor.user.uid:
+    from: fields.auid
+    transforms: [trim_ascii, absent_if_placeholder, absent_if_unset_uid, to_string]
+    fallback:
+      from: fields.uid
+      transforms: [trim_ascii, absent_if_placeholder, absent_if_unset_uid, to_string]
+
+  # --- Unmapped auditd-specific fields ---
+  unmapped.auditd.saddr:
+    from: fields.saddr
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.socket_family:
+    from: fields.saddr
+    transforms: [trim_ascii, absent_if_placeholder, extract_saddr_family]
+
+  unmapped.auditd.a0:
+    from: fields.a0
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.a1:
+    from: fields.a1
+    transforms: [trim_ascii, absent_if_placeholder]
+
+  unmapped.auditd.a2:
+    from: fields.a2
+    transforms: [trim_ascii, absent_if_placeholder]
+
+no_inference:
+  forbidden_derivations:
+    - actor.user.name_from_uid_lookup
+    - protocol_from_socket_type
+    # AF_UNIX sockets do not have IP/port; fields remain absent.
+    - ip_from_af_unix_socket

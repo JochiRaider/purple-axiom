@@ -28,7 +28,7 @@ dev = [
 
   # Markdown formatting
   # Core formatter
-  "mdformat==1.0.0",
+  "mdformat>=0.7.16",
   # GFM support (tables, strikethrough, autolinks, tasklists)
   "mdformat-gfm==1.0.0",
   # YAML frontmatter preservation (required for style guide compliance)
@@ -45,6 +45,9 @@ dev = [
 # "mdformat-tables==1.0.0",        # Enhanced table formatting
 #
 # If you add any of these, update .mdformat.toml `extensions` list accordingly.
+
+[tool.uv]
+package = false
 
 [tool.ruff]
 # Ruff can be configured via pyproject.toml. 

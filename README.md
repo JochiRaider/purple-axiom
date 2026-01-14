@@ -2,20 +2,20 @@
 
 **Ground-truth detection engineering through continuous adversary emulation**
 
-Purple Axiom is a **local-first** cyber range for **isolated lab environments** that runs safe
+Purple Axiom is a **local-first** cyber range for **isolated lab environments**. It executes safe
 adversary-emulation scenarios, captures telemetry from lab assets, normalizes events into **OCSF**,
-evaluates detections using **Sigma**, and produces **reproducible run bundles** (artifact bundles
-suitable for regression testing and trend tracking).
+evaluates detections using **Sigma**, and produces **reproducible run bundles** suitable for
+regression testing and trend tracking.
 
 ## Why Purple Axiom
 
-Most detection engineering loops still look like: run a test, eyeball logs, and call it "good
-enough." Purple Axiom specifies a repeatable, defensible loop:
+Most detection engineering loops still look like: run a test, eyeball logs, and call it “good
+enough.” Purple Axiom specifies a repeatable, defensible loop with explicit artifacts:
 
-- **Ground truth**: what ran, when, where, and what should have been observable
-- **Telemetry**: what was actually collected
-- **Normalization**: how raw events mapped to a portable schema (OCSF)
-- **Detections**: what rules fired (Sigma)
+- **Ground truth**: what ran, when, where, and with what resolved inputs
+- **Telemetry**: what was actually collected (and what was not)
+- **Normalization**: how raw events mapped to a portable schema (OCSF), including mapping coverage
+- **Detections**: what rules were executable and what fired (Sigma)
 - **Scoring**: coverage, latency, and gap classification
 - **Reporting**: a run bundle you can diff, gate in CI, and trend over time
 
@@ -24,149 +24,207 @@ enough." Purple Axiom specifies a repeatable, defensible loop:
 Treat detections as the theorems you are trying to prove, and adversary emulation as the axioms
 (ground truth) you build upon.
 
-This project prioritizes **measurable outcomes tied to specific techniques and behaviors**, rather
-than opaque "security scores."
+This project prioritizes measurable outcomes tied to specific techniques and behaviors, rather than
+opaque “security scores.”
 
 ## Scope and safety
 
-Purple Axiom is designed for **isolated lab environments** and emphasizes detectability validation
+Purple Axiom is designed for isolated lab environments and emphasizes detectability validation
 rather than stealth, persistence, or destructive outcomes.
 
 ### Explicit non-goals
 
 - Exploit development, weaponization, or destructive testing
 - Production deployment guidance for hostile environments
-- "Full SIEM replacement" (external ingestion is optional)
+- “Full SIEM replacement” (external ingestion is optional)
 - A full-featured lab provisioning platform (Purple Axiom integrates with external lab providers; it
   does not replace them)
+- Network telemetry capture and ingestion (pcap and NetFlow/IPFIX) as a required v0.1 capability
+  (placeholder contracts are reserved)
 
 ### Safety constraints and secure defaults
 
 - The range MUST be operated as an isolated lab, not a production environment.
+
 - Cleanup is required, recorded, and surfaced in reporting.
-- Long-term artifacts MUST avoid storing secrets; redaction is configurable and can be tuned or
-  disabled (with explicit handling for unredacted outputs).
+
+- Lab assets SHOULD default to an outbound egress-deny posture.
+
+  - Scenario-level network intent is expressed via `scenario.safety.allow_network`.
+  - Effective outbound policy is the logical AND of `scenario.safety.allow_network` and
+    `security.network.allow_outbound`.
+  - Enforcement of outbound posture MUST occur at the lab boundary (provider / lab controls), not as
+    a best-effort runner behavior.
+
+- Long-term artifacts MUST avoid storing secrets.
+
+  - Redaction is configurable and deterministic, and may be disabled only with explicit opt-in and
+    quarantine handling for unredacted outputs.
+
 - The detection subsystem MUST treat Sigma as non-executable content (no arbitrary code execution).
 
-## Architecture (high-level)
+## Architecture overview
 
-Purple Axiom's specified pipeline stages are:
+Purple Axiom’s specified pipeline stages are:
 
-1. **Runner** executes scenario actions and emits an append-only ground-truth timeline.
-1. **Telemetry pipeline** captures raw events (via OpenTelemetry Collector topology) and preserves
-   original semantics.
-1. **Normalizer** converts raw events to OCSF envelopes with required provenance and deterministic
-   identity.
+1. **Lab provider** resolves target inventory and records a deterministic lab inventory snapshot.
+1. **Runner** executes scenario actions and emits an append-only ground-truth timeline plus runner
+   evidence artifacts.
+1. **Telemetry pipeline** captures raw events (via an OpenTelemetry Collector topology) and runs
+   required runtime canaries.
+1. **Normalizer** converts raw telemetry into OCSF envelopes with required provenance and
+   deterministic event identity.
 1. **Validation** applies criteria packs and cleanup verification.
-1. **Detection** evaluates Sigma rules against normalized events (via the Sigma-to-OCSF bridge).
-1. **Scoring** produces coverage/latency/gap metrics.
-1. **Reporting** emits an HTML + JSON report bundle for diffing and trending.
+1. **Sigma-to-OCSF bridge** routes Sigma rules to applicable OCSF classes and snapshots mapping
+   inputs for reproducibility.
+1. **Detection engine** evaluates Sigma rules against normalized events (v0.1 default: DuckDB SQL
+   over Parquet).
+1. **Scoring** produces coverage, latency, and gap metrics (plus threshold gates where configured).
+1. **Reporting** emits human-readable and machine-readable report outputs for diffing and trending.
+1. **Signing** (optional) emits integrity artifacts for the run bundle.
 
 ```text
-┌─────────────────────────┐
-│ Scenario Runner         │  ← runner engines (e.g., Atomic, Caldera)
-└────────────┬────────────┘
-             │ ground truth (append-only)
-             ▼
-┌─────────────────────────┐
-│ Telemetry Pipeline      │  ← OTel Collector topology (agent/gateway)
-└────────────┬────────────┘
-             │ raw events
-             ▼
-┌─────────────────────────┐
-│ Normalizer → OCSF       │  ← OCSF envelopes + provenance + event identity
-└────────────┬────────────┘
-             │ normalized event store
-             ▼
-┌─────────────────────────┐
-│ Validation (Criteria)   │  ← criteria packs + cleanup verification
-└────────────┬────────────┘
-             │ validated observations
-             ▼
-┌─────────────────────────┐
-│ Sigma Detection         │  ← Sigma→OCSF bridge + evaluation
-└────────────┬────────────┘
-             │ detections
-             ▼
-┌─────────────────────────┐
-│ Scoring + Reporting     │  ← metrics + HTML/JSON run bundle
-└─────────────────────────┘
+┌──────────────────────────────┐
+│         Lab Provider         │ ← Inventory resolution (Manual, Ludus, Terraform)
+└──────────────┬───────────────┘
+               │ Inventory snapshot (deterministic)
+               ▼
+┌──────────────────────────────┐
+│       Scenario Runner        │ ← Execution engine (Atomic Red Team v0.1)
+└──────────────┬───────────────┘
+               │ Ground truth + Evidence (transcripts)
+               ▼
+┌──────────────────────────────┐
+│      Telemetry Pipeline      │ ← OTel Collector topology + Canaries
+└──────────────┬───────────────┘
+               │ Raw datasets + Evidence pointers
+               ▼
+┌──────────────────────────────┐
+│     Normalization (OCSF)     │ ← Schema envelopes + Provenance + Identity
+└──────────────┬───────────────┘
+               │ Normalized event store (Parquet)
+               ▼
+┌──────────────────────────────┐
+│      Criteria Evaluator      │ ← Validation packs + Cleanup verification
+└──────────────┬───────────────┘
+               │ Validated observations
+               ▼
+┌──────────────────────────────┐
+│     Sigma-to-OCSF Bridge     │ ← Routing + Field mapping + Rule compilation
+└──────────────┬───────────────┘
+               │ Executable plans (SQL) + Classification
+               ▼
+┌──────────────────────────────┐
+│       Detection Engine       │ ← Evaluation backend (DuckDB)
+└──────────────┬───────────────┘
+               │ Detection instances
+               ▼
+┌──────────────────────────────┐
+│     Scoring & Reporting      │ ← Metrics aggregation + HTML/JSON generation
+└──────────────┬───────────────┘
+               │ Integrity metadata
+               ▼
+┌──────────────────────────────┐
+│      Signing (Optional)      │ ← Artifact checksums + Digital signatures
+└──────────────────────────────┘
 ```
 
 ## Key concepts
 
 - **Scenario**: a planned set of actions/tests executed by the runner.
-- **Run**: a single execution instance with a unique `run_id`.
-- **Ground truth**: append-only timeline of what executed, with hashed summaries and "expected
-  telemetry" hints.
+- **Run**: a single execution instance with a unique `run_id` (UUID, canonical hyphenated form).
+- **Lab inventory snapshot**: the resolved target inventory used for the run, recorded for
+  reproducibility and diffability.
+- **Ground truth**: append-only timeline of what executed, with hashed summaries and
+  expected-observability hints.
 - **Normalized events**: OCSF event envelopes with required provenance fields and deterministic
   `metadata.event_id`.
 - **Criteria pack**: validation rules that evaluate expected vs observed telemetry and cleanup
   state.
 - **Sigma-to-OCSF bridge**: mapping/router layer that makes Sigma evaluation over OCSF mechanically
   testable.
+- **Stage outcomes**: deterministic per-stage outcomes (`success | failed | skipped`) with stable
+  reason codes that drive `manifest.status` and process exit codes.
 - **Run bundle**: the on-disk artifact bundle rooted at `runs/<run_id>/`, indexed by
   `manifest.json`.
 
 ## Run bundles
 
-Each run produces a **run bundle** at `runs/<run_id>/`. The **manifest** is the authoritative index
-of what exists and which versions/config hashes were used.
+Each run produces a run bundle at `runs/<run_id>/`. The **manifest** is the authoritative index of
+what exists, which versions/config hashes were used, and the overall run status.
 
 ### Typical layout
+
+The run bundle layout is contract-driven. At a high level, you should expect:
 
 ```text
 runs/<run_id>/
   manifest.json
   ground_truth.jsonl
 
-  runner/                 # runner-emitted execution events
-  raw/                    # raw telemetry capture (format depends on source)
-  normalized/             # normalized OCSF event store + coverage artifacts
-  criteria/               # criteria pack inputs/outputs + cleanup verification artifacts
-  bridge/                 # Sigma→OCSF bridge artifacts (router + mapping snapshots)
-  detections/             # detection results (Sigma evaluation outputs)
-  scoring/                # scoring summaries and per-technique metrics
-  report/                 # human + machine-readable report bundle (HTML/JSON)
-  logs/                   # volatile logs (not long-term storage)
-  security/               # optional security metadata (e.g., signatures, redaction manifests)
+  criteria/                # criteria pack snapshot + criteria evaluation outputs
+  runner/                  # runner evidence: transcripts, executor metadata, cleanup verification
+
+  raw/                     # evidence tier: source-native telemetry and supporting evidence (policy-controlled)
+  raw_parquet/             # analytics tier: structured raw telemetry tables (Parquet)
+
+  normalized/              # analytics tier: normalized OCSF event store + mapping coverage
+
+  bridge/                  # Sigma→OCSF bridge artifacts: mapping pack snapshot, compiled plans, coverage
+  detections/              # detection outputs (Sigma evaluation results)
+  scoring/                 # summary metrics, joins/derivations (optional)
+
+  report/                  # HTML and JSON report outputs (presentation derived from scoring and run metadata)
+
+  logs/                    # structured operability summaries and debug logs (not long-term storage)
+  security/                # optional integrity and redaction metadata (checksums/signatures, policy manifests)
+  unredacted/              # optional quarantine for unredacted evidence (explicit opt-in; excluded from exports)
 ```
 
 ### Storage formats and determinism
 
-- Normalized event storage MAY be JSONL or Parquet depending on the contract and use case; Parquet
-  is the default for long-term analytics storage, while JSONL is used where line-addressable diffs
-  and fixtures are required.
-- Outputs that are intended to be diffed (JSON/JSONL) MUST use deterministic ordering rules as
-  specified in the storage/contracts documentation.
+Purple Axiom uses a two-tier storage model:
 
-## Determinism and provenance
+- **Evidence tier** preserves source-native artifacts when they are valuable for fidelity and
+  reprocessing (under `raw/`).
+- **Analytics tier** stores structured, queryable datasets for evaluation and trending (Parquet
+  under `raw_parquet/` and `normalized/`).
+
+Format expectations:
+
+- Small, contract-driven artifacts are JSON (for example `manifest.json`, `scoring/summary.json`,
+  and `report/report.json`).
+- Event-like streams are JSONL when line-addressable diffs/fixtures are required (for example
+  `ground_truth.jsonl`).
+- Long-term event streams and large datasets are Parquet by default (for example the normalized OCSF
+  event store).
+
+Outputs intended to be diffed and hashed MUST follow deterministic ordering and canonicalization
+rules defined in the storage and contracts specs.
+
+## Determinism, provenance, and CI posture
+
+Purple Axiom is specified to fail closed on contract violations. Key properties include:
 
 - `run_id` is immutable per execution and is carried across artifacts via required provenance
   fields.
-- `metadata.event_id` is deterministic when the source event and normalization inputs match (see
-  event identity ADR).
-- Hashes that participate in identity MUST use canonical JSON rules (see contracts/ADR).
-- Mapping profiles and bridge inputs are snapshotted to make evaluations reproducible across time.
+- `metadata.event_id` is deterministic when the source event and normalization inputs match.
+- Hashes that participate in identity MUST use canonical JSON rules.
+- Mapping packs and bridge inputs are snapshotted so evaluations are reproducible across time.
+- Multi-scenario runs are reserved in v0.1. Implementations MUST fail closed if more than one
+  distinct `scenario_id` is observed.
+- Validators MUST use local-only JSON Schema `$ref` resolution (no network fetches) and
+  deterministic error ordering.
+- Stage outcomes and deterministic exit codes are used for CI gating.
 
 ## Configuration
 
-Purple Axiom is configured via a `range.yaml` (see the normative configuration reference).
+Purple Axiom is configured via `range.yaml` (see the normative configuration reference).
+Configuration and contract validation are a first-class part of the runtime and CI model.
 
 - Canonical keys, defaults, and examples: `docs/spec/120_config_reference.md`
-- Operational limits and safety toggles (including redaction and signing):
-  `docs/spec/120_config_reference.md` + `docs/spec/090_security_safety.md` +
-  `ADR-0003-redaction-policy.md`
-
-## CI and validation
-
-Purple Axiom is specified to fail closed on contract violations:
-
-- Schema validation for each artifact (including per-line JSONL validation where applicable)
-- Cross-artifact invariant checks (e.g., `run_id` consistency, referential integrity across event
-  IDs)
-- Golden run end-to-end fixtures for regression testing
-- Report generation sanity checks
+- Operational limits and safety toggles (including redaction, network posture, and signing):
+  `docs/spec/090_security_safety.md` and `docs/adr/ADR-0003-redaction-policy.md`
 
 ## Documentation
 
@@ -198,19 +256,22 @@ Purple Axiom is specified to fail closed on contract violations:
 
 ### ADRs
 
-| ADR                                                                     | Decision area                                             |
-| ----------------------------------------------------------------------- | --------------------------------------------------------- |
-| `ADR-0001-project-naming-and-versioning.md`                             | Project naming rules and versioning policy                |
-| `ADR-0002-event-identity-and-provenance.md`                             | Event identity, provenance model, and determinism rules   |
-| `ADR-0003-redaction-policy.md`                                          | Redaction policy posture and consequences                 |
-| `ADR-0004-deployment-architecture-and-inter-component-communication.md` | Deployment architecture and inter-component communication |
-| `ADR-0005-stage-outcomes-and-failure-classification.md`                 | Stage outcomes and failure classification rules           |
+| ADR                                                                              | Decision area                                             |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `docs/adr/ADR-0001-project-naming-and-versioning.md`                             | Project naming rules and versioning policy                |
+| `docs/adr/ADR-0002-event-identity-and-provenance.md`                             | Event identity, provenance model, and determinism rules   |
+| `docs/adr/ADR-0003-redaction-policy.md`                                          | Redaction policy posture and consequences                 |
+| `docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md` | Deployment architecture and inter-component communication |
+| `docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md`                 | Stage outcomes and failure classification rules           |
 
 ## Requirements
 
-- Docker and Docker Compose (single-node lab deployment)
-- Python 3.12.3 (pinned; see `SUPPORTED_VERSIONS.md` for toolchain details)
 - Isolated lab environment (required)
+- Python 3.12.3 (pinned; see `SUPPORTED_VERSIONS.md` for toolchain details)
+- Pinned runtime dependencies as specified in `SUPPORTED_VERSIONS.md` (including the OpenTelemetry
+  Collector Contrib distribution and DuckDB)
+- Optional packaging: Docker Compose MAY be provided for installation convenience, but it is not a
+  normative requirement for v0.1
 
 ## License
 

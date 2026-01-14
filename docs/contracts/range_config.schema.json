@@ -644,8 +644,8 @@
       "additionalProperties": false,
       "properties": {
         "executable": { "$ref": "#/$defs/path" },
-        "args": { "$ref": "#/$defs/string_array" },
         "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "max_stdout_bytes": { "type": "integer", "minimum": 1 },
         "extensions": { "$ref": "#/$defs/extensions" }
       },
       "required": ["executable"]

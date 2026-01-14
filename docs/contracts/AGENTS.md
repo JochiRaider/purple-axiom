@@ -1,5 +1,3 @@
-<!-- docs/contracts/AGENTS.md -->
-
 # Agent instructions (docs/contracts/)
 
 +## Scope and authority

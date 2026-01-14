@@ -1,20 +1,14 @@
----
-title: Research index
-description: One-page map of exploratory and transient research documents in docs/research.
-status: draft
----
-
 # Research index
 
 This file provides a single-page map of the research documents under `docs/research/` to keep
 working sets small. Research documents are exploratory and non-normative unless explicitly promoted
 in specs or ADRs.
 
-## Overview
+## Entrypoints (open these first)
 
-The research documents in this directory capture experiments, conformance reports, and mapping
-coverage studies that inform v0.1 decisions. Use this index to locate the relevant report without
-opening every document.
+- `R-02_DuckDB_Conformance_Report_and_Harness_Requirements_v1.4.3.md`
+- `R-03_DuckDB_Backend_Plugin_for_pySigma.md`
+- `R-04_EPS_baseline_quantification.md`
 
 ## File map (covers all docs/research files)
 
@@ -43,7 +37,7 @@ opening every document.
 
 ## Update rule (required)
 
-When you add, rename, or remove a file in `docs/research/`:
-
 - Update this index to point to the authoritative research document (keep it one page).
+- Do not include the agent, index or readme files.
 - Prefer pointers to existing documents over duplicated prose.
+- Unless stated otherwise, lists and tables are sorted lexicographically by path.

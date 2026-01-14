@@ -1,5 +1,3 @@
-<!-- mappings/AGENTS.md -->
-
 # Agent instructions (mappings/)
 
 ## Scope

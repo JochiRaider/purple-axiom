@@ -1,5 +1,3 @@
-<!-- docs/AGENTS.md -->
-
 # Agent instructions (docs/)
 
 ## Scope

@@ -1,5 +1,3 @@
-<!-- AGENTS.md -->
-
 # Agent instructions (repo-wide)
 
 ## Purpose and scope

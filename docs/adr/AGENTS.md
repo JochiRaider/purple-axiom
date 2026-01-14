@@ -1,5 +1,3 @@
-<!-- docs/adr/AGENTS.md -->
-
 # Agent instructions (docs/adr/)
 
 ## Scope and authority

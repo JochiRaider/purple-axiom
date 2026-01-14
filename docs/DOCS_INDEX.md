@@ -1,44 +1,49 @@
-<!-- docs/DOCS_INDEX.md -->
+# Docs index
 
-# Documentation Map
+This file is a high-level navigation aid for the `docs/` directory to help agents and humans
+locate authoritative information without loading the full tree.
 
-This file provides a high-level navigation aid for the `docs/` directory to help agents and humans
-locate authoritative information.
+## Entrypoints (open these first, if needed)
 
-## Primary Indexes (Start Here)
+- `docs/spec/SPEC_INDEX.md` (normative requirements)
+- `docs/contracts/CONTRACTS_INDEX.md` (schemas and contract registry)
+- `docs/mappings/MAPPINGS_DOC_INDEX.md` (human mapping specs)
+- `docs/adr/ADR_INDEX.md` (architectural decisions)
+- `docs/research/RESEARCH_INDEX.md` (non-normative research)
 
-| Domain             | Index File                        | Purpose                                                                  |
-| :----------------- | :-------------------------------- | :----------------------------------------------------------------------- |
-| **Specifications** | `docs/spec/SPEC_INDEX.md`         | **Normative requirements**, architecture, data flows, and configuration. |
-| **Decisions**      | `docs/adr/ADR_INDEX.md`           | **Context and history** of architectural choices (ADRs).                 |
-| **Contracts**      | `docs/contracts/index.json`       | **JSON Schemas** for validation of artifacts (e.g., manifest, events).   |
-| **Mappings**       | `docs/mappings/MAPPINGS_INDEX.md` | **Mapping specs** and coverage expectations per `source_type`.           |
-| **Research**       | `docs/research/RESEARCH_INDEX.md` | **Exploratory reports** and conformance studies (non-normative).          |
+## Sub-index map
+
+| Index file                            | Domain          | Purpose                                                             |
+| ------------------------------------- | --------------- | ------------------------------------------------------------------- |
+| `docs/adr/ADR_INDEX.md`               | Decisions       | Context and history of architectural choices (ADRs)                 |
+| `docs/contracts/CONTRACTS_INDEX.md`   | Contracts       | JSON Schemas and contract registry for validation of artifacts      |
+| `docs/mappings/MAPPINGS_DOC_INDEX.md` | Mappings        | Mapping specs and coverage expectations per `source_type`           |
+| `docs/research/RESEARCH_INDEX.md`     | Research        | Exploratory reports and conformance studies (non-normative)         |
+| `docs/spec/SPEC_INDEX.md`             | Specifications  | Normative requirements, architecture, data flows, and configuration |
 
 ## Directory Guide
 
-- **`docs/spec/`**: The "source of truth" for system behavior.
-  - *Read when:* Implementing features, fixing bugs, or verifying requirements.
-- **`docs/adr/`**: Immutable records of decisions.
-  - *Read when:* Understanding the "why" behind a design or proposing a fundamental change.
-- **`docs/contracts/`**: CI-enforced data structures.
-  - *Read when:* Modifying JSON outputs, validating data formats, or checking schema compatibility.
-- **`docs/mappings/`**: Mapping references and completeness checklists.
-  - *Read when:* Implementing or reviewing normalization mappings; adding CI coverage for “mapping
-    completeness”.
-- **`docs/research/`**: Transient or exploratory documents.
-  - *Read when:* Investigating performance experiments or reliability studies.
+- `docs/spec/`: The "source of truth" for system behavior.
+  - Implementing features, fixing bugs, or verifying requirements.
+- `docs/adr/`: Immutable records of decisions.
+  - Understanding the "why" behind a design or proposing a fundamental change.
+- `docs/contracts/`: CI-enforced data structures.
+  - Modifying JSON outputs, validating data formats, or checking schema compatibility.
+- `docs/mappings/`: Mapping references and completeness checklists.
+  - Implementing or reviewing normalization mappings; adding CI coverage for "mapping
+    completeness".
+- `docs/research/`: Transient or exploratory documents.
+  - Investigating performance experiments or reliability studies.
 
 ## Writing and Style References
 
-- **Markdown Style Guide**: `docs/MARKDOWN_STYLE_GUIDE.md`
-- **Markdown Quick Reference**: `docs/MARKDOWN_QUICK_REFERENCE.md`
+- Markdown Style Guide: `docs/MARKDOWN_STYLE_GUIDE.md`
+- Markdown Quick Reference: `docs/MARKDOWN_QUICK_REFERENCE.md`
 
-## Agent Guidelines Hierarchy
+## Update rule (required)
 
-- **Global/Repo-wide**: `AGENTS.md` (Root)
-- **Documentation**: `docs/AGENTS.md` (This directory)
-  - **Specs**: `docs/spec/AGENTS.md`
-  - **ADRs**: `docs/adr/AGENTS.md`
-  - **Contracts**: `docs/contracts/AGENTS.md`
-  - **Mappings**: `docs/mappings/AGENTS.md`
+- Update this index and keep it one page.
+- Do not include the agent, index or readme files.
+- Prefer pointers to scoped indexes over duplicated prose.
+- Unless stated otherwise, lists and tables are sorted lexicographically by path.
+- The “Entrypoints” section above is intentionally sorted by recommended read order.

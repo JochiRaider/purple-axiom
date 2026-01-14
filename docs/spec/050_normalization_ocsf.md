@@ -122,7 +122,8 @@ Implementation details and conformance fixtures are specified in the
 
 When normalization is enabled and produces an OCSF event store, the normalizer MUST emit:
 
-- `normalized/ocsf_events.parquet` (or `normalized/ocsf_events.jsonl` for small fixtures)
+- `normalized/ocsf_events/` (Parquet dataset directory) or `normalized/ocsf_events.jsonl` (small
+  fixtures)
 - `normalized/mapping_profile_snapshot.json` (required)
 - `normalized/mapping_coverage.json` (required)
 

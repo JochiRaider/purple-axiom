@@ -569,7 +569,7 @@ available.
   - mapping pack id/version
   - backend id/version
 - Ordering:
-  - `detections.jsonl` written in a deterministic order (see storage requirements)
+  - `detections/detections.jsonl` written in a deterministic order (see storage requirements)
 - Fail-closed:
   - unknown logsource, unmapped fields (without fallback), or unsupported modifiers MUST not
     silently degrade into “no matches”

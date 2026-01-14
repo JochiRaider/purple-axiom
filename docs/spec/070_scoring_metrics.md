@@ -178,8 +178,8 @@ scoring:
 
 - If any threshold is violated, the run SHOULD be marked `partial` (exit code `10`), not `failed`,
   unless a stage-level `fail_closed` condition is met.
-- Threshold evaluation MUST be based on metrics emitted in `scoring/summary.json` (or
-  `report/summary.json` if exported), and the report MUST enumerate which thresholds failed.
+- Threshold evaluation MUST be based on metrics emitted in `scoring/summary.json`, and the report
+  MUST enumerate which thresholds failed.
 
 ## References
 

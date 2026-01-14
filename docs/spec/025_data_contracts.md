@@ -317,7 +317,7 @@ Stage outcomes (v0.1 baseline expectations):
 | `validation`    | `warn_and_skip` (default)                              | `criteria/results.jsonl`, `criteria/manifest.json`             | MUST emit a result row per selected action; un-evaluable actions MUST be `skipped` with `reason_code`.             |
 | `detection`     | `fail_closed` (default)                                | `detections/detections.jsonl`, `bridge/coverage.json`          | MUST record non-executable rules with stable reasons (compiled plans and coverage).                                |
 | `scoring`       | `fail_closed`                                          | `scoring/summary.json`                                         | A missing or invalid summary is fatal when scoring is enabled.                                                     |
-| `reporting`     | `fail_closed`                                          | `reporting/**`                                                 | Reporting failures are fatal when reporting is enabled.                                                            |
+| `reporting`     | `fail_closed`                                          | `report/**`                                                    | Reporting failures are fatal when reporting is enabled.                                                            |
 | `signing`       | `fail_closed` (when enabled)                           | `signatures/**`                                                | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed.                        |
 
 ### Ground truth timeline

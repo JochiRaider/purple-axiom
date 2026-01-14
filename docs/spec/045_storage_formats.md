@@ -127,7 +127,6 @@ Purpose:
 - `criteria/manifest.json`
 - `scoring/summary.json`
 - `normalized/mapping_coverage.json`
-- `report/report.json`
 
 Rationale:
 

@@ -17,10 +17,11 @@ It also specifies the stable keys used for trending across historical runs.
 - `criteria/criteria.jsonl`
 - `criteria/results.jsonl`
 - `runner/` (per-action transcripts + cleanup verification evidence)
-- `ocsf_events.jsonl` (or Parquet)
+- `normalized/ocsf_events.*` (JSONL or Parquet)
+- `normalized/mapping_coverage.json`
 - `bridge/` (mapping pack snapshot, compiled plans, bridge coverage)
-- `detections.jsonl`
-- `report.html`
+- `detections/detections.jsonl`
+- `report/` (HTML and JSON report outputs)
 - `scoring/summary.json`
 
 ## Report sections (seed)

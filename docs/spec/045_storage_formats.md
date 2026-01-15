@@ -61,7 +61,7 @@ Additional evidence location (runner artifacts):
 Format:
 
 - Source-native where it materially improves fidelity or reprocessing:
-  - Windows EVTX (optional, see Windows section)
+  - Windows Event Log raw payload captures (optional, see Windows section)
   - PCAP (if added later)
   - Tool-native output files
   - osquery results logs (NDJSON) preserved under `runs/<run_id>/raw/osquery/` (see the
@@ -423,86 +423,77 @@ Permissive payload:
 - If a source produces highly variable nested structures, store a `raw_json` (string) column as a
   fallback, but prefer typed columns for fields used by detections.
 
-## Windows Event Log storage decision
+## Windows Event Log storage (raw payload + Parquet)
 
-You are split on EVTX. The recommended approach is to treat EVTX as evidence-tier optional, and
-Parquet as analytics-tier required.
+Purple Axiom v0.1 treats OpenTelemetry LogRecords as the canonical transport for Windows Event Log
+data. The pipeline MUST NOT assume that Windows-native binary event log container files are created
+or retained.
 
-### Recommendation
+### Default representation (normative)
 
-Redaction interaction (normative):
+Implementations MUST write a structured raw Windows Event Log Parquet table derived from the
+collector output (example: the OpenTelemetry `windowseventlog` receiver).
 
-- EVTX is a binary evidence format and is not redacted in-place by the baseline policy.
-- Therefore, EVTX MUST NOT be retained by default. Retention MUST require explicit operator intent
-  (config-driven) and MUST be treated as sensitive evidence.
-- When EVTX is retained, the run report and manifest SHOULD clearly indicate that an unredacted
-  binary evidence artifact exists and where it is stored.
+The raw table SHOULD use stable columns. Recommended columns include:
 
-1. Always store a structured representation of Windows Event Logs as Parquet for consistency and
-   analytics.
-1. Optionally retain EVTX in `raw/evidence/` when you need:
-   - maximal fidelity for reprocessing
-   - compatibility with Windows-native tooling
-   - investigation workflows that rely on EVTX semantics
+- `channel` (string)
+- `provider` (string)
+- `event_id` (int32)
+- `record_id` (int64)
+- `computer` (string)
+- `level` (int32, nullable)
+- `keywords` (string, nullable)
+- `task` (int32, nullable)
+- `opcode` (int32, nullable)
 
-Do not convert EVTX to plain text as the primary path. Plain text loses structure, complicates
-parsing, and tends to be less stable for deterministic pipelines. If you need human-readable views,
-generate them as derived, ephemeral artifacts.
+Canonical raw payload (required):
 
-### Why Parquet for Windows event data is worth it
+- `event_xml` (string, nullable)
+- `event_xml_sha256` (string, required)
+- `event_xml_truncated` (bool, required)
+- `payload_overflow_ref` (string, nullable; relative sidecar path when overflow is written)
+- `payload_overflow_sha256` (string, nullable)
 
-- Consistent downstream evaluation: the evaluator consumes Parquet across OSes.
-- Easier joins: correlate Windows telemetry with ground truth, osquery, and normalized OCSF events.
-- Faster iteration: mapping fixes and Sigma tuning become query-driven.
+Rendered message strings are non-authoritative:
 
-### Why keeping EVTX can still be valuable
+- `rendered_message` MAY be stored as a nullable convenience column.
+- Missing rendered messages (provider metadata/manifests unavailable) MUST NOT block ingestion or
+  normalization.
 
-- Fidelity insurance: EVTX preserves full record structure and provenance.
-- Reprocessing: if your mapping evolves, EVTX allows you to regenerate raw tables without re-running
-  scenarios.
-- Tool compatibility: many Windows IR utilities and workflows expect EVTX.
+### Raw payload sizing and sidecars (normative)
 
-### Default policy (suggested)
+If the raw XML payload exceeds a configured maximum payload size:
 
-- MVP and daily CI runs:
+- The writer MUST truncate `event_xml`.
+- The writer MUST set `event_xml_truncated = true`.
+- The writer MUST write the full payload to a content-addressed sidecar blob and set
+  `payload_overflow_ref` and `payload_overflow_sha256`.
 
-  - Do not retain EVTX by default.
-  - Store Parquet extracted from Windows Event Log receiver output (or equivalent structured
-    export).
+### Optional: native container export (non-default)
 
-- Investigation-quality runs (explicit flag):
+If an implementation supports exporting Windows Event Log binary container files as additional
+evidence:
 
-  - Retain EVTX as evidence-tier artifacts.
-  - Also store the corresponding Parquet extraction for analytics.
+- Export MUST be explicitly enabled by the operator (config-driven).
+- Export MUST NOT be enabled by default, including for CI and "daily" runs.
+- Exported containers MUST be treated as sensitive evidence (baseline redaction does not apply
+  in-place).
+- The run manifest and report SHOULD indicate that unredacted binary evidence exists and where it is
+  stored.
 
 ### Practical implementation options
 
-Option A (preferred when using OTel Windows Event Log receiver):
+Option A (default, using an OpenTelemetry receiver):
 
-- Collect structured events from the receiver.
-- Write them into a raw Windows event Parquet table with stable columns:
-  - channel, provider, event_id, record_id, computer, level, keywords, task, opcode
-  - rendered_message (optional, nullable; non-authoritative)
-  - event_xml (required, MAY be truncated)
-  - event_xml_sha256 (required)
-  - event_xml_truncated (required)
-  - payload_overflow_ref (optional; relative sidecar path when overflow is written)
-  - payload_overflow_sha256 (optional)
-  - binary_present (optional, default false)
-  - binary_oversize (optional, default false)
-  - binary_ref (optional; relative sidecar path when decoded bytes are written)
-  - binary_sha256 (optional)
+- Collect LogRecords from the receiver.
+- Write the raw Windows Event Log Parquet table.
+- Preserve canonical raw payloads (XML) inline or via sidecars per the sizing policy above.
 
-Manifest and locale notes:
+Option B (optional, when binary containers are exported separately):
 
-- Rendered message strings MAY be missing when provider metadata/manifests are unavailable.
-- This MUST NOT block ingestion or normalization; raw XML remains canonical.
-
-Option B (when you explicitly export EVTX):
-
-- Export EVTX as evidence-tier.
-- Parse EVTX into a structured raw table and write Parquet.
-- Avoid plain text as an intermediate. Use XML or JSON structures if needed during parsing.
+- Export binary containers as evidence-tier artifacts.
+- Parse the exported containers into the same structured raw table and write Parquet.
+- Do not treat rendered message plain text as canonical; the raw XML/system fields remain canonical.
 
 ## Linux and Unix log storage
 
@@ -551,7 +542,7 @@ To enable reprocessing:
 
 - Preserve sufficient raw structured Parquet tables to re-run normalization and detection evaluation
   without re-running scenarios.
-- If EVTX is retained, it is additional insurance, not a replacement for the structured raw tables.
+- If native container exports are retained, they are additional insurance, not a replacement for the structured raw tables.
 
 The manifest should record:
 
@@ -559,24 +550,24 @@ The manifest should record:
 - their hashes (or the hash of a checksums file)
 - versions used to generate them
 
-## Decision matrix: EVTX vs Parquet
+## Decision matrix: native container exports vs Parquet
 
 Use this table as the default decision logic:
 
 - If your primary need is evaluation, scoring, and trending:
 
   - Parquet is required.
-  - EVTX is optional.
+  - Native container exports is optional.
 
 - If your primary need is maximal Windows-native fidelity and reprocessing:
 
-  - Keep EVTX as evidence-tier.
+  - Keep native container exports as evidence-tier.
   - Still write Parquet for analytics.
 
 - If disk budget is tight:
 
   - Keep Parquet only.
-  - Retain EVTX only for explicitly flagged runs.
+  - Retain native container exports only for explicitly flagged runs.
 
 This yields consistency across the storage system without losing the ability to preserve
 high-fidelity Windows artifacts when needed.

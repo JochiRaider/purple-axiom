@@ -19,7 +19,7 @@ Purple Axiom requires a stable, deterministic event identifier to support:
 
 - Reproducible detection matching (ground truth ↔ telemetry ↔ detections).
 - At-least-once collection semantics (duplicates on restart/replay are expected).
-- Reprocessing from stored artifacts (for example: EVTX rehydration) without changing joins.
+- Reprocessing from stored raw logs or other stored artifacts without changing joins.
 
 Timestamp precision and clock variance are not reliable uniqueness mechanisms. OpenTelemetry
 explicitly distinguishes event time (`Timestamp`) from collection/observation time
@@ -64,7 +64,7 @@ Identity basis selection is tiered:
 
 Use when the source provides a stable per-record identifier or cursor.
 
-**Windows Event Log / EVTX (generic)**
+**Windows Event Log (generic)**
 
 - `source_type`: `windows_eventlog`
 - `origin.host`: event's source computer name (from the event payload)
@@ -87,7 +87,7 @@ Use when the source provides a stable per-record identifier or cursor.
 
 Source-type selection rule (normative):
 
-- For events collected via Windows Event Log / EVTX, the normalizer MUST set
+- For events collected via Windows Event Log, the normalizer MUST set
   `identity_basis.source_type = "sysmon"` if and only if `origin.channel` equals
   `Microsoft-Windows-Sysmon/Operational`. Otherwise it MUST set
   `identity_basis.source_type = "windows_eventlog"`.
@@ -523,20 +523,20 @@ If a checkpoint store is corrupt at restart:
   - replay start mode `reset_corrupt` (operator-visible), and
   - recovery evidence when available (example: `.backup` file emitted).
 
-### EVTX reprocessing invariants
+### Windows Event Log reprocessing invariants
 
-When reprocessing from EVTX:
+When reprocessing from stored Windows Event Log artifacts:
 
-- Extract Tier 1 identity inputs from the EVTX record system fields (do not rely on rendered message
+- Extract Tier 1 identity inputs from the stored record system fields (do not rely on rendered message
   strings).
 - Ensure `origin.host`, `origin.channel`, and `origin.record_id` reflect the *original* event when
-  the EVTX record is a forwarded wrapper.
+  the stored artifact wraps a forwarded event.
 
 With these inputs, `metadata.event_id` remains stable across:
 
 - live collection
 - collector restarts
-- EVTX reprocessing
+- stored-artifact reprocessing
 
 ## Alternatives considered
 
@@ -598,7 +598,7 @@ provides acceptable coverage while maintaining transparency about identity confi
 - Stable event joins and reproducible scoring become practical.
 - At-least-once delivery is explicitly supported with clear deduplication semantics.
 - Identity tier tracking enables coverage metrics to surface when weaker identity is used.
-- EVTX reprocessing produces identical identities to live collection.
+- Windows Event Log stored-artifact reprocessing produces identical identities to live collection.
 
 ### Negative
 

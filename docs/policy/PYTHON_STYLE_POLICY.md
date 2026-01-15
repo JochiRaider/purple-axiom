@@ -2,7 +2,6 @@
 title: Python style and quality policy
 description: Defines Python coding, formatting, typing, testing, and determinism standards for Codex agents and human contributors.
 status: draft
-version: 2.1
 last_updated: 2026-01-14
 category: policy
 related:

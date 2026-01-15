@@ -2,7 +2,6 @@
 title: AGENTS.md policy (Codex and GPT-5.2-Codex)
 description: Defines how this repository uses AGENTS.md and related instruction files to guide local Codex agents deterministically and safely.
 status: draft
-version: 2.0
 last_updated: 2026-01-14
 ---
 

@@ -2,7 +2,6 @@
 title: Repository index files policy (agent navigation)
 description: Defines a deterministic, low-churn policy for repo index files used by local coding agents (Codex / GPT-5.2-Codex).
 status: draft
-version: 2.0
 last_updated: 2026-01-14
 ---
 

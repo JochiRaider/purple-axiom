@@ -504,10 +504,17 @@ Operator semantics (minimum, normative):
 Type rules (minimum, normative):
 
 - `equals` and `one_of` MUST support comparison over JSON scalar types (string, number, boolean).
-- If the resolved value is an array or object, the operator MUST evaluate to false (no deep matching
-  in v0.1).
+- If the resolved value is an array or object, `equals`, `one_of`, and `contains` MUST evaluate to
+  false (no deep matching in v0.1). `exists` remains a presence check and is unaffected by this
+  rule.
+  - Implication: v0.1 defines neither list-logic nor set-logic for array-to-array comparisons. For
+    example, expected `["A","B"]` MUST NOT match observed `["B","A"]` under any operator.
+  - Implication: `one_of` MUST NOT treat an observed array as “any element is in expected”; it is
+    strictly a scalar-to-array membership check.
 - For `one_of`, the expected `value` MUST be an array of scalars; otherwise the operator MUST
   evaluate to false.
+- For `equals`, the expected `value` SHOULD be a scalar. If the expected `value` is an array or
+  object, the operator MUST evaluate to false.
 - For `contains`, both the resolved value and expected `value` MUST be strings; otherwise the
   operator MUST evaluate to false.
 
@@ -530,6 +537,10 @@ Required conformance fixtures (constraint matching):
 - `case_sensitive: false`: observed `c:\windows\system32\cmd.exe` MUST match expected
   `C:\Windows\System32\cmd.exe` under `op = equals`.
 - `case_sensitive: true`: the same observed/expected pair MUST NOT match under `op = equals`.
+- **Array resolved value**: if the resolved value is an array, `equals`, `one_of`, and `contains`
+  MUST evaluate to false regardless of the expected `value`.
+- **Array presence**: if the resolved value is an array and is not JSON null, `op = exists` MUST
+  evaluate to true.
 
 ### Cleanup verification model
 

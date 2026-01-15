@@ -1,0 +1,434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/contracts/mapping_profile_input.schema.json",
+  "title": "Purple Axiom Mapping Profile Input (YAML)",
+  "description": "Schema for YAML mapping profile inputs (profile, canonicalization, routing, class maps).",
+  "type": "object",
+  "examples": [
+    {
+      "format_version": 1,
+      "profile": {
+        "profile_id": "example_to_ocsf_1.7.0",
+        "profile_version": "0.1.0",
+        "ocsf_version": "1.7.0"
+      },
+      "source": {
+        "source_pack_id": "example",
+        "event_source_type": "example"
+      },
+      "inputs": {
+        "raw_shape_version": 1,
+        "required_fields": ["field1"]
+      },
+      "includes": {
+        "canonicalization": "canonicalization.yaml",
+        "routing": "routing.yaml"
+      },
+      "shared_emit": {
+        "metadata.source_type": {
+          "const": "example"
+        }
+      },
+      "identity": {
+        "algorithm": "pa:eid:v1",
+        "basis": {
+          "source_type_const": "example"
+        }
+      },
+      "outputs": {
+        "set_uid_equal_event_id": true
+      }
+    },
+    {
+      "format_version": 1,
+      "constants": {
+        "placeholder_values": [""]
+      },
+      "transforms": {
+        "trim_ascii": {
+          "kind": "string",
+          "op": "trim_ascii_whitespace"
+        }
+      }
+    },
+    {
+      "format_version": 1,
+      "routing": {
+        "provider": null,
+        "channel": null
+      },
+      "routes": [
+        {
+          "route_id": "example_route",
+          "match": {
+            "query_names": ["example_query"]
+          },
+          "class_map": "classes/example_1001.yaml"
+        }
+      ]
+    },
+    {
+      "format_version": 1,
+      "class_map": {
+        "class_uid": 1001,
+        "class_name": "File System Activity",
+        "category_uid": 1,
+        "event_id_map": {
+          "1": { "activity_id": 1 }
+        }
+      },
+      "emit": {
+        "class_uid": { "const_from_class": true },
+        "activity_id": { "from_event_id_map": "activity_id" }
+      }
+    }
+  ],
+  "oneOf": [
+    { "$ref": "#/$defs/profile" },
+    { "$ref": "#/$defs/canonicalization" },
+    { "$ref": "#/$defs/routing" },
+    { "$ref": "#/$defs/class_map" }
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+    },
+    "format_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "emit_rule_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": { "$ref": "#/$defs/non_empty_string" },
+        "const": {
+          "type": ["string", "number", "boolean", "null"]
+        },
+        "default": {
+          "type": ["string", "number", "boolean", "null"]
+        },
+        "transforms": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/non_empty_string" },
+          "minItems": 1
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "event_id_in": {
+              "type": "array",
+              "items": {
+                "type": ["string", "integer"]
+              },
+              "minItems": 1
+            }
+          },
+          "required": ["event_id_in"]
+        },
+        "op": { "$ref": "#/$defs/non_empty_string" },
+        "args": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "const_from_class": {
+          "type": "boolean"
+        },
+        "from_event_id_map": { "$ref": "#/$defs/non_empty_string" }
+      },
+      "anyOf": [
+        { "required": ["from"] },
+        { "required": ["const"] },
+        { "required": ["op"] },
+        { "required": ["const_from_class"] },
+        { "required": ["from_event_id_map"] }
+      ]
+    },
+    "emit_rule": {
+      "allOf": [
+        { "$ref": "#/$defs/emit_rule_base" },
+        {
+          "properties": {
+            "fallback": { "$ref": "#/$defs/emit_rule_base" }
+          }
+        }
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format_version",
+        "profile",
+        "source",
+        "inputs",
+        "includes",
+        "shared_emit",
+        "identity",
+        "outputs"
+      ],
+      "properties": {
+        "format_version": { "$ref": "#/$defs/format_version" },
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["profile_id", "profile_version", "ocsf_version"],
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+_to_ocsf_[0-9]+\\.[0-9]+\\.[0-9]+$"
+            },
+            "profile_version": { "$ref": "#/$defs/semver" },
+            "ocsf_version": { "$ref": "#/$defs/semver" }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_pack_id", "event_source_type"],
+          "properties": {
+            "source_pack_id": { "$ref": "#/$defs/non_empty_string" },
+            "event_source_type": { "$ref": "#/$defs/non_empty_string" },
+            "provider": {
+              "type": ["string", "null"]
+            },
+            "channel": {
+              "type": ["string", "null"]
+            },
+            "product_name": { "$ref": "#/$defs/non_empty_string" },
+            "log_name": { "$ref": "#/$defs/non_empty_string" }
+          }
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["raw_shape_version", "required_fields"],
+          "properties": {
+            "raw_shape_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required_fields": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/non_empty_string" },
+              "minItems": 1
+            }
+          }
+        },
+        "includes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["canonicalization", "routing"],
+          "properties": {
+            "canonicalization": { "$ref": "#/$defs/non_empty_string" },
+            "routing": { "$ref": "#/$defs/non_empty_string" }
+          }
+        },
+        "shared_emit": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/emit_rule" }
+        },
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "basis"],
+          "properties": {
+            "algorithm": { "$ref": "#/$defs/non_empty_string" },
+            "identity_source_type": { "$ref": "#/$defs/non_empty_string" },
+            "basis": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/non_empty_string" },
+              "minProperties": 1
+            },
+            "prehash_normalization": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/non_empty_string" },
+                "minItems": 1
+              }
+            }
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["set_uid_equal_event_id"],
+          "properties": {
+            "set_uid_equal_event_id": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "canonicalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format_version", "transforms"],
+      "properties": {
+        "format_version": { "$ref": "#/$defs/format_version" },
+        "constants": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": ["string", "number", "boolean", "null"]
+            },
+            "minItems": 1
+          }
+        },
+        "transforms": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "op"],
+            "properties": {
+              "kind": { "$ref": "#/$defs/non_empty_string" },
+              "op": { "$ref": "#/$defs/non_empty_string" },
+              "args": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format_version", "routing", "routes"],
+      "properties": {
+        "format_version": { "$ref": "#/$defs/format_version" },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "type": ["string", "null"] },
+            "channel": { "type": ["string", "null"] },
+            "routing_key": { "$ref": "#/$defs/non_empty_string" },
+            "secondary_routing_key": { "$ref": "#/$defs/non_empty_string" }
+          }
+        },
+        "routes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["route_id", "match", "class_map"],
+            "properties": {
+              "route_id": { "$ref": "#/$defs/non_empty_string" },
+              "match": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "event_ids": {
+                    "type": "array",
+                    "items": { "type": ["integer", "string"] },
+                    "minItems": 1
+                  },
+                  "query_names": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/non_empty_string" },
+                    "minItems": 1
+                  },
+                  "record_types": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/non_empty_string" },
+                    "minItems": 1
+                  },
+                  "syscalls": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/non_empty_string" },
+                    "minItems": 1
+                  }
+                },
+                "anyOf": [
+                  { "required": ["event_ids"] },
+                  { "required": ["query_names"] },
+                  { "required": ["record_types"] },
+                  { "required": ["syscalls"] }
+                ]
+              },
+              "class_map": { "$ref": "#/$defs/non_empty_string" }
+            }
+          }
+        }
+      }
+    },
+    "class_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format_version", "class_map", "emit"],
+      "properties": {
+        "format_version": { "$ref": "#/$defs/format_version" },
+        "class_map": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "class_uid",
+            "class_name",
+            "category_uid",
+            "event_id_map"
+          ],
+          "properties": {
+            "class_uid": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "class_name": { "$ref": "#/$defs/non_empty_string" },
+            "category_uid": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "event_id_map": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["activity_id"],
+                "properties": {
+                  "activity_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "status_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "activity_name": { "$ref": "#/$defs/non_empty_string" }
+                }
+              }
+            }
+          }
+        },
+        "emit": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/emit_rule" }
+        },
+        "no_inference": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "forbidden_derivations": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/non_empty_string" },
+              "minItems": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

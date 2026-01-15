@@ -33,15 +33,15 @@ RPC in v0.1. The stable stage identifiers are:
 - `signing` (when enabled)
 
 See the
-[deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
-for the normative run sequence, IO boundaries, and publish semantics.
+[deployment architecture ADR (ADR-0004)](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
+for the normative run sequence, IO boundaries, and publish semantics
 
 ## Motivation
 
 - Replace ad-hoc "run a test, eyeball logs" workflows with repeatable ground-truth runs and
-  measurable detection outcomes.
+  measurable detection outcomes
 - Enable regression testing for detections, telemetry pipelines, schema mappings, and evaluation
-  joins by capturing the full run bundle as a reproducible artifact set.
+  joins by capturing the full run bundle as a reproducible artifact set
 
 ## Principles
 
@@ -50,14 +50,13 @@ for the normative run sequence, IO boundaries, and publish semantics.
 - A run MUST be explainable and comparable across time by inspecting the run bundle and manifest,
   not by relying on external mutable state.
 - Asset identity MUST be stable across runs (provider-native identifiers are treated as optional
-  metadata, not the identity basis). See the [lab providers specification](015_lab_providers.md).
+  metadata, not the identity basis). See the [lab providers specification](015_lab_providers.md)
 
 ### Contract-driven, stage-scoped execution
 
 - Each stage MUST be implementable as "read inputs from run bundle, write outputs to run bundle."
 - For v0.1, stage ordering and the minimum published outputs are normative at the stage level (see
-  the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)).
+  ADR-0004)
 
 ### Safety-by-default operation
 
@@ -95,26 +94,22 @@ The MVP outcome is a single "one-click" run that produces a reproducible run bun
 minimum:
 
 - **Inventory snapshot**: a run-scoped snapshot that preserves the resolved target set even if the
-  provider state changes later. See the [lab providers specification](015_lab_providers.md).
+  provider state changes later. See the [lab providers specification](015_lab_providers.md)
 - **Ground truth timeline**: `ground_truth.jsonl`, one action per line, including deterministic
-  action identity and resolved target metadata. See the [scenarios specification](030_scenarios.md).
+  action identity and resolved target metadata. See the [scenarios specification](030_scenarios.md)
 - **Stage-scoped evidence**: runner evidence under `runner/**`, and telemetry validation evidence
-  when enabled. See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+  when enabled
 - **Normalized event store**: `normalized/**` as the canonical normalized dataset for downstream
-  detection and scoring. See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+  detection and scoring
 - **Detection outcomes**: `detections/detections.jsonl` produced from sigma evaluation via the
-  detection stage. See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+  detection stage
 - **Machine-readable scorecard**: `scoring/summary.json` as the required machine-readable run
-  summary output. See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
-  and the [stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md).
+  summary output
 - **Human-readable report**: `report/**` as presentation outputs derived from scoring and other run
-  artifacts. See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
-  and the [stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md).
+  artifacts
+
+Run bundle stage model, publish semantics, and minimum output paths are defined in ADR-0004. Run
+status derivation and stage outcome semantics are defined in ADR-0005.
 
 ### Operational safety outcomes (v0.1)
 
@@ -123,8 +118,7 @@ minimum:
   deterministically). See the [operability specification](110_operability.md).
 - **Fail-closed behavior**: safety control violations are run-fatal by default and must be
   observable in deterministic stage outcomes and reason codes. See the
-  [security and safety specification](090_security_safety.md) and the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+  [security and safety specification](090_security_safety.md)
 
 ## Intended users
 
@@ -143,11 +137,9 @@ Normative dependencies are those relied upon by the v0.1 pipeline contracts. Pin
   hardened, and minimized per the security boundary requirements). See the
   [security and safety specification](090_security_safety.md).
 - **OCSF schema** as the canonical normalized event model (the `normalized/**` store is the input to
-  detection and scoring stages). See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+  detection and scoring stages). See ADR-0004.
 - **Sigma toolchain (pySigma + pySigma-pipeline-ocsf)** as the detection portability layer and
-  Sigma-to-OCSF bridge (evaluated in the detection stage). See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+  Sigma-to-OCSF bridge (evaluated in the detection stage). See ADR-0004.
 - **DuckDB** as the batch evaluator backend.
 - **pyarrow** as the Parquet scanning and schema inspection backend.
 - **jsonschema** as the contract validation engine.
@@ -159,8 +151,7 @@ Normative dependencies are those relied upon by the v0.1 pipeline contracts. Pin
 Purple Axiom v0.1 is considered "done" when:
 
 - A single command (or equivalent one-shot orchestration) can execute the canonical stage sequence
-  and publish the required run bundle artifacts. See the
-  [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+  and publish the required run bundle artifacts. See ADR-0004.
 - The run produces deterministic stage outcomes with stable stage identifiers and reason codes such
   that failures can be triaged mechanically using `(stage, status, fail_mode, reason_code)`. See the
   [stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md).
@@ -181,10 +172,10 @@ Normative or orienting references for v0.1:
 - [Operability specification](110_operability.md) (health signals, canaries, resource safeguards)
 - [Configuration reference](120_config_reference.md) (configuration determinism and secret reference
   rules)
-- [Deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
+- [Deployment architecture ADR (ADR-0004)](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
   (stage model, run sequence, IO boundaries, publish semantics)
-- [Stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) (stage outcomes
-  taxonomy and CI gating implications)
+- [Stage outcomes ADR (ADR-0005)](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
+  (stage outcomes taxonomy and CI gating implications)
 
 ## Changelog
 

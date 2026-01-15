@@ -65,6 +65,7 @@ Schemas live in:
 - `docs/contracts/duckdb_conformance_report.schema.json`
 - `docs/contracts/pcap_manifest.schema.json`
 - `docs/contracts/netflow_manifest.schema.json`
+- `docs/contracts/mapping_profile_input.schema.json`
 - `docs/contracts/mapping_profile_snapshot.schema.json`
 - `docs/contracts/mapping_coverage.schema.json`
 - `docs/contracts/bridge_router_table.schema.json`

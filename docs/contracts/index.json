@@ -46,6 +46,10 @@
       "purpose": "Normalization mapping profile snapshot (normalized/mapping_profile_snapshot.json)."
     },
     {
+      "name": "mapping_profile_input.schema.json",
+      "purpose": "Mapping profile input YAML validation (mappings/normalizer/ocsf/**)."
+    },
+    {
       "name": "mapping_coverage.schema.json",
       "purpose": "Optional mapping coverage stats for normalized/mapping_coverage.json."
     },

@@ -45,6 +45,7 @@ See `index.json` for the authoritative registry. Current schemas:
 - `ocsf_event_envelope.schema.json`
 - `detection_instance.schema.json`
 - `summary.schema.json`
+- `mapping_profile_input.schema.json`
 - `mapping_profile_snapshot.schema.json`
 - `mapping_coverage.schema.json`
 - `bridge_router_table.schema.json`

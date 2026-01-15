@@ -30,6 +30,7 @@ Rows are sorted lexicographically by filename.
 | `ground_truth.schema.json`              | Schema for ground-truth execution evidence                       |
 | `manifest.schema.json`                  | Schema for the run manifest root object                          |
 | `mapping_coverage.schema.json`          | Schema for mapping coverage summaries                            |
+| `mapping_profile_input.schema.json`     | Schema for mapping profile input YAML files                       |
 | `mapping_profile_snapshot.schema.json`  | Schema for mapping profile snapshots                             |
 | `netflow_manifest.schema.json`          | Schema for NetFlow/flow artifacts (placeholder / optional)       |
 | `ocsf_event_envelope.schema.json`       | Schema for normalized OCSF event envelope                        |

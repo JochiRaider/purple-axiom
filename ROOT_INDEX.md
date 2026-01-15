@@ -34,6 +34,12 @@ Sort key: recommended reading order for new contributors.
 | `docs/policy/REPO_INDEX_FILES_POLICY.md` | Policy for maintaining index files |
 | `SUPPORTED_VERSIONS.md` | Supported versions and compatibility matrix |
 
+## Tests and fixtures
+
+| File | Purpose |
+| ---- | ------- |
+| `tests/fixtures/FIXTURES_INDEX.md` | Test Fixtures |
+
 ## Common tasks (fast paths)
 
 | Need | Start here | Then (if needed) |

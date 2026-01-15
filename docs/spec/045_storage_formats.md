@@ -16,6 +16,18 @@ The key principle is a two-tier model:
 - Analytics tier: store a structured, columnar representation (Parquet) for evaluation, scoring, and
   reporting.
 
+v0.1 policy (normative):
+
+- The pipeline MUST NOT require native container exports. Pipeline correctness (normalization,
+  detection evaluation, scoring, and reporting) MUST NOT depend on native container exports.
+- Native container exports MAY be supported behind an explicit config gate, but docs SHOULD refer to
+  them generically (or omit them entirely) until the capability is implemented.
+- Any native container export feature MUST specify:
+  - default-off behavior,
+  - disk budget accounting semantics,
+  - redaction and quarantine semantics, and
+  - manifest and report disclosure requirements.
+
 ## Goals
 
 - Use Parquet for long-term storage of event streams and large telemetry datasets.
@@ -476,8 +488,16 @@ evidence:
 
 - Export MUST be explicitly enabled by the operator (config-driven).
 - Export MUST NOT be enabled by default, including for CI and "daily" runs.
+- Export MUST be included in disk budget accounting:
+  - Exported containers MUST count toward run-scoped raw storage budgets (for example:
+    `max_raw_bytes_per_run`) and MUST be subject to the same fail-closed enforcement semantics as
+    other raw artifacts.
 - Exported containers MUST be treated as sensitive evidence (baseline redaction does not apply
   in-place).
+- Export MUST define redaction and quarantine semantics:
+  - If exported containers are not redaction-safe under the configured policy, they MUST be
+    withheld from standard long-term artifact locations and MUST be written only to a quarantined
+    unredacted location when explicitly allowed.
 - The run manifest and report SHOULD indicate that unredacted binary evidence exists and where it is
   stored.
 
@@ -557,7 +577,7 @@ Use this table as the default decision logic:
 - If your primary need is evaluation, scoring, and trending:
 
   - Parquet is required.
-  - Native container exports is optional.
+  - Native container exports are optional.
 
 - If your primary need is maximal Windows-native fidelity and reprocessing:
 

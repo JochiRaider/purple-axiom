@@ -222,7 +222,25 @@ extraction):
   - `sidecar` (optional)
     - `enabled` (optional, default: true)
     - `dir` (optional, default: `raw/evidence/blobs/wineventlog/`)
-
+- `native_container_exports` (optional)
+  - v0.1 policy (normative):
+    - The pipeline MUST NOT require native container exports. Pipeline correctness MUST NOT depend
+      on native container exports.
+    - Native container exports MAY be supported behind an explicit config gate, but docs SHOULD
+      refer to them generically (or omit them entirely) until the capability is implemented.
+  - `enabled` (optional, default: false)
+    - When `true`, the implementation MAY export source-native container artifacts as additional
+      evidence-tier material.
+  - `dir` (optional, default: `raw/evidence/`): relative directory under the run bundle root for
+    exported native containers (subpaths are implementation-defined).
+  - Requirements when `enabled: true` (normative):
+    - Exported containers MUST count toward run-scoped disk usage limits (see
+      `operability.run_limits`).
+    - Exported containers MUST follow `security.redaction` behavior (withhold or quarantine when
+      unredacted).
+    - The run manifest and report SHOULD disclose that native containers were exported and their
+      relative paths.
+      
 ### Normalization (normalization)
 
 Controls raw-to-OCSF transformation and the normalized store written under `normalized/`.

@@ -8,6 +8,7 @@ related:
   - ../spec/042_osquery_integration.md
   - ../spec/040_telemetry_pipeline.md
   - ../spec/050_normalization_ocsf.md
+  - ../spec/045_storage_formats.md
   - ../spec/120_config_reference.md
 ---
 
@@ -20,6 +21,11 @@ Purple Axiom requires a stable, deterministic event identifier to support:
 - Reproducible detection matching (ground truth ↔ telemetry ↔ detections).
 - At-least-once collection semantics (duplicates on restart/replay are expected).
 - Reprocessing from stored raw logs or other stored artifacts without changing joins.
+
+v0.1 constraint (normative):
+
+- Event identity computation and joins MUST NOT require native container exports. Identity MUST be
+  computable from record-oriented telemetry and structured stored artifacts.
 
 Timestamp precision and clock variance are not reliable uniqueness mechanisms. OpenTelemetry
 explicitly distinguishes event time (`Timestamp`) from collection/observation time
@@ -525,7 +531,8 @@ If a checkpoint store is corrupt at restart:
 
 ### Windows Event Log reprocessing invariants
 
-When reprocessing from stored Windows Event Log artifacts:
+When reprocessing from stored Windows Event Log artifacts (for example: structured raw tables and
+sidecar raw payloads; native container exports, if any, are optional):
 
 - Extract Tier 1 identity inputs from the stored record system fields (do not rely on rendered message
   strings).

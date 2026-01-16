@@ -646,7 +646,8 @@ Minimum fields:
 
 - `run_id`
 - `scenario_id`
-- `action_id`
+- `action_id` (format is versioned; see data contracts)
+- `template_id` (v0.2+; stable procedure identity of the action template)
 - `action_key`
 - `criteria_ref` (pack id, pack version, and entry_id)
 - `status` (`pass`, `fail`, `skipped`)

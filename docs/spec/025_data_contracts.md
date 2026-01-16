@@ -223,6 +223,7 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 
 - `manifest.json` (single JSON object)
 - `ground_truth.jsonl` (JSONL)
+- `plan/` (v0.2+; compiled plan graph and expansion manifests)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw/` (telemetry as collected, plus source-native evidence where applicable)
   - `raw/pcap/` (optional; placeholder contract in v0.1)
@@ -303,6 +304,17 @@ Recommended manifest additions (normative in schema when implemented):
   - When `normalized/mapping_profile_snapshot.json` is present, `normalization.ocsf_version` SHOULD
     match `mapping_profile_snapshot.ocsf_version`.
 
+Plan model provenance (v0.2+; normative when implemented):
+
+- `plan.model_version` (string): the plan execution model version used to compile the run plan.
+  - v0.1: absent (implicit single-action plan).
+  - When `plan/expanded_graph.json` is present, this field MUST be present and MUST be a semantic
+    version string (example: `0.2.0`).
+- `plan.expanded_graph_sha256` (string): SHA-256 of the exact bytes of `plan/expanded_graph.json` as
+  published in the run bundle.
+  - Purpose: detect plan compilation drift within a run bundle and provide an audit pointer for
+    deterministic `action_id` generation.
+
 Stage outcomes (v0.1 baseline expectations):
 
 - The following table defines the baseline stage behaviors for v0.1. Implementations MAY add
@@ -351,13 +363,49 @@ Key semantics:
 
 This section defines `action_id` and `action_key`.
 
-- `action_id` MUST be unique within a run. It is not stable across runs and MUST NOT be used for
-  cross-run comparisons.
+- `action_id` MUST be unique within a run. It is a run-scoped correlation key for per-run artifacts
+  and MUST NOT be used for cross-run comparisons.
 - `action_key` MUST be a stable join key for equivalent executions across runs.
+
+`action_id` format by plan model version (normative):
+
+- v0.1 (single-action plan): implementations MUST emit legacy ordinal identifiers of the form
+  `s<positive_integer>` (example: `s1`).
+- v0.2+ (multi-action plan model): `action_id` MUST equal the deterministic action instance
+  identifier (`action_instance_id`) defined below. Legacy `sN` identifiers are v0.1-only and MUST
+  NOT be emitted by v0.2+ producers.
+
+Deterministic action instance id (`action_instance_id`) (v0.2+):
+
+`action_instance_id` MUST be computed as:
+
+- Prefix: `pa_aid_v1_`
+- Digest: `sha256(canonical_json_bytes(action_instance_basis_v1))` truncated to 128 bits (32 hex
+  chars)
+
+`action_instance_basis_v1` MUST include, at minimum:
+
+- `v`: 1
+- `run_id`
+- `node_ordinal` (integer; zero-based ordinal in the runner's deterministic expanded plan order)
+- `engine`
+- `template_id` (stable procedure identifier; see Plan Execution Model)
+- `technique_id`
+- `engine_test_id`
+- `parameters.resolved_inputs_sha256`
+- `target_asset_id`
+
+Notes (normative):
+
+- `node_ordinal` MUST be stable for equivalent plan compilation inputs (same plan template + same
+  axis enumeration + same target resolution) and MUST NOT depend on runtime start time or scheduler
+  timing.
+- `action_id` MUST be derived from the basis above; it MUST NOT be assigned from a mutable counter
+  at runtime in v0.2+.
 
 `action_key` (v1) MUST be computed as:
 
-- `sha256(canonical_json(action_key_basis_v1))`
+- `sha256(canonical_json_bytes(action_key_basis_v1))`
 
 Where `action_key_basis_v1` MUST include, at minimum:
 
@@ -914,6 +962,11 @@ Required invariants:
 1. Deterministic ordering requirements (for diffability):
    - When writing JSONL outputs, lines are sorted deterministically (see storage spec).
    - When writing Parquet, within-file ordering is deterministic (see storage spec).
+1. Action identifier model:
+   - When `plan/expanded_graph.json` is present, every `ground_truth.action_id` MUST match the
+     deterministic action instance id format: `^pa_aid_v1_[0-9a-f]{32}$`.
+   - When `plan/expanded_graph.json` is absent (v0.1), every `ground_truth.action_id` MUST match the
+     legacy v0.1 format: `^s[1-9][0-9]*$`.
 
 ## Optional invariants: run bundle signing
 

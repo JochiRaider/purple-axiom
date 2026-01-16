@@ -208,15 +208,20 @@ artifacts.
 
 Responsibilities:
 
-- Execute scenario actions per the test plan (Atomic Red Team for v0.1; Caldera is a future
-  candidate)
+- Execute scenario actions per the test plan (Atomic Red Team for v0.1; additional runners are
+  future candidates)
+- When plan execution is enabled (v0.2+), compile multi-action plans to a deterministic plan graph
+  (expanded nodes + edges), write `plan/expanded_graph.json`, and assign deterministic action
+  instance ids (`action_id`)
 - Emit `ground_truth.jsonl`: what ran, when, where, with what resolved inputs
 - Record resolved target identifiers (`asset_id` + resolved host identity)
 - Capture executor transcripts (stdout/stderr), exit codes, and durations
 - Invoke and verify cleanup actions (staged lifecycle: invoke → verify)
 
 Ground truth records MUST include deterministic `action_key` values that remain stable across
-replays. See the [scenarios specification][scenarios-spec] for ground truth schema.
+replays. In v0.2+ (multi-action plans), ground truth records MUST also include deterministic
+`action_id` values for action instances. See the [scenarios specification][scenarios-spec] for
+ground truth schema.
 
 Evidence artifacts are stored under `runner/**` (transcripts, executor metadata, cleanup
 verification results).

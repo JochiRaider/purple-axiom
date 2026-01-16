@@ -13,6 +13,10 @@ for v0.1 while keeping evaluation deterministic and auditable.
 ## Concepts
 
 - Ground truth action: a known technique/test execution (with timestamp + target)
+- Action template: stable procedure identity (`template_id`) used for cross-run aggregation.
+- Action instance: a run-scoped execution instance (`action_id`).
+  - v0.1: legacy `s<positive_integer>`.
+  - v0.2+: deterministic `pa_aid_v1_<32hex>` (see data contracts).
 - Detection: a rule hit mapped to `run_id` + `technique_id`
 
 ### Normalization coverage gate (Tier 1 Core Common)

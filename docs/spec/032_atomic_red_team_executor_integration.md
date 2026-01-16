@@ -63,6 +63,9 @@ The runner MUST record these pins in run provenance (see
 For v0.1 runner actions, `engine_test_id` MUST be present and MUST be used as the canonical Atomic
 test identifier.
 
+In v0.2+ plan compilation, the runner MUST compute a stable `template_id` for each Atomic action as:
+`atomic/<technique_id>/<engine_test_id>`.
+
 ### Canonicalization token
 
 `$ATOMICS_ROOT` is a literal token used only for **identity-bearing canonicalization**. It
@@ -72,6 +75,13 @@ identity-bearing materials.
 ## Contracted runner artifacts
 
 Per-action evidence is stored under:
+
+Action id semantics (normative):
+
+- v0.1: `action_id` MUST be the legacy ordinal identifier `s<positive_integer>` (example: `s1`).
+
+- v0.2+: `action_id` MUST be the deterministic action instance id defined in the
+  [data contracts spec](025_data_contracts.md) and MUST match `pa_aid_v1_<32hex>`.
 
 - `runs/<run_id>/runner/actions/<action_id>/`
 

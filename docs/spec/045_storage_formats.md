@@ -136,6 +136,9 @@ Purpose:
 ### Always JSON (small, contract-driven)
 
 - `manifest.json`
+- `plan/expanded_graph.json` (v0.2+)
+- `plan/expansion_manifest.json` (v0.2+)
+- `plan/template_snapshot.json` (v0.2+; optional)
 - `criteria/manifest.json`
 - `scoring/summary.json`
 - `normalized/mapping_coverage.json`
@@ -147,6 +150,7 @@ Rationale:
 ### JSONL (small to medium, event-like but not huge)
 
 - `ground_truth.jsonl`
+- `plan/execution_log.jsonl` (v0.2+; optional)
 - `criteria/criteria.jsonl`
 - `criteria/results.jsonl`
 - `detections/detections.jsonl`
@@ -495,9 +499,9 @@ evidence:
 - Exported containers MUST be treated as sensitive evidence (baseline redaction does not apply
   in-place).
 - Export MUST define redaction and quarantine semantics:
-  - If exported containers are not redaction-safe under the configured policy, they MUST be
-    withheld from standard long-term artifact locations and MUST be written only to a quarantined
-    unredacted location when explicitly allowed.
+  - If exported containers are not redaction-safe under the configured policy, they MUST be withheld
+    from standard long-term artifact locations and MUST be written only to a quarantined unredacted
+    location when explicitly allowed.
 - The run manifest and report SHOULD indicate that unredacted binary evidence exists and where it is
   stored.
 
@@ -562,7 +566,8 @@ To enable reprocessing:
 
 - Preserve sufficient raw structured Parquet tables to re-run normalization and detection evaluation
   without re-running scenarios.
-- If native container exports are retained, they are additional insurance, not a replacement for the structured raw tables.
+- If native container exports are retained, they are additional insurance, not a replacement for the
+  structured raw tables.
 
 The manifest should record:
 

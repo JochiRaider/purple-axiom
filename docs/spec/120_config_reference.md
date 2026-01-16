@@ -130,6 +130,17 @@ Determinism guidance:
 - The runner should record its version and inputs in the manifest.
 - Allowlists and denylists should be explicit and versioned.
 
+Plan execution defaults (reserved for v0.2+):
+
+- `plan` (optional): defaults and safety caps applied when compiling multi-action plans.
+  - `model_version` (optional, default: `0.2.0`): requested plan execution model version.
+  - `max_nodes` (optional, default: 100): hard cap on expanded plan node count; if exceeded, fail
+    closed with `reason_code=plan_expansion_limit`.
+  - `max_concurrency` (optional, default: 1): upper bound on concurrent action execution; per-plan
+    requested concurrency MUST be clamped to this value.
+  - `fail_fast` (optional, default: false): if true, halt scheduling of remaining nodes after the
+    first failure.
+
 ### Control plane (optional, control_plane)
 
 Reserved for a future optional RPC-based endpoint management layer (for example, agent configuration

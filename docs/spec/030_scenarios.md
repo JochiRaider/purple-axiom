@@ -110,7 +110,10 @@ v0.1 constraint (normative):
 
 Each executed action MUST include two identifiers:
 
-- `action_id` (unique within a run): used to correlate all per-run artifacts.
+- `action_id` (run-scoped correlation key): used to correlate all per-run artifacts.
+  - v0.1: legacy `s<positive_integer>` (example: `s1`).
+  - v0.2+: MUST equal the deterministic action instance id format defined in the data contracts spec
+    (`pa_aid_v1_<32hex>`).
 - `action_key` (stable across runs): used as the deterministic join key for regression comparisons.
 
 `action_key` MUST be computed from `action_key_basis_v1` (see the
@@ -128,7 +131,9 @@ Then:
 
 - `action_key = sha256(canonical_json_bytes(action_key_basis_v1))`
 
-**Notes**:
+In v0.2+, ground truth entries SHOULD also include a stable `template_id` field (procedure identity)
+in addition to the engine-specific identifiers above. `template_id` MUST be stable across runs and
+MUST NOT incorporate `run_id` or timestamps. **Notes**:
 
 - `action_key` MUST NOT incorporate `run_id` or timestamps.
 - `action_key` SHOULD NOT embed secrets; use hashes for resolved inputs and store redacted inputs
@@ -328,6 +333,40 @@ Ground truth is emitted as JSONL, one action per line.
     "verification": {
       "status": "success",
       "results_ref": "runner/actions/s1/cleanup_verification.json"
+    }
+  }
+}
+```
+
+## Ground truth timeline entry (v0.2+; deterministic action_id)
+
+When the plan execution model is enabled (multi-action plans), each emitted action line MUST use a
+deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data contracts spec.
+
+```json
+{
+  "timestamp_utc": "2026-01-03T12:00:00Z",
+  "run_id": "run-2026-01-03-001",
+  "scenario_id": "scn-2026-01-001",
+  "scenario_version": "0.1.0",
+  "action_id": "pa_aid_v1_4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d",
+  "template_id": "atomic/T1059.001/d3c1...guid",
+  "action_key": "sha256hex...",
+  "engine": "atomic",
+  "engine_test_id": "d3c1...guid",
+  "technique_id": "T1059.001",
+  "target_asset_id": "win11-test-01",
+  "extensions": {
+    "plan": {
+      "node_ordinal": 0
+    }
+  },
+  "parameters": {
+    "resolved_inputs_sha256": "sha256hex..."
+  },
+  "cleanup": {
+    "verification": {
+      "results_ref": "runner/actions/pa_aid_v1_4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d/cleanup_verification.json"
     }
   }
 }

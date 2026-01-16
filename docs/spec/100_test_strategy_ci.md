@@ -55,8 +55,8 @@ requiring byte-for-byte determinism.
 Windows Event Log raw XML tests validate identity-field extraction without RenderingInfo, binary
 field detection, and payload limit truncation with SHA-256 computation.
 
-Linux event identity basis tests use auditd/journald/syslog fixture vectors covering Tier 1 and
-Tier 2 fields, plus Tier 3 collision fixtures under `tests/fixtures/event_id/v1/`.
+Linux event identity basis tests use auditd/journald/syslog fixture vectors covering Tier 1 and Tier
+2 fields, plus Tier 3 collision fixtures under `tests/fixtures/event_id/v1/`.
 
 ### Redaction
 
@@ -131,9 +131,9 @@ Criteria pack versioning tests validate that
 `pack_version`. If multiple search paths contain the same `(pack_id, pack_version)`, CI MUST fail
 unless the pack snapshots are byte-identical (manifest plus criteria content hashes match).
 
-Criteria drift detection tests validate that given a criteria pack manifest upstream with `(engine,
-source_ref, source_tree_sha256)` and a runner provenance that differs, the evaluator MUST set
-criteria drift to detected and MUST mark affected actions `status=skipped` with a deterministic
+Criteria drift detection tests validate that given a criteria pack manifest upstream with
+`(engine, source_ref, source_tree_sha256)` and a runner provenance that differs, the evaluator MUST
+set criteria drift to detected and MUST mark affected actions `status=skipped` with a deterministic
 drift reason field.
 
 ## Integration tests
@@ -164,8 +164,9 @@ For each query fixture, the harness MUST execute `EXPLAIN (FORMAT json) <query>`
 `result_jcs_sha256` over a JCS-canonicalized JSON result representation, and require a deterministic
 total ordering of rows (RECOMMENDED: outermost `ORDER BY ALL`).
 
-The harness MUST emit a consolidated report to `artifacts/duckdb_conformance/<report_id>/report.json`
-conforming to the [DuckDB conformance report schema](../contracts/duckdb_conformance_report.schema.json).
+The harness MUST emit a consolidated report to
+`artifacts/duckdb_conformance/<report_id>/report.json` conforming to the
+[DuckDB conformance report schema](../contracts/duckdb_conformance_report.schema.json).
 
 Failure classification MUST be explicit per cell and per query. Harness internal failures (init,
 execute, parse, encode) MUST be recorded as `status=fail` with a stable `reason_code`. Observed
@@ -206,7 +207,8 @@ Missing publisher/manifest metadata with raw XML present MUST NOT fail ingestion
 `wineventlog_rendering_metadata_missing_total`.
 
 Raw XML unavailable MUST fail telemetry stage under `fail_mode: fail_closed`. Under
-`fail_mode: warn_and_skip`, it MUST skip the record and increment `wineventlog_raw_unavailable_total`.
+`fail_mode: warn_and_skip`, it MUST skip the record and increment
+`wineventlog_raw_unavailable_total`.
 
 Oversize raw XML MUST truncate deterministically and create a content-addressed sidecar
 `${sha256}.xml` with `payload_overflow_ref` pointing to `${sidecar.path}/${sha256}.xml`.
@@ -263,9 +265,9 @@ Schema validation of effective configuration validates `range.yaml` against
 
 ### Version conformance
 
-Pinned-version consistency checks (fail closed) validate that
-`manifest.normalization.ocsf_version` (when present), `mapping_profile_snapshot.ocsf_version`, and
-bridge mapping pack `ocsf_version` (when present) MUST match.
+Pinned-version consistency checks (fail closed) validate that `manifest.normalization.ocsf_version`
+(when present), `mapping_profile_snapshot.ocsf_version`, and bridge mapping pack `ocsf_version`
+(when present) MUST match.
 
 External dependency version matrix (fail closed; v0.1) requires CI MUST run the integration and
 "golden run" fixtures using the pinned dependency versions in the
@@ -274,13 +276,13 @@ version differs from the pins for an enabled stage.
 
 The minimum pinned set for v0.1:
 
-| Dependency                  | Version   |
-| --------------------------- | --------- |
-| OpenTelemetry Collector Contrib | 0.143.1   |
-| pySigma                     | 1.1.0     |
-| DuckDB                      | 1.4.3     |
-| osquery                     | 5.14.1    |
-| OCSF schema                 | 1.7.0     |
+| Dependency                      | Version |
+| ------------------------------- | ------- |
+| OpenTelemetry Collector Contrib | 0.143.1 |
+| pySigma                         | 1.1.0   |
+| DuckDB                          | 1.4.3   |
+| osquery                         | 5.14.1  |
+| OCSF schema                     | 1.7.0   |
 
 ### Determinism gates
 
@@ -352,7 +354,7 @@ The recommended CI workflow proceeds through six stages:
 
 ## Changelog
 
-| Date       | Change                                         |
-| ---------- | ---------------------------------------------- |
-| 2026-01-13 | Style guide conformance reformat               |
-| 2026-01-12 | Formatting update                              |
+| Date       | Change                           |
+| ---------- | -------------------------------- |
+| 2026-01-13 | Style guide conformance reformat |
+| 2026-01-12 | Formatting update                |

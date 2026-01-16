@@ -68,13 +68,14 @@ The following artifacts MUST be present for a run to be considered reportable:
 | Path                                       | Source stage  | Purpose                                        |
 | ------------------------------------------ | ------------- | ---------------------------------------------- |
 | `runner/`                                  | runner        | Per-action transcripts and cleanup evidence    |
+| `plan/expanded_graph.json`                 | runner        | Compiled plan graph (v0.2+)                    |
+| `plan/expansion_manifest.json`             | runner        | Matrix expansion manifest (v0.2+)              |
 | `normalized/ocsf_events.*`                 | normalization | Full normalized event store (JSONL or Parquet) |
 | `bridge/mapping_pack_snapshot.json`        | detection     | Bridge inputs snapshot for reproducibility     |
 | `bridge/compiled_plans/`                   | detection     | Per-rule compilation outputs                   |
 | `normalized/mapping_profile_snapshot.json` | normalization | Mapping profile snapshot for drift detection   |
 | `security/checksums.txt`                   | signing       | SHA-256 checksums for long-term artifacts      |
 | `security/signature.ed25519`               | signing       | Ed25519 signature over checksums               |
-
 
 ## Required JSON outputs (v0.1)
 
@@ -100,7 +101,6 @@ These artifacts are produced by upstream stages and referenced in the report:
 | `bridge/coverage.json`             | Sigma-to-OCSF bridge quality      | [bridge coverage schema](bridge_coverage_schema.json)               |
 | `normalized/mapping_coverage.json` | OCSF normalization coverage       | [mapping coverage schema](mapping_coverage_schema.json)             |
 | `criteria/manifest.json`           | Criteria pack snapshot metadata   | [criteria pack manifest schema](criteria_pack_manifest_schema.json) |
-
 
 ## Run status summary
 
@@ -483,6 +483,13 @@ The `report/report.json` output MUST conform to the following structure:
     "duration_seconds": 300,
     "target_count": 2
   },
+  "plan": {
+    "model_version": "<semver>",
+    "plan_type": "<string>",
+    "node_count": 10,
+    "group_count": 1,
+    "templates_executed": 10
+  },  
   "coverage": { },
   "latency": { },
   "fidelity": { },

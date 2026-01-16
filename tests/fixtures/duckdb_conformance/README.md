@@ -1,4 +1,4 @@
-<!-- tests/baselines/duckdb_conformance/README.md -->
+<!-- tests/fixtures/duckdb_conformance/README.md -->
 
 # DuckDB Conformance Baselines
 

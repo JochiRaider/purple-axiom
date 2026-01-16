@@ -351,7 +351,9 @@ Validation:
 Generation source (normative):
 
 - The runner MUST derive ground truth entries from a structured execution record produced at runtime
-  (for example, an ATTiRe-style JSON execution log for Atomic).
+  (for example, an ATTiRe-style JSON execution log for Atomic). For Atomic, the structured execution
+  record is stored as `runner/actions/<action_id>/attire.json` (see the
+  [Atomic Red Team executor integration spec](032_atomic_red_team_executor_integration.md)).
 - The runner MUST write the structured execution record under `runner/actions/<action_id>/` and
   treat `ground_truth.jsonl` as a derived, stable join layer.
 
@@ -621,8 +623,13 @@ Minimum contents (recommended):
 - `runner/actions/<action_id>/stderr.txt`
 - `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type or version,
   timestamps)
+- `runner/actions/<action_id>/attire.json` (when structured execution logging is enabled; Atomic
+  uses ATTiRe)
+- `runner/actions/<action_id>/atomic_test_extracted.json` (optional; Atomic template snapshot)
+- `runner/actions/<action_id>/atomic_test_source.yaml` (optional; Atomic template snapshot)
 - `runner/actions/<action_id>/cleanup_verification.json` (checks + results)
 
+note: see [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
 Validation:
 
 - `executor.json` and `cleanup_verification.json` SHOULD be schema validated when present.

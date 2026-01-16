@@ -94,6 +94,9 @@ REQUIRED by this contract when the corresponding feature is enabled:
 - `prereqs_stdout.txt` (required when prerequisites are evaluated)
 - `prereqs_stderr.txt` (required when prerequisites are evaluated)
 - `attire.json` (required when Invoke-AtomicRedTeam structured logging is enabled, see below)
+- `atomic_test_extracted.json` (required when Atomic template snapshotting is enabled, see
+  [Atomic template snapshot](#atomic-template-snapshot))
+- `atomic_test_source.yaml` (optional; see [Atomic template snapshot](#atomic-template-snapshot))
 - `cleanup_stdout.txt` (required when cleanup is invoked)
 - `cleanup_stderr.txt` (required when cleanup is invoked)
 - `cleanup_verification.json` (required when cleanup verification is enabled)
@@ -132,6 +135,71 @@ The parser MUST extract, at minimum, for each Atomic test:
 If `auto_generated_guid` is missing or empty, the runner MUST fail closed with reason code
 `missing_engine_test_id` unless the action is configured as `warn_and_skip` (in which case it MUST
 emit `skipped` with reason code `missing_engine_test_id`).
+
+### Atomic template snapshot
+
+The runner MAY snapshot the Atomic test template material used for an action into the run bundle so
+run review does not require a local checkout of the Atomic Red Team repository.
+
+Config gate (normative):
+
+- `runner.atomic.template_snapshot.mode` (string enum; v0.1 default: `off`)
+
+Allowed values:
+
+- `off`: do not write template snapshot artifacts.
+- `extracted`: write `atomic_test_extracted.json` only.
+- `source`: write both `atomic_test_extracted.json` and `atomic_test_source.yaml`.
+
+Requirements (normative):
+
+- When `runner.atomic.template_snapshot.mode` is `extracted` or `source`, the runner MUST write
+  `atomic_test_extracted.json` for the selected Atomic test before attempting execution or
+  prerequisites evaluation.
+- When `runner.atomic.template_snapshot.mode` is `source`, the runner MUST also write
+  `atomic_test_source.yaml` containing the YAML bytes for the selected Atomic test after newline
+  normalization to LF.
+
+Snapshot artifact paths:
+
+- `runs/<run_id>/runner/actions/<action_id>/atomic_test_extracted.json`
+- `runs/<run_id>/runner/actions/<action_id>/atomic_test_source.yaml` (mode=`source`)
+
+`atomic_test_extracted.json` contents (minimum):
+
+- `technique_id`
+- `engine_test_id`
+- `source_relpath` (example: `atomics/T1059.001/T1059.001.yaml`)
+- `source_sha256` (sha256 of the exact bytes written to `atomic_test_source.yaml` when present;
+  otherwise sha256 of the YAML bytes after deterministic newline normalization to LF)
+- `name`
+- `description` (if present)
+- `supported_platforms` (if present)
+- `executor` object:
+  - `name`
+  - `command` (list of strings; normalized per
+    [Command list normalization](#command-list-normalization))
+  - `cleanup_command` (optional list of strings; normalized per
+    [Command list normalization](#command-list-normalization))
+- `input_arguments` (optional object; keys and per-key `default` values when present)
+- `dependencies` (optional array in YAML order), each with:
+  - `description` (string or null)
+  - `prereq_command` (list of strings; normalized per
+    [Command list normalization](#command-list-normalization))
+  - `get_prereq_command` (list of strings; normalized per
+    [Command list normalization](#command-list-normalization))
+
+Template snapshot scope:
+
+- The runner MUST NOT perform input placeholder substitution when writing the snapshot artifacts.
+  Snapshot artifacts represent the Atomic template, not the resolved command material.
+
+Determinism requirements:
+
+- Arrays MUST preserve YAML order.
+- `atomic_test_extracted.json` MUST be serialized as RFC 8785 canonical JSON (JCS) bytes (UTF-8, no
+  BOM, no trailing newline).
+- `atomic_test_source.yaml` MUST be UTF-8 (no BOM) with LF newlines.
 
 ### Command list normalization
 
@@ -602,6 +670,33 @@ outcomes as specified by the ground truth contract in the
 [data contracts spec](025_data_contracts.md), including a reference to `cleanup_verification.json`
 when produced.
 
+## Appendix: ATTiRe import mode (optional)
+
+Some environments may execute Atomic tests outside Purple Axiom (for example, via a separate runner
+wrapper) while still producing structured ATTiRe execution logs.
+
+Implementations MAY support an "ATTiRe import" mode that ingests external structured execution
+records and emits a run bundle that is contract-compatible with downstream stages.
+
+If ATTiRe import mode is implemented (normative requirements):
+
+- The runner MUST write a normalized per-action ATTiRe record to:
+  - `runs/<run_id>/runner/actions/<action_id>/attire.json`
+- The runner MUST derive `ground_truth.jsonl` entries from the imported `attire.json` using the same
+  mapping rules as the execution path (timestamps, action identity fields, and executor status
+  fields).
+- The runner MUST NOT attempt to execute `Invoke-AtomicTest` when operating in import mode.
+- `executor.json` MUST record that the action was imported (example field: `import_mode=true`) and
+  MUST include a SHA-256 of the imported ATTiRe bytes after newline normalization (example field:
+  `attire_sha256`).
+- If the imported record is missing required fields, the runner MUST fail closed for the action with
+  `reason_code=attire_import_error` and MUST preserve the raw import file only in a quarantined
+  location (if configured).
+
+This appendix does not require import mode for v0.1. When not enabled, `attire.json` is produced
+only by the reference executor as specified in
+[Structured execution record (ATTiRe)](#structured-execution-record-attire).
+
 ## Failure modes and stage outcomes
 
 Failures in this contract MUST be observable in:
@@ -615,6 +710,7 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 
 - `atomic_yaml_not_found`
 - `atomic_yaml_parse_error`
+- `attire_import_error` (only when ATTiRe import mode is enabled)
 - `missing_engine_test_id`
 - `missing_required_input`
 - `interactive_prompt_blocked`
@@ -637,6 +733,9 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 Implementations MUST include fixture-backed tests that validate:
 
 1. YAML parsing determinism: same YAML bytes yield identical extracted fields.
+1. Template snapshot determinism: when enabled, `atomic_test_extracted.json` and (if present)
+   `atomic_test_source.yaml` are byte-stable for identical YAML bytes and the same pinned parser and
+   normalizer versions.
 1. Input resolution determinism: same YAML bytes plus same override object yield identical
    `resolved_inputs_redacted_canonical` and identical `parameters.resolved_inputs_sha256`.
 1. Canonicalization: `$ATOMICS_ROOT` replacement is applied to identity-bearing materials and does

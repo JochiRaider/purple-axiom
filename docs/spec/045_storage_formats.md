@@ -107,8 +107,13 @@ Runner evidence notes:
   - `runner/actions/<action_id>/stdout.txt`
   - `runner/actions/<action_id>/stderr.txt`
   - `runner/actions/<action_id>/executor.json`
+  - `runner/actions/<action_id>/attire.json` (optional; Atomic structured execution record)
+  - `runner/actions/<action_id>/atomic_test_extracted.json` (optional; Atomic template snapshot)
+  - `runner/actions/<action_id>/atomic_test_source.yaml` (optional; Atomic template snapshot)
   - `runner/actions/<action_id>/cleanup_verification.json`
 - Executor-level evidence for defensible debugging when orchestration logs are incomplete.
+
+Note: see [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
 
 ### Tier 2: Analytics (structured, long-term)
 

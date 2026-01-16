@@ -237,11 +237,23 @@ boundaries remain stable:
 
 - A "local multi-process" mode where each stage is a separately invocable command, still reading and
   writing the same run bundle artifact contracts.
+
 - A long-running daemon that schedules runs and maintains a queue, provided:
+
   - it uses the same lock and atomic publish rules, and
   - UI actions do not bypass contract validation.
+
 - Remote execution runners or distributed collection backends, provided the run bundle still
   captures a complete, deterministic snapshot of inputs and outputs required for reproducibility.
+
+- Optional control-plane RPC for endpoint management (for example, pushing validated collector
+  configuration or triggering canary actions), provided:
+
+  - it is default-off and explicitly enabled via `control_plane.enabled`,
+  - the run bundle remains the authoritative coordination and evidence plane (stages still publish
+    artifacts via filesystem contracts), and
+  - every remote action is recorded into the run bundle as an auditable transcript (inputs, targets,
+    results, timestamps, and stable hashes).
 
 ## References
 

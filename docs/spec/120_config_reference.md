@@ -130,6 +130,34 @@ Determinism guidance:
 - The runner should record its version and inputs in the manifest.
 - Allowlists and denylists should be explicit and versioned.
 
+### Control plane (optional, control_plane)
+
+Reserved for a future optional RPC-based endpoint management layer (for example, agent configuration
+injection).
+
+Common keys:
+
+- `enabled` (optional, default: false)
+  - v0.1: MUST be `false`. Setting to `true` MUST be rejected by schema validation (fail closed with
+    `reason_code=config_schema_invalid`).
+- `transport` (optional): `ssh | winrm | grpc | other` (reserved; ignored when disabled)
+- `targets` (optional): allowlist of `lab.assets[].asset_id` to which control-plane actions may
+  apply
+- `auth` (optional): transport-specific authentication; values MUST be secret references (`*_ref`)
+  - `username_ref` (optional)
+  - `password_ref` (optional)
+  - `private_key_ref` (optional)
+  - `token_ref` (optional)
+- `audit` (optional)
+  - `enabled` (optional, default: true): when enabled, implementations MUST record a deterministic
+    audit transcript into the run bundle (TODO: define artifact paths and schema). See
+    [ADR-0004: Deployment architecture and inter-component communication](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+
+Notes:
+
+- Control-plane functionality is out of scope for v0.1. The v0.1 pipeline MUST NOT require remote
+  management credentials and MUST NOT depend on control-plane actions for correctness.
+
 ### Telemetry (telemetry)
 
 Controls collection and staging of raw telemetry in `raw/`.
@@ -240,7 +268,7 @@ extraction):
       unredacted).
     - The run manifest and report SHOULD disclose that native containers were exported and their
       relative paths.
-      
+
 ### Normalization (normalization)
 
 Controls raw-to-OCSF transformation and the normalized store written under `normalized/`.

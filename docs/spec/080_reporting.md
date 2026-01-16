@@ -129,6 +129,8 @@ degradation reasons include:
 | `gap_rate_exceeded`                  | Quality gate  | One or more gap category rates exceeded budget             |
 | `stage_failed_closed`                | Stage outcome | A required stage failed with `fail_closed` mode            |
 | `cleanup_verification_failed`        | Validation    | Cleanup checks failed; run may be tainted                  |
+| `revert_failed`                      | Runner        | One or more actions failed during lifecycle `revert`       |
+| `teardown_failed`                    | Runner        | One or more actions failed during lifecycle `teardown`     |
 
 ## Human-readable report sections
 
@@ -147,6 +149,22 @@ Required content:
 - Target asset summary (count by OS, roles)
 - Top-line coverage percentage
 - Status degradation reasons (if not `success`)
+
+### Action lifecycle outcomes
+
+**Summary**: Operator-visible action execution health, separated by lifecycle phase.
+
+Required content:
+
+- Idempotence distribution over executed actions:
+  - counts for `idempotent | non_idempotent | unknown`
+- Per-phase outcome counts aggregated over actions:
+  - `prepare`, `execute`, `revert`, `teardown` each with counts for `success | failed | skipped`
+- A table (or list) of actions with non-success lifecycle phases (limit 25), including:
+  - `action_id`, technique ID, target asset id
+  - failed phase(s) and per-phase `phase_outcome`
+  - evidence references (paths under `runner/actions/<action_id>/`), including cleanup verification
+    references when present
 
 ### Coverage metrics
 

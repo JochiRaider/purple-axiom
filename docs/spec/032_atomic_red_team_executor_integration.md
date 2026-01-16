@@ -40,16 +40,43 @@ This document is additive and MUST be read alongside:
 If this document conflicts with any of the above, the conflict MUST be resolved explicitly via a
 spec patch (do not implement "best effort" divergence).
 
+## Lifecycle phase mapping
+
+Purple Axiom's action lifecycle is defined in the scenario model. For `engine = "atomic"` actions,
+the runner MUST map Atomic semantics to lifecycle phases as follows:
+
+| Atomic semantic                                         | Lifecycle phase | Notes                                                                                      |
+| ------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------ |
+| Dependency evaluation (`check_prereq_command`)          | `prepare`       | Warm-up checks are `prepare` even when no changes are made.                                |
+| Dependency fetch (`get_prereq_command`)                 | `prepare`       | Any prerequisite materialization is recorded as `prepare`.                                 |
+| Primary command invocation (`executor.command`)         | `execute`       | The detonation attempt.                                                                    |
+| Cleanup command invocation (`executor.cleanup_command`) | `revert`        | Undo detonation side-effects to enable a safe re-run.                                      |
+| Cleanup verification (`cleanup_verification.json`)      | `teardown`      | Post-run verification. Teardown MAY also remove runner-created prereq artifacts when safe. |
+
+Revert vs teardown (normative):
+
+- The runner MUST record `revert` separately from `teardown`. `revert` exists to undo execute
+  side-effects; `teardown` exists to remove per-action prerequisites (when applicable) and to record
+  cleanup verification outcomes.
+  - The runner MUST NOT attempt to uninstall or remove system-wide prerequisites by default (risk:
+    deleting prerequisites shared by other techniques). Any prerequisite removal behavior MUST be
+    explicit, opt-in, and deterministic.
+
+Idempotence (normative):
+
+- Unless the scenario/action descriptor explicitly declares otherwise, Atomic actions MUST default
+  `idempotence` to `unknown`.
+  - When `idempotence` is `unknown`, the runner MUST treat the action as `non_idempotent` for safety
+    (do not assume it is safe to re-run without a successful `revert`).
+
 ## Definitions
 
 ### Reference executor
 
 For v0.1, the **reference executor** is the tuple:
 
-- PowerShell runtime: **PowerShell 7.4.x** (pinned in
-  [supported versions](../../SUPPORTED_VERSIONS.md))
-- Invoke-AtomicRedTeam module: pinned exact version (pinned in
-  [supported versions](../../SUPPORTED_VERSIONS.md))
+- PowerShell runtime: **PowerShell 7.4.6**
+- Invoke-AtomicRedTeam module: pinned exact version
 - Atomic Red Team content: pinned reference (commit SHA, tag, or vendored content hash)
 
 The runner MUST record these pins in run provenance (see

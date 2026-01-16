@@ -62,6 +62,36 @@ Purple Axiom treats scenario execution as a staged lifecycle per action:
 1. **Cleanup** (invoke cleanup command when applicable)
 1. **Cleanup verification** (verify post-conditions; "cleanup ran" is not sufficient)
 
+### Action lifecycle
+
+Purple Axiom models each action execution as a four-phase lifecycle:
+
+- `prepare`: resolve inputs and evaluate or satisfy prerequisites.
+- `execute`: attempt the technique payload.
+- `revert`: undo execute-side effects so the action can be executed again on the same target.
+- `teardown`: remove per-action prerequisites (when safe and applicable) and verify the target is in
+  a known-good state.
+
+Idempotence indicates whether `execute` MAY be re-attempted without a successful `revert`:
+
+- `idempotent`: `execute` MAY be repeated without `revert`.
+- `non_idempotent`: `execute` MUST NOT be repeated on the same target without a successful `revert`.
+- `unknown`: treat as `non_idempotent` for safety.
+
+Allowed transitions (finite-state machine, normative):
+
+- The runner MUST attempt phases in order: `prepare` -> `execute` -> `revert` -> `teardown`.
+- A phase MAY be `skipped` when it is not applicable or is blocked by an earlier failure.
+- If `prepare` is `failed`, `execute` MUST be `skipped`.
+- `revert` MUST NOT be attempted unless `execute` was attempted.
+- `teardown` SHOULD be attempted even if `execute` or `revert` failed, but MUST record its outcome.
+
+Recording requirements (normative):
+
+- Ground truth MUST record the action `idempotence` declaration.
+- Ground truth MUST record, for each phase, `started_at_utc`, `ended_at_utc`, and `phase_outcome`
+  (`success | failed | skipped`).
+
 The runner MUST persist:
 
 - Ground truth timeline entries (contracted).
@@ -260,7 +290,13 @@ See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for the plan execution m
   - `input_args_redacted` (optional)
   - `input_args_sha256` (optional)
 - `expected_telemetry` (channels / event types)
-- `cleanup_status`
+- `idempotence` (`idempotent | non_idempotent | unknown`)
+- `lifecycle` (seed)
+  - `phases` (array; in phase order)
+    - `phase` (`prepare | execute | revert | teardown`)
+    - `phase_outcome` (`success | failed | skipped`)
+    - `started_at_utc`
+    - `ended_at_utc`
 
 ## Seed schema: Scenario definition (v0.1)
 
@@ -279,6 +315,7 @@ plan:
   type: "atomic"
   technique_id: "T1059.001"
   engine_test_id: "d3c1...guid"
+  idempotence: "unknown"
   input_args:
     command: "whoami"
   cleanup: true
@@ -327,13 +364,37 @@ Ground truth is emitted as JSONL, one action per line.
   "expected_telemetry_hints": {
     "ocsf_class_uids": [1001, 1005]
   },
-  "cleanup": {
-    "invoked": true,
-    "status": "success",
-    "verification": {
-      "status": "success",
-      "results_ref": "runner/actions/s1/cleanup_verification.json"
-    }
+  "idempotence": "unknown",
+   "lifecycle": {
+     "phases": [
+     {
+       "phase": "prepare",
+       "phase_outcome": "success",
+       "started_at_utc": "2026-01-03T12:00:00Z",
+       "ended_at_utc": "2026-01-03T12:00:02Z"
+     },
+     {
+       "phase": "execute",
+       "phase_outcome": "success",
+       "started_at_utc": "2026-01-03T12:00:02Z",
+       "ended_at_utc": "2026-01-03T12:00:05Z"  
+     },
+     {
+       "phase": "revert",
+       "phase_outcome": "success",
+       "started_at_utc": "2026-01-03T12:00:05Z",
+       "ended_at_utc": "2026-01-03T12:00:06Z"
+     },
+     {
+       "phase": "teardown", 
+       "phase_outcome": "success",
+       "started_at_utc": "2026-01-03T12:00:06Z",
+       "ended_at_utc": "2026-01-03T12:00:07Z",
+       "evidence": {
+         "cleanup_verification_ref": "runner/actions/s1/cleanup_verification.json"
+       }
+     }
+    ]
   }
 }
 ```
@@ -364,10 +425,31 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
   "parameters": {
     "resolved_inputs_sha256": "sha256hex..."
   },
-  "cleanup": {
-    "verification": {
-      "results_ref": "runner/actions/pa_aid_v1_4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d/cleanup_verification.json"
-    }
+  "idempotence": "unknown",
+  "lifecycle": {
+    "phases": [
+      {
+        "phase": "prepare",
+        "phase_outcome": "success",
+        "started_at_utc": "2026-01-03T12:00:00Z",
+        "ended_at_utc": "2026-01-03T12:00:02Z"
+      },
+      {
+        "phase": "execute",
+        "phase_outcome": "success",
+        "started_at_utc": "2026-01-03T12:00:02Z",
+        "ended_at_utc": "2026-01-03T12:00:05Z"
+      },
+      {
+        "phase": "teardown",
+        "phase_outcome": "success",
+        "started_at_utc": "2026-01-03T12:00:05Z",
+        "ended_at_utc": "2026-01-03T12:00:07Z",
+        "evidence": {
+          "cleanup_verification_ref": "runner/actions/pa_aid_v1_4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d/cleanup_verification.json"
+        }
+      }
+    ]
   }
 }
 ```

@@ -53,6 +53,7 @@ Schemas live in:
 
 - `docs/contracts/manifest.schema.json`
 - `docs/contracts/ground_truth.schema.json`
+- `docs/contracts/action_descriptor.schema.json`
 - `docs/contracts/runner_executor_evidence.schema.json`
 - `docs/contracts/cleanup_verification.schema.json`
 - `docs/contracts/criteria_pack_manifest.schema.json`
@@ -342,7 +343,7 @@ Purpose:
 
 Format:
 
-- JSON Lines. Each line is one executed action (one runner step with an observable effect).
+- JSON Lines. Each line is one action instance, including its lifecycle phase outcomes.
 
 Validation:
 
@@ -360,6 +361,36 @@ Generation source (normative):
 Key semantics:
 
 - `timestamp_utc` is the start time of the action (UTC).
+
+Lifecycle semantics (normative):
+
+- Each ground truth entry MUST include:
+
+- `idempotence` (`idempotent | non_idempotent | unknown`), and `lifecycle.phases[]` (ordered phase
+  records).
+
+  - `lifecycle.phases[]` MUST be ordered by the phase sequence: `prepare`, `execute`, `revert`,
+    `teardown`.
+  - Each phase record MUST include:
+    - `phase` (`prepare | execute | revert | teardown`)
+    - `phase_outcome` (`success | failed | skipped`)
+    - `started_at_utc` and `ended_at_utc` (UTC)
+    - `timestamp_utc` MUST equal `lifecycle.phases[0].started_at_utc` when the lifecycle is present.
+
+Revert vs teardown (normative):
+
+- `revert` MUST represent undoing execute-side effects so the action can be executed again on the
+  same target.
+- `teardown` MUST represent removing per-action prerequisites (when applicable) and recording
+  cleanup verification outcomes.
+- Implementations MUST NOT conflate revert and teardown as a single "cleanup" outcome; they are
+  recorded separately to avoid leaving targets in a non-re-runnable state and to avoid deleting
+  prerequisites shared by other actions.
+
+Idempotence defaults (normative):
+
+- If `idempotence` is `unknown`, implementations MUST treat the action as `non_idempotent` for
+  safety (do not assume it is safe to re-run without a successful `revert`).
 
 ### Stable action identity
 

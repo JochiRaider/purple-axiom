@@ -264,6 +264,10 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 | `ground_truth_write_failed`    | FATAL    | Cannot write `ground_truth.jsonl`.                                        |
 | `action_key_collision`         | FATAL    | Duplicate `action_key` within the run.                                    |
 | `cleanup_invocation_failed`    | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure). |
+| `prepare_failed`               | FATAL    | One or more actions failed during lifecycle `prepare`.                    |
+| `execute_failed`               | FATAL    | One or more actions failed during lifecycle `execute`.                    |
+| `revert_failed`                | FATAL    | One or more actions failed during lifecycle `revert`.                     |
+| `teardown_failed`              | FATAL    | One or more actions failed during lifecycle `teardown`.                   |
 
 - Multi-target iteration (matrix plans) is reserved for v0.2; v0.1 enforces 1:1 action-target
   resolution.
@@ -279,12 +283,29 @@ Cleanup verification policy (normative):
 
 - `cleanup.verification.status` in ground truth MUST be one of:
   `success | failed | indeterminate | skipped | not_applicable`.
+
 - `failed` and `indeterminate` are **not success**.
+
 - Default v0.1 behavior:
+
   - if runner stage `fail_mode=fail_closed`, a run MUST be marked `failed` when any action cleanup
     verification is `failed` or `indeterminate`
   - if runner stage `fail_mode=warn_and_skip`, cleanup verification failures MUST be recorded under
     `cleanup_verification_failed` and the run MAY be `partial`
+
+- Ground truth MUST record lifecycle phase outcomes for each action, including a `teardown` phase.
+
+- When cleanup verification is enabled, the runner MUST:
+
+  - write `runner/actions/<action_id>/cleanup_verification.json`, and
+  - reflect the aggregate result in the `teardown` phase `phase_outcome`.
+
+Lifecycle reason code guidance (normative):
+
+- When a runner-stage failure can be attributed to a specific lifecycle phase, implementations
+  SHOULD prefer emitting `prepare_failed | execute_failed | revert_failed | teardown_failed`.
+- `cleanup_invocation_failed` is a v0.1 legacy alias for a `revert_failed` condition.
+- `cleanup_verification_failed` is a v0.1 legacy alias for a `teardown_failed` condition.
 
 ### Telemetry stage (`telemetry`)
 

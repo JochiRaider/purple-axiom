@@ -79,6 +79,18 @@ boundary defined by the
 OCSF schema regression tests validate that representative normalized fixtures MUST validate against
 the pinned OCSF version used by v0.1.
 
+### Runner contracts (ground truth lifecycle)
+
+Ground truth schema tests MUST validate representative fixtures against the pinned
+`ground_truth.schema.json`, including lifecycle and idempotence fields:
+
+- Fixtures MUST include `idempotence` and a `lifecycle.phases[]` array containing all four phases:
+  - `prepare`, `execute`, `revert`, `teardown`.
+- Phase records MUST be ordered and MUST include `started_at_utc`, `ended_at_utc`, and
+  `phase_outcome`.
+- The fixture suite MUST include at least one failure case where `revert` or `teardown` is `failed`
+  and is surfaced deterministically in runner-stage outcomes and reporting inputs.
+
 ### Schema evolution
 
 Parquet schema evolution tests for the normalized store cover two scenarios.
@@ -90,6 +102,13 @@ union-by-name semantics, and the missing column MUST read as NULL for fixture A 
 For alias resolution: given a deprecated column name and an `_schema.json` alias mapping, the query
 layer MUST resolve the canonical column name deterministically (prefer first alias, fall through to
 next, then NULL if none exist).
+
+The same fixture MUST assert lifecycle conformance:
+
+- Ground truth MUST include `idempotence` and `lifecycle.phases[]`.
+- `lifecycle.phases[]` MUST be in phase order and MUST include `prepare` and `execute`.
+- When cleanup verification is enabled, `teardown` MUST include a stable reference to
+  `runner/actions/<action_id>/cleanup_verification.json` and reflect the aggregate outcome.
 
 ### Sigma compilation (bridge)
 

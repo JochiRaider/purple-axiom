@@ -534,8 +534,8 @@ If a checkpoint store is corrupt at restart:
 When reprocessing from stored Windows Event Log artifacts (for example: structured raw tables and
 sidecar raw payloads; native container exports, if any, are optional):
 
-- Extract Tier 1 identity inputs from the stored record system fields (do not rely on rendered message
-  strings).
+- Extract Tier 1 identity inputs from the stored record system fields (do not rely on rendered
+  message strings).
 - Ensure `origin.host`, `origin.channel`, and `origin.record_id` reflect the *original* event when
   the stored artifact wraps a forwarded event.
 

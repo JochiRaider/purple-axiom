@@ -1,0 +1,261 @@
+{
+  "registry_version": "0.1.0",
+  "contracts": [
+    {
+      "contract_id": "action_descriptor",
+      "schema_path": "docs/contracts/action_descriptor.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Action descriptor (schema-backed; artifact binding TBD in v0.1 spec).",
+      "artifact_kind": "other",
+      "format": "json"
+    },
+    {
+      "contract_id": "bridge_compiled_plan",
+      "schema_path": "docs/contracts/bridge_compiled_plan.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Sigma-to-OCSF bridge compiled plan per rule (bridge/compiled_plans/<rule_id>.plan.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "bridge_coverage",
+      "schema_path": "docs/contracts/bridge_coverage.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Bridge coverage summary (bridge/coverage.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "bridge_mapping_pack",
+      "schema_path": "docs/contracts/bridge_mapping_pack.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Sigma-to-OCSF bridge mapping pack snapshot (bridge/mapping_pack_snapshot.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "bridge_router_table",
+      "schema_path": "docs/contracts/bridge_router_table.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Sigma logsource router table snapshot (bridge/router_table.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "cache_provenance",
+      "schema_path": "docs/contracts/cache_provenance.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Run-level cache provenance evidence (logs/cache_provenance.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "cleanup_verification",
+      "schema_path": "docs/contracts/cleanup_verification.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Cleanup verification results per action (runner/actions/<action_id>/cleanup_verification.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "criteria_entry",
+      "schema_path": "docs/contracts/criteria_entry.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-line schema for criteria/criteria.jsonl.",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
+      "contract_id": "criteria_pack_manifest",
+      "schema_path": "docs/contracts/criteria_pack_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Criteria pack manifest snapshot (criteria/manifest.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "criteria_result",
+      "schema_path": "docs/contracts/criteria_result.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-line schema for criteria/results.jsonl.",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
+      "contract_id": "detection_instance",
+      "schema_path": "docs/contracts/detection_instance.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-line schema for detections/detections.jsonl.",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
+      "contract_id": "duckdb_conformance_report",
+      "schema_path": "docs/contracts/duckdb_conformance_report.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "DuckDB conformance report output (report/duckdb_conformance_report.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "ground_truth",
+      "schema_path": "docs/contracts/ground_truth.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-line schema for ground_truth.jsonl.",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
+      "contract_id": "manifest",
+      "schema_path": "docs/contracts/manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Run-level manifest (manifest.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "mapping_coverage",
+      "schema_path": "docs/contracts/mapping_coverage.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Optional mapping coverage stats (normalized/mapping_coverage.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "mapping_profile_input",
+      "schema_path": "docs/contracts/mapping_profile_input.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Mapping profile input YAML validation (mappings/normalizer/ocsf/**).",
+      "artifact_kind": "repo_input",
+      "format": "yaml"
+    },
+    {
+      "contract_id": "mapping_profile_snapshot",
+      "schema_path": "docs/contracts/mapping_profile_snapshot.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Normalization mapping profile snapshot (normalized/mapping_profile_snapshot.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "netflow_manifest",
+      "schema_path": "docs/contracts/netflow_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Manifest enumerating netflow capture/log files for a run (placeholder contract; v0.1).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "ocsf_event_envelope",
+      "schema_path": "docs/contracts/ocsf_event_envelope.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Minimal required OCSF + provenance for normalized events.",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
+      "contract_id": "pcap_manifest",
+      "schema_path": "docs/contracts/pcap_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Manifest enumerating pcap capture files for a run (placeholder contract; v0.1).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "principal_context",
+      "schema_path": "docs/contracts/principal_context.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Run-level principal context evidence (runner/principal_context.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "range_config",
+      "schema_path": "docs/contracts/range_config.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Range configuration input (range.yaml).",
+      "artifact_kind": "repo_input",
+      "format": "yaml"
+    },
+    {
+      "contract_id": "requirements_evaluation",
+      "schema_path": "docs/contracts/requirements_evaluation.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-action requirements evaluation output (runner/actions/<action_id>/requirements_evaluation.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "runner_executor_evidence",
+      "schema_path": "docs/contracts/runner_executor_evidence.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-action runner executor evidence (runner/actions/<action_id>/executor.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "side_effect_ledger",
+      "schema_path": "docs/contracts/side_effect_ledger.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-action append-only side-effect ledger (runner/actions/<action_id>/side_effect_ledger.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "state_reconciliation_report",
+      "schema_path": "docs/contracts/state_reconciliation_report.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-action state reconciliation report (runner/actions/<action_id>/state_reconciliation_report.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "summary",
+      "schema_path": "docs/contracts/summary.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Scoring summary for scoring/summary.json.",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "telemetry_validation",
+      "schema_path": "docs/contracts/telemetry_validation.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Telemetry validation summary (logs/telemetry_validation.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    }
+  ],
+  "bindings": [
+    { "artifact_glob": "bridge/compiled_plans/*.plan.json", "contract_id": "bridge_compiled_plan", "validation_mode": "json_document" },
+    { "artifact_glob": "bridge/coverage.json", "contract_id": "bridge_coverage", "validation_mode": "json_document" },
+    { "artifact_glob": "bridge/mapping_pack_snapshot.json", "contract_id": "bridge_mapping_pack", "validation_mode": "json_document" },
+    { "artifact_glob": "bridge/router_table.json", "contract_id": "bridge_router_table", "validation_mode": "json_document" },
+    { "artifact_glob": "criteria/criteria.jsonl", "contract_id": "criteria_entry", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "criteria/manifest.json", "contract_id": "criteria_pack_manifest", "validation_mode": "json_document" },
+    { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "logs/cache_provenance.json", "contract_id": "cache_provenance", "validation_mode": "json_document" },
+    { "artifact_glob": "logs/telemetry_validation.json", "contract_id": "telemetry_validation", "validation_mode": "json_document" },
+    { "artifact_glob": "manifest.json", "contract_id": "manifest", "validation_mode": "json_document" },
+    { "artifact_glob": "normalized/mapping_coverage.json", "contract_id": "mapping_coverage", "validation_mode": "json_document" },
+    { "artifact_glob": "normalized/mapping_profile_snapshot.json", "contract_id": "mapping_profile_snapshot", "validation_mode": "json_document" },
+    { "artifact_glob": "normalized/ocsf_events.jsonl", "contract_id": "ocsf_event_envelope", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "raw_parquet/netflow/manifest.json", "contract_id": "netflow_manifest", "validation_mode": "json_document" },
+    { "artifact_glob": "raw_parquet/pcap/manifest.json", "contract_id": "pcap_manifest", "validation_mode": "json_document" },
+    { "artifact_glob": "report/duckdb_conformance_report.json", "contract_id": "duckdb_conformance_report", "validation_mode": "json_document" },
+    { "artifact_glob": "runner/actions/*/cleanup_verification.json", "contract_id": "cleanup_verification", "validation_mode": "json_document" },
+    { "artifact_glob": "runner/actions/*/executor.json", "contract_id": "runner_executor_evidence", "validation_mode": "json_document" },
+    { "artifact_glob": "runner/actions/*/requirements_evaluation.json", "contract_id": "requirements_evaluation", "validation_mode": "json_document" },
+    { "artifact_glob": "runner/actions/*/side_effect_ledger.json", "contract_id": "side_effect_ledger", "validation_mode": "json_document" },
+    { "artifact_glob": "runner/actions/*/state_reconciliation_report.json", "contract_id": "state_reconciliation_report", "validation_mode": "json_document" },
+    { "artifact_glob": "runner/principal_context.json", "contract_id": "principal_context", "validation_mode": "json_document" },
+    { "artifact_glob": "scoring/summary.json", "contract_id": "summary", "validation_mode": "json_document" }
+  ],
+  "notes": [
+    "contracts[].contract_version MUST be kept in sync with each schema file's contract_version const (enforced by validation/runtime).",
+    "bindings[].artifact_glob values are run-bundle-relative (do not include runs/<run_id>/ prefix).",
+    "raw_parquet/** network manifest bindings are placeholders; reconcile final paths with the run bundle layout spec before relying on them as stable."
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purple-axiom:contracts:contract_registry.schema.json",
+  "title": "Purple Axiom Contract Registry",
+  "description": "Authoritative registry mapping contract ids to schema files and artifact globs to contracts. This file is repo-static and MUST NOT include volatile or timestamped data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["registry_version", "contracts", "bindings"],
+  "properties": {
+    "registry_version": {
+      "description": "Registry schema/content version (SemVer). Bump when the registry meaningfully changes.",
+      "$ref": "#/$defs/semver"
+    },
+    "contracts": {
+      "description": "Contract definitions. Deterministic ordering requirement (enforced outside JSON Schema): sort ascending by contract_id (UTF-8 byte order).",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/contract_def" }
+    },
+    "bindings": {
+      "description": "Artifact glob bindings. Deterministic ordering requirement (enforced outside JSON Schema): sort ascending by (artifact_glob, contract_id) (UTF-8 byte order).",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/binding_def" }
+    },
+    "notes": {
+      "description": "Optional human-readable notes. Notes MUST be redaction-safe and stable (avoid volatile data).",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "contract_id": {
+      "description": "Stable identifier for a contract. Intended to be filename-derived (without .schema.json).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "schema_path": {
+      "description": "Repository-relative path to the schema file. MUST be local and under docs/contracts/.",
+      "type": "string",
+      "pattern": "^docs/contracts/[A-Za-z0-9_.-]+\\.schema\\.json$"
+    },
+    "artifact_glob": {
+      "description": "Run-bundle-relative artifact glob (POSIX separators). MUST NOT start with '/' and MUST NOT include 'runs/<run_id>/' prefix.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!runs/)[^\\\\]+$"
+    },
+    "contract_def": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_id", "schema_path", "contract_version"],
+      "properties": {
+        "contract_id": { "$ref": "#/$defs/contract_id" },
+        "schema_path": { "$ref": "#/$defs/schema_path" },
+        "contract_version": {
+          "description": "Declared contract version. MUST equal the schema's contract_version const (enforced by validator/runtime).",
+          "$ref": "#/$defs/semver"
+        },
+        "purpose": {
+          "description": "Optional short purpose string for humans.",
+          "type": "string"
+        },
+        "artifact_kind": {
+          "description": "Optional classification to help tooling decide when and how to validate.",
+          "type": "string",
+          "enum": ["run_artifact", "repo_input", "other"]
+        },
+        "format": {
+          "description": "Optional expected encoding/format. Informational only.",
+          "type": "string",
+          "enum": ["json", "jsonl", "parquet", "yaml", "other"]
+        }
+      }
+    },
+    "binding_def": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_glob", "contract_id"],
+      "properties": {
+        "artifact_glob": { "$ref": "#/$defs/artifact_glob" },
+        "contract_id": { "$ref": "#/$defs/contract_id" },
+        "validation_mode": {
+          "description": "Optional hint for validators. If omitted, validators infer from contract/extension and stage rules.",
+          "type": "string",
+          "enum": ["json_document", "jsonl_lines", "parquet_schema", "yaml_document", "other"]
+        },
+        "notes": {
+          "description": "Optional redaction-safe notes. MUST be stable and MUST avoid volatile data.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

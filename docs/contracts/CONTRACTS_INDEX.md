@@ -6,14 +6,14 @@ This file is a one-page map over the JSON Schema contracts under `docs/contracts
 
 Sort key: recommended reading order (not lexicographic).
 
-- `index.json` (machine-readable schema registry, if present)
+- `docs/contracts/contract_registry.json` (machine-readable schema registry, if present)
 - `docs/spec/025_data_contracts.md` (artifact semantics and invariants)
-- `manifest.schema.json` (run manifest contract)
-- `ocsf_event_envelope.schema.json` (normalized event envelope contract)
+- `docs/contracts/manifest.schema.json` (run manifest contract)
+- `docs/contracts/ocsf_event_envelope.schema.json` (normalized event envelope contract)
 
 ## Schema map
 
-Rows are sorted lexicographically by filename.
+Rows are sorted lexicographically by filename, all in the `docs/contracts/` diectory.
 
 | Schema file                             | Artifact / contract surface (high-level)                         |
 | --------------------------------------- | ---------------------------------------------------------------- |
@@ -23,6 +23,8 @@ Rows are sorted lexicographically by filename.
 | `bridge_router_table.schema.json`       | Schema for Sigma bridge router table snapshots                   |
 | `cache_provenance.schema.json`          | Schema for cache provenance and usage evidence                   |
 | `cleanup_verification.schema.json`      | Schema for cleanup verification results                          |
+| `contract_registry.json`                | Contract registry mapping contract ids to schemas and bindings   |
+| `contract_registry.schema.json`         | Schema for the contract registry file                            |
 | `criteria_entry.schema.json`            | Schema for a single validation criteria entry                    |
 | `criteria_pack_manifest.schema.json`    | Schema for criteria pack identity and metadata                   |
 | `criteria_result.schema.json`           | Schema for criteria evaluation results                           |
@@ -31,7 +33,7 @@ Rows are sorted lexicographically by filename.
 | `ground_truth.schema.json`              | Schema for ground-truth execution evidence                       |
 | `manifest.schema.json`                  | Schema for the run manifest root object                          |
 | `mapping_coverage.schema.json`          | Schema for mapping coverage summaries                            |
-| `mapping_profile_input.schema.json`     | Schema for mapping profile input YAML files                       |
+| `mapping_profile_input.schema.json`     | Schema for mapping profile input YAML files                      |
 | `mapping_profile_snapshot.schema.json`  | Schema for mapping profile snapshots                             |
 | `netflow_manifest.schema.json`          | Schema for NetFlow/flow artifacts (placeholder / optional)       |
 | `ocsf_event_envelope.schema.json`       | Schema for normalized OCSF event envelope                        |
@@ -41,7 +43,7 @@ Rows are sorted lexicographically by filename.
 | `requirements_evaluation.schema.json`   | Schema for per-action requirements evaluation results            |
 | `runner_executor_evidence.schema.json`  | Schema for runner/executor evidence outputs                      |
 | `side_effect_ledger.schema.json`        | Schema for per-action side-effect ledgers                        |
-| `state_reconciliation_report.schema.json` | Schema for per-action state reconciliation reports              |
+| `state_reconciliation_report.schema.json` | Schema for per-action state reconciliation reports             |
 | `summary.schema.json`                   | Schema for run-level summary outputs                             |
 | `telemetry_validation.schema.json`      | Schema for telemetry validation outputs                          |
 

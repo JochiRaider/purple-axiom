@@ -21,6 +21,7 @@ Rows are sorted lexicographically by filename.
 | `bridge_coverage.schema.json`           | Schema for Sigma bridge routing/coverage summaries               |
 | `bridge_mapping_pack.schema.json`       | Schema for a serialized bridge mapping pack snapshot             |
 | `bridge_router_table.schema.json`       | Schema for Sigma bridge router table snapshots                   |
+| `cache_provenance.schema.json`          | Schema for cache provenance and usage evidence                   |
 | `cleanup_verification.schema.json`      | Schema for cleanup verification results                          |
 | `criteria_entry.schema.json`            | Schema for a single validation criteria entry                    |
 | `criteria_pack_manifest.schema.json`    | Schema for criteria pack identity and metadata                   |
@@ -35,8 +36,12 @@ Rows are sorted lexicographically by filename.
 | `netflow_manifest.schema.json`          | Schema for NetFlow/flow artifacts (placeholder / optional)       |
 | `ocsf_event_envelope.schema.json`       | Schema for normalized OCSF event envelope                        |
 | `pcap_manifest.schema.json`             | Schema for pcap artifacts (placeholder / optional)               |
+| `principal_context.schema.json`         | Schema for runner principal context evidence                     |
 | `range_config.schema.json`              | Schema for range.yaml configuration inputs                       |
+| `requirements_evaluation.schema.json`   | Schema for per-action requirements evaluation results            |
 | `runner_executor_evidence.schema.json`  | Schema for runner/executor evidence outputs                      |
+| `side_effect_ledger.schema.json`        | Schema for per-action side-effect ledgers                        |
+| `state_reconciliation_report.schema.json` | Schema for per-action state reconciliation reports              |
 | `summary.schema.json`                   | Schema for run-level summary outputs                             |
 | `telemetry_validation.schema.json`      | Schema for telemetry validation outputs                          |
 

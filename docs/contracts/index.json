@@ -74,8 +74,28 @@
       "purpose": "Cleanup verification results per action (runs/<run_id>/runner/actions/<action_id>/cleanup_verification.json)."
     },
     {
+      "name": "requirements_evaluation.schema.json",
+      "purpose": "Per-action requirements evaluation output (runs/<run_id>/runner/actions/<action_id>/requirements_evaluation.json)."
+    },
+    {
       "name": "runner_executor_evidence.schema.json",
       "purpose": "Per-action runner executor evidence (runs/<run_id>/runner/actions/<action_id>/executor.json)."
+    },
+    {
+      "name": "cache_provenance.schema.json",
+      "purpose": "Run-level cache provenance evidence (runs/<run_id>/runner/cache_provenance.json)."
+    },
+    {
+      "name": "principal_context.schema.json",
+      "purpose": "Run-level principal context evidence (runs/<run_id>/runner/principal_context.json)."
+    },
+    {
+      "name": "side_effect_ledger.schema.json",
+      "purpose": "Per-action append-only side-effect ledger (runs/<run_id>/runner/actions/<action_id>/side_effect_ledger.json)."
+    },
+    {
+      "name": "state_reconciliation_report.schema.json",
+      "purpose": "Per-action state reconciliation report (runs/<run_id>/runner/actions/<action_id>/state_reconciliation_report.json)."
     },
     {
       "name": "pcap_manifest.schema.json",
@@ -87,7 +107,7 @@
     },
     {
       "name": "range_config.schema.json",
-      "purpose": "<TODO>"
+      "purpose": "Range configuration input (range.yaml)."
     }
   ],
   "notes": [

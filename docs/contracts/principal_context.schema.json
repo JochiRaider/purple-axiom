@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "principal_context.schema.json",
+  "title": "Principal Context (Runner Evidence)",
+  "description": "Runner evidence artifact: runs/<run_id>/runner/principal_context.json. Records typed principal identity used during the run without secrets. Deterministic ordering requirements (normative, enforced outside JSON Schema): principals[] sorted by principal_id ascending (UTF-8 byte order); action_principal_map[] sorted by action_id ascending (UTF-8 byte order).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "run_id", "generated_at_utc", "principals", "action_principal_map"],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema contract version. Bump only for meaningfully breaking changes (new required fields, tightened validation, or semantic changes)."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Run identifier (RFC 4122 UUID, canonical hyphenated form, lowercase hex).",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "description": "UTC timestamp when this artifact was generated (RFC 3339 date-time with trailing 'Z').",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "principals": {
+      "type": "array",
+      "description": "Declared/resolved principals observed or inferred for the run. Ordering MUST be deterministic (see artifact description).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["principal_id", "kind", "assertion_source"],
+        "properties": {
+          "principal_id": {
+            "type": "string",
+            "description": "Stable run-local identifier (NOT a username). v0.1 REQUIRED format: pa_pid_v1_<32 lowercase hex>.",
+            "pattern": "^pa_pid_v1_[0-9a-f]{32}$"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Vendor-neutral principal kind.",
+            "enum": [
+              "local_user",
+              "local_admin",
+              "domain_user",
+              "service_account",
+              "ssh_key",
+              "cloud_role_session",
+              "unknown"
+            ]
+          },
+          "assertion_source": {
+            "type": "string",
+            "description": "How the principal identity was determined.",
+            "enum": ["live_probe", "configured", "inferred", "unknown"]
+          },
+          "redacted_fingerprint": {
+            "type": "string",
+            "description": "Optional redaction-safe fingerprint (hash-only form recommended). MUST NOT contain secrets, credentials, or token-like material.",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]{0,255}$"
+          }
+        }
+      },
+      "default": []
+    },
+    "action_principal_map": {
+      "type": "array",
+      "description": "Mapping from action_id to the principal_id used for that action. Ordering MUST be deterministic (see artifact description).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action_id", "principal_id"],
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "description": "Action identifier (v0.1 legacy sN; v0.2+ deterministic pa_aid_v1_<32hex>).",
+            "pattern": "^(s[1-9][0-9]*|pa_aid_v1_[0-9a-f]{32})$"
+          },
+          "principal_id": {
+            "type": "string",
+            "description": "Principal identifier referenced from principals[].principal_id.",
+            "pattern": "^pa_pid_v1_[0-9a-f]{32}$"
+          }
+        }
+      },
+      "default": []
+    }
+  }
+}

@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axion.invalid/contracts/requirements_evaluation.schema.json",
+  "title": "Requirements evaluation (per-action runner evidence)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "action_id", "action_key", "generated_at_utc", "requirements"],
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0",
+      "description": "Schema contract version (SemVer)."
+    },
+    "action_id": {
+      "$ref": "#/$defs/id_slug_v1",
+      "description": "Action identifier."
+    },
+    "action_key": {
+      "$ref": "#/$defs/sha256_hex",
+      "description": "Deterministic action identity hash."
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when this artifact was produced."
+    },
+    "content_handling": {
+      "$ref": "#/$defs/content_handling",
+      "description": "Optional disclosure/handling metadata for this artifact content."
+    },
+    "requirements_eval_jcs_sha256": {
+      "$ref": "#/$defs/sha256_hex",
+      "description": "Optional SHA-256 over the RFC 8785 JCS-canonicalized JSON of the requirements evaluation payload."
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "evaluation", "results"],
+      "properties": {
+        "declared": {
+          "$ref": "#/$defs/requirements_declared",
+          "description": "Effective requirements used for evaluation (post-precedence)."
+        },
+        "evaluation": {
+          "type": "string",
+          "enum": ["satisfied", "unsatisfied", "unknown"],
+          "description": "Aggregate evaluation outcome."
+        },
+        "results": {
+          "type": "array",
+          "description": "Per-check outcomes. Ordering is normative: (kind, key) ascending; no locale.",
+          "items": {
+            "$ref": "#/$defs/requirement_result"
+          }
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional provenance of the effective requirements.",
+          "properties": {
+            "scenario_override": {
+              "$ref": "#/$defs/requirements_declared"
+            },
+            "derived": {
+              "$ref": "#/$defs/requirements_declared"
+            },
+            "derivation_warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved for forward-compatible extensions; not interpreted by v0.1 consumers.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex SHA-256."
+    },
+    "id_slug_v1": {
+      "type": "string",
+      "pattern": "^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])$",
+      "description": "ASCII lowercase slug (1-64 chars), a-z0-9 and hyphen, no double hyphen."
+    },
+    "os_family": {
+      "type": "string",
+      "enum": ["windows", "linux", "macos"],
+      "description": "Coarse OS family constraint (v0.1 minimal set)."
+    },
+    "privilege_level": {
+      "type": "string",
+      "enum": ["user", "admin", "system", "unknown"],
+      "description": "Coarse privilege constraint (v0.1 minimal set)."
+    },
+    "tool_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "description": "Lowercase tool/capability token."
+    },
+    "requirements_declared": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "os": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/os_family" },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Allowed OS families."
+            }
+          }
+        },
+        "privilege": {
+          "$ref": "#/$defs/privilege_level",
+          "description": "Required privilege level."
+        },
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tool_token" },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Required tools/capabilities."
+        }
+      }
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Stable lower_snake_case token."
+    },
+    "requirement_status": {
+      "type": "string",
+      "enum": ["satisfied", "unsatisfied", "unknown"]
+    },
+    "requirement_kind": {
+      "type": "string",
+      "enum": ["platform", "privilege", "tool"]
+    },
+    "requirement_result_kind_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "key", "status"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/requirement_kind" },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Evaluated token (OS family, privilege level, or tool token)."
+        },
+        "status": { "$ref": "#/$defs/requirement_status" },
+        "reason_code": { "$ref": "#/$defs/reason_code" },
+        "details": {
+          "type": "object",
+          "description": "Optional, redacted-safe details. Avoid over-specific environment probes by default.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "requirement_result_category_token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "token", "status"],
+      "properties": {
+        "category": { "$ref": "#/$defs/requirement_kind" },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Evaluated token (OS family, privilege level, or tool token)."
+        },
+        "status": { "$ref": "#/$defs/requirement_status" },
+        "reason_code": { "$ref": "#/$defs/reason_code" },
+        "details": {
+          "type": "object",
+          "description": "Optional, redacted-safe details. Avoid over-specific environment probes by default.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "requirement_result": {
+      "description": "Per-check requirement evaluation result. Supports (kind,key) and the transitional (category,token) naming.",
+      "oneOf": [
+        { "$ref": "#/$defs/requirement_result_kind_key" },
+        { "$ref": "#/$defs/requirement_result_category_token" }
+      ]
+    },
+    "content_handling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["present", "withheld", "quarantined"],
+          "description": "Content handling mode for this artifact."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional human-readable rationale (redacted-safe)."
+        },
+        "quarantine_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional run-relative path to quarantined unredacted material (when mode=quarantined)."
+        }
+      }
+    }
+  }
+}

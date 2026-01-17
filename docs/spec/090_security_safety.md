@@ -121,6 +121,22 @@ Normative requirements:
   - treat provider stdout/stderr as sensitive.
 - If secret resolution fails for any required secret, the pipeline MUST fail closed.
 
+### Synthetic correlation marker
+
+Synthetic correlation markers are explicitly non-secret identifiers emitted to correlate synthetic
+runner activity end-to-end. They are intended to be safe to display in reports.
+
+Normative requirements:
+
+- Marker values MUST NOT contain secrets, credentials, or token-like material.
+- Marker values MUST be constrained to a safe, bounded character set:
+  - Marker values MUST match regex `^[a-z0-9:._-]{1,256}$` (ASCII only).
+  - Marker values MUST NOT contain whitespace or control characters.
+- Marker values MUST be bounded in length:
+  - Marker values MUST be at most 256 characters.
+- Implementations MUST validate marker values against these constraints before emission. Invalid
+  marker values MUST NOT be emitted.
+
 ## Redaction
 
 The pipeline MUST support a configurable redaction policy for:
@@ -163,6 +179,32 @@ subject to the same redaction policy as raw telemetry.
 If transcripts cannot be safely redacted, they MUST be withheld. Implementations MUST record a
 placeholder file and a hash of the withheld content in volatile logs.
 
+### Requirements evaluation
+
+The per-action requirements evaluation artifact
+(`runner/actions/<action_id>/requirements_evaluation.json`) is an evidence-tier artifact and MUST be
+treated as sensitive by default.
+
+Rationale: requirements evaluation may reveal over-specific environment details (example: exact tool
+versions, binary paths, OS build strings, installed capability inventory) that are not necessary for
+most reports and may increase sharing risk.
+
+Normative requirements:
+
+- The pipeline MUST apply the effective redaction policy to requirements evaluation contents before
+  writing the artifact to standard run bundle locations.
+- The artifact MUST redact secrets (tokens, passwords, private keys, bearer credentials) and other
+  redaction policy matches deterministically.
+- If the pipeline determines that the requirements evaluation content cannot be made redacted-safe
+  deterministically (example: it contains over-specific environment details that must be withheld),
+  it MUST NOT store that content in standard long-term artifact locations.
+  - Implementations MAY quarantine the unredacted content under the run's configured quarantine
+    directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by configuration.
+  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
+    placeholder at `runner/actions/<action_id>/requirements_evaluation.json`.
+- When requirements evaluation content is quarantined or withheld, the run manifest and reports MUST
+  disclose the affected artifact relative path and the applied handling (withheld or quarantined).
+
 ### Side-effect ledger
 
 The per-action side-effect ledger (`runner/actions/<action_id>/side_effect_ledger.json`) is an
@@ -192,11 +234,11 @@ against observed environment state to detect drift.
 
 Guardrails (normative):
 
-- Default posture MUST be observe-only. Reconciliation probes MUST be read-only and MUST NOT
-  mutate target assets.
+- Default posture MUST be observe-only. Reconciliation probes MUST be read-only and MUST NOT mutate
+  target assets.
 - Destructive reconciliation (repair) MUST be disabled by default.
-  - v0.1: repair is out of scope; implementations MUST NOT attempt destructive repair actions
-    as part of reconciliation.
+  - v0.1: repair is out of scope; implementations MUST NOT attempt destructive repair actions as
+    part of reconciliation.
 - If a scenario requests a reconciliation policy of `repair` (see the scenario model), the runner
   MUST refuse to run reconciliation in repair mode unless an explicit global configuration gate is
   enabled. The gate MUST be defined in the configuration reference before repair is supported.
@@ -208,8 +250,8 @@ Guardrails (normative):
   - Repair MUST be scoped to the action's resolved `target_asset_id` (cross-asset mutation is
     prohibited).
 - Fail-closed semantics:
-  - If the runner cannot prove a deterministic, bounded, and allowlisted repair plan for an item,
-    it MUST NOT attempt repair and MUST fail closed for reconciliation (record
+  - If the runner cannot prove a deterministic, bounded, and allowlisted repair plan for an item, it
+    MUST NOT attempt repair and MUST fail closed for reconciliation (record
     `runner.state_reconciliation` as failed with `reason_code=reconcile_failed`).
   - When reconciliation fails closed, the runner MUST still write a reconciliation report with
     `status=unknown` or `status=skipped` items, and MUST include a stable `reason_code` per item

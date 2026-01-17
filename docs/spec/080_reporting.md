@@ -131,6 +131,9 @@ degradation reasons include:
 | `cleanup_verification_failed`        | Validation    | Cleanup checks failed; run may be tainted                  |
 | `revert_failed`                      | Runner        | One or more actions failed during lifecycle `revert`       |
 | `teardown_failed`                    | Runner        | One or more actions failed during lifecycle `teardown`     |
+| `unsupported_platform`               | Runner        | One or more actions skipped due to platform requirements   |
+| `insufficient_privileges`            | Runner        | One or more actions skipped due to privilege requirements  |
+| `missing_tool`                       | Runner        | One or more actions skipped due to tool/capability gates   |
 
 ## Human-readable report sections
 
@@ -163,8 +166,36 @@ Required content:
 - A table (or list) of actions with non-success lifecycle phases (limit 25), including:
   - `action_id`, technique ID, target asset id
   - failed phase(s) and per-phase `phase_outcome`
-  - evidence references (paths under `runner/actions/<action_id>/`), including cleanup verification
-    references when present
+  - evidence references (paths under `runner/actions/<action_id>/`), including requirements
+    evaluation and cleanup verification references when present
+
+### Synthetic correlation marker
+
+**Summary**: Correlate synthetic activity using a durable marker emitted by the runner and preserved
+in normalized events.
+
+Required content (when marker emission is enabled):
+
+- Marker status: `enabled | disabled`.
+- The marker value(s) used for the run (displayed verbatim).
+- Per-action marker observability table (stable ordering, required):
+  - Sort rows by `action_id` ascending.
+  - Columns:
+    - `action_id` (and action name when available)
+    - `marker_value`
+    - `observed` (`yes | no`)
+    - `gap_category` (when `observed=no`, MUST be `missing_telemetry`)
+- Narrative and gap integration (normative):
+  - When `observed=no` for any action, the report MUST surface those actions under the existing
+    `missing_telemetry` gap category in [Gap analysis](#gap-analysis) and MUST include a concise
+    remediation hint that points to telemetry pipeline filtering/sampling misconfiguration as a
+    primary suspect.
+
+JSON equivalent (recommended):
+
+- The report JSON SHOULD mirror this section under `report/report.json.extensions`, for example
+  `extensions.synthetic_correlation_marker`, including aggregate counts and a `per_action[]` list
+  sorted by `action_id` ascending.
 
 ### Coverage metrics
 
@@ -301,6 +332,33 @@ Required content:
 - Criteria signal latency (p50, p90) when measurable
 - Skipped reasons breakdown (no matching criteria, evaluation disabled, action failed)
 
+### Requirements & environment gates
+
+**Summary**: Action-level preflight gates derived from declared requirements (platform, privilege,
+tools/capabilities) when requirements evaluation is enabled.
+
+Required content:
+
+- Aggregate unmet requirement counts by `reason_code`:
+  - `unsupported_platform`
+  - `insufficient_privileges`
+  - `missing_tool`
+- Affected actions table (limit 50) including:
+  - `action_id` and technique ID (and action name when available)
+  - primary unmet `reason_code` (one of the above)
+  - Evidence reference: link to `runner/actions/<action_id>/requirements_evaluation.json`
+  - Evidence handling note: `present | withheld | quarantined`
+- Narrative integration (normative):
+  - When any unmet requirements exist, the report MUST include the corresponding reason codes in
+    [Status degradation reasons](#status-degradation-reasons) and MUST surface a concise explanation
+    in the executive summary “why did it fail?” narrative.
+
+Disclosure minimization (normative):
+
+- Unless explicitly configured otherwise, this section MUST NOT render over-specific probe details
+  (example: exact tool paths, full version strings); it MUST prefer reason codes and run-relative
+  evidence references.
+
 ### Cleanup verification
 
 **Summary**: Post-action cleanup status.
@@ -333,13 +391,13 @@ Required content:
   - `skipped`
 - Remediation disposition summary:
   - `repaired` vs `requires_review`
-  - For v0.1, repair is out of scope; the report MUST render `repaired=0` and MUST treat every
-    drift item as `requires_review`.
+  - For v0.1, repair is out of scope; the report MUST render `repaired=0` and MUST treat every drift
+    item as `requires_review`.
 - Drift details table (limit 50):
   - `action_id` and `action_key`
   - `source` (`cleanup_verification | side_effect_ledger`)
-  - `check_id` (when `source=cleanup_verification`) or `ledger_seq`
-    (when `source=side_effect_ledger`)
+  - `check_id` (when `source=cleanup_verification`) or `ledger_seq` (when
+    `source=side_effect_ledger`)
   - `status` (`match | mismatch | unknown | skipped`)
   - `reason_code`
   - Evidence reference: link to `runner/actions/<action_id>/state_reconciliation_report.json`

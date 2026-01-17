@@ -496,6 +496,23 @@ Constraints:
   enrichment without external correlation is not assumed.
 - Collection-time enrichment is best for small lab runs where collector restart is acceptable.
 
+### Synthetic correlation marker propagation (required when enabled)
+
+When synthetic correlation marker emission is enabled, the telemetry pipeline MUST ingest and retain
+the marker end-to-end so downstream stages can correlate synthetic activity without heuristics.
+
+Normative requirements:
+
+- Marker-bearing events MUST be treated as first-class telemetry:
+  - they MUST be ingested into the raw store, and
+  - they MUST NOT be dropped by sampling or filter processors.
+- Collector and gateway configurations MUST NOT include any rule that filters out marker-bearing
+  events. If filtering or sampling is enabled for other reasons, the configuration MUST implement an
+  explicit allowlist so marker-bearing events are always retained.
+- The raw store MUST preserve the marker field in the captured record (attributes/body as emitted).
+  Normalization MUST preserve the marker in the OCSF envelope even when the base event is not mapped
+  (see the normalization specification).
+
 ## Practical validation harness (required)
 
 Before the telemetry stage is treated as green, validate each Windows endpoint with a repeatable

@@ -24,7 +24,8 @@ Each major stage exposes a minimal health signal:
 
 - **Lab Provider**: inventory resolution success, snapshot hash, resolved asset count, drift
   detection (optional).
-- **Runner**: scenario execution status, per-action outcomes, cleanup status, state reconciliation (optional).
+- **Runner**: scenario execution status, per-action outcomes, cleanup status, state reconciliation
+  (optional).
 - **Telemetry (collector)**: receiver health, export success, queue depth, dropped counts.
 - **Normalizer**: input read completeness, parse errors, mapping coverage.
 - **Evaluator**: rule load success, compilation failures, match counts.
@@ -186,6 +187,7 @@ Replay start mode definitions (normative):
 When state reconciliation is enabled, implementations MUST emit both:
 
 1. A `health.json.stages[]` entry with:
+
    - `stage: "runner.state_reconciliation"`
 
    Reason-code constraints (normative):
@@ -194,7 +196,7 @@ When state reconciliation is enabled, implementations MUST emit both:
      - `drift_detected`
      - `reconcile_failed`
 
-2. Stable per-run counters (at minimum into `runs/<run_id>/logs/` and optionally into a metrics
+1. Stable per-run counters (at minimum into `runs/<run_id>/logs/` and optionally into a metrics
    backend):
 
    - `runner_state_reconciliation_items_total`
@@ -210,8 +212,8 @@ Counter semantics (normative):
 - `skipped_total` MUST count items not probed due to policy or missing deterministic probe targets.
 - `unknown_total` MUST count items with indeterminate outcomes (probe executed but result could not
   be classified deterministically).
-- `probe_error_total` MUST count probe executions that returned an error (timeout, auth failure,
-  API error), regardless of whether an item is later classified as `unknown`.
+- `probe_error_total` MUST count probe executions that returned an error (timeout, auth failure, API
+  error), regardless of whether an item is later classified as `unknown`.
 
 ## Telemetry validation (gating)
 

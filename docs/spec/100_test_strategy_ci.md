@@ -143,9 +143,58 @@ Atomic runner determinism fixtures under `tests/fixtures/runner/atomic/` validat
 Atomic test to resolved inputs to `$ATOMICS_ROOT` canonicalization produces stable
 `resolved_inputs_sha256` and `action_key`.
 
+Requirements gating fixtures under `tests/fixtures/runner/requirements/` validate deterministic
+evaluation and deterministic skip semantics when declared requirements are unmet.
+
+The fixture set MUST include at least:
+
+- `unmet_admin_privilege`:
+  - Input: scenario declares `plan.requirements.privilege=admin`.
+  - Probe snapshot: target privilege probe indicates the runner context is not admin.
+  - Expected: action is skipped with deterministic `reason_code=insufficient_privileges` and
+    `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
+- `wrong_os`:
+  - Input: scenario declares `plan.requirements.platform.os=["windows"]`.
+  - Probe snapshot: target OS family probe indicates `linux`.
+  - Expected: action is skipped with deterministic `reason_code=unsupported_platform` and
+    `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
+- `missing_tool`:
+  - Input: scenario declares `plan.requirements.tools=["powershell"]`.
+  - Probe snapshot: tool/capability probe indicates `powershell` is unavailable.
+  - Expected: action is skipped with deterministic `reason_code=missing_tool` and
+    `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
+
+For each fixture, the runner requirements implementation MUST:
+
+- Emit `runner/actions/<action_id>/requirements_evaluation.json` with deterministic ordering of
+  requirement result items.
+  - Requirement result arrays MUST be ordered by a stable sort key: `(category, token)` where
+    `category` is one of `platform | privilege | tool` and `token` is the evaluated value (OS
+    family, privilege level, or tool token).
+- In the test harness, compute a stable hash over the evaluation content (RECOMMENDED:
+  `requirements_eval_jcs_sha256` over RFC 8785 JCS canonicalized JSON) and assert the hash is
+  identical across repeated runs with identical inputs and probe snapshots.
+
 State reconciliation fixtures under `tests/fixtures/runner/state_reconciliation/` validate
-deterministic environment drift reporting (distinct from baseline drift in evaluator and
-conformance harnesses).
+deterministic environment drift reporting (distinct from baseline drift in evaluator and conformance
+harnesses).
+
+Synthetic correlation marker fixtures under `tests/fixtures/runner/synthetic_marker/` validate
+deterministic marker computation and attempted emission bookkeeping.
+
+The fixture set MUST include at least:
+
+- `marker_emitted`:
+  - Input: runner config enables synthetic correlation marker emission.
+  - Expected:
+    - Ground truth includes `extensions.synthetic_correlation_marker` for the action where `execute`
+      is attempted.
+    - The side-effect ledger includes an `execute`-phase entry describing the marker emission
+      attempt (success or failure), consistent with runner contracts.
+    - The marker value conforms to the v0.1 format defined in data contracts.
+
+For this fixture, the harness SHOULD compute `marker_value_sha256 = sha256(utf8(marker_value))` and
+assert it is identical across repeated runs with identical inputs.
 
 The fixture set MUST include at least:
 
@@ -169,8 +218,8 @@ For each fixture, the runner reconciliation implementation MUST:
 - Emit `runner/actions/<action_id>/state_reconciliation_report.json` with deterministic item
   ordering as specified in the data contracts.
 - In the test harness, compute a stable hash over the report content (RECOMMENDED:
-  `report_jcs_sha256` over RFC 8785 JCS canonicalized JSON) and assert the hash is identical
-  across repeated runs with identical inputs and probe snapshots.
+  `report_jcs_sha256` over RFC 8785 JCS canonicalized JSON) and assert the hash is identical across
+  repeated runs with identical inputs and probe snapshots.
 
 ### Criteria evaluation
 
@@ -263,6 +312,40 @@ Oversize raw XML MUST truncate deterministically and create a content-addressed 
 
 Binary decode failure MUST NOT drop the record. It MUST emit bounded summary and increment
 `wineventlog_binary_decode_failed_total`.
+
+#### Synthetic correlation marker observability
+
+These fixtures validate marker propagation using the same captured-telemetry fixture approach as
+other telemetry validation tests.
+
+The fixture set under `tests/fixtures/telemetry/synthetic_marker/` MUST include at least:
+
+- `marker_observed`:
+
+  - Input:
+    - Runner-side artifacts indicate marker emission is enabled for the run and `execute` is
+      attempted for at least one action.
+    - Captured raw telemetry includes at least one marker-bearing event for that action.
+  - Expected:
+    - Normalized output includes `metadata.synthetic_correlation_marker` on the corresponding OCSF
+      envelope and preserves the value verbatim through normalization.
+    - Reporting records the per-action marker status as observed (`yes`) in a stable per-action
+      ordering (sort by `action_id` ascending).
+
+- `marker_missing`:
+
+  - Input:
+    - Runner-side artifacts indicate marker emission is enabled for the run and `execute` is
+      attempted for at least one action.
+    - Captured raw telemetry contains no marker-bearing event for that action.
+  - Expected:
+    - Reporting records the per-action marker status as missing (`no`) and classifies the condition
+      under the existing gap taxonomy as `missing_telemetry`.
+    - Per-action marker results are emitted in a stable ordering (sort by `action_id` ascending).
+
+For both fixtures, the harness SHOULD compute a stable hash over the report’s marker summary
+(RECOMMENDED: RFC 8785 JCS hash of the report JSON subsection) and assert it is identical across
+repeated runs with identical inputs.
 
 ### Schema and version migration
 

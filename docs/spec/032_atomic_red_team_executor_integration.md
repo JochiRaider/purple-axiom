@@ -133,6 +133,31 @@ REQUIRED by this contract when the corresponding feature is enabled:
 The runner MUST also emit ground truth timeline entries as specified in the
 [data contracts spec](025_data_contracts.md).
 
+### Synthetic correlation marker emission (optional; when enabled)
+
+Goal: enable durable correlation of synthetic activity without heuristics (time windows, IP guess,
+hostnames, etc.).
+
+When synthetic correlation marker emission is enabled (normative requirements):
+
+- For every action where `execute` is attempted, the runner MUST compute a deterministic marker
+  value (v0.1 minimum):
+  - `pa:synth:v1:<run_id>:<action_id>:execute`
+  - `<run_id>` MUST equal the run's `manifest.run_id`.
+  - `<action_id>` MUST equal the action's `ground_truth.action_id`.
+- The runner MUST populate `ground_truth.extensions.synthetic_correlation_marker` with the marker
+  value for every action where `execute` is attempted.
+- The runner MUST attempt to emit at least one marker-bearing telemetry event per action at the
+  start of `execute` (immediately before primary command invocation).
+  - The emitted event MUST carry the marker value in a way that survives end-to-end ingestion and
+    normalization into the OCSF envelope field `metadata.synthetic_correlation_marker` (see the
+    telemetry pipeline and data contracts specs).
+- The runner MUST record the emission attempt as evidence:
+  - it MUST append an `execute`-phase side-effect ledger entry describing the marker emission
+    attempt before attempting emission, and
+  - it MUST record whether emission was `success` or `failed` with a stable `reason_code` when
+    failed.
+
 ### Side-effect ledger population (normative, v0.1 minimum)
 
 Goal: recovery correctness even if the run aborts mid-action.
@@ -145,19 +170,19 @@ Goal: recovery correctness even if the run aborts mid-action.
 
 Minimum viable population for v0.1:
 
-- Runner-injected effects (markers): if the runner emits any explicit correlation marker or
-  runner-generated marker evidence intended to represent a side effect (for example, a dedicated
-  marker artifact or a marker entry in ground truth extensions), the runner MUST append a ledger
-  entry in the `execute` phase that describes the emission.
+- Runner-injected effects (synthetic correlation marker): when synthetic correlation marker emission
+  is enabled, the runner MUST follow the requirements in
+  [Synthetic correlation marker emission](#synthetic-correlation-marker-emission-optional-when-enabled),
+  including appending an `execute`-phase ledger entry describing the emission attempt.
 - Cleanup verification checks as expected reverted effects: when `cleanup_verification.json` is
-  produced, the runner MUST append one `teardown`-phase ledger entry per cleanup verification
-  result row.
+  produced, the runner MUST append one `teardown`-phase ledger entry per cleanup verification result
+  row.
   - Each such entry MUST include, at minimum, the `check_id` and the resulting `status`.
 - Optional template-declared effects: when template snapshotting is enabled (see
   [Atomic template snapshot](#atomic-template-snapshot)), the runner MAY also append ledger entries
   representing deterministically extracted, template-declared effects.
-  - Declared-effect entries MUST be in the `prepare` phase and MUST be explicitly marked as
-    declared (not observed).
+  - Declared-effect entries MUST be in the `prepare` phase and MUST be explicitly marked as declared
+    (not observed).
   - If extraction is ambiguous or non-deterministic, the runner MUST omit declared-effect entries.
 
 ### State reconciliation (optional; when enabled)
@@ -169,8 +194,8 @@ When state reconciliation is enabled (normative requirements):
 
 - The runner MUST read the action's `side_effect_ledger.json` and, when present,
   `cleanup_verification.json`.
-- The runner MUST attempt to reconcile recorded effects against observed state using only
-  read-only probes (no target mutation during reconciliation).
+- The runner MUST attempt to reconcile recorded effects against observed state using only read-only
+  probes (no target mutation during reconciliation).
 - The runner MUST write a per-action reconciliation report to:
   - `runs/<run_id>/runner/actions/<action_id>/state_reconciliation_report.json`
 - The report MUST conform to the state reconciliation report contract defined in the
@@ -178,13 +203,12 @@ When state reconciliation is enabled (normative requirements):
 
 Minimum v0.1 scope (normative):
 
-- If `cleanup_verification.json` exists, the runner MUST include one reconciliation item per
-  cleanup verification result row keyed by `check_id`.
+- If `cleanup_verification.json` exists, the runner MUST include one reconciliation item per cleanup
+  verification result row keyed by `check_id`.
 - The runner MAY include additional reconciliation items derived from other ledger entries when the
   probe target is unambiguous and probing is permitted by policy.
-- For any ledger-derived item that cannot be probed deterministically, the runner MUST emit the
-  item with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable
-  `reason_code`.
+- For any ledger-derived item that cannot be probed deterministically, the runner MUST emit the item
+  with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable `reason_code`.
 
 ## Atomic YAML parsing
 
@@ -324,7 +348,7 @@ The effective object is used for:
 Effective requirements are derived from two sources, with field-level precedence:
 
 1. Scenario overrides (`plan.requirements` in v0.1; `actions[].requirements` in v0.2+)
-2. Template-derived requirements from the Atomic template snapshot (`atomic_test_extracted.json`)
+1. Template-derived requirements from the Atomic template snapshot (`atomic_test_extracted.json`)
 
 Field-level precedence: if an override field is present, it replaces the derived field.
 
@@ -524,7 +548,7 @@ Where `resolved_inputs_redacted_canonical` is the resolved input map after:
 - environment-dependent path canonicalization to `$ATOMICS_ROOT` (see
   [Canonicalization of environment-dependent Atomics paths](#canonicalization-of-environment-dependent-atomics-paths))
 - effective requirements embedding under `__pa_action_requirements_v1` (see
-  [Action requirements (permissions and environment assumptions)](#action-requirements-permissions-and-environment-assumptions))  
+  [Action requirements (permissions and environment assumptions)](#action-requirements-permissions-and-environment-assumptions))
 - redaction (see [Redaction for hashing](#redaction-for-hashing))
 
 This hash MUST be computable without executing the Atomic test.
@@ -923,8 +947,8 @@ Implementations MUST include fixture-backed tests that validate:
    normalizer versions.
 1. Input resolution determinism: same YAML bytes plus same override object yield identical
    `resolved_inputs_redacted_canonical` and identical `parameters.resolved_inputs_sha256`.
-1. Requirements embedding determinism: changing `plan.requirements` (or derived requirements) changes
-   `resolved_inputs_redacted_canonical` and changes `parameters.resolved_inputs_sha256`.   
+1. Requirements embedding determinism: changing `plan.requirements` (or derived requirements)
+   changes `resolved_inputs_redacted_canonical` and changes `parameters.resolved_inputs_sha256`.
 1. Canonicalization: `$ATOMICS_ROOT` replacement is applied to identity-bearing materials and does
    not vary with actual filesystem paths.
 1. Transcript normalization: newline normalization and encoding rules produce byte-identical outputs

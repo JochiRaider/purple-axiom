@@ -132,7 +132,7 @@ Side-effect ledger encoding and hashing (normative):
     run-bundle file (see data contracts: long-term artifact selection for checksumming).
   - v0.1 does not require an additional `manifest.json` file-hash field for the ledger; integrity
     coverage is provided by `security/checksums.txt` when signing is enabled.
-    
+
 ### Tier 2: Analytics (structured, long-term)
 
 Location:

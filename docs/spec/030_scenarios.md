@@ -108,8 +108,7 @@ The runner MUST persist:
 State reconciliation is an optional runner capability that performs post-action drift detection
 using runner evidence artifacts (side-effect ledger and, when present, cleanup verification).
 
-For v0.1 (single-action plans), the reconciliation policy is expressed under
-`plan.reconciliation`.
+For v0.1 (single-action plans), the reconciliation policy is expressed under `plan.reconciliation`.
 
 Scenario inputs (normative):
 
@@ -126,8 +125,8 @@ Optional scope control (normative; when reconciliation is enabled):
   `reconciliation.sources`, with allowed values:
   - `cleanup_verification`
   - `side_effect_ledger`
-- If omitted, the runner MUST treat the effective default as `sources=[cleanup_verification]`,
-  and MUST ignore `cleanup_verification` when the corresponding evidence artifact is absent.
+- If omitted, the runner MUST treat the effective default as `sources=[cleanup_verification]`, and
+  MUST ignore `cleanup_verification` when the corresponding evidence artifact is absent.
 
 ### Technique requirements (permissions and environment assumptions)
 

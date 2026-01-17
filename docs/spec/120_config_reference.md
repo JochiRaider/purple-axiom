@@ -117,6 +117,23 @@ Common keys:
     - `verify` (optional, default: true): run cleanup verification checks and persist results under
       `runner/`
     - `verification_profile` (optional): named set of cleanup checks (implementation-defined)
+  - `requirements` (optional)
+    - `fail_mode` (default: `fail_closed`): `fail_closed | warn_and_skip`
+      - `fail_closed`: if action requirements are `unsatisfied` or `unknown`, the runner MUST NOT
+        attempt execution and MUST fail closed after writing deterministic evidence (ground truth +
+        `requirements_evaluation.json`).
+      - `warn_and_skip`: if action requirements are `unsatisfied` or `unknown`, the runner MUST mark
+        the action non-executable (`prepare.phase_outcome=skipped`) with stable reason codes and MAY
+        continue with other actions (v0.2+).
+  - `synthetic_correlation_marker` (optional)
+    - `enabled` (optional, default: `false`)
+      - When `true`, the runner emits synthetic marker events for correlation (see
+        `032_atomic_red_team_executor_integration.md`) and records the marker value in run
+        artifacts.
+    - `method` (optional, default: `auto`): `auto | windows_eventlog | syslog | filelog`
+      - `auto`: implementation selects an OS-appropriate method.
+      - `filelog`: marker is appended to a local file that is tailed by the collector.
+    - `filelog_path` (optional, required when `method=filelog`)
   - `technique_allowlist` (optional): list of ATT&CK technique ids
   - `technique_denylist` (optional): list of ATT&CK technique ids
   - `executor_allowlist` (optional): list (example: `powershell`, `cmd`, `bash`)
@@ -458,6 +475,14 @@ Common keys:
 - `emit_html` (default: true)
 - `emit_json` (default: true)
 - `include_debug_sections` (default: false)
+- `requirements` (optional)
+  - `detail_level` (default: `reason_codes_only`): `reason_codes_only | include_sensitive_details`
+    - `reason_codes_only`: reports MUST include only stable `reason_code` tokens and aggregate
+      counts for unmet requirements. Reports MUST NOT include detailed tool strings, dependency
+      command fragments, or privilege descriptors beyond coarse enums.
+    - `include_sensitive_details`: reports MAY include the `requirements.results[]` `key` values and
+      related detail fields from `runner/actions/*/requirements_evaluation.json`, subject to the
+      report redaction policy and the pipeline redaction/quarantine rules.
 - `redaction` (optional)
   - `enabled` (default: true)
   - `policy_ref` (optional): reference to a redaction policy file
@@ -659,6 +684,9 @@ runner:
     executor: invoke_atomic_red_team
     timeout_seconds: 300
     capture_transcripts: true
+    synthetic_correlation_marker:
+      enabled: false
+      method: auto    
     cleanup:
       invoke: true
       verify: true

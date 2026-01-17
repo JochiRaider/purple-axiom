@@ -62,7 +62,8 @@ The `identity_basis` is a minimal set of source-derived fields. It MUST exclude 
 pipeline-specific values:
 
 - MUST NOT include: `run_id`, `scenario_id`, `collector_version`, `normalizer_version`,
-  ingest/observed timestamps, file offsets, collector hostnames, or any execution metadata.
+  `metadata.synthetic_correlation_marker`, ingest/observed timestamps, file offsets, collector
+  hostnames, or any execution metadata.
 
 Identity basis selection is tiered:
 

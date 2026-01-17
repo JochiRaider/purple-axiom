@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purple-axiom:contract:side_effect_ledger:v0.1",
+  "title": "Side-effect ledger",
+  "description": "Append-only, per-action side-effect ledger used for deterministic recovery, reporting, and post-mortem analysis when a run aborts mid-action.",
+  "type": "object",
+  "additionalProperties": false,
+  "$comment": "Normative semantics (append-only, write-ahead flush, stable ordering, and lifecycle attribution) are specified in docs/spec/025_data_contracts.md. JSON Schema cannot fully enforce monotonic seq increments or crash-safe append behavior; CI MUST validate those invariants.",
+  "required": ["ledger_format", "schema_version", "run_id", "action_id", "entries"],
+  "properties": {
+    "ledger_format": {
+      "type": "string",
+      "const": "pa.side_effect_ledger.v1",
+      "description": "Artifact type discriminator."
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "v0.1",
+      "description": "Contract version for this schema."
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Run identifier for the run bundle containing this artifact."
+    },
+    "action_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Action identifier for the action whose side effects are recorded by this ledger."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the last successful append to the ledger."
+    },
+    "withheld": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, this file is a deterministic placeholder and does not contain the unredacted ledger content."
+    },
+    "withheld_reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Machine-readable reason code for withholding (for example: post_check_match_after_redaction)."
+    },
+    "quarantine_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\\\]+$",
+      "description": "Relative path (within the run bundle or configured quarantine root) where the quarantined unredacted ledger content was stored, when quarantining is enabled."
+    },
+    "redaction_policy_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Effective redaction policy identifier applied to this artifact."
+    },
+    "redaction_policy_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Effective redaction policy version applied to this artifact."
+    },
+    "redaction_policy_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 hex of canonical JSON (RFC 8785 / JCS) for the effective redaction policy snapshot."
+    },
+    "entries": {
+      "type": "array",
+      "description": "Ordered ledger entries. Order is authoritative and MUST follow seq ascending with no gaps.",
+      "items": { "$ref": "#/$defs/ledger_entry" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "withheld": { "const": true } },
+        "required": ["withheld"]
+      },
+      "then": {
+        "required": ["withheld_reason_code"],
+        "properties": {
+          "entries": { "type": "array", "maxItems": 0 }
+        }
+      }
+    }
+  ],
+  "dependentSchemas": {
+    "quarantine_path": {
+      "properties": { "withheld": { "const": true } },
+      "required": ["withheld"]
+    }
+  },
+  "$defs": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+    },
+    "ledger_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "phase", "effect_type", "disposition", "summary"],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonic sequence number starting at 1. Stable ordering key for entries."
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp recorded for the entry (informational; ordering is defined by seq)."
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["prepare", "execute", "revert", "teardown"],
+          "description": "Lifecycle phase to which this side effect is attributable."
+        },
+        "effect_type": {
+          "$ref": "#/$defs/token",
+          "description": "Stable classifier for the kind of side effect (for example: marker_emission, cleanup_verification, declared_effect)."
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "created",
+            "declared",
+            "reverted",
+            "expected_reverted",
+            "verified_reverted",
+            "failed",
+            "unknown"
+          ],
+          "description": "Outcome classification for the side effect at the time the entry was appended."
+        },
+        "observed": {
+          "type": "boolean",
+          "default": true,
+          "description": "When false, the entry represents a declared or inferred effect (not directly observed)."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Human-readable summary suitable for reports (subject to redaction policy)."
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional target identifier for the mutated/emitted entity.",
+          "required": ["namespace", "type", "id"],
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "description": "Scope namespace (for example: local, runner, windows, aws, azure)."
+            },
+            "type": {
+              "$ref": "#/$defs/token",
+              "description": "Target type token (for example: file, registry_key, process, cloud_resource)."
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "description": "Target identifier (path, ARN, URL, GUID, etc.)."
+            }
+          }
+        },
+        "refs": {
+          "type": "object",
+          "description": "Optional machine-readable references (for example: check_id, marker_id, artifact_path).",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 4096
+          }
+        },
+        "details": {
+          "type": "object",
+          "description": "Optional structured details. Implementations MUST treat string values as subject to redaction policy.",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

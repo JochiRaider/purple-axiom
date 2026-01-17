@@ -61,6 +61,7 @@ Purple Axiom treats scenario execution as a staged lifecycle per action:
 1. **Execute** (capture stdout/stderr + executor metadata)
 1. **Cleanup** (invoke cleanup command when applicable)
 1. **Cleanup verification** (verify post-conditions; "cleanup ran" is not sufficient)
+1. **State reconciliation** (optional; detect drift between recorded effects and observed state)
 
 ### Action lifecycle
 
@@ -101,6 +102,53 @@ The runner MUST persist:
   [Atomic Red Team executor integration spec](032_atomic_red_team_executor_integration.md)
   (deterministic YAML parsing, input resolution, prerequisites handling, transcript capture, cleanup
   invocation, and cleanup verification).
+
+### State reconciliation policy (per action)
+
+State reconciliation is an optional runner capability that performs post-action drift detection
+using runner evidence artifacts (side-effect ledger and, when present, cleanup verification).
+
+For v0.1 (single-action plans), the reconciliation policy is expressed under
+`plan.reconciliation`.
+
+Scenario inputs (normative):
+
+- Scenarios MAY declare a reconciliation policy per action:
+  - `none`: do not perform reconciliation.
+  - `observe_only`: perform read-only probes and emit reconciliation reports.
+  - `repair`: request destructive reconciliation (reserved; not supported in v0.1).
+- If a scenario requests `repair` in v0.1, the runner MUST fail closed before attempting repair
+  behavior.
+
+Optional scope control (normative; when reconciliation is enabled):
+
+- Actions MAY constrain which reconciliation item sources are eligible for reporting via
+  `reconciliation.sources`, with allowed values:
+  - `cleanup_verification`
+  - `side_effect_ledger`
+- If omitted, the runner MUST treat the effective default as `sources=[cleanup_verification]`,
+  and MUST ignore `cleanup_verification` when the corresponding evidence artifact is absent.
+
+### Technique requirements (permissions and environment assumptions)
+
+Scenarios MAY declare explicit action requirements used for deterministic preflight gating and
+explainable failures.
+
+For v0.1 (single-action plans), requirements are expressed under `plan.requirements`.
+
+`plan.requirements` (v0.1) minimal shape:
+
+- `platform` (optional object): OS constraints.
+  - `os` (optional array of strings): allowed OS families (`windows`, `linux`, `macos`).
+- `privilege` (optional string enum): `user | admin | system | unknown`
+- `tools` (optional array of strings): required tools/capabilities.
+
+Normative requirements:
+
+- `requirements` MUST be machine-readable; free-form prose fields MUST NOT be used for gating.
+- When `requirements` is present, it MUST participate in action identity by being incorporated into
+  the canonical basis used to compute `parameters.resolved_inputs_sha256` (see
+  [Stable action identity (join keys)](#stable-action-identity-join-keys)).
 
 ## Safety controls
 
@@ -156,6 +204,14 @@ defined by RFC 8785 (JCS).
 - `parameters.resolved_inputs_sha256` (hash of resolved inputs; not the raw inputs)
 - `target_asset_id` (stable Purple Axiom logical asset id; see the
   [lab providers spec](015_lab_providers.md))
+
+Action requirements and identity (normative):
+
+- If the scenario declares action requirements (`plan.requirements` in v0.1;
+  `actions[].requirements` in v0.2+), the runner MUST incorporate the effective requirements object
+  into the canonical basis used to compute `parameters.resolved_inputs_sha256`, so `action_key`
+  changes deterministically when requirements change. See the Atomic executor integration spec for
+  the canonical embedding rules.
 
 Then:
 
@@ -316,9 +372,16 @@ plan:
   technique_id: "T1059.001"
   engine_test_id: "d3c1...guid"
   idempotence: "unknown"
+  requirements:
+    platform: { os: ["windows"] }
+    privilege: "admin"
+    tools: ["powershell"]  
   input_args:
     command: "whoami"
   cleanup: true
+  reconciliation:
+    policy: "observe_only"
+    sources: ["cleanup_verification"]
 ```
 
 ## Ground truth timeline entry (v0.1)

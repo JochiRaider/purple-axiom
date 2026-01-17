@@ -24,7 +24,7 @@ Each major stage exposes a minimal health signal:
 
 - **Lab Provider**: inventory resolution success, snapshot hash, resolved asset count, drift
   detection (optional).
-- **Runner**: scenario execution status, per-action outcomes, cleanup status.
+- **Runner**: scenario execution status, per-action outcomes, cleanup status, state reconciliation (optional).
 - **Telemetry (collector)**: receiver health, export success, queue depth, dropped counts.
 - **Normalizer**: input read completeness, parse errors, mapping coverage.
 - **Evaluator**: rule load success, compilation failures, match counts.
@@ -180,6 +180,38 @@ Replay start mode definitions (normative):
 - `reset_missing`: checkpoint missing; replay expected.
 - `reset_corrupt`: checkpoint corrupt and recovery was applied (fresh state); replay expected.
 - `reset_manual`: operator explicitly requested reset (ignore checkpoints).
+
+## State reconciliation observability (normative)
+
+When state reconciliation is enabled, implementations MUST emit both:
+
+1. A `health.json.stages[]` entry with:
+   - `stage: "runner.state_reconciliation"`
+
+   Reason-code constraints (normative):
+
+   - When this substage is recorded as `status="failed"`, `reason_code` MUST be one of:
+     - `drift_detected`
+     - `reconcile_failed`
+
+2. Stable per-run counters (at minimum into `runs/<run_id>/logs/` and optionally into a metrics
+   backend):
+
+   - `runner_state_reconciliation_items_total`
+   - `runner_state_reconciliation_drift_detected_total`
+   - `runner_state_reconciliation_skipped_total`
+   - `runner_state_reconciliation_unknown_total`
+   - `runner_state_reconciliation_probe_error_total`
+
+Counter semantics (normative):
+
+- `items_total` MUST count reconciliation items emitted across all action reports for the run.
+- `drift_detected_total` MUST count items where observed state mismatched the recorded expectation.
+- `skipped_total` MUST count items not probed due to policy or missing deterministic probe targets.
+- `unknown_total` MUST count items with indeterminate outcomes (probe executed but result could not
+  be classified deterministically).
+- `probe_error_total` MUST count probe executions that returned an error (timeout, auth failure,
+  API error), regardless of whether an item is later classified as `unknown`.
 
 ## Telemetry validation (gating)
 

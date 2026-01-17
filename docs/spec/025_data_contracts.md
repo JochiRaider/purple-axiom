@@ -56,6 +56,8 @@ Schemas live in:
 - `docs/contracts/action_descriptor.schema.json`
 - `docs/contracts/runner_executor_evidence.schema.json`
 - `docs/contracts/cleanup_verification.schema.json`
+- `docs/contracts/side_effect_ledger.schema.json`
+- `docs/contracts/state_reconciliation_report.schema.json`
 - `docs/contracts/criteria_pack_manifest.schema.json`
 - `docs/contracts/criteria_entry.schema.json`
 - `docs/contracts/criteria_result.schema.json`
@@ -180,7 +182,8 @@ Minimum publish-gate coverage (v0.1):
   that publishes them:
   - `manifest.json`
   - `ground_truth.jsonl`
-  - `runner/**` artifacts that have contracts (for example, executor evidence, cleanup verification)
+  - `runner/**` artifacts that have contracts (for example, executor evidence, side-effect ledger,
+    cleanup verification)
   - `criteria/**` artifacts that have contracts (criteria pack snapshot, criteria results)
   - `normalized/**` artifacts that have contracts (OCSF event envelope for JSONL outputs, mapping
     coverage, mapping profile snapshot)
@@ -229,7 +232,7 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `raw/` (telemetry as collected, plus source-native evidence where applicable)
   - `raw/pcap/` (optional; placeholder contract in v0.1)
   - `raw/netflow/` (optional; placeholder contract in v0.1)
-- `runner/` (runner evidence: transcripts, executor metadata, cleanup verification)
+- `runner/` (runner evidence: transcripts, executor metadata, side-effect ledger, cleanup verification, state reconciliation)
 - `normalized/` (normalized event store and mapping coverage)
 - `bridge/` (Sigma-to-OCSF bridge artifacts: mapping pack snapshot, compiled plans, bridge coverage)
 - `detections/` (detections emitted by evaluators)
@@ -654,6 +657,9 @@ Minimum contents (recommended):
 - `runner/actions/<action_id>/stderr.txt`
 - `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type or version,
   timestamps)
+- `runner/actions/<action_id>/side_effect_ledger.json` (append-only side-effect ledger; see below)
+- `runner/actions/<action_id>/state_reconciliation_report.json` (when state reconciliation is enabled;
+  per-action drift report)  
 - `runner/actions/<action_id>/attire.json` (when structured execution logging is enabled; Atomic
   uses ATTiRe)
 - `runner/actions/<action_id>/atomic_test_extracted.json` (optional; Atomic template snapshot)
@@ -661,9 +667,63 @@ Minimum contents (recommended):
 - `runner/actions/<action_id>/cleanup_verification.json` (checks + results)
 
 note: see [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
+
+Side-effect ledger (normative):
+
+- The runner MUST persist a per-action side-effect ledger at
+  `runner/actions/<action_id>/side_effect_ledger.json`.
+- The ledger MUST be treated as append-only within a run:
+  - implementations MUST only append new entries,
+  - implementations MUST NOT modify or delete previously written entries.
+- The ledger MUST contain an ordered `entries[]` array whose order is authoritative.
+- Stable ordering requirements:
+  - Each entry MUST include a monotonically increasing `seq` (positive integer).
+  - `seq` MUST start at `1` and MUST increase by exactly `1` per appended entry.
+  - `entries[]` MUST be ordered by `seq` ascending, with no gaps and no duplicates.
+- Lifecycle attribution requirements:
+  - Each entry MUST include `phase` and `phase` MUST be one of `prepare | execute | revert | teardown`.
+  - If a side effect spans multiple lifecycle phases, the runner MUST emit one entry per phase
+    (do not reuse a single entry across phases).
+- Recovery write-ahead requirement:
+  - Before performing any external or target-mutating side effect, the runner MUST append the
+    corresponding ledger entry and MUST flush it to durable storage.
+  - Rationale: enables deterministic recovery even if the run aborts mid-action.
+
+State reconciliation report (normative; when enabled):
+
+- When state reconciliation is enabled, the runner MUST persist a per-action state reconciliation
+  report at `runner/actions/<action_id>/state_reconciliation_report.json`.
+- The report MUST validate against `state_reconciliation_report.schema.json`.
+- Purpose: record drift between the side-effect ledger (what the runner believes it did) and the
+  target environment's observed state at a well-defined reconciliation point.
+- Determinism requirements:
+  - `items[]` MUST be ordered deterministically:
+    - First, items derived from `cleanup_verification.json`, ordered by `check_id` ascending.
+    - Then, items derived from side-effect ledger entries, ordered by `seq` ascending.
+  - Any nested arrays MUST be ordered by stable key (if present).
+- Probing and skip semantics:
+  - The runner MUST only perform read-only probes during reconciliation.
+  - If an item cannot be probed deterministically under the effective policy, the runner MUST emit
+    the item with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable
+    `reason_code`.
+- Minimum required fields:
+  - `action_id`
+  - `action_key`
+  - `generated_at_utc`
+  - `status` (`clean | drift_detected | unknown | skipped`)
+  - `summary` (object): `items_total`, `drift_detected`, `unknown`, `skipped`
+  - `items[]` (array):
+    - `source` (`cleanup_verification | side_effect_ledger`)
+    - `check_id` (required when `source=cleanup_verification`)
+    - `ledger_seq` (required when `source=side_effect_ledger`)
+    - `status` (`match | mismatch | unknown | skipped`)
+    - `reason_code` (required)
+
 Validation:
 
-- `executor.json` and `cleanup_verification.json` SHOULD be schema validated when present.
+- `executor.json`, `side_effect_ledger.json`, `cleanup_verification.json`, and
+  `state_reconciliation_report.json` SHOULD be schema validated when present.
+  validated when present.
 
 ### Network sensor placeholders
 

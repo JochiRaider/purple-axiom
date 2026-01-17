@@ -118,6 +118,7 @@ REQUIRED by this contract when the corresponding feature is enabled:
 - `stdout.txt` (required when execution is attempted)
 - `stderr.txt` (required when execution is attempted)
 - `executor.json` (required for all attempted executions and cleanup runs)
+- `side_effect_ledger.json` (required; append-only side-effect ledger for recovery)
 - `prereqs_stdout.txt` (required when prerequisites are evaluated)
 - `prereqs_stderr.txt` (required when prerequisites are evaluated)
 - `attire.json` (required when Invoke-AtomicRedTeam structured logging is enabled, see below)
@@ -127,9 +128,63 @@ REQUIRED by this contract when the corresponding feature is enabled:
 - `cleanup_stdout.txt` (required when cleanup is invoked)
 - `cleanup_stderr.txt` (required when cleanup is invoked)
 - `cleanup_verification.json` (required when cleanup verification is enabled)
+- `state_reconciliation_report.json` (required when state reconciliation is enabled)
 
 The runner MUST also emit ground truth timeline entries as specified in the
 [data contracts spec](025_data_contracts.md).
+
+### Side-effect ledger population (normative, v0.1 minimum)
+
+Goal: recovery correctness even if the run aborts mid-action.
+
+- The runner MUST write `runs/<run_id>/runner/actions/<action_id>/side_effect_ledger.json` for each
+  Atomic action where execution is attempted.
+- The ledger MUST follow the side-effect ledger contract defined in the
+  [data contracts spec](025_data_contracts.md) (append-only semantics, stable ordering, and
+  lifecycle phase attribution).
+
+Minimum viable population for v0.1:
+
+- Runner-injected effects (markers): if the runner emits any explicit correlation marker or
+  runner-generated marker evidence intended to represent a side effect (for example, a dedicated
+  marker artifact or a marker entry in ground truth extensions), the runner MUST append a ledger
+  entry in the `execute` phase that describes the emission.
+- Cleanup verification checks as expected reverted effects: when `cleanup_verification.json` is
+  produced, the runner MUST append one `teardown`-phase ledger entry per cleanup verification
+  result row.
+  - Each such entry MUST include, at minimum, the `check_id` and the resulting `status`.
+- Optional template-declared effects: when template snapshotting is enabled (see
+  [Atomic template snapshot](#atomic-template-snapshot)), the runner MAY also append ledger entries
+  representing deterministically extracted, template-declared effects.
+  - Declared-effect entries MUST be in the `prepare` phase and MUST be explicitly marked as
+    declared (not observed).
+  - If extraction is ambiguous or non-deterministic, the runner MUST omit declared-effect entries.
+
+### State reconciliation (optional; when enabled)
+
+Goal: detect drift between the side-effect ledger (what the runner believes occurred) and the
+environment's observed state at a defined reconciliation point.
+
+When state reconciliation is enabled (normative requirements):
+
+- The runner MUST read the action's `side_effect_ledger.json` and, when present,
+  `cleanup_verification.json`.
+- The runner MUST attempt to reconcile recorded effects against observed state using only
+  read-only probes (no target mutation during reconciliation).
+- The runner MUST write a per-action reconciliation report to:
+  - `runs/<run_id>/runner/actions/<action_id>/state_reconciliation_report.json`
+- The report MUST conform to the state reconciliation report contract defined in the
+  [data contracts spec](025_data_contracts.md).
+
+Minimum v0.1 scope (normative):
+
+- If `cleanup_verification.json` exists, the runner MUST include one reconciliation item per
+  cleanup verification result row keyed by `check_id`.
+- The runner MAY include additional reconciliation items derived from other ledger entries when the
+  probe target is unambiguous and probing is permitted by policy.
+- For any ledger-derived item that cannot be probed deterministically, the runner MUST emit the
+  item with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable
+  `reason_code`.
 
 ## Atomic YAML parsing
 
@@ -250,6 +305,80 @@ as resolved from the run-scoped inventory snapshot (see
 - If the action's target platform is not supported, the runner MUST emit `skipped` with reason code
   `unsupported_platform`.
 - The runner MUST NOT attempt execution on unsupported platforms.
+
+### Action requirements (permissions and environment assumptions)
+
+Scenarios MAY declare machine-readable action requirements (see the
+[scenario model spec](030_scenarios.md)). For v0.1 (single-action plans), the requirements override
+field is `plan.requirements`.
+
+The runner MUST compute an **effective requirements** object for each `engine = "atomic"` action.
+The effective object is used for:
+
+- deterministic preflight gating during `prepare`
+- deterministic action identity (via the resolved inputs hash; see
+  [Resolved inputs hash](#resolved-inputs-hash))
+
+#### Effective requirements sources and precedence (normative)
+
+Effective requirements are derived from two sources, with field-level precedence:
+
+1. Scenario overrides (`plan.requirements` in v0.1; `actions[].requirements` in v0.2+)
+2. Template-derived requirements from the Atomic template snapshot (`atomic_test_extracted.json`)
+
+Field-level precedence: if an override field is present, it replaces the derived field.
+
+#### Derivation rules (minimum, normative)
+
+Platform:
+
+- If `supported_platforms` is present, the runner MUST set `requirements.platform.os` to the
+  lowercased, de-duplicated list of OS families from `supported_platforms`, sorted ascending.
+
+Tools:
+
+- The runner MUST include at least one tool token derived from `executor.name` using this mapping:
+  - `powershell` -> `powershell`
+  - `command_prompt` -> `cmd`
+  - `sh` -> `sh`
+  - `bash` -> `bash`
+  - `python` -> `python`
+- Additionally, the runner MAY derive tool tokens from dependency command strings using a bounded,
+  versioned matcher set. When enabled, matches MUST be case-insensitive and based on literal
+  substring checks (no regex), with the following minimum mappings:
+  - `curl` -> `curl`
+  - `wget` -> `wget`
+  - `bitsadmin` -> `bitsadmin`
+  - `certutil` -> `certutil`
+  - `invoke-webrequest` -> `invoke_webrequest`
+- Any unrecognized `executor.name` MUST result in a derived tools token `unknown_executor` and MUST
+  be recorded as a derivation warning in action evidence.
+
+Privilege:
+
+- The runner MUST NOT attempt to infer privilege from Atomic YAML in v0.1. If no scenario override
+  is present, `requirements.privilege` MUST be omitted.
+
+#### Canonical form (normative)
+
+For identity-bearing materials, the effective requirements object MUST be canonicalized:
+
+- `platform.os` and `tools` arrays MUST be lowercased, de-duplicated, and sorted lexicographically.
+- Empty arrays MUST be omitted.
+- If present, `privilege` MUST be one of: `user | admin | system`.
+
+#### Identity embedding into resolved inputs (normative)
+
+When the effective requirements object is non-empty, the runner MUST include it in the
+identity-bearing resolved inputs map prior to redaction and hashing by adding a reserved top-level
+key:
+
+- `__pa_action_requirements_v1`: <effective requirements object>
+
+Reserved key collision handling:
+
+- If the precedence-merged input map contains a key named `__pa_action_requirements_v1`, the runner
+  MUST fail closed with reason code `reserved_input_key_collision`.
 
 ## Target resolution and remote execution
 
@@ -394,6 +523,8 @@ Where `resolved_inputs_redacted_canonical` is the resolved input map after:
 - fixed-point resolution (see [Resolved input fixed point](#resolved-input-fixed-point))
 - environment-dependent path canonicalization to `$ATOMICS_ROOT` (see
   [Canonicalization of environment-dependent Atomics paths](#canonicalization-of-environment-dependent-atomics-paths))
+- effective requirements embedding under `__pa_action_requirements_v1` (see
+  [Action requirements (permissions and environment assumptions)](#action-requirements-permissions-and-environment-assumptions))  
 - redaction (see [Redaction for hashing](#redaction-for-hashing))
 
 This hash MUST be computable without executing the Atomic test.
@@ -455,6 +586,29 @@ includes:
 - `prereq_command`: a command that checks whether a prerequisite is satisfied
 - `get_prereq_command`: a command that attempts to satisfy the prerequisite (often by downloading or
   creating payloads)
+
+### Requirements evaluation (prepare)
+
+Before running any prerequisites commands, the runner MUST evaluate the effective requirements
+object for the action (see
+[Action requirements (permissions and environment assumptions)](#action-requirements-permissions-and-environment-assumptions))
+using only read-only probes.
+
+- If platform requirements are not satisfied, the runner MUST emit `skipped` with reason code
+  `unsupported_platform`.
+- If privilege requirements are not satisfied, the runner MUST emit `skipped` with reason code
+  `insufficient_privileges`.
+- If tool requirements are not satisfied, the runner MUST emit `skipped` with reason code
+  `missing_tool`.
+
+When a requirement cannot be evaluated deterministically (example: probe tool not available), the
+runner MUST treat the requirement as unsatisfied unless a configuration gate explicitly allows
+warn-only behavior (defined in the configuration reference).
+
+Observability (normative):
+
+- The runner MUST record the effective requirements object and per-check outcomes in
+  machine-readable action evidence (contracted in the [data contracts spec](025_data_contracts.md)).
 
 ### Responsibility model (normative)
 
@@ -754,6 +908,10 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 - `target_asset_not_found`
 - `target_asset_id_not_unique`
 - `target_connection_address_missing`
+- `reserved_input_key_collision`
+- `missing_tool`
+- `insufficient_privileges`
+- `unsupported_platform`
 
 ## Verification hooks
 
@@ -765,6 +923,8 @@ Implementations MUST include fixture-backed tests that validate:
    normalizer versions.
 1. Input resolution determinism: same YAML bytes plus same override object yield identical
    `resolved_inputs_redacted_canonical` and identical `parameters.resolved_inputs_sha256`.
+1. Requirements embedding determinism: changing `plan.requirements` (or derived requirements) changes
+   `resolved_inputs_redacted_canonical` and changes `parameters.resolved_inputs_sha256`.   
 1. Canonicalization: `$ATOMICS_ROOT` replacement is applied to identity-bearing materials and does
    not vary with actual filesystem paths.
 1. Transcript normalization: newline normalization and encoding rules produce byte-identical outputs

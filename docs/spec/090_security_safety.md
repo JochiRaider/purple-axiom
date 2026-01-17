@@ -163,6 +163,58 @@ subject to the same redaction policy as raw telemetry.
 If transcripts cannot be safely redacted, they MUST be withheld. Implementations MUST record a
 placeholder file and a hash of the withheld content in volatile logs.
 
+### Side-effect ledger
+
+The per-action side-effect ledger (`runner/actions/<action_id>/side_effect_ledger.json`) is an
+evidence-tier artifact and MUST be treated as potentially sensitive.
+
+Normative requirements:
+
+- The pipeline MUST apply the effective redaction policy to ledger contents before writing the
+  ledger to standard run bundle locations.
+- The ledger MUST redact secrets (tokens, passwords, private keys, bearer credentials) and other
+  redaction policy matches deterministically.
+- If the pipeline determines that the ledger contains raw credential material that cannot be made
+  redacted-safe deterministically, it MUST NOT store that ledger content in standard long-term
+  artifact locations.
+  - Implementations MAY quarantine the unredacted ledger content under the run's configured
+    quarantine directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by
+    configuration.
+  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
+    placeholder at `runner/actions/<action_id>/side_effect_ledger.json`.
+- When ledger content is quarantined or withheld, the run manifest and reports MUST disclose the
+  affected artifact relative path and the applied handling (withheld or quarantined).
+
+### State reconciliation
+
+State reconciliation compares recorded action effects (side-effect ledger and cleanup verification)
+against observed environment state to detect drift.
+
+Guardrails (normative):
+
+- Default posture MUST be observe-only. Reconciliation probes MUST be read-only and MUST NOT
+  mutate target assets.
+- Destructive reconciliation (repair) MUST be disabled by default.
+  - v0.1: repair is out of scope; implementations MUST NOT attempt destructive repair actions
+    as part of reconciliation.
+- If a scenario requests a reconciliation policy of `repair` (see the scenario model), the runner
+  MUST refuse to run reconciliation in repair mode unless an explicit global configuration gate is
+  enabled. The gate MUST be defined in the configuration reference before repair is supported.
+- Allowlist constraints (for any future repair-capable mode):
+  - A repair attempt MUST be limited to an explicit allowlist of reconciliation items derived from
+    the run bundle (for example by `check_id` and/or `ledger_seq`).
+  - Repair MUST NOT discover or enumerate targets beyond what is explicitly recorded in the
+    side-effect ledger and/or cleanup verification results for that action.
+  - Repair MUST be scoped to the action's resolved `target_asset_id` (cross-asset mutation is
+    prohibited).
+- Fail-closed semantics:
+  - If the runner cannot prove a deterministic, bounded, and allowlisted repair plan for an item,
+    it MUST NOT attempt repair and MUST fail closed for reconciliation (record
+    `runner.state_reconciliation` as failed with `reason_code=reconcile_failed`).
+  - When reconciliation fails closed, the runner MUST still write a reconciliation report with
+    `status=unknown` or `status=skipped` items, and MUST include a stable `reason_code` per item
+    explaining the refusal.
+
 ## Failure modes
 
 - If telemetry collection is misconfigured (example: missing raw/unrendered mode for Windows), the

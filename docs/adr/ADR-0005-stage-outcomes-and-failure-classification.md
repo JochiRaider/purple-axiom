@@ -278,6 +278,8 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 | ----------------------------- | --------- | --------------------------------------------------------------------- |
 | `cleanup_verification_failed` | NON-FATAL | Cleanup verification failed or was indeterminate (policy-controlled). |
 | `action_timeout`              | NON-FATAL | Action exceeded `timeout_seconds`.                                    |
+| `drift_detected`              | NON-FATAL | State reconciliation detected drift between recorded effects and observed state. |
+| `reconcile_failed`            | NON-FATAL | State reconciliation could not complete deterministically or report generation failed. |
 
 Cleanup verification policy (normative):
 
@@ -299,6 +301,30 @@ Cleanup verification policy (normative):
 
   - write `runner/actions/<action_id>/cleanup_verification.json`, and
   - reflect the aggregate result in the `teardown` phase `phase_outcome`.
+
+State reconciliation policy (normative):
+
+- When state reconciliation is enabled, the runner MUST:
+  - write `runner/actions/<action_id>/state_reconciliation_report.json`, and
+  - record a `logs/health.json` substage outcome with `stage: "runner.state_reconciliation"`.
+
+- `reason_code` for `runner.state_reconciliation` MUST be constrained to:
+  - `drift_detected`
+  - `reconcile_failed`
+
+- Default v0.1 behavior (policy-controlled via runner stage `fail_mode`):
+
+  - if runner stage `fail_mode=fail_closed`, the run MUST be marked `failed` when:
+    - any action reconciliation report indicates drift (emit `reason_code=drift_detected`), or
+    - reconciliation cannot be completed deterministically for an action (emit
+      `reason_code=reconcile_failed`).
+
+  - if runner stage `fail_mode=warn_and_skip`, the runner MUST record the corresponding reason code
+    under `runner.state_reconciliation` and the run MAY be `partial`.
+
+- Relationship to the parent runner stage outcome:
+  - If `runner.state_reconciliation` is recorded as `status="failed"`, the runner stage outcome
+    MUST NOT be recorded as `status="success"`.
 
 Lifecycle reason code guidance (normative):
 

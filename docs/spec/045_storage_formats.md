@@ -107,6 +107,7 @@ Runner evidence notes:
   - `runner/actions/<action_id>/stdout.txt`
   - `runner/actions/<action_id>/stderr.txt`
   - `runner/actions/<action_id>/executor.json`
+  - `runner/actions/<action_id>/side_effect_ledger.json`
   - `runner/actions/<action_id>/attire.json` (optional; Atomic structured execution record)
   - `runner/actions/<action_id>/atomic_test_extracted.json` (optional; Atomic template snapshot)
   - `runner/actions/<action_id>/atomic_test_source.yaml` (optional; Atomic template snapshot)
@@ -115,6 +116,23 @@ Runner evidence notes:
 
 Note: see [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
 
+Side-effect ledger encoding and hashing (normative):
+
+- `runner/actions/<action_id>/side_effect_ledger.json` is Tier 1 evidence and MUST be stored under
+  the run bundle root (not under `logs/`).
+- The ledger MUST be a valid JSON document after every write (crash-safe), and MUST use:
+  - UTF-8 encoding
+  - LF (`\n`) line endings
+- Determinism requirements:
+  - The ledger SHOULD be serialized using canonical JSON (RFC 8785 / JCS) to produce stable bytes.
+  - The `entries[]` array order is authoritative and MUST follow the stable ordering rules defined
+    in the data contracts spec (`seq` ascending with no gaps).
+- Hash inventory requirements:
+  - When signing is enabled, the ledger MUST be included in `security/checksums.txt` as a normal
+    run-bundle file (see data contracts: long-term artifact selection for checksumming).
+  - v0.1 does not require an additional `manifest.json` file-hash field for the ledger; integrity
+    coverage is provided by `security/checksums.txt` when signing is enabled.
+    
 ### Tier 2: Analytics (structured, long-term)
 
 Location:

@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "state_reconciliation_report.schema.json",
+  "title": "State reconciliation report",
+  "description": "Per-action reconciliation output. Compares recorded action effects (side-effect ledger and cleanup verification) against observed environment state to detect drift. Observe-only in v0.1; reconciliation MUST NOT mutate target assets. Ordering and other cross-artifact invariants are defined in the data contracts spec and cannot be fully enforced by JSON Schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "action_id",
+    "action_key",
+    "generated_at_utc",
+    "status",
+    "summary",
+    "items"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract version for this artifact. Bump only via spec change."
+    },
+    "action_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Action identifier (v0.1: may be s1-style; v0.2+: deterministic action_id)."
+    },
+    "action_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Deterministic action key for the action instance (see data contracts spec)."
+    },
+    "target_asset_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Resolved target asset identifier, when known."
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when this report was generated (ISO-8601 / RFC 3339)."
+    },
+    "effective_mode": {
+      "type": "string",
+      "enum": ["observe_only"],
+      "description": "Effective reconciliation mode. v0.1 is observe-only (repair out of scope)."
+    },
+    "status": {
+      "$ref": "#/$defs/report_status"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items_total", "drift_detected", "unknown", "skipped"],
+      "properties": {
+        "items_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of items in items[]. Cross-artifact invariant: must equal items.length."
+        },
+        "drift_detected": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of items with status=mismatch."
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of items with status=unknown."
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of items with status=skipped."
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional evidence references used to construct this report. Paths are run-bundle relative.",
+      "properties": {
+        "side_effect_ledger_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative path to side-effect ledger (example: runner/actions/<action_id>/side_effect_ledger.json)."
+        },
+        "cleanup_verification_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative path to cleanup verification (example: runner/actions/<action_id>/cleanup_verification.json)."
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$ref": "#/$defs/reconciliation_item"
+      },
+      "description": "Per-check reconciliation results. Ordering is a normative invariant (see data contracts spec)."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional human-readable note (non-normative)."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Forward-compatible extension point (implementation-defined).",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "report_status": {
+      "type": "string",
+      "enum": ["clean", "drift_detected", "unknown", "skipped"],
+      "description": "Aggregate report status."
+    },
+    "item_source": {
+      "type": "string",
+      "enum": ["cleanup_verification", "side_effect_ledger"],
+      "description": "Which input produced this item."
+    },
+    "item_status": {
+      "type": "string",
+      "enum": ["match", "mismatch", "unknown", "skipped"],
+      "description": "Reconciliation outcome for an item."
+    },
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Stable, machine-readable reason code (snake_case). Required for every item, including refusals."
+    },
+    "reconciliation_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "status", "reason_code"],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/item_source"
+        },
+        "check_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cleanup verification check identifier (required when source=cleanup_verification)."
+        },
+        "ledger_seq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Side-effect ledger entry sequence number (required when source=side_effect_ledger)."
+        },
+        "status": {
+          "$ref": "#/$defs/item_status"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/reason_code"
+        },
+        "expected": {
+          "description": "Optional expected state fragment used for comparison (shape is implementation-defined).",
+          "type": ["object", "string", "number", "boolean", "array", "null"]
+        },
+        "observed": {
+          "description": "Optional observed state fragment used for comparison (shape is implementation-defined).",
+          "type": ["object", "string", "number", "boolean", "array", "null"]
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Optional probe evidence (implementation-defined). Must not include secrets."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "source": { "const": "cleanup_verification" } },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["check_id"],
+            "not": { "required": ["ledger_seq"] }
+          }
+        },
+        {
+          "if": {
+            "properties": { "source": { "const": "side_effect_ledger" } },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["ledger_seq"],
+            "not": { "required": ["check_id"] }
+          }
+        }
+      ]
+    }
+  }
+}

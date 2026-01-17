@@ -143,6 +143,35 @@ Atomic runner determinism fixtures under `tests/fixtures/runner/atomic/` validat
 Atomic test to resolved inputs to `$ATOMICS_ROOT` canonicalization produces stable
 `resolved_inputs_sha256` and `action_key`.
 
+State reconciliation fixtures under `tests/fixtures/runner/state_reconciliation/` validate
+deterministic environment drift reporting (distinct from baseline drift in evaluator and
+conformance harnesses).
+
+The fixture set MUST include at least:
+
+- `record_present_reality_absent`:
+  - Input: a `side_effect_ledger.json` entry indicating a resource is present/created.
+  - Probe snapshot: observed state indicates the resource is absent.
+  - Expected: `state_reconciliation_report.status=drift_detected` with a deterministic
+    `reason_code`.
+- `record_absent_reality_present`:
+  - Input: a `side_effect_ledger.json` entry indicating a resource is absent/deleted.
+  - Probe snapshot: observed state indicates the resource is present.
+  - Expected: `state_reconciliation_report.status=drift_detected` with a deterministic
+    `reason_code`.
+- `clean_match`:
+  - Input: a `side_effect_ledger.json` entry indicating a resource is present/created.
+  - Probe snapshot: observed state indicates the resource is present.
+  - Expected: `state_reconciliation_report.status=clean`.
+
+For each fixture, the runner reconciliation implementation MUST:
+
+- Emit `runner/actions/<action_id>/state_reconciliation_report.json` with deterministic item
+  ordering as specified in the data contracts.
+- In the test harness, compute a stable hash over the report content (RECOMMENDED:
+  `report_jcs_sha256` over RFC 8785 JCS canonicalized JSON) and assert the hash is identical
+  across repeated runs with identical inputs and probe snapshots.
+
 ### Criteria evaluation
 
 Criteria pack versioning tests validate that

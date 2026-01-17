@@ -312,6 +312,38 @@ Required content:
 - Failed verifications with evidence references (links to `runner/` artifacts)
 - Cleanup policy applied (from scenario or range config)
 
+### State reconciliation
+
+**Summary**: Post-action drift detection between recorded effects and observed environment state
+(when enabled).
+
+Required content:
+
+- Reconciliation coverage:
+  - Actions reconciled count vs not-enabled/skipped count
+- Action-level status distribution (from per-action reconciliation reports):
+  - `clean`
+  - `drift_detected`
+  - `unknown`
+  - `skipped`
+- Aggregate item counts (sum of `summary` fields across actions):
+  - `items_total`
+  - `drift_detected`
+  - `unknown`
+  - `skipped`
+- Remediation disposition summary:
+  - `repaired` vs `requires_review`
+  - For v0.1, repair is out of scope; the report MUST render `repaired=0` and MUST treat every
+    drift item as `requires_review`.
+- Drift details table (limit 50):
+  - `action_id` and `action_key`
+  - `source` (`cleanup_verification | side_effect_ledger`)
+  - `check_id` (when `source=cleanup_verification`) or `ledger_seq`
+    (when `source=side_effect_ledger`)
+  - `status` (`match | mismatch | unknown | skipped`)
+  - `reason_code`
+  - Evidence reference: link to `runner/actions/<action_id>/state_reconciliation_report.json`
+
 ### Event volume metrics
 
 **Summary**: Telemetry throughput for capacity planning.

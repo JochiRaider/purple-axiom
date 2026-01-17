@@ -65,6 +65,10 @@ pipeline-specific values:
   `metadata.synthetic_correlation_marker`, ingest/observed timestamps, file offsets, collector
   hostnames, or any execution metadata.
 
+Rationale: `metadata.synthetic_correlation_marker` is intentionally per-run/per-action correlation
+metadata. Including it in `identity_basis` would make `metadata.event_id` vary across runs and
+reprocessing, breaking stable joins and deterministic deduplication.
+
 Identity basis selection is tiered:
 
 #### Tier 1: Source-native record identity (preferred)

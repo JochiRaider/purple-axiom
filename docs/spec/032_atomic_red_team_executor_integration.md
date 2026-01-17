@@ -69,6 +69,51 @@ Idempotence (normative):
   - When `idempotence` is `unknown`, the runner MUST treat the action as `non_idempotent` for safety
     (do not assume it is safe to re-run without a successful `revert`).
 
+## Runner-enforced lifecycle guards (normative)
+
+The runner MUST enforce the lifecycle transition rules defined in the scenario model and the
+ground-truth lifecycle semantics defined in the data contracts spec.
+
+Minimum guard set (normative):
+
+- Invalid transitions MUST be blocked deterministically:
+  - The runner MUST NOT attempt `revert` (Atomic cleanup command invocation) unless an `execute`
+    phase was attempted for the same action instance in the current run.
+    - When `revert` would otherwise be attempted (for example, because cleanup invocation is
+      enabled), the runner MUST instead record a `revert` phase record with
+      `phase_outcome="skipped"` and `reason_code="invalid_lifecycle_transition"`, and MUST NOT
+      invoke `executor.cleanup_command`.
+  - The runner MUST NOT attempt `teardown` work that depends on artifacts that were not produced.
+    - If cleanup behavior is suppressed (see below), the runner MUST record `teardown` as
+      `phase_outcome="skipped"` with `reason_code="cleanup_suppressed"`.
+
+Re-run safety refusal (normative):
+
+- If the runner is asked to attempt `execute` more than once for the same action instance without an
+  intervening successful `revert`, and the effective idempotence is treated as `non_idempotent`
+  (including `idempotence="unknown"`), the runner MUST refuse the `execute` attempt.
+  - The runner MUST still record an `execute` phase record with `phase_outcome="skipped"` and
+    `reason_code="unsafe_rerun_blocked"` (see data contracts spec "Re-run safety and refusal
+    recording").
+  - If the runner records the refusal as an additional attempt within the same action instance, it
+    MUST follow the retry ordering requirements in the data contracts spec (`attempt_ordinal`,
+    deterministic ordering).
+
+Observability (normative):
+
+- When the runner blocks an invalid transition or refuses an unsafe re-run, it MUST:
+  - record the per-action phase `reason_code` as above, and
+  - record the enforcement event in `logs/health.json` as substage
+    `stage="runner.lifecycle_enforcement"` with `status="failed"` and
+    `reason_code="invalid_lifecycle_transition"` or `reason_code="unsafe_rerun_blocked"` (see
+    ADR-0005 and `110_operability.md`).
+
+Cleanup suppression interaction (normative):
+
+- If cleanup behavior is suppressed for an action instance (for example, operator config disables
+  cleanup invocation and/or verification), the runner MUST treat the action instance as not proven
+  reverted and MUST apply the re-run safety refusal rules above for non-idempotent actions.
+
 ## Definitions
 
 ### Reference executor
@@ -194,12 +239,27 @@ When state reconciliation is enabled (normative requirements):
 
 - The runner MUST read the action's `side_effect_ledger.json` and, when present,
   `cleanup_verification.json`.
-- The runner MUST attempt to reconcile recorded effects against observed state using only read-only
-  probes (no target mutation during reconciliation).
+- The runner MUST attempt to reconcile recorded effects against observed state using read-only
+  probes by default (no target mutation during reconciliation).
 - The runner MUST write a per-action reconciliation report to:
   - `runs/<run_id>/runner/actions/<action_id>/state_reconciliation_report.json`
 - The report MUST conform to the state reconciliation report contract defined in the
   [data contracts spec](025_data_contracts.md).
+
+Repair mode (reserved; policy-gated):
+
+- Reconciliation MAY include an optional repair step only when all of the following are true:
+  - the action's effective reconciliation policy is `repair`, and
+  - repair is explicitly enabled by configuration (see config reference), and
+  - the repair operation is allowlisted by policy.
+- v0.1 implementations MUST NOT perform destructive repair as part of reconciliation.
+  - If repair is requested (scenario policy or future config) but repair is not enabled/supported,
+    the runner MUST NOT mutate the target and MUST record the blocked intent deterministically:
+    - per-item `reason_code` SHOULD be `repair_blocked` for affected items in
+      `state_reconciliation_report.json`, and
+    - the run MUST account for the block via operability counters (see `110_operability.md`).
+  - When repair is blocked and drift exists, the runner MUST surface drift via the reconciliation
+    outputs (see ADR-0005 `runner.state_reconciliation` substage semantics).
 
 Minimum v0.1 scope (normative):
 
@@ -813,12 +873,39 @@ Minimum required fields (v0.1):
 - `command_shell_specific` (string or list of strings, evidence-only actual invocation form)
 - `prereqs` (object, required when prerequisites are evaluated; see
   [Prerequisites and dependencies](#prerequisites-and-dependencies))
+- `cleanup` (object; required for all attempted executions; records cleanup gating and outcomes),
+  with at minimum:
+  - `plan_cleanup` (boolean; effective `plan.cleanup` after defaults; see scenario model spec)
+  - `invoke_configured` (boolean; effective `runner.atomic.cleanup.invoke`)
+  - `verify_configured` (boolean; effective `runner.atomic.cleanup.verify`)
+  - `cleanup_command_present` (boolean; whether the Atomic test defines `executor.cleanup_command`)
+  - `invoke_effective` (boolean; `plan_cleanup && invoke_configured && cleanup_command_present`)
+  - `invoke_attempted` (boolean)
+  - `skip_reason` (string enum; required when `invoke_attempted=false`):
+    - `disabled_by_scenario` (effective `plan.cleanup=false`)
+    - `disabled_by_policy` (effective `runner.atomic.cleanup.invoke=false`)
+    - `prior_phase_blocked` (`execute` was not attempted)
+    - `not_applicable` (no `cleanup_command` exists)
 
 This file is evidence, not identity.
 
 ## Cleanup invocation and verification
 
 ### Cleanup invocation strategy
+
+Effective cleanup gating (normative):
+
+- `plan.cleanup` MUST be treated as an operator-intent gate for all cleanup behaviors.
+- When effective `plan.cleanup = false`:
+  - The runner MUST NOT invoke cleanup (`Invoke-AtomicTest -Cleanup`).
+  - The runner MUST NOT attempt cleanup verification checks and MUST NOT write
+    `cleanup_verification.json` for the action.
+  - `executor.json` MUST record `cleanup.invoke_attempted=false` and
+    `cleanup.skip_reason=disabled_by_scenario`.
+- When effective `plan.cleanup = true` but `runner.atomic.cleanup.invoke = false`:
+  - The runner MUST NOT invoke cleanup.
+  - `executor.json` MUST record `cleanup.invoke_attempted=false` and
+    `cleanup.skip_reason=disabled_by_policy`.
 
 When `runner.atomic.cleanup.invoke: true`:
 
@@ -840,6 +927,11 @@ Cleanup invocation MUST capture transcripts and store them per
 When cleanup verification is enabled (see the
 [validation criteria spec](035_validation_criteria.md)):
 
+- Cleanup verification MUST be gated by operator intent:
+  - The runner MUST execute cleanup verification checks only when effective `plan.cleanup = true`
+    and `runner.atomic.cleanup.verify = true`.
+  - If either gate is false, the runner MUST NOT execute checks and MUST NOT write
+    `cleanup_verification.json` for the action.
 - The runner MUST execute the configured cleanup verification checks after cleanup completes.
 - The runner MUST write results to:
   - `runs/<run_id>/runner/actions/<action_id>/cleanup_verification.json`
@@ -901,6 +993,10 @@ If ATTiRe import mode is implemented (normative requirements):
 This appendix does not require import mode for v0.1. When not enabled, `attire.json` is produced
 only by the reference executor as specified in
 [Structured execution record (ATTiRe)](#structured-execution-record-attire).
+
+- When effective `plan.cleanup = false`, ground truth MUST record `revert.phase_outcome=skipped` and
+  `teardown.phase_outcome=skipped` and MUST NOT reference `cleanup_verification.json` for the
+  action. Suppression MUST be recorded in `executor.json` as specified above.
 
 ## Failure modes and stage outcomes
 

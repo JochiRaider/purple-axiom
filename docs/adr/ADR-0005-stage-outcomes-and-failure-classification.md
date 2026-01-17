@@ -256,18 +256,20 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 
 #### FATAL reason codes
 
-| Reason code                    | Severity | Description                                                               |
-| ------------------------------ | -------- | ------------------------------------------------------------------------- |
-| `unstable_asset_id_resolution` | FATAL    | `target_asset_id` cannot be resolved deterministically.                   |
-| `plan_type_reserved`           | FATAL    | Plan type is reserved and not supported in this version.                  |
-| `executor_not_found`           | FATAL    | Required executor binary/module is missing.                               |
-| `ground_truth_write_failed`    | FATAL    | Cannot write `ground_truth.jsonl`.                                        |
-| `action_key_collision`         | FATAL    | Duplicate `action_key` within the run.                                    |
-| `cleanup_invocation_failed`    | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure). |
-| `prepare_failed`               | FATAL    | One or more actions failed during lifecycle `prepare`.                    |
-| `execute_failed`               | FATAL    | One or more actions failed during lifecycle `execute`.                    |
-| `revert_failed`                | FATAL    | One or more actions failed during lifecycle `revert`.                     |
-| `teardown_failed`              | FATAL    | One or more actions failed during lifecycle `teardown`.                   |
+| Reason code                    | Severity | Description                                                                       |
+| ------------------------------ | -------- | --------------------------------------------------------------------------------- |
+| `unstable_asset_id_resolution` | FATAL    | `target_asset_id` cannot be resolved deterministically.                           |
+| `plan_type_reserved`           | FATAL    | Plan type is reserved and not supported in this version.                          |
+| `executor_not_found`           | FATAL    | Required executor binary/module is missing.                                       |
+| `ground_truth_write_failed`    | FATAL    | Cannot write `ground_truth.jsonl`.                                                |
+| `action_key_collision`         | FATAL    | Duplicate `action_key` within the run.                                            |
+| `invalid_lifecycle_transition` | FATAL    | Runner detected an invalid lifecycle transition request (contract violation).     |
+| `unsafe_rerun_blocked`         | FATAL    | Runner refused to re-execute a non-idempotent action without successful `revert`. |
+| `cleanup_invocation_failed`    | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure).         |
+| `prepare_failed`               | FATAL    | One or more actions failed during lifecycle `prepare`.                            |
+| `execute_failed`               | FATAL    | One or more actions failed during lifecycle `execute`.                            |
+| `revert_failed`                | FATAL    | One or more actions failed during lifecycle `revert`.                             |
+| `teardown_failed`              | FATAL    | One or more actions failed during lifecycle `teardown`.                           |
 
 - Multi-target iteration (matrix plans) is reserved for v0.2; v0.1 enforces 1:1 action-target
   resolution.
@@ -314,6 +316,17 @@ State reconciliation policy (normative):
   - `drift_detected`
   - `reconcile_failed`
 
+  Deterministic selection (normative):
+
+  - If any action's reconciliation cannot be completed deterministically (emit
+    `reason_code=reconcile_failed` for that action report), the runner MUST record the substage
+    outcome as `status="failed"` with `reason_code="reconcile_failed"`.
+  - Otherwise, if any action report indicates drift (emit `reason_code=drift_detected` for that
+    action report), the runner MUST record the substage outcome as `status="failed"` with
+    `reason_code="drift_detected"`.
+  - Otherwise, the runner MUST record the substage outcome as `status="success"` (and MUST omit
+    `reason_code`).
+
 - Default v0.1 behavior (policy-controlled via runner stage `fail_mode`):
 
   - if runner stage `fail_mode=fail_closed`, the run MUST be marked `failed` when:
@@ -332,10 +345,84 @@ State reconciliation policy (normative):
 
 Lifecycle reason code guidance (normative):
 
-- When a runner-stage failure can be attributed to a specific lifecycle phase, implementations
-  SHOULD prefer emitting `prepare_failed | execute_failed | revert_failed | teardown_failed`.
+- When a runner-stage failure can be attributed to a specific lifecycle phase, implementations MUST
+  prefer emitting `prepare_failed | execute_failed | revert_failed | teardown_failed`.
 - `cleanup_invocation_failed` is a v0.1 legacy alias for a `revert_failed` condition.
 - `cleanup_verification_failed` is a v0.1 legacy alias for a `teardown_failed` condition.
+
+Runner lifecycle aggregation (normative; deterministic):
+
+- A stage outcome entry in `logs/health.json.stages[]` MUST include exactly one `reason_code`.
+  - Multiple concurrent failures MUST be represented by:
+    - choosing a single deterministic aggregate `reason_code` per the rules below, and
+    - surfacing per-action detail in runner evidence and reports (out of scope for this ADR).
+  - Separate substage outcomes (for example `runner.state_reconciliation`) are permitted and do not
+    change this rule.
+
+Runner lifecycle enforcement substage (normative; when emitted):
+
+- When the runner enforces lifecycle transition guards or rerun-safety rules, it SHOULD record a
+  `logs/health.json` substage outcome with `stage: "runner.lifecycle_enforcement"`.
+
+- `reason_code` for `runner.lifecycle_enforcement` MUST be constrained to:
+
+  - `invalid_lifecycle_transition`
+  - `unsafe_rerun_blocked`
+
+- Deterministic selection (normative):
+
+  - If both enforcement conditions occur within a run, `runner.lifecycle_enforcement.reason_code`
+    MUST be `unsafe_rerun_blocked` (and the runner MUST still increment counters for both
+    conditions, if emitted elsewhere).
+
+- Relationship to the parent runner stage outcome:
+
+  - If `runner.lifecycle_enforcement` is recorded as `status="failed"`, the runner stage outcome
+    MUST NOT be recorded as `status="success"`.
+  - If the runner stage is recorded as `status="failed"` due to runner-enforced guards, the runner
+    stage `reason_code` MUST be the corresponding enforcement code (see below).
+
+- If the runner stage is recorded as `status="failed"` due to **runner-enforced guards** (for
+  example invalid transition prevention or deterministic rerun refusal), the runner MUST set the
+  runner stage `reason_code` directly to the corresponding enforcement code:
+
+  - `invalid_lifecycle_transition`, or
+  - `unsafe_rerun_blocked`. These enforcement codes MUST take precedence over lifecycle-derived
+    aggregation rules below.
+
+- If the runner stage is recorded as `status="failed"` due to lifecycle phase outcomes, the runner
+  MUST derive the runner stage `reason_code` deterministically from per-action lifecycle records
+  (ground truth), using the following precedence:
+
+  1. `prepare_failed` (any action has `prepare.phase_outcome="failed"`)
+  1. `execute_failed` (otherwise, any action has `execute.phase_outcome="failed"`)
+  1. `revert_failed` (otherwise, any action has `revert.phase_outcome="failed"`)
+  1. `teardown_failed` (otherwise, any action has `teardown.phase_outcome="failed"`)
+
+  Notes:
+
+  - “Any action” MUST be evaluated over the set of ground truth rows for the run. Implementations
+    MUST NOT depend on input iteration order; they MUST treat ground truth as the source of truth.
+  - If multiple phases fail across different actions, the earliest phase in the precedence list MUST
+    win. This ensures stable root-cause reporting (fix earlier failures first).
+
+- Legacy alias handling (deterministic):
+
+  - Implementations SHOULD NOT emit legacy aliases in new builds.
+  - If a legacy alias is emitted, it MUST be treated as equivalent to its canonical lifecycle code
+    for aggregation:
+    - `cleanup_invocation_failed` is equivalent to `revert_failed`.
+    - `cleanup_verification_failed` is equivalent to `teardown_failed`.
+  - Implementations MUST NOT emit both a legacy alias and its canonical lifecycle code for the same
+    run.
+
+- Cleanup verification interaction (deterministic):
+
+  - When cleanup verification failures are treated as fail-closed for the runner stage, the runner
+    stage `reason_code` MUST be `teardown_failed` (not `cleanup_verification_failed`).
+  - When cleanup verification failures are treated as warn-and-skip for the runner stage, the runner
+    stage `reason_code` MUST be `cleanup_verification_failed` and the run MAY be `partial` (per
+    policy).
 
 ### Telemetry stage (`telemetry`)
 

@@ -134,6 +134,29 @@ Common keys:
       - `auto`: implementation selects an OS-appropriate method.
       - `filelog`: marker is appended to a local file that is tailed by the collector.
     - `filelog_path` (optional, required when `method=filelog`)
+  - `state_reconciliation` (optional)
+    - `enabled` (optional, default: `false`)
+      - When `true`, the runner performs per-action state reconciliation (see
+        `032_atomic_red_team_executor_integration.md`) and writes
+        `runner/actions/<action_id>/state_reconciliation_report.json` (see `025_data_contracts.md`).
+      - When `false`, the runner MUST NOT attempt reconciliation and MUST NOT produce
+        `state_reconciliation_report.json`.
+    - `allow_repair` (optional, default: `false`) (reserved)
+      - When `true`, the runner MAY perform reconciliation-time repair only when:
+        - the action's effective reconciliation policy requests repair, and
+        - the repair operation is allowlisted (see below), and
+        - the implementation supports repair for the selected effect types.
+      - v0.1: MUST be `false`. Setting `allow_repair=true` MUST be rejected by config validation
+        (fail closed with `reason_code=config_schema_invalid`).
+    - `repair_allowlist_effect_types` (optional) (reserved)
+      - List of allowlisted reconciliation effect types that may be repaired (implementation-defined
+        tokens).
+      - When `allow_repair=true`, this list MUST be present and MUST be non-empty; otherwise config
+        validation MUST fail closed with `reason_code=config_schema_invalid`.
+      - When `allow_repair=false`, the runner MUST treat any requested repair intent as blocked and
+        MUST NOT mutate targets. Blocked repair MUST be accounted for in reconciliation outputs and
+        operability counters (see `032_atomic_red_team_executor_integration.md` and
+        `110_operability.md`).
   - `technique_allowlist` (optional): list of ATT&CK technique ids
   - `technique_denylist` (optional): list of ATT&CK technique ids
   - `executor_allowlist` (optional): list (example: `powershell`, `cmd`, `bash`)

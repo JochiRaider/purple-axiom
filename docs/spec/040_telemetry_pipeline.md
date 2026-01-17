@@ -510,8 +510,9 @@ Normative requirements:
   events. If filtering or sampling is enabled for other reasons, the configuration MUST implement an
   explicit allowlist so marker-bearing events are always retained.
 - The raw store MUST preserve the marker field in the captured record (attributes/body as emitted).
-  Normalization MUST preserve the marker in the OCSF envelope even when the base event is not mapped
-  (see the normalization specification).
+  Normalization MUST preserve the marker value on the OCSF envelope field
+  `metadata.synthetic_correlation_marker` even when the base event is not mapped (see
+  [Normalization](050_normalization_ocsf.md))
 
 ## Practical validation harness (required)
 

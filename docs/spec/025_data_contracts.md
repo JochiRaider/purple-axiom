@@ -374,13 +374,64 @@ Lifecycle semantics (normative):
 - `idempotence` (`idempotent | non_idempotent | unknown`), and `lifecycle.phases[]` (ordered phase
   records).
 
-  - `lifecycle.phases[]` MUST be ordered by the phase sequence: `prepare`, `execute`, `revert`,
-    `teardown`.
+  - `lifecycle.phases[]` MUST be ordered deterministically:
+    - The first record MUST be `phase="prepare"` and the last record MUST be `phase="teardown"`.
+    - If more than four phase records are present, any additional records MUST be `execute` and/or
+      `revert` retry records and MUST appear between `prepare` and `teardown`.
+    - When retry records are present, each retry record MUST include `attempt_ordinal` (integer;
+      0-based).
+      - Retry records MUST be ordered by the tuple `(attempt_ordinal, phase)` using UTF-8 byte order
+        (no locale), with phase order `execute` before `revert` for the same `attempt_ordinal`.
+      - `attempt_ordinal` values MUST be contiguous (no gaps) for the retry records present.
   - Each phase record MUST include:
     - `phase` (`prepare | execute | revert | teardown`)
     - `phase_outcome` (`success | failed | skipped`)
     - `started_at_utc` and `ended_at_utc` (UTC)
+    - `reason_code` (string; required when `phase_outcome != "success"`): stable reason token (ASCII
+      `lower_snake_case`).
+    - `error` (object; optional): per-phase failure classification for deterministic reporting.
+      - When present, `error.type` MUST be one of:
+        - `exit_code`
+        - `timeout`
+        - `missing_tool`
+        - `insufficient_privileges`
+        - `unsupported_platform`
+        - `internal_error`
+        - `unknown`
+      - When `error.type="exit_code"`, `error.exit_code` (integer) MUST be present.
+      - When `error.type="timeout"`, `error.timeout_ms` (integer) MUST be present.
+    - `evidence` (object; optional): run-relative pointers to runner evidence artifacts that justify
+      the phase outcome.
+      - Evidence pointers MUST be POSIX-style run-relative paths (no `..` segments).
+      - Allowed evidence keys (non-exhaustive; stable when used):
+        - `requirements_evaluation_ref` (example:
+          `runner/actions/<action_id>/requirements_evaluation.json`)
+        - `executor_ref` (example: `runner/actions/<action_id>/executor.json`)
+        - `stdout_ref` / `stderr_ref` (example: `runner/actions/<action_id>/stdout.txt`)
+        - `cleanup_stdout_ref` / `cleanup_stderr_ref` (example:
+          `runner/actions/<action_id>/cleanup_stdout.txt`)
+        - `cleanup_verification_ref` (example:
+          `runner/actions/<action_id>/cleanup_verification.json`)
+        - `state_reconciliation_report_ref` (example:
+          `runner/actions/<action_id>/state_reconciliation_report.json`)
+        - `side_effect_ledger_ref` (example: `runner/actions/<action_id>/side_effect_ledger.json`)
+        - `attire_ref` (example: `runner/actions/<action_id>/attire.json`)
     - `timestamp_utc` MUST equal `lifecycle.phases[0].started_at_utc` when the lifecycle is present.
+
+Phase evidence attachment (normative; when artifacts exist):
+
+- If `runner/actions/<action_id>/requirements_evaluation.json` is produced, the runner MUST attach
+  `evidence.requirements_evaluation_ref` to the `prepare` phase record.
+- If the runner attempts `execute`, the runner MUST attach:
+  - `evidence.executor_ref`, and
+  - `evidence.stdout_ref` and `evidence.stderr_ref` to the `execute` phase record.
+- If the runner attempts `revert`, the runner MUST attach:
+  - `evidence.executor_ref`, and
+  - `evidence.cleanup_stdout_ref` and `evidence.cleanup_stderr_ref` to the `revert` phase record.
+- If `runner/actions/<action_id>/cleanup_verification.json` is produced, the runner MUST attach
+  `evidence.cleanup_verification_ref` to the `teardown` phase record.
+- If `runner/actions/<action_id>/state_reconciliation_report.json` is produced, the runner MUST
+  attach `evidence.state_reconciliation_report_ref` to the `teardown` phase record.
 
 Requirements and environment assumptions (normative; when evaluated):
 
@@ -418,6 +469,28 @@ Idempotence defaults (normative):
 
 - If `idempotence` is `unknown`, implementations MUST treat the action as `non_idempotent` for
   safety (do not assume it is safe to re-run without a successful `revert`).
+
+Re-run safety and refusal recording (normative):
+
+- A ground truth line represents a single **action instance** (`action_id`) and MUST NOT collapse
+  distinct planned executions into one line.
+  - If a plan (v0.2+) schedules equivalent executions multiple times (same `action_key` and same
+    `target_asset_id`), each scheduled execution MUST be represented as a separate ground truth line
+    with a distinct `action_id`.
+- If a runner refuses to attempt `execute` for an action instance due to re-run safety rules (for
+  example, the action is treated as `non_idempotent` and a prior execute-side effect is not proven
+  reverted), the runner MUST still emit a ground truth line and MUST record:
+  - an `execute` phase record with `phase_outcome="skipped"`, and
+  - `reason_code="unsafe_rerun_blocked"`.
+- If `plan.cleanup=false` (or an equivalent operator-intent control) suppresses cleanup behavior for
+  an action instance, the runner MUST record:
+  - `revert.phase_outcome="skipped"` with `reason_code="cleanup_suppressed"`, and
+  - `teardown.phase_outcome="skipped"` with `reason_code="cleanup_suppressed"`.
+  - When suppressed, `teardown.evidence` MUST NOT reference `cleanup_verification.json` (because it
+    MUST NOT be produced).
+- If a runner performs multiple `execute` attempts within a single action instance (retry behavior),
+  it MUST record the additional attempt(s) as retry phase records in `lifecycle.phases[]` using
+  `attempt_ordinal`, and MUST NOT silently overwrite the first attempt outcome.
 
 ### Stable action identity
 
@@ -1163,6 +1236,31 @@ signing artifacts, and related metadata).
 - `unredacted/**` (quarantine, if present)
 - `security/checksums.txt` and `security/signature.ed25519` (to avoid self-reference)
 
+Inclusion notes (normative):
+
+- The following runner evidence artifacts are long-term artifacts. When present at their standard
+  paths, they MUST be included in `security/checksums.txt`:
+  - `runner/actions/<action_id>/side_effect_ledger.json`
+  - `runner/actions/<action_id>/state_reconciliation_report.json`
+  - `runner/actions/<action_id>/requirements_evaluation.json`
+- If an evidence-tier artifact is withheld-from-long-term, the deterministic placeholder written at
+  the standard path MUST be included in `security/checksums.txt`. Any quarantined/unredacted copies
+  under `unredacted/**` MUST NOT be included (see `090_security_safety.md`, "Redaction").
+- Implementations MUST treat `runner/actions/<action_id>/` as part of the long-term artifact set
+  (unless excluded above), including additional contract-defined runner evidence artifacts written
+  under that directory.
+
+Canonical JSON and stable bytes (normative):
+
+- For deterministic hashing and diffability, the following JSON artifacts MUST be serialized as
+  canonical JSON (RFC 8785, JCS):
+  - `runner/actions/<action_id>/side_effect_ledger.json`
+  - `runner/actions/<action_id>/state_reconciliation_report.json`
+  - `runner/actions/<action_id>/requirements_evaluation.json`
+- For these artifacts, implementations MUST write exactly `canonical_json_bytes(value)` to disk (no
+  additional whitespace). Array ordering requirements defined by each artifact's contract are
+  authoritative and MUST be preserved.
+
 Path canonicalization:
 
 - Paths in `security/checksums.txt` MUST be relative to the run bundle root.
@@ -1189,6 +1287,21 @@ This section defines `key_id`.
 - `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
 - Implementations SHOULD record `key_id` in run provenance (for example, `manifest.json` under an
   extensions namespace) to support downstream trust policies.
+
+Recommended signing provenance in `manifest.json` (non-normative for field presence; normative if
+present):
+
+- When `security.signing.enabled: true`, implementations SHOULD record signing metadata in
+  `manifest.json` under `extensions.security.signing`.
+- If any of the following fields are recorded, they MUST match the emitted signing artifacts:
+  - `extensions.security.signing.key_id` (string): the `key_id` defined above.
+  - `extensions.security.signing.checksums_sha256` (string): `sha256(file_bytes)` of
+    `security/checksums.txt`, as 64 lowercase hex characters.
+  - `extensions.security.signing.checksums_path` (string): `security/checksums.txt`.
+  - `extensions.security.signing.signature_path` (string): `security/signature.ed25519`.
+  - `extensions.security.signing.public_key_path` (string): `security/public_key.ed25519`.
+  - `extensions.security.signing.signature_alg` (string): `ed25519`.
+  - `extensions.security.signing.hash_alg` (string): `sha256`.
 
 ### Security signature format (normative)
 

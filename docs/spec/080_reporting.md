@@ -165,9 +165,27 @@ Required content:
   - `prepare`, `execute`, `revert`, `teardown` each with counts for `success | failed | skipped`
 - A table (or list) of actions with non-success lifecycle phases (limit 25), including:
   - `action_id`, technique ID, target asset id
-  - failed phase(s) and per-phase `phase_outcome`
+  - `idempotence` (`idempotent | non_idempotent | unknown`) for the action
+  - non-success phase(s) and per-phase `phase_outcome`
+    - When multiple non-success phases exist, phases MUST be listed in lifecycle order: `prepare`,
+      `execute`, `revert`, `teardown`.
+    - When retries are present in ground truth, the report MUST render attempt ordinals
+      deterministically (example: `execute[0]`, `execute[1]`) and MUST preserve lifecycle order.
   - evidence references (paths under `runner/actions/<action_id>/`), including requirements
     evaluation and cleanup verification references when present
+    - The report SHOULD prefer rendering evidence links that are referenced by the ground truth
+      lifecycle phase `evidence` pointers (when present), and otherwise fall back to the
+      conventional runner paths.
+
+Deterministic ordering (normative):
+
+- The non-success lifecycle actions table MUST be sorted deterministically by the tuple:
+  1. `primary_phase` order: `prepare` < `execute` < `revert` < `teardown`, where `primary_phase` is
+     the earliest lifecycle phase that is not `success` for the action (considering retries).
+  1. `primary_outcome` order: `failed` < `skipped`.
+  1. `action_id` ascending (UTF-8 byte order, no locale).
+- If multiple actions share identical tuple values (rare), implementations MAY add additional stable
+  tie-breakers, but MUST NOT depend on input iteration order.
 
 ### Synthetic correlation marker
 

@@ -190,11 +190,26 @@ When state reconciliation is enabled, implementations MUST emit both:
 
    - `stage: "runner.state_reconciliation"`
 
+   Tuple alignment (normative):
+
+   - `runner.state_reconciliation.fail_mode` MUST equal the effective runner stage `fail_mode` for
+     the run (do not invent an independent substage policy).
+   - When drift is detected or reconciliation fails deterministically, the implementation MUST
+     record `runner.state_reconciliation.status="failed"` (this is a taint/degradation signal; see
+     ADR-0005).
+   - When no drift is detected and reconciliation completes deterministically, the implementation
+     MUST record `runner.state_reconciliation.status="success"` and MUST omit `reason_code`.
+
    Reason-code constraints (normative):
 
    - When this substage is recorded as `status="failed"`, `reason_code` MUST be one of:
      - `drift_detected`
      - `reconcile_failed`
+
+   Deterministic selection (normative):
+
+   - If both conditions occur in a run, `reason_code` MUST be `reconcile_failed` (reconciliation
+     failure takes precedence over drift detection).
 
 1. Stable per-run counters (at minimum into `runs/<run_id>/logs/` and optionally into a metrics
    backend):
@@ -204,8 +219,23 @@ When state reconciliation is enabled, implementations MUST emit both:
    - `runner_state_reconciliation_skipped_total`
    - `runner_state_reconciliation_unknown_total`
    - `runner_state_reconciliation_probe_error_total`
+   - `runner_state_reconciliation_repairs_attempted_total`
+   - `runner_state_reconciliation_repairs_succeeded_total`
+   - `runner_state_reconciliation_repairs_failed_total`
+   - `runner_state_reconciliation_repair_blocked_total`
 
-Counter semantics (normative):
+   v0.1 repair constraints (normative):
+
+   - v0.1 implementations MUST NOT attempt destructive repair as part of reconciliation.
+   - Therefore, the following counters MUST be zero for v0.1 runs:
+     - `runner_state_reconciliation_repairs_attempted_total`
+     - `runner_state_reconciliation_repairs_succeeded_total`
+     - `runner_state_reconciliation_repairs_failed_total`
+   - If a run requests repair (scenario policy or future config) but repair is not
+     enabled/supported, implementations MUST increment
+     `runner_state_reconciliation_repair_blocked_total`.
+
+### Counter semantics (normative):
 
 - `items_total` MUST count reconciliation items emitted across all action reports for the run.
 - `drift_detected_total` MUST count items where observed state mismatched the recorded expectation.
@@ -214,6 +244,31 @@ Counter semantics (normative):
   be classified deterministically).
 - `probe_error_total` MUST count probe executions that returned an error (timeout, auth failure, API
   error), regardless of whether an item is later classified as `unknown`.
+
+### Runner lifecycle enforcement observability (normative)
+
+When the runner enforces lifecycle transition guards and rerun-safety rules, it MUST emit both:
+
+1. A `health.json.stages[]` substage outcome with:
+
+   - `stage: "runner.lifecycle_enforcement"`
+
+   Reason-code constraints (normative):
+
+   - When this substage is recorded as `status="failed"`, `reason_code` MUST be one of:
+     - `invalid_lifecycle_transition`
+     - `unsafe_rerun_blocked`
+
+   Deterministic selection (normative):
+
+   - If both conditions occur in a run, `reason_code` MUST be `unsafe_rerun_blocked`.
+
+1. Stable per-run counters:
+
+- `runner_invalid_lifecycle_transition_total` (u64): incremented when an invalid lifecycle
+  transition is detected and blocked (no executor attempt is made).
+- `runner_unsafe_rerun_blocked_total` (u64): incremented when a non-idempotent action re-execution
+  is refused because no successful `revert` has occurred since the last `execute`.
 
 ## Telemetry validation (gating)
 

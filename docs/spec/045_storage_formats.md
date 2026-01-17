@@ -108,6 +108,8 @@ Runner evidence notes:
   - `runner/actions/<action_id>/stderr.txt`
   - `runner/actions/<action_id>/executor.json`
   - `runner/actions/<action_id>/side_effect_ledger.json`
+  - `runner/actions/<action_id>/requirements_evaluation.json`
+  - `runner/actions/<action_id>/state_reconciliation_report.json`
   - `runner/actions/<action_id>/attire.json` (optional; Atomic structured execution record)
   - `runner/actions/<action_id>/atomic_test_extracted.json` (optional; Atomic template snapshot)
   - `runner/actions/<action_id>/atomic_test_source.yaml` (optional; Atomic template snapshot)
@@ -597,6 +599,21 @@ The manifest should record:
 - which datasets exist
 - their hashes (or the hash of a checksums file)
 - versions used to generate them
+
+Signing and integrity provenance (normative if present):
+
+- When `security.signing.enabled: true`, implementations SHOULD record the hash of
+  `security/checksums.txt` and signing metadata in `manifest.json` under
+  `extensions.security.signing` (see `025_data_contracts.md`, "Recommended signing provenance in
+  manifest.json").
+- If any `extensions.security.signing.*` fields are recorded, they MUST match the emitted
+  `security/checksums.txt`, `security/signature.ed25519`, and `security/public_key.ed25519` files.
+
+Integrity recording note (v0.1):
+
+- When signing is enabled, implementations SHOULD prefer recording the hash of
+  `security/checksums.txt` (and optional signature metadata) in `manifest.json` under an extensions
+  namespace, consistent with the data contracts guidance.
 
 ## Decision matrix: native container exports vs Parquet
 

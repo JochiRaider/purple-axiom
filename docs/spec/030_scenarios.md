@@ -79,13 +79,40 @@ Idempotence indicates whether `execute` MAY be re-attempted without a successful
 - `non_idempotent`: `execute` MUST NOT be repeated on the same target without a successful `revert`.
 - `unknown`: treat as `non_idempotent` for safety.
 
+Cleanup policy (scenario input, normative):
+
+- The `plan.cleanup` flag controls whether the runner attempts the `revert` and `teardown` phases.
+  - If `plan.cleanup` is omitted in v0.1, the runner MUST treat the effective value as `true`.
+  - If `plan.cleanup = true`, the runner MUST attempt `revert` and `teardown` subject to the allowed
+    transition rules below.
+  - If `plan.cleanup = false`, the runner MUST set `revert.phase_outcome = skipped` and
+    `teardown.phase_outcome = skipped`.
+    - Rationale: `plan.cleanup = false` is an explicit operator request to retain post-action
+      effects and/or prerequisites for debugging, and MUST NOT trigger destructive cleanup
+      behaviors.
+
+Prerequisite scope (per-action vs shared, normative):
+
+- The prerequisite set is engine-defined (for example Atomic `dependencies`) and MAY be constrained
+  by scenario inputs (reserved for v0.2+).
+- **Per-action prerequisites** are prerequisites that are attributable to a single action instance
+  because the runner satisfied them by making changes during `prepare` (for example installing a
+  tool, enabling a feature, or creating a temporary artifact).
+- **Shared prerequisites** are prerequisites that were already present, or are not provably
+  introduced by the current action instance.
+- During `teardown`, the runner MUST remove only **per-action prerequisites**.
+- The runner MUST NOT remove **shared prerequisites**.
+- If the runner cannot deterministically classify a prerequisite as per-action, it MUST treat the
+  prerequisite as shared.
+
 Allowed transitions (finite-state machine, normative):
 
 - The runner MUST attempt phases in order: `prepare` -> `execute` -> `revert` -> `teardown`.
 - A phase MAY be `skipped` when it is not applicable or is blocked by an earlier failure.
 - If `prepare` is `failed`, `execute` MUST be `skipped`.
 - `revert` MUST NOT be attempted unless `execute` was attempted.
-- `teardown` SHOULD be attempted even if `execute` or `revert` failed, but MUST record its outcome.
+- When `plan.cleanup = true`, `teardown` SHOULD be attempted even if `execute` or `revert` failed,
+  but MUST record its outcome.
 
 Recording requirements (normative):
 

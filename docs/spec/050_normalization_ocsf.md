@@ -77,14 +77,19 @@ Required steps for changing the pinned OCSF version (normative):
 
 - Preserve source fidelity:
   - retain original or raw payload (or a redacted-safe representation) for audit and forensics
-  - route unmapped fields into an explicit `unmapped` or `raw` object so nothing is silently dropped
+  - route unmapped fields into an explicit `raw` object so nothing is silently dropped
+    - `unmapped` MAY be used for derived fields that could not be mapped after routing, but `raw` is
+      the canonical location for retaining the source payload
 - preserve the synthetic correlation marker in the normalized envelope even when the base event is
   unmapped:
   - if the source record carries a synthetic correlation marker, the normalizer MUST copy it into
     `metadata.synthetic_correlation_marker` on the emitted OCSF envelope
   - if the record is otherwise unrouted/unmapped, the normalizer MUST still emit a minimal OCSF
     envelope record (see "Required envelope for normalized events") and retain the original payload
-    under `raw` or `unmapped` (marker-bearing records MUST NOT be dropped as "unmapped noise")
+    under `raw` (marker-bearing records MUST NOT be dropped as "unmapped noise")
+  - for marker-bearing records where no OCSF `class_uid` can be assigned from routing/mapping, the
+    normalizer MUST NOT guess a `class_uid`; it MUST set `class_uid = 0` (reserved "unmapped") and
+    MUST count the record as unmapped in `normalized/mapping_coverage.json`
 - Core-first mapping:
   - define a small core field set per event class (mandatory + high-value entities)
   - map core fields deterministically; enrich incrementally over time

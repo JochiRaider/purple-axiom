@@ -163,6 +163,22 @@ The fixture set MUST include at least:
   - Probe snapshot: tool/capability probe indicates `powershell` is unavailable.
   - Expected: action is skipped with deterministic `reason_code=missing_tool` and
     `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
+- `multiple_requirements_mixed_order`:
+  - Input: scenario declares multiple requirements in a non-sorted declaration order (example:
+    privilege=admin, platform.os=["windows"], tools=["powershell"]).
+  - Probe snapshot: multiple requirements evaluate to unmet (example: OS family indicates `linux`,
+    privilege probe indicates not admin, and tool probe indicates `powershell` unavailable).
+  - Expected (normative):
+    - The action is skipped and `runner/actions/<action_id>/requirements_evaluation.json` is
+      emitted.
+    - The requirement result list MUST include an item for each evaluated requirement and MUST be
+      ordered deterministically by the stable sort key `(category, token)`.
+    - The action-level `reason_code` MUST be selected deterministically from the first unmet
+      requirement result after applying the same stable sort key. The mapping MUST be:
+      - `platform` -> `unsupported_platform`
+      - `privilege` -> `insufficient_privileges`
+      - `tool` -> `missing_tool` (Example: if the first unmet result has `category=platform`, then
+        `reason_code` MUST be `unsupported_platform`.)
 
 For each fixture, the runner requirements implementation MUST:
 
@@ -178,6 +194,116 @@ For each fixture, the runner requirements implementation MUST:
 State reconciliation fixtures under `tests/fixtures/runner/state_reconciliation/` validate
 deterministic environment drift reporting (distinct from baseline drift in evaluator and conformance
 harnesses).
+
+Idempotence and lifecycle enforcement fixtures under `tests/fixtures/runner/lifecycle/` validate
+deterministic re-run safety behavior and lifecycle phase transition guards.
+
+The fixture set MUST include at least:
+
+- `unsafe_rerun_blocked_cleanup_suppressed`:
+
+  - Input:
+    - Scenario includes two action instances targeting the same `target_asset_id` and resolving to
+      the same `action_key`.
+    - The action's `idempotence` is `non_idempotent` (or `unknown` treated as `non_idempotent`).
+    - The first action instance suppresses cleanup (`plan.cleanup=false`) and therefore does not
+      attempt `revert`/`teardown`.
+  - Expected:
+    - First action instance:
+      - `execute.phase_outcome=success`.
+      - `revert.phase_outcome=skipped` and `teardown.phase_outcome=skipped` when
+        `plan.cleanup=false` (cleanup suppressed).
+      - `runner/actions/<action_id>/cleanup_verification.json` MUST NOT be emitted when cleanup is
+        suppressed.
+    - Second action instance:
+      - The runner MUST refuse to attempt `execute` and MUST record `execute.phase_outcome=skipped`
+        with deterministic `reason_code=unsafe_rerun_blocked`.
+      - `revert` and `teardown` MUST be `skipped`.
+    - Observability (normative):
+      - `runs/<run_id>/logs/health.json` MUST include a `health.json.stages[]` entry with:
+        - `stage="runner.lifecycle_enforcement"`
+        - `status="failed"`
+        - `reason_code="unsafe_rerun_blocked"`
+      - Stable counters MUST reflect the enforcement event:
+        - `runner_unsafe_rerun_blocked_total == 1`
+        - `runner_invalid_lifecycle_transition_total == 0`
+    - In the test harness, compute a stable hash over the two action lifecycle records (RECOMMENDED:
+      `lifecycle_jcs_sha256` over RFC 8785 JCS canonicalized ground truth lifecycle objects) and
+      assert the hash is identical across repeated runs with identical inputs.
+
+- `unsafe_rerun_blocked_revert_failed`:
+
+  - Input:
+    - Scenario includes two action instances targeting the same `target_asset_id` and resolving to
+      the same `action_key`.
+    - The action's `idempotence` is `non_idempotent` (or `unknown` treated as `non_idempotent`).
+    - The first action instance attempts cleanup (`plan.cleanup=true`) and attempts `revert`, but
+      the `revert` phase does not complete successfully (`revert.phase_outcome=failed`).
+  - Expected:
+    - First action instance:
+      - `execute.phase_outcome=success`.
+      - `revert.phase_outcome=failed`.
+    - Second action instance:
+      - The runner MUST refuse to attempt `execute` and MUST record `execute.phase_outcome=skipped`
+        with deterministic `reason_code=unsafe_rerun_blocked`.
+      - `revert` and `teardown` MUST be `skipped`.
+    - Observability (normative):
+      - `runs/<run_id>/logs/health.json` MUST include a `health.json.stages[]` entry with:
+        - `stage="runner.lifecycle_enforcement"`
+        - `status="failed"`
+        - `reason_code="unsafe_rerun_blocked"`
+      - Stable counters MUST reflect the enforcement event:
+        - `runner_unsafe_rerun_blocked_total == 1`
+        - `runner_invalid_lifecycle_transition_total == 0`
+    - In the test harness, compute a stable hash over the two action lifecycle records (RECOMMENDED:
+      `lifecycle_jcs_sha256` over RFC 8785 JCS canonicalized ground truth lifecycle objects) and
+      assert the hash is identical across repeated runs with identical inputs.
+
+- `execute_not_attempted_without_prepare_success`:
+
+  - Input:
+    - requirements evaluation (or other deterministic gating) causes `prepare` to be skipped or
+      failed, and
+    - `execute` would otherwise be attempted for the action.
+  - Expected:
+    - The runner MUST block the invalid transition deterministically:
+      - `execute.phase_outcome=skipped` with deterministic
+        `reason_code=invalid_lifecycle_transition`.
+    - `revert.phase_outcome=skipped` and `teardown.phase_outcome=skipped`.
+    - Observability (normative):
+      - `runs/<run_id>/logs/health.json` MUST include a `health.json.stages[]` entry with:
+        - `stage="runner.lifecycle_enforcement"`
+        - `status="failed"`
+        - `reason_code="invalid_lifecycle_transition"`
+      - Stable counters MUST reflect the enforcement event:
+        - `runner_invalid_lifecycle_transition_total == 1`
+        - `runner_unsafe_rerun_blocked_total == 0`
+    - If `side_effect_ledger.json` exists for the action, it MUST NOT contain any `execute`-phase
+      entry representing command invocation.
+
+- `revert_not_attempted_without_execute`:
+
+  - Input:
+    - requirements evaluation (or other deterministic gating) causes `execute` to be skipped, and
+    - cleanup invocation would otherwise be attempted (example: `plan.cleanup=true` for the action).
+  - Expected:
+    - The runner MUST block the invalid transition deterministically:
+      - `revert.phase_outcome=skipped` with deterministic
+        `reason_code=invalid_lifecycle_transition`.
+    - `teardown.phase_outcome=skipped`.
+    - Observability (normative):
+      - `runs/<run_id>/logs/health.json` MUST include a `health.json.stages[]` entry with:
+        - `stage="runner.lifecycle_enforcement"`
+        - `status="failed"`
+        - `reason_code="invalid_lifecycle_transition"`
+      - Stable counters MUST reflect the enforcement event:
+        - `runner_invalid_lifecycle_transition_total == 1`
+        - `runner_unsafe_rerun_blocked_total == 0`
+    - Cleanup invocation evidence MUST be absent for the action:
+      - `runner/actions/<action_id>/cleanup_stdout.txt` and
+        `runner/actions/<action_id>/cleanup_stderr.txt` MUST NOT exist.
+      - If `side_effect_ledger.json` exists for the action, it MUST NOT contain any `revert`-phase
+        entry representing cleanup invocation.
 
 Synthetic correlation marker fixtures under `tests/fixtures/runner/synthetic_marker/` validate
 deterministic marker computation and attempted emission bookkeeping.
@@ -199,24 +325,102 @@ assert it is identical across repeated runs with identical inputs.
 The fixture set MUST include at least:
 
 - `record_present_reality_absent`:
+
   - Input: a `side_effect_ledger.json` entry indicating a resource is present/created.
   - Probe snapshot: observed state indicates the resource is absent.
   - Expected: `state_reconciliation_report.status=drift_detected` with a deterministic
     `reason_code`.
+    - Stable counters MUST reflect that repair was not attempted:
+      - `runner_state_reconciliation_repairs_attempted_total == 0`
+      - `runner_state_reconciliation_repairs_succeeded_total == 0`
+      - `runner_state_reconciliation_repairs_failed_total == 0`
+      - `runner_state_reconciliation_repair_blocked_total == 0`
+    - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
+      `status="failed"` and `reason_code="drift_detected"`.
+
 - `record_absent_reality_present`:
+
   - Input: a `side_effect_ledger.json` entry indicating a resource is absent/deleted.
   - Probe snapshot: observed state indicates the resource is present.
   - Expected: `state_reconciliation_report.status=drift_detected` with a deterministic
     `reason_code`.
+    - Stable counters MUST reflect that repair was not attempted:
+      - `runner_state_reconciliation_repairs_attempted_total == 0`
+      - `runner_state_reconciliation_repairs_succeeded_total == 0`
+      - `runner_state_reconciliation_repairs_failed_total == 0`
+      - `runner_state_reconciliation_repair_blocked_total == 0`
+    - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
+      `status="failed"` and `reason_code="drift_detected"`.
+
+- `observe_only_drift_detected`:
+
+  - Input:
+    - action requests reconciliation policy `observe_only` (scenario-side policy), and
+    - runner config enables reconciliation.
+  - Probe snapshot: observed state indicates drift (example: record present but reality absent).
+  - Expected (normative):
+    - `state_reconciliation_report.status=drift_detected` with a deterministic `reason_code`.
+    - The report MUST record at least one drift item (stable ordering as specified in data
+      contracts).
+    - Stable counters MUST reflect that repair was not attempted and was not blocked:
+      - `runner_state_reconciliation_repairs_attempted_total == 0`
+      - `runner_state_reconciliation_repairs_succeeded_total == 0`
+      - `runner_state_reconciliation_repairs_failed_total == 0`
+      - `runner_state_reconciliation_repair_blocked_total == 0`
+    - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
+      `status="failed"` and `reason_code="drift_detected"`.
+
 - `clean_match`:
+
   - Input: a `side_effect_ledger.json` entry indicating a resource is present/created.
   - Probe snapshot: observed state indicates the resource is present.
   - Expected: `state_reconciliation_report.status=clean`.
+    - Stable counters MUST reflect that no repair was required:
+      - `runner_state_reconciliation_repairs_attempted_total == 0`
+      - `runner_state_reconciliation_repairs_succeeded_total == 0`
+      - `runner_state_reconciliation_repairs_failed_total == 0`
+      - `runner_state_reconciliation_repair_blocked_total == 0`
+    - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
+      `status="success"` and `reason_code="clean"`.
+
+- `repair_requested_but_blocked`:
+
+  - Input:
+    - action requests reconciliation policy `repair` (scenario-side policy), and
+    - runner config enables reconciliation but does not permit repair (v0.1 default; example:
+      `runner.atomic.state_reconciliation.enabled=true` and
+      `runner.atomic.state_reconciliation.allow_repair=false`).
+  - Probe snapshot: observed state indicates drift that would require repair to resolve (example:
+    record present but reality absent).
+  - Expected (normative):
+    - `state_reconciliation_report.status=drift_detected` with a deterministic `reason_code`.
+    - The report MUST record that repair was requested but blocked in a deterministic way (minimum
+      requirement: at least one affected reconciliation item includes `reason_code=repair_blocked`).
+    - Stable counters MUST reflect that repair was not attempted and was blocked:
+      - `runner_state_reconciliation_repairs_attempted_total == 0`
+      - `runner_state_reconciliation_repairs_succeeded_total == 0`
+      - `runner_state_reconciliation_repairs_failed_total == 0`
+      - `runner_state_reconciliation_repair_blocked_total >= 1`
+    - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
+      `status="failed"` and `reason_code="drift_detected"`.
 
 For each fixture, the runner reconciliation implementation MUST:
 
 - Emit `runner/actions/<action_id>/state_reconciliation_report.json` with deterministic item
   ordering as specified in the data contracts.
+- Emit `runs/<run_id>/logs/health.json` with a deterministic `health.json.stages[]` entry for
+  reconciliation:
+  - `stage="runner.state_reconciliation"` MUST be present for every fixture run where reconciliation
+    is enabled.
+  - When `state_reconciliation_report.status=drift_detected`, `health` MUST record `status="failed"`
+    and `reason_code="drift_detected"`.
+  - When `state_reconciliation_report.status=clean`, `health` MUST record `status="success"` and
+    `reason_code="clean"`.
+- Emit stable reconciliation counters for determinism and operability:
+  - `runner_state_reconciliation_repairs_attempted_total`
+  - `runner_state_reconciliation_repairs_succeeded_total`
+  - `runner_state_reconciliation_repairs_failed_total`
+  - `runner_state_reconciliation_repair_blocked_total`
 - In the test harness, compute a stable hash over the report content (RECOMMENDED:
   `report_jcs_sha256` over RFC 8785 JCS canonicalized JSON) and assert the hash is identical across
   repeated runs with identical inputs and probe snapshots.

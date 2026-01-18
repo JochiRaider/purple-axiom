@@ -562,7 +562,7 @@ Evidence pointer requirements (normative): Any field that records a "where obser
 (for example a canary observation location or a sample log reference) MUST be a run-relative path
 using POSIX separators (`/`) even on Windows. Implementations MUST NOT emit absolute paths,
 drive-letter paths, or host-specific directory prefixes. These paths are intended to be usable
-directly as `evidence_refs[].path` entries for telemetry-layer gaps in reporting.
+directly as `evidence_refs[].artifact_path` entries for telemetry-layer gaps in reporting.
 
 Minimum required fields for `logs/telemetry_validation.json`:
 

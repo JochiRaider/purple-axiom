@@ -727,8 +727,9 @@ Evidence pointers for reporting (normative intent):
 
 - Reporting/scoring conclusions that classify gaps as scoring-layer criteria issues SHOULD include
   evidence references to `criteria/manifest.json` and `criteria/results.jsonl`.
-- For `criteria/results.jsonl`, report evidence references SHOULD use a selector keyed by
-  `action_id` (or `criteria_ref.entry_id` when present) rather than a line number.
+- For `criteria/results.jsonl`, report evidence references SHOULD use a selector that follows the
+  evidence ref selector grammar in `025_data_contracts.md`. When referencing rows directly, prefer
+  `jsonl_line:<n>` with the deterministic ordering below rather than ad-hoc row-key selectors.
 
 Deterministic ordering (normative):
 

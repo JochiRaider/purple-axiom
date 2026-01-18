@@ -353,7 +353,8 @@ conclusions. Evidence pointers MUST be deterministic to support regression testi
 triage.
 
 Evidence refs appear most prominently in the report JSON (see the reporting spec), but the same
-requirements apply wherever evidence pointers are used.
+requirements apply wherever evidence pointers are used. This section is authoritative for evidence
+ref shape and selector grammar; other docs must reference it and MUST NOT redefine the format.
 
 Minimum evidence ref fields (normative):
 
@@ -1449,7 +1450,7 @@ Key semantics (normative when produced):
 
 - Coverage MUST reference the mapping pack used via `mapping_pack_sha256`.
 - Coverage MUST be sufficient to attribute detection gaps to `bridge_gap` vs `normalization_gap` vs
-  `telemetry_gap`.
+  `missing_telemetry`.
 
 ## Cross-artifact invariants
 

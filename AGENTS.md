@@ -7,37 +7,6 @@
 - Evidence-gated changes: cite authoritative source (spec, ADR, test) before modifying behavior
 - Deterministic, reviewable outputs: preserve stable ordering in lists and tables
 
-## How to validate changes
-
-### Fast checks (run before finalizing)
-
-```bash
-# Python formatting and linting (if Python tooling exists)
-uv run ruff check .
-uv run ruff format --check .
-
-# Type checking
-uv run mypy .
-```
-
-### Full checks (CI-equivalent)
-
-```bash
-# Full test suite
-uv run pytest
-
-# Schema validation (if applicable)
-uv run python -m tools.validate_schemas
-```
-
-### Notes
-
-- Formatting/linting/typing/testing MUST be tool-driven — do not hand-format beyond what the
-  formatter produces
-- When Python tooling exists in-repo, commands SHOULD be executed via `uv run <tool>` to ensure
-  the intended environment is used
-- If a change affects specs/docs, ensure formatting and link/path references remain correct
-
 ## Repository navigation
 
 Start by reading these index files to locate authoritative sources:

@@ -367,7 +367,7 @@ Minimum evidence refs by measurement layer:
 Evidence ref shape (recommended for JSON):
 
 - `artifact_path` (string; run-relative)
-- `selector` (string; optional; example: JSON pointer or row key)
+- `selector` (string; optional; see selector grammar in `025_data_contracts.md`)
 - `handling` (enum): `present | withheld | quarantined | absent`
 
 Deterministic ordering (normative):
@@ -561,8 +561,7 @@ run against the baseline.
 
 When regression analysis is performed, the report JSON MUST include `report/report.json.regression`
 as a structured object. This object is the authoritative machine-readable regression surface for CI
-and downstream tools.
-The authoritative regression surface is `report/report.json.regression`.
+and downstream tools. The authoritative regression surface is `report/report.json.regression`.
 Implementations MUST NOT emit `report/regression.json` or `report/regression_deltas.jsonl`.
 
 Required fields:

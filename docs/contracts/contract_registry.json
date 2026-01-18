@@ -194,6 +194,14 @@
       "format": "json"
     },
     {
+      "contract_id": "resolved_inputs_redacted",
+      "schema_path": "docs/contracts/resolved_inputs_redacted.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Redaction-safe resolved inputs evidence (runner/actions/<action_id>/resolved_inputs_redacted.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
       "contract_id": "runner_executor_evidence",
       "schema_path": "docs/contracts/runner_executor_evidence.schema.json",
       "contract_version": "0.1.0",
@@ -257,6 +265,7 @@
     { "artifact_glob": "runner/actions/*/cleanup_verification.json", "contract_id": "cleanup_verification", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/executor.json", "contract_id": "runner_executor_evidence", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/requirements_evaluation.json", "contract_id": "requirements_evaluation", "validation_mode": "json_document" },
+    { "artifact_glob": "runner/actions/*/resolved_inputs_redacted.json", "contract_id": "resolved_inputs_redacted", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/side_effect_ledger.json", "contract_id": "side_effect_ledger", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/state_reconciliation_report.json", "contract_id": "state_reconciliation_report", "validation_mode": "json_document" },
     { "artifact_glob": "runner/principal_context.json", "contract_id": "principal_context", "validation_mode": "json_document" },

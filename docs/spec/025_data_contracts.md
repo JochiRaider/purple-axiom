@@ -101,6 +101,7 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/principal_context.schema.json`
 - `docs/contracts/cache_provenance.schema.json`
 - `docs/contracts/runner_executor_evidence.schema.json`
+- `docs/contracts/resolved_inputs_redacted.schema.json`
 - `docs/contracts/requirements_evaluation.schema.json`
 - `docs/contracts/cleanup_verification.schema.json`
 - `docs/contracts/side_effect_ledger.schema.json`
@@ -865,6 +866,8 @@ Purpose:
 - `runner/actions/<action_id>/stderr.txt`
 - `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type or version,
   timestamps)
+- `runner/actions/<action_id>/resolved_inputs_redacted.json` (optional; redaction-safe resolved
+  inputs basis used for `parameters.resolved_inputs_sha256`)  
 - `runner/actions/<action_id>/requirements_evaluation.json` (effective requirements + per-check
   outcomes)
 - `runner/actions/<action_id>/side_effect_ledger.json` (append-only side-effect ledger; see below)
@@ -883,9 +886,9 @@ note: see [Atomic Red Team executor integration](032_atomic_red_team_executor_in
 #### Runner evidence JSON header pattern (normative; contract-backed artifacts)
 
 For per-action, contract-backed JSON evidence artifacts under `runner/actions/<action_id>/` (for
-example `executor.json`, `requirements_evaluation.json`, `side_effect_ledger.json`,
-`state_reconciliation_report.json`, `cleanup_verification.json`), the artifact MUST include, at
-minimum:
+example `executor.json`, `resolved_inputs_redacted.json`, `requirements_evaluation.json`,
+`side_effect_ledger.json`, `state_reconciliation_report.json`, `cleanup_verification.json`), the
+artifact MUST include, at minimum:
 
 - `contract_version` (schema constant)
 - `run_id`
@@ -910,6 +913,32 @@ Rationale: consistent joins and deterministic provenance without depending on fi
 - The runner MUST copy `requirements.declared`, `requirements.evaluation`, and
   `requirements.results[]` into the corresponding ground truth row so reporting and scoring can
   explain skipped/failed actions without consulting runner-internal logs.
+
+#### Resolved inputs evidence (optional; schema-backed)
+
+Purpose: Provide a redaction-safe, machine-readable view of the resolved inputs basis used for
+`parameters.resolved_inputs_sha256` without requiring re-execution.
+
+Normative requirements:
+
+- When the runner emits a resolved inputs evidence artifact for an action, it MUST persist
+  `runner/actions/<action_id>/resolved_inputs_redacted.json`.
+- The artifact MUST validate against `resolved_inputs_redacted.schema.json`.
+- The artifact MUST include, at minimum:
+  - `action_id`
+  - `action_key`
+  - `generated_at_utc`
+  - `resolved_inputs_sha256` (string; `sha256:<hex>` form)
+  - `resolved_inputs_redacted` (object; see below)
+- `resolved_inputs_redacted` MUST be exactly the redaction-safe resolved input map used as the hash
+  basis in the Atomic executor contract (see
+  [Resolved inputs hash](032_atomic_red_team_executor_integration.md#resolved-inputs-hash)).
+- Hash linkage (verifiable): `resolved_inputs_sha256` MUST equal
+  `sha256_hex(canonical_json_bytes(resolved_inputs_redacted))` where `canonical_json_bytes` is RFC
+  8785 canonical JSON (JCS), UTF-8 bytes.
+- Redaction safety: `resolved_inputs_redacted` MUST be redaction-safe by construction under the
+  effective redaction policy (see [ADR-0003](../adr/ADR-0003-redaction-policy.md) and
+  [security and safety](090_security_safety.md)).
 
 #### Side-effect ledger (normative):
 

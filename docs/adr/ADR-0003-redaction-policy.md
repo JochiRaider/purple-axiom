@@ -59,7 +59,8 @@ This policy applies to:
 - runner prerequisite transcripts (`runner/actions/<action_id>/prereqs_stdout.txt`,
   `prereqs_stderr.txt`)
 - `ground_truth.command_summary` field
-- redacted input argument objects stored in artifacts (`resolved_inputs_redacted`)
+- redacted input argument objects stored in artifacts
+  (`runner/actions/<action_id>/resolved_inputs_redacted.json`)
 - raw telemetry fields promoted into long-term storage (JSONL/Parquet)
 - report rendering of any evidence-tier text
 - structured execution records when string fields contain command-like content (for example,

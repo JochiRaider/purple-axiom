@@ -143,6 +143,14 @@ Atomic runner determinism fixtures under `tests/fixtures/runner/atomic/` validat
 Atomic test to resolved inputs to `$ATOMICS_ROOT` canonicalization produces stable
 `resolved_inputs_sha256` and `action_key`.
 
+When a fixture includes `runner/actions/<action_id>/resolved_inputs_redacted.json`, tests MUST
+also validate that:
+
+- the artifact validates against `resolved_inputs_redacted.schema.json`, and
+- `runner/actions/<action_id>/resolved_inputs_redacted.json.resolved_inputs_sha256` equals the
+  corresponding ground truth `parameters.resolved_inputs_sha256` value, and
+- that value equals `sha256_hex(RFC8785_JCS_bytes(resolved_inputs_redacted))`.
+
 Requirements gating fixtures under `tests/fixtures/runner/requirements/` validate deterministic
 evaluation and deterministic skip semantics when declared requirements are unmet.
 

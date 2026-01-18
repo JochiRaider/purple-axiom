@@ -42,6 +42,7 @@ Rows are sorted lexicographically by filename, all in the `docs/contracts/` diec
 | `range_config.schema.json`              | Schema for range.yaml configuration inputs                       |
 | `report_schema.json`                    | Schema for consolidated run report outputs                       |
 | `requirements_evaluation.schema.json`   | Schema for per-action requirements evaluation results            |
+| `resolved_inputs_redacted.schema.json`  | Schema for redaction-safe resolved inputs evidence               |
 | `runner_executor_evidence.schema.json`  | Schema for runner/executor evidence outputs                      |
 | `side_effect_ledger.schema.json`        | Schema for per-action side-effect ledgers                        |
 | `state_reconciliation_report.schema.json` | Schema for per-action state reconciliation reports             |

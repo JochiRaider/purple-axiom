@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Resolved inputs evidence (redacted)",
+  "description": "Per-action runner evidence capturing a redaction-safe view of the resolved inputs basis used to compute parameters.resolved_inputs_sha256.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "action_id",
+    "action_key",
+    "generated_at_utc",
+    "resolved_inputs_sha256",
+    "resolved_inputs_redacted"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "action_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resolved_inputs_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "resolved_inputs_redacted": {
+      "$ref": "#/$defs/json_object"
+    }
+  },
+  "$defs": {
+    "json_value": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/json_object"
+        },
+        {
+          "$ref": "#/$defs/json_array"
+        }
+      ]
+    },
+    "json_object": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/json_value"
+      }
+    },
+    "json_array": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/json_value"
+      }
+    }
+  }
+}

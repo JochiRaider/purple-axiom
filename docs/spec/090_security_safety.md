@@ -205,6 +205,34 @@ Normative requirements:
 - When requirements evaluation content is quarantined or withheld, the run manifest and reports MUST
   disclose the affected artifact relative path and the applied handling (withheld or quarantined).
 
+### Resolved inputs evidence
+
+The per-action resolved inputs evidence artifact
+(`runner/actions/<action_id>/resolved_inputs_redacted.json`) is an evidence-tier artifact and MUST
+be treated as sensitive by default.
+
+Rationale: while redacted-safe, resolved inputs may still contain environment-specific details
+(example: file paths, hostnames, usernames) that are not necessary for most shared reports and may
+increase sharing risk.
+
+Normative requirements:
+
+- The pipeline MUST apply the effective redaction policy to resolved inputs evidence contents
+  before writing the artifact to standard run bundle locations.
+- The artifact MUST NOT contain plaintext secrets or credential material.
+- If the pipeline determines that resolved inputs evidence cannot be made redacted-safe
+  deterministically, it MUST NOT store that content in standard long-term artifact locations.
+  - Implementations MAY quarantine the unredacted content under the run's configured quarantine
+    directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by configuration.
+  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
+    placeholder at `runner/actions/<action_id>/resolved_inputs_redacted.json`.
+- When resolved inputs evidence content is quarantined or withheld, the run manifest and reports
+  MUST disclose the affected artifact relative path and the applied handling (withheld or
+  quarantined).
+- Report rendering (default-safe): reports MUST NOT render resolved input values from
+  `resolved_inputs_redacted.json` unless a future explicit debug-only gate is added. Reports MAY
+  render `parameters.resolved_inputs_sha256` and an evidence reference for operator triage.
+
 ### Principal context
 
 The per-run principal context artifact (`runner/principal_context.json`) is an evidence-tier

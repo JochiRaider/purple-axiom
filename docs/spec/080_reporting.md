@@ -221,7 +221,10 @@ Required content:
     - When retries are present in ground truth, the report MUST render attempt ordinals
       deterministically (example: `execute[0]`, `execute[1]`) and MUST preserve lifecycle order.
   - evidence references (paths under `runner/actions/<action_id>/`), including requirements
-    evaluation and cleanup verification references when present
+    evaluation, resolved inputs evidence, and cleanup verification references when present
+    - When `runner/actions/<action_id>/resolved_inputs_redacted.json` is present, the report MUST
+      treat it as sensitive and MUST NOT render resolved input values; the report SHOULD render
+      only the evidence reference (artifact path) and handling.
     - The report SHOULD prefer rendering evidence links that are referenced by the ground truth
       lifecycle phase `evidence` pointers (when present), and otherwise fall back to the
       conventional runner paths.

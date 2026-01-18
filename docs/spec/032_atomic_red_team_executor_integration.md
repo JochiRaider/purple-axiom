@@ -625,6 +625,15 @@ Where `resolved_inputs_redacted_canonical` is the resolved input map after:
 
 This hash MUST be computable without executing the Atomic test.
 
+Optional resolved inputs evidence artifact (schema-backed):
+
+- When the runner emits a resolved inputs evidence artifact, it MUST write:
+  - `runs/<run_id>/runner/actions/<action_id>/resolved_inputs_redacted.json`
+- The artifact MUST be redaction-safe and MUST include:
+  - `resolved_inputs_redacted`: the exact `resolved_inputs_redacted_canonical` object used as the
+    hash basis above
+  - `resolved_inputs_sha256`: the corresponding `sha256:<hex>` value
+
 ### Redaction for hashing
 
 Before hashing `resolved_inputs`, the runner MUST apply deterministic redaction per the

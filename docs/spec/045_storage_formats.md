@@ -116,6 +116,8 @@ Runner evidence notes:
   - `runner/actions/<action_id>/stdout.txt`
   - `runner/actions/<action_id>/stderr.txt`
   - `runner/actions/<action_id>/executor.json`
+  - `runner/actions/<action_id>/resolved_inputs_redacted.json` (optional; redaction-safe resolved
+    inputs basis used for `parameters.resolved_inputs_sha256`)
   - `runner/actions/<action_id>/side_effect_ledger.json`
   - `runner/actions/<action_id>/requirements_evaluation.json`
   - `runner/actions/<action_id>/state_reconciliation_report.json`

@@ -319,6 +319,9 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 
 - `manifest.json` (single JSON object)
 - `ground_truth.jsonl` (JSONL)
+- `inputs/` (input snapshots and references used to interpret and compare runs)
+  - `inputs/baseline_run_ref.json` (optional; regression baseline pointer form)
+  - `inputs/baseline/manifest.json` (optional; regression baseline snapshot form)
 - `plan/` (v0.2+; compiled plan graph and expansion manifests)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw_parquet/` (raw telemetry datasets, long-term; see storage formats)
@@ -331,6 +334,8 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `detections/` (detections emitted by evaluators)
 - `scoring/` (joins and summary metrics)
 - `report/` (HTML and JSON report outputs)
+  - `report/regression.json` (optional; regression comparison summary)
+  - `report/regression_deltas.jsonl` (optional; regression delta tables)
 - `logs/` (structured operability summaries and debug logs; not considered long-term storage)
   - `logs/health.json` (when enabled; see the [operability spec](110_operability.md))
   - `logs/telemetry_validation.json` (when telemetry validation is enabled)
@@ -340,6 +345,61 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 The manifest is the authoritative index for what exists in the bundle and which versions were used.
 
 ## Artifact contracts
+
+### Evidence references (shared shape)
+
+Some artifacts include evidence pointers used to justify outcomes, classifications, or operator
+conclusions. Evidence pointers MUST be deterministic to support regression testing and stable
+triage.
+
+Evidence refs appear most prominently in the report JSON (see the reporting spec), but the same
+requirements apply wherever evidence pointers are used.
+
+Minimum evidence ref fields (normative):
+
+- `artifact_path` (string; REQUIRED): run-relative POSIX path to the evidence artifact
+- `selector` (string; optional): optional selector within the artifact (for example, a JSON Pointer
+  or a JSONL line number)
+- `handling` (enum; optional): `present | withheld | quarantined | absent`
+
+Artifact path requirements (normative):
+
+- `artifact_path` MUST be a run-relative path using POSIX separators (`/`).
+- `artifact_path` MUST NOT be an absolute path and MUST NOT contain `..` segments.
+- `artifact_path` MUST refer to a deterministic path as defined by the storage formats spec
+  (`045_storage_formats.md`).
+- Within any `evidence_refs[]` array, entries MUST be sorted by `artifact_path` ascending (UTF-8
+  byte order, no locale).
+
+Selector constraints (normative when present):
+
+- `selector` MUST be ASCII and MUST be no longer than 256 characters.
+- `selector` MUST match one of the following prefix forms:
+  - `json_pointer:` followed by an RFC 6901 JSON Pointer starting with `/`
+  - `jsonl_line:` followed by a 1-indexed positive integer
+
+### Measurement layers for conclusions (triage taxonomy)
+
+Some reported gaps and conclusions are not best triaged by pipeline stage alone. To enable stable
+triage, reportable gaps MUST be attributable to exactly one measurement layer.
+
+Measurement layers (closed set):
+
+- `telemetry`
+- `normalization`
+- `detection`
+- `scoring`
+
+Normative requirements (for reporting artifacts):
+
+- Any report gap entry that contributes to status degradation or a failing `status_recommendation`
+  MUST include:
+  - `measurement_layer`, and
+  - `evidence_refs[]` (at least one entry).
+- `measurement_layer` MUST match the normative mapping defined in `070_scoring_metrics.md` (gap
+  category to measurement layer mapping).
+- Reporting publish-gate validation MUST fail closed if the report JSON violates the above
+  requirements.
 
 ### Run manifest
 

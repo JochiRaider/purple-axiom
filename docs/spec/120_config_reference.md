@@ -560,14 +560,17 @@ Common keys:
   - `criteria_unavailable`
   - `criteria_misconfigured`
   - `normalization_gap`
-  - `bridge_gap`
+  - `bridge_gap_mapping`
+  - `bridge_gap_feature`
+  - `bridge_gap_other`
   - `rule_logic_gap`
   - `cleanup_verification_failed`
 - `thresholds` (optional): allow CI to fail if below expected quality.
   - v0.1 defaults (normative) if omitted: `min_technique_coverage=0.75`,
     `max_allowed_latency_seconds=300`, `min_tier1_field_coverage=0.80`,
     `max_missing_telemetry_rate=0.10`, `max_normalization_gap_rate=0.05`,
-    `max_bridge_gap_rate=0.15`.
+    `max_bridge_gap_mapping_rate=0.10`, `max_bridge_gap_feature_rate=0.40`,
+    `max_bridge_gap_other_rate=0.02`.
   - Keys:
     - `min_technique_coverage`: percent of executed techniques that must have ≥1 detection.
     - `max_allowed_latency_seconds`: maximum time delta between a ground truth action and first
@@ -591,6 +594,12 @@ Common keys:
     - `latency_weight`: factor for time-to-detection.
     - `fidelity_weight`: factor for match quality (exact vs partial vs weak).
 
+Notes:
+
+- `gap_taxonomy` selects which gap categories are budgeted/gated and appear in scoring outputs.
+- Gap category to measurement layer mapping is defined in `070_scoring_metrics.md` and is normative.
+  Configuration MUST NOT redefine or remap categories into different layers.
+
 ### Reporting (reporting)
 
 Controls report generation and output locations.
@@ -601,6 +610,22 @@ Common keys:
 - `emit_html` (default: true)
 - `emit_json` (default: true)
 - `include_debug_sections` (default: false)
+- `regression` (optional)
+  - `enabled` (default: false)
+    - When `true`, reporting MUST attempt a deterministic comparison against a baseline run and emit
+      regression outputs under `report/` (see `080_reporting.md` and `045_storage_formats.md`).
+  - Baseline selection (exactly one when `enabled: true`):
+    - `baseline_run_id` (string, UUID): baseline run identifier
+    - `baseline_manifest_path` (string): relative path to a baseline `manifest.json`
+      - `baseline_manifest_path` MUST be relative to `reporting.output_dir`. Absolute paths MUST NOT
+        be used for baseline selection.
+  - `thresholds` (optional): allowlist of comparable metrics and tolerances used to classify deltas
+    - Comparable metric identifiers and rounding/tolerance semantics are defined in
+      `070_scoring_metrics.md`.
+  - Notes (recommended for CI/regression runs):
+    - Pack-like inputs that affect comparability SHOULD be explicitly pinned (see
+      `criteria_pack.pack_version`, `detection.sigma.rule_set_version`, and
+      `detection.sigma.bridge.mapping_pack_version`).
 - `requirements` (optional)
   - `detail_level` (default: `reason_codes_only`): `reason_codes_only | include_sensitive_details`
     - `reason_codes_only`: reports MUST include only stable `reason_code` tokens and aggregate

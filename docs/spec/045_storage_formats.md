@@ -46,10 +46,44 @@ v0.1 policy (normative):
 
 - Contracted artifacts in Tier 1 and Tier 2 locations MUST have deterministic paths.
   - See the data contracts specification for the canonical "deterministic artifact path" rule.
+- This rule applies equally to regression inputs and outputs (baseline references, delta reports).
 - Timestamps belong inside artifact content, not in filenames.
 - If an implementation generates timestamped scratch outputs, it MUST place them under a
   non-contracted, explicitly excluded directory, and MUST disclose the exclusion policy in
   operability docs or configuration.
+
+### Regression baseline reference and outputs (v0.1; optional when enabled)
+
+When regression comparison is enabled, the pipeline MUST materialize a deterministic baseline
+reference under the candidate run bundle.
+
+Baseline reference (exactly one form is REQUIRED):
+
+- Snapshot form (preferred for local-first portability):
+  - `runs/<run_id>/inputs/baseline/manifest.json`
+    - A byte-for-byte copy of the baseline run's `manifest.json`.
+- Pointer form (allowed when the baseline is not copied into the run bundle):
+  - `runs/<run_id>/inputs/baseline_run_ref.json`
+    - A pointer to the baseline run identifier or manifest path plus an expected SHA-256 for the
+      baseline `manifest.json` bytes.
+
+If both forms are present, they MUST be consistent (the referenced baseline manifest hash must match
+the copied snapshot hash).
+
+Regression outputs (when produced) MUST use deterministic paths:
+
+- `runs/<run_id>/report/regression.json` (single JSON object)
+- `runs/<run_id>/report/regression_deltas.jsonl` (optional; large delta tables streamed as JSONL)
+
+Evidence references (normative):
+
+- Any artifact field that carries an evidence pointer (for example `evidence_refs[].path`) MUST use
+  a run-relative path that follows the deterministic layout rules in this document.
+- Evidence paths MUST NOT be absolute paths and MUST NOT encode environment-specific prefixes.
+
+Verification hook (RECOMMENDED): CI SHOULD include a storage-format lint that fails if any
+contracted regression artifact uses a timestamped filename or deviates from the paths specified
+above.
 
 ### Tier 0: Ephemeral operational logs
 
@@ -175,12 +209,15 @@ Purpose:
 ### Always JSON (small, contract-driven)
 
 - `manifest.json`
+- `inputs/baseline_run_ref.json` (optional; regression runs)
+- `inputs/baseline/manifest.json` (optional; regression runs)
 - `plan/expanded_graph.json` (v0.2+)
 - `plan/expansion_manifest.json` (v0.2+)
 - `plan/template_snapshot.json` (v0.2+; optional)
 - `criteria/manifest.json`
 - `scoring/summary.json`
 - `normalized/mapping_coverage.json`
+- `report/regression.json` (optional; regression runs)
 
 Rationale:
 
@@ -194,6 +231,7 @@ Rationale:
 - `criteria/results.jsonl`
 - `detections/detections.jsonl`
 - `scoring/joins.jsonl` (if used early)
+- `report/regression_deltas.jsonl` (optional; regression runs)
 
 Rationale:
 

@@ -559,6 +559,68 @@ identical inputs and asserts stable `resolved_inputs_sha256` and stable `action_
 
 The baseline comparison fixture compares current run outputs to a pinned baseline run bundle.
 
+The baseline comparison fixture set MUST include at least:
+
+- `baseline_present_identical_all_zero`
+
+  - Input:
+    - Provide a pinned baseline run bundle and a current run executed with identical inputs (same
+      scenario selection, same pins, same captured telemetry fixtures).
+  - Expected:
+    - Regression delta outputs MUST be all-zero for the comparable metric surface.
+    - Delta rows MUST be emitted in a deterministic ordering (as defined by reporting/scoring
+      specifications).
+    - The harness SHOULD compute a stable hash over the regression delta JSON subsection
+      (RECOMMENDED: RFC 8785 JCS hash) and assert it is identical across repeated runs with
+      identical inputs.
+
+- `baseline_present_intentional_change_detected`
+
+  - Input:
+    - Provide a pinned baseline run bundle and a current run that introduces a controlled, declared
+      change (for example, a mapping profile or ruleset change fixture).
+  - Expected:
+    - At least one regression delta MUST be non-zero.
+    - Delta outputs MUST remain deterministic (stable rounding, stable ordering, stable
+      identifiers).
+
+- `baseline_missing`
+
+  - Input:
+    - Enable regression comparison but provide a missing or unreadable baseline reference.
+  - Expected:
+    - `runs/<run_id>/logs/health.json` MUST include a deterministic stage outcome entry:
+      - `stage="reporting.regression_compare"`
+      - `status="failed"`
+      - `fail_mode="warn_and_skip"`
+      - `reason_code="baseline_missing"`
+    - Regression delta outputs MUST NOT be emitted as if comparison succeeded.
+
+The measurement contract fixture set MUST include at least:
+
+- `report_gaps_measurement_layer_and_evidence_refs_present`
+
+  - Input:
+    - Use a fixture that deterministically produces at least one pipeline gap (for example,
+      `marker_missing` in synthetic marker observability).
+  - Expected:
+    - The machine-readable report (`report/report.json`) MUST include a gap entry for the condition.
+    - Each gap entry MUST include:
+      - `measurement_layer` (one of `telemetry | normalization | detection | scoring`), and
+      - at least one `evidence_ref.path` that is a deterministic relative path into the run bundle.
+    - For each `evidence_ref.path`, the referenced artifact MUST exist within the run bundle.
+
+- `gap_taxonomy_tokens_match_scoring_spec`
+
+  - Input:
+    - Provide a minimal configuration fixture that enumerates the supported `scoring.gap_taxonomy[]`
+      tokens.
+  - Expected:
+    - The configured tokens MUST match the scoring specification taxonomy exactly (no aliases, no
+      extra tokens).
+    - The harness MUST reject any drift by asserting schema validation fails for unknown tokens and
+      passes for the canonical token set.
+
 ### Telemetry collection
 
 The telemetry fixture provides a raw Windows event XML corpus including missing rendered messages
@@ -668,6 +730,14 @@ schema.
 Schema validation of effective configuration validates `range.yaml` against
 `docs/contracts/range_config.schema.json`.
 
+The fixture set MUST include at least:
+
+- `range_config_gap_taxonomy_invalid_token_rejected` (fail closed)
+  - Provide a `range.yaml` fixture that includes a non-canonical `scoring.gap_taxonomy[]` token.
+  - Assert schema validation fails closed.
+  - Assert the failure output identifies the invalid token location deterministically (for example,
+    a JSON pointer or dotted path to the array element).
+
 ### Version conformance
 
 Pinned-version consistency checks (fail closed) validate that `manifest.normalization.ocsf_version`
@@ -742,6 +812,11 @@ Regression gates (configurable thresholds) protect against coverage and performa
 - Latency percentiles must not exceed Y
 - `missing_telemetry` and `normalization_gap` rates must not exceed Z
 
+Regression comparison precondition failures (for example, missing or incompatible baselines) MUST be
+represented as a `warn_and_skip` stage outcome under the reporting regression compare substage
+(`stage="reporting.regression_compare"`), consistent with stage outcomes being the sole input to run
+status derivation (see ADR-0005).
+
 ## CI workflow pattern
 
 The recommended CI workflow proceeds through six stages:
@@ -777,5 +852,6 @@ The recommended CI workflow proceeds through six stages:
 
 | Date       | Change                           |
 | ---------- | -------------------------------- |
+| 2026-01-13 | new feature                      |
 | 2026-01-13 | Style guide conformance reformat |
 | 2026-01-12 | Formatting update                |

@@ -139,6 +139,17 @@ When normalization is enabled and produces an OCSF event store, the normalizer M
 - `normalized/mapping_profile_snapshot.json` (required)
 - `normalized/mapping_coverage.json` (required)
 
+Regression comparable normalization metric inputs (normative):
+
+- Any normalization-stage metric that participates in regression comparisons MUST be computable from
+  deterministic artifacts in the run bundle.
+- For v0.1, the comparable normalization surface MUST be derived from:
+  - `normalized/mapping_coverage.json` (aggregate and per-source coverage inputs), and
+  - `normalized/mapping_profile_snapshot.json` (pins mapping inputs via hashes).
+- Comparable normalization surfaces MUST NOT incorporate environment-dependent timestamps. Timestamp
+  fields MAY be recorded as informational only (for example `generated_at_utc`) and MUST NOT
+  participate in regression deltas or gating.
+
 ### Mapping profile snapshot
 
 Purpose:
@@ -169,6 +180,31 @@ Requirements (normative):
 - MUST validate against `mapping_coverage.schema.json`.
 - MUST reference the mapping profile via `mapping_profile_sha256` so coverage is attributable to
   mapping changes vs telemetry changes.
+- `normalized/mapping_coverage.json` is the canonical evidence artifact for normalization-layer gap
+  classification (example: `normalization_gap`) and MUST be suitable for direct inclusion in
+  `evidence_refs[].artifact_path` as `normalized/mapping_coverage.json` (run-relative path, POSIX
+  separators, deterministic content).
+
+Deterministic computation rules (normative):
+
+- Any per-source arrays or maps emitted by `normalized/mapping_coverage.json` that are used for
+  regression comparisons MUST be deterministically ordered:
+  - Sort by `source_type` ascending (UTF-8 byte order, no locale).
+- Any rates or percentages emitted in comparable metric surfaces MUST be rounded to 4 decimal places
+  using round-half-up semantics.
+
+Regression comparable normalization metrics (normative):
+
+At minimum, normalization MUST expose the following comparable metrics for regression analysis:
+
+- Tier 1 field coverage percent (overall), derived from `normalized/mapping_coverage.json` and
+  computed over the in-scope normalized events as defined in the OCSF field tiers spec.
+- Per-source Tier 1 field coverage percent, keyed by `metadata.source_type` values and derived from
+  `normalized/mapping_coverage.json`.
+
+These comparable metrics MUST be attributable to a specific mapping profile via
+`mapping_profile_sha256` so mapping drift can be distinguished from telemetry drift
+deterministically.
 
 ## Core entities guidance (best practice)
 
@@ -196,6 +232,12 @@ Requirements (normative):
   artifacts.
 - Tier 3 (storage): enforce Parquet schema + partitioning + deterministic ordering for long-term
   storage.
+- Regression fixture (normative):
+  - Add a fixture where normalized events exist but Tier 1 coverage declines.
+  - Expected: classification is normalization layer, with `evidence_refs[]` including
+    `normalized/mapping_coverage.json`.
+  - Fixture design MUST drive a deterministic change in Tier 1 coverage by adjusting normalized
+    envelope field presence (Tier 1 pivots are explicitly measured and gated).
 
 ## Observability and coverage
 

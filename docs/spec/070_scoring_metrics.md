@@ -115,6 +115,88 @@ mode), since it changes operator expectations and the interpretability of scorin
   - fallback_rate: fraction of evaluated rules that required `raw.*` fallback predicates
   - compile_failures: count and reasons (unknown logsource, unmapped fields, unsupported modifiers)
 
+### Regression comparable metric surface (normative)
+
+When regression analysis is enabled, the scoring stage MUST expose a small, stable set of comparable
+metrics suitable for deterministic cross-run diffs.
+
+Definitions:
+
+- "baseline": a prior run selected for comparison.
+- "current": the run being evaluated.
+- "comparable metric": a metric with stable identifier, type, and unit that can be diffed between
+  baseline and current.
+
+Normative requirements:
+
+- Comparable metrics MUST be derived from `scoring/summary.json` only.
+- Comparable metrics MUST be emitted deterministically (stable rounding and stable ordering).
+- If a comparable metric cannot be computed, it MUST be recorded as `null` and accompanied by a
+  deterministic `indeterminate_reason` token.
+
+Comparable metrics (v0.1 minimum set):
+
+- Coverage:
+  - `technique_coverage_rate` (kind: `rate`, unit: unitless fraction in `[0.0, 1.0]`)
+- Latency:
+  - `detection_latency_p95_seconds` (kind: `duration_seconds`, unit: seconds)
+- Normalization coverage (Tier 1):
+  - `tier1_field_coverage_pct` (kind: `rate`, unit: unitless fraction in `[0.0, 1.0]`)
+- Pipeline health (counts and rates per gap category):
+  - `missing_telemetry_count` (kind: `count`, unit: actions)
+  - `missing_telemetry_rate` (kind: `rate`, unit: unitless fraction)
+  - `criteria_unavailable_count` (kind: `count`, unit: actions)
+  - `criteria_unavailable_rate` (kind: `rate`, unit: unitless fraction)
+  - `criteria_misconfigured_count` (kind: `count`, unit: actions)
+  - `criteria_misconfigured_rate` (kind: `rate`, unit: unitless fraction)
+  - `normalization_gap_count` (kind: `count`, unit: actions)
+  - `normalization_gap_rate` (kind: `rate`, unit: unitless fraction)
+  - `bridge_gap_mapping_count` (kind: `count`, unit: actions)
+  - `bridge_gap_mapping_rate` (kind: `rate`, unit: unitless fraction)
+  - `bridge_gap_feature_count` (kind: `count`, unit: actions)
+  - `bridge_gap_feature_rate` (kind: `rate`, unit: unitless fraction)
+  - `bridge_gap_other_count` (kind: `count`, unit: actions)
+  - `bridge_gap_other_rate` (kind: `rate`, unit: unitless fraction)
+  - `rule_logic_gap_count` (kind: `count`, unit: actions)
+  - `rule_logic_gap_rate` (kind: `rate`, unit: unitless fraction)
+  - `cleanup_verification_failed_count` (kind: `count`, unit: actions)
+  - `cleanup_verification_failed_rate` (kind: `rate`, unit: unitless fraction)
+
+Notes:
+
+- `*_rate` metrics MUST use `executed_actions_total` as the denominator, unless the category is not
+  applicable to the run, in which case the metric MUST be `null` with an `indeterminate_reason`.
+- Implementations MAY include additional comparable metrics, but MUST NOT change the identifiers,
+  meaning, or typing of the minimum set above within a contract version.
+
+### Deterministic comparison semantics (normative)
+
+Regression delta computation MUST be deterministic and reproducible across platforms.
+
+Canonical rounding:
+
+- `rate` values MUST be rounded to 4 decimal places using round-half-up.
+- `duration_seconds` values MUST be rounded to 3 decimal places using round-half-up.
+- `count` values MUST be integers.
+
+Delta rules:
+
+- Delta MUST be computed as `current_value - baseline_value` after canonical rounding.
+- For `count`, delta MUST be an integer difference.
+- For `rate` and `duration_seconds`, delta MUST be the rounded numeric difference.
+
+Default tolerances (v0.1):
+
+- `technique_coverage_rate`: tolerance `0.0001`
+- `detection_latency_p95_seconds`: tolerance `0.010`
+- `tier1_field_coverage_pct`: tolerance `0.0001`
+- All `*_rate` gap metrics: tolerance `0.0001`
+- All `*_count` gap metrics: tolerance `0`
+
+Stable ordering:
+
+- Any regression delta table MUST be sorted by `metric_id` ascending (ASCII byte order).
+
 ## Methodology inspiration
 
 - Prefer transparent reporting tied to specific behaviors/techniques rather than opaque vendor-style
@@ -143,6 +225,52 @@ The scoring stage MUST map compiled plan `reason_code` values to gap categories 
 | `backend_eval_error`               | `bridge_gap_other`   | Runtime evaluation failure                                                                      |
 
 Unknown reason codes MUST be classified as `bridge_gap_other` and SHOULD trigger a warning log.
+
+### Gap category to measurement layer mapping (normative)
+
+For reporting and triage, each gap category MUST also map to a measurement layer. The measurement
+layer answers "which pipeline layer is broken" independent of remediation ownership.
+
+Measurement layers (closed set):
+
+- `telemetry`
+- `normalization`
+- `detection`
+- `scoring`
+
+Mapping (v0.1):
+
+| Gap category                  | Measurement layer |
+| ----------------------------- | ----------------- |
+| `missing_telemetry`           | `telemetry`       |
+| `normalization_gap`           | `normalization`   |
+| `bridge_gap_mapping`          | `detection`       |
+| `bridge_gap_feature`          | `detection`       |
+| `bridge_gap_other`            | `detection`       |
+| `rule_logic_gap`              | `detection`       |
+| `criteria_unavailable`        | `scoring`         |
+| `criteria_misconfigured`      | `scoring`         |
+| `cleanup_verification_failed` | `scoring`         |
+
+### Evidence pointer requirements (normative)
+
+Implementations MUST be able to provide run-relative evidence pointers that justify any gap
+classification. Evidence pointers MUST be stable artifact paths (selectors are optional).
+
+Minimum evidence pointer set by measurement layer:
+
+- telemetry:
+  - `logs/health.json`
+  - telemetry validation artifacts under `telemetry/` (when present)
+- normalization:
+  - `normalized/mapping_coverage.json`
+- detection:
+  - `bridge/coverage.json`
+  - `detections/detections.jsonl`
+- scoring:
+  - `criteria/manifest.json` and `criteria/results.jsonl` (when validation is enabled)
+  - `scoring/summary.json`
+  - runner cleanup evidence under `runner/` (when present for `cleanup_verification_failed`)
 
 ### Thresholds (CI gates)
 
@@ -185,6 +313,16 @@ scoring:
 - Threshold evaluation MUST be based on metrics emitted in `scoring/summary.json`, and the report
   MUST enumerate which thresholds failed.
 
+## Verification hooks
+
+Golden regression fixture (normative):
+
+- Given two runs with identical pinned inputs (scenario, mapping pack snapshot, rule set snapshot,
+  criteria pack snapshot when enabled), the implementation MUST produce identical values for every
+  metric in "Regression comparable metric surface (normative)".
+- The regression delta report for such a pair MUST contain deltas of zero for all comparable metrics
+  and MUST be deterministically ordered by `metric_id` ascending.
+
 ## References
 
 - [OCSF field tiers specification](055_ocsf_field_tiers.md)
@@ -193,6 +331,7 @@ scoring:
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                                       |
+| ---------- | ------------------------------------------------------------ |
+| 2026-01-18 | Regression comparable surface and measurement-layer contract |
+| 2026-01-12 | Formatting update                                            |

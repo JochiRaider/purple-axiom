@@ -514,6 +514,10 @@ Normative requirements:
   `metadata.synthetic_correlation_marker` even when the base event is not mapped (see
   [Normalization](050_normalization_ocsf.md))
 
+This invariant is required for regression comparisons and for classifying `missing_telemetry` when
+markers are expected but not observed. Implementations MUST NOT substitute time-window or other
+heuristic correlation in place of marker propagation.
+
 ## Practical validation harness (required)
 
 Before the telemetry stage is treated as green, validate each Windows endpoint with a repeatable
@@ -554,6 +558,12 @@ Emit a large script block and confirm max-length and sidecar policies behave as 
 
 Record validation results as part of a run bundle under `logs/telemetry_validation.json`.
 
+Evidence pointer requirements (normative): Any field that records a "where observed" file pointer
+(for example a canary observation location or a sample log reference) MUST be a run-relative path
+using POSIX separators (`/`) even on Windows. Implementations MUST NOT emit absolute paths,
+drive-letter paths, or host-specific directory prefixes. These paths are intended to be usable
+directly as `evidence_refs[].path` entries for telemetry-layer gaps in reporting.
+
 Minimum required fields for `logs/telemetry_validation.json`:
 
 - `asset_id` (string)
@@ -579,6 +589,15 @@ Recommended additional fields (operator UX and regression tracking):
   - `memory_limiter_activated` (bool)
   - `exporter_queue_drops_observed` (bool)
   - `exporter_send_failures_observed` (bool)
+
+Recommended additional fields (raw-mode canary triage):
+
+- `raw_mode_canary` (object, OPTIONAL)
+  - `performed` (bool)
+  - `observed` (bool)
+  - `observed_at` (object, OPTIONAL)
+    - `path` (string; run-relative POSIX-style path)
+    - `event_id` (string, OPTIONAL; `metadata.event_id` when resolvable)
 
 Recommended additional fields (checkpointing diagnostics):
 
@@ -709,6 +728,22 @@ If writing the sidecar object fails, the pipeline MUST:
   warning under `fail_mode: warn_and_skip`.
 
 #### Validation and gating
+
+Regression comparability (normative):
+
+- Telemetry-stage artifacts that participate in regression comparisons MUST be derived
+  deterministically and MUST NOT include environment-dependent timestamps in any comparable metric
+  surface.
+- Timestamp fields MAY be emitted as informational only (for example `generated_at_utc`) and MUST
+  NOT participate in regression deltas or regression gating.
+
+Reason codes and evidence pointers (normative):
+
+- Telemetry validation failures that contribute to stage gating MUST be represented using stable
+  `reason_code` tokens and deterministic ordering, consistent with the stage outcome conventions.
+- Any field that records a "where observed" file pointer (for example a canary observation location
+  or a sample log reference) MUST be a run-relative path using POSIX separators (`/`) even on
+  Windows.
 
 Telemetry validation output MUST include the following counters (integers, deterministic):
 

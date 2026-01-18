@@ -130,6 +130,7 @@ degradation reasons include:
 | `latency_above_threshold`            | Quality gate  | Detection latency p95 > configured threshold               |
 | `gap_rate_exceeded`                  | Quality gate  | One or more gap category rates exceeded budget             |
 | `stage_failed_closed`                | Stage outcome | A required stage failed with `fail_closed` mode            |
+| `regression_alert`                   | Quality gate  | Regression delta exceeded configured threshold(s)          |
 | `cleanup_verification_failed`        | Validation    | Cleanup checks failed; run may be tainted                  |
 | `revert_failed`                      | Runner        | One or more actions failed during lifecycle `revert`       |
 | `teardown_failed`                    | Runner        | One or more actions failed during lifecycle `teardown`     |
@@ -328,9 +329,54 @@ Required content:
 - Aggregate counts per gap category
 - Top failures by category (limit 10 per category) with:
   - Technique ID
+  - Measurement layer
   - Evidence references (paths to relevant artifacts)
   - Actionable remediation hint
 - Gap rate percentages relative to executed actions
+
+#### Measurement contract for conclusions (normative)
+
+Every reported gap MUST be attributable to exactly one measurement layer. This enables deterministic
+triage by answering "which layer is broken" and "which artifacts prove it" for every conclusion.
+
+Measurement layers (closed set):
+
+- `telemetry`
+- `normalization`
+- `detection`
+- `scoring`
+
+Normative requirements:
+
+- Each gap entry MUST include `measurement_layer`.
+- `measurement_layer` MUST match the mapping in [Scoring metrics](070_scoring_metrics.md) (Gap
+  category to measurement layer mapping, normative).
+- Each gap entry MUST include `evidence_refs[]` that justify the classification.
+- Evidence refs MUST be run-relative artifact paths. Selectors are optional.
+- Evidence refs MUST NOT embed secrets or raw sensitive identifiers.
+
+Minimum evidence refs by measurement layer:
+
+- telemetry: MUST include `logs/health.json` and SHOULD include `telemetry/` validation artifacts
+  when present.
+- normalization: MUST include `normalized/mapping_coverage.json`.
+- detection: MUST include `bridge/coverage.json` and SHOULD include `detections/detections.jsonl`.
+- scoring: MUST include `scoring/summary.json` and SHOULD include `criteria/**` artifacts when
+  applicable to the gap category.
+
+Evidence ref shape (recommended for JSON):
+
+- `artifact_path` (string; run-relative)
+- `selector` (string; optional; example: JSON pointer or row key)
+- `handling` (enum): `present | withheld | quarantined | absent`
+
+Deterministic ordering (normative):
+
+- Any `top_failures[]` array MUST be sorted by:
+  1. `gap_category` ascending (UTF-8 byte order, no locale)
+  1. `technique_id` ascending (UTF-8 byte order, no locale)
+  1. `action_id` ascending (UTF-8 byte order, no locale), when present
+- Within any `evidence_refs[]` array, entries MUST be sorted by `artifact_path` ascending.
 
 ### Tier 1 normalization coverage
 
@@ -511,6 +557,57 @@ Additional provenance:
 When a baseline run is provided, the report MUST include a regression summary comparing the current
 run against the baseline.
 
+### Regression JSON contract (normative)
+
+When regression analysis is performed, the report JSON MUST include `report/report.json.regression`
+as a structured object. This object is the authoritative machine-readable regression surface for CI
+and downstream tools.
+
+Required fields:
+
+- `baseline`:
+  - `run_id` (string; baseline run id)
+  - `generated_at_utc` (string; baseline report generation timestamp)
+  - `manifest_ref` (string; run-relative artifact path or content-addressed reference)
+- `comparability_checks[]`:
+  - Each entry MUST include:
+    - `key` (string)
+    - `baseline_value` (string)
+    - `current_value` (string)
+    - `match` (boolean)
+  - `comparability_checks[]` MUST include all keys listed in [Comparable keys](#comparable-keys).
+  - The array MUST be emitted in the same order as the table in [Comparable keys](#comparable-keys).
+- `metric_surface_ref`:
+  - A string reference to the comparable metric surface defined in
+    [Scoring metrics](070_scoring_metrics.md) (Regression comparable metric surface, normative).
+- `deltas[]`:
+  - Each entry MUST include:
+    - `metric_id` (string)
+    - `kind` (string)
+    - `unit` (string)
+    - `baseline_value` (number or integer; may be `null` when indeterminate)
+    - `current_value` (number or integer; may be `null` when indeterminate)
+    - `delta` (number or integer; may be `null` when indeterminate)
+    - `tolerance` (number or integer)
+    - `within_tolerance` (boolean; MUST be false when any of baseline/current/delta is null)
+    - `regression_flag` (boolean)
+  - `deltas[]` MUST be sorted by `metric_id` ascending (UTF-8 byte order, no locale).
+  - Delta rounding, tolerance semantics, and indeterminate handling MUST follow
+    [Scoring metrics](070_scoring_metrics.md) (Deterministic comparison semantics, normative).
+- `regression_alerted` (boolean)
+- `alert_reasons[]`:
+  - Stable list of tokens describing which thresholds were exceeded.
+  - MUST be sorted ascending (UTF-8 byte order, no locale).
+
+Interaction with status recommendation (normative):
+
+- If `regression_alerted=true`, then:
+  - `report/thresholds.json.status_recommendation` MUST be downgraded to at least `partial`, and
+  - `report/report.json.status_reasons[]` MUST include `regression_alert`.
+- Implementations MAY support a strict policy that treats regression alerts as `failed`, but that
+  policy MUST be explicitly configured and MUST be recorded in `report/thresholds.json` (TODO:
+  specify the config key in `120_config_reference.md`).
+
 ### Comparable keys
 
 Two runs are comparable when the following keys match:
@@ -526,15 +623,18 @@ Runs with mismatched `scenario_id` MUST NOT be compared. Mismatched `scenario_ve
 
 ### Regression deltas
 
-The report MUST compute deltas for:
+The report MUST compute deltas for comparable metrics as defined in
+[Scoring metrics](070_scoring_metrics.md) (Regression comparable metric surface, normative).
 
-| Metric                     | Delta computation    | Regression threshold |
-| -------------------------- | -------------------- | -------------------- |
-| `coverage_pct`             | `current - baseline` | < -5.0 points        |
-| `latency_p95_ms`           | `current - baseline` | > +60000 ms          |
-| `tier1_field_coverage_pct` | `current - baseline` | < -5.0 points        |
-| `missing_telemetry_count`  | `current - baseline` | > +2                 |
-| `bridge_gap_mapping_count` | `current - baseline` | > +5                 |
+At minimum, the report MUST compute regression deltas for:
+
+| Metric                          | Delta computation    | Regression threshold |
+| ------------------------------- | -------------------- | -------------------- |
+| `technique_coverage_rate`       | `current - baseline` | < -0.0500            |
+| `detection_latency_p95_seconds` | `current - baseline` | > +60.000            |
+| `tier1_field_coverage_pct`      | `current - baseline` | < -0.0500            |
+| `missing_telemetry_count`       | `current - baseline` | > +2                 |
+| `bridge_gap_mapping_count`      | `current - baseline` | > +5                 |
 
 A regression is flagged when any delta exceeds the configured threshold.
 
@@ -545,6 +645,14 @@ A regression is flagged when any delta exceeds the configured threshold.
 - Delta table with: metric, baseline value, current value, delta, regression flag
 - New failures not present in baseline (technique ID + gap category)
 - Resolved failures present in baseline but not current
+
+Deterministic ordering (normative):
+
+- The delta table MUST be sorted by `metric_id` ascending (UTF-8 byte order, no locale).
+- The "new failures" list and "resolved failures" list MUST be sorted by:
+  1. `gap_category` ascending (UTF-8 byte order, no locale)
+  1. `technique_id` ascending (UTF-8 byte order, no locale)
+  1. `action_id` ascending (UTF-8 byte order, no locale), when present
 
 ## Trend tracking
 
@@ -641,6 +749,14 @@ Required gates (v0.1):
 - `max_bridge_gap_feature_rate` (default: 0.40)
 - `max_bridge_gap_other_rate` (default: 0.02)
 
+Regression gates (required only when a baseline is provided):
+
+- `regression_alert`:
+  - The gate MUST fail when `report/report.json.regression.regression_alerted=true`.
+  - When the gate fails, `degradation_reason` MUST be `regression_alert`.
+  - The reporting stage MUST apply the "Interaction with status recommendation" rules in
+    [Regression JSON contract](#regression-json-contract-normative).
+
 ## Report JSON schema
 
 The `report/report.json` output MUST conform to the following structure:
@@ -652,6 +768,19 @@ The `report/report.json` output MUST conform to the following structure:
   "generated_at_utc": "<ISO8601>",
   "status": "success | partial | failed",
   "status_reasons": ["<reason_code>"],
+  "status_reason_details": [
+    {
+      "reason_code": "<reason_code>",
+      "measurement_layer": "telemetry | normalization | detection | scoring",
+      "evidence_refs": [
+        {
+          "artifact_path": "<run-relative path>",
+          "selector": "<optional selector>",
+          "handling": "present | withheld | quarantined | absent"
+        }
+      ]
+    }
+  ],
   "executive_summary": {
     "scenario_id": "<string>",
     "scenario_version": "<string>",
@@ -672,8 +801,45 @@ The `report/report.json` output MUST conform to the following structure:
   "latency": { },
   "fidelity": { },
   "gaps": {
-    "by_category": { },
-    "top_failures": [ ]
+    "by_category": {
+      "<gap_category>": {
+        "measurement_layer": "telemetry | normalization | detection | scoring",
+        "count": 0,
+        "rate": 0.0,
+        "top_failures": [
+          {
+            "gap_category": "<gap_category>",
+            "measurement_layer": "telemetry | normalization | detection | scoring",
+            "technique_id": "<string>",
+            "action_id": "<string>",
+            "evidence_refs": [
+              {
+                "artifact_path": "<run-relative path>",
+                "selector": "<optional selector>",
+                "handling": "present | withheld | quarantined | absent"
+              }
+            ],
+            "remediation_hint": "<string>"
+          }
+        ]
+      }
+    },
+    "top_failures": [
+      {
+        "gap_category": "<gap_category>",
+        "measurement_layer": "telemetry | normalization | detection | scoring",
+        "technique_id": "<string>",
+        "action_id": "<string>",
+        "evidence_refs": [
+          {
+            "artifact_path": "<run-relative path>",
+            "selector": "<optional selector>",
+            "handling": "present | withheld | quarantined | absent"
+          }
+        ],
+        "remediation_hint": "<string>"
+      }
+    ]
   },
   "tier1_coverage": { },
   "per_source": [ ],
@@ -682,7 +848,37 @@ The `report/report.json` output MUST conform to the following structure:
   "cleanup_verification": { },
   "event_volume": { },
   "versions": { },
-  "regression": { },
+  "regression": {
+    "baseline": {
+      "run_id": "<uuid>",
+      "generated_at_utc": "<ISO8601>",
+      "manifest_ref": "<string>"
+    },
+    "comparability_checks": [
+      {
+        "key": "<string>",
+        "baseline_value": "<string>",
+        "current_value": "<string>",
+        "match": true
+      }
+    ],
+    "metric_surface_ref": "070_scoring_metrics.md#regression-comparable-metric-surface-normative",
+    "deltas": [
+      {
+        "metric_id": "<string>",
+        "kind": "<string>",
+        "unit": "<string>",
+        "baseline_value": 0,
+        "current_value": 0,
+        "delta": 0,
+        "tolerance": 0,
+        "within_tolerance": true,
+        "regression_flag": false
+      }
+    ],
+    "regression_alerted": false,
+    "alert_reasons": [ ]
+  },
   "extensions": {
     "execution_context": {
       "principal_context": {
@@ -763,5 +959,6 @@ The reporting stage MUST set exit codes aligned with
 
 | Date       | Change                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------ |
+| 2026-01-18 | Codify regression JSON contract and measurement-layer evidence pointers for gaps           |
 | 2026-01-13 | Major revision: added normative requirements, gap taxonomy alignment, per-source breakdown |
 | 2026-01-12 | Formatting update                                                                          |

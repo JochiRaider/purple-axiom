@@ -348,6 +348,16 @@ Expected `source_tree_sha256` for this basis (using `canonical_json_bytes` as de
 Rationale: this allows drift detection without requiring the evaluator to locate and parse upstream
 repos at evaluation time.
 
+Regression comparability requirement (normative):
+
+- For regression runs, criteria evaluation results MUST be treated as comparable only when the
+  following are pinned and recorded in run outputs:
+  - Criteria pack identity (at minimum `pack_id` and a concrete `pack_version`).
+  - Criteria pack snapshot content hashes (manifest and criteria content hashes), as pinned in the
+    run bundle snapshot.
+- If criteria pack identity or snapshot hashes are missing from run outputs, consumers MUST treat
+  criteria evaluation results as not comparable for regression deltas.
+
 ### Drift detection algorithm (normative)
 
 Before evaluating any actions for a run, the criteria evaluator MUST compute
@@ -368,11 +378,15 @@ When `criteria_drift_status = "detected"`:
 - Per-action criteria evaluation MUST NOT silently claim fail for missing signals when drift is
   detected. Instead, actions MUST be marked as `skipped` with a drift reason recorded in a
   deterministic field location.
+- Drift-related skips MUST NOT be reported as `missing_telemetry`. The evaluator MUST set
+  `reason_code = "criteria_misconfigured"` for drift-related skipped actions so downstream reporting
+  and scoring can classify the gap under the scoring layer.
 
 Recording drift in results (normative, minimal-impact):
 
 - Each affected `criteria/results.jsonl` line MUST include:
   - `status: "skipped"`
+  - `reason_code: "criteria_misconfigured"`
   - an explanation under `extensions.criteria.drift`:
     - `status`: `detected`
     - `engine`
@@ -416,6 +430,15 @@ Deterministic selection:
 
 If no entry matches, criteria evaluation emits `criteria_unavailable` for the action.
 
+No-match behavior (normative):
+
+- The evaluator MUST emit a `criteria/results.jsonl` row for the action with:
+  - `status: "skipped"`
+  - `reason_code: "criteria_unavailable"`
+- `criteria_ref` MUST include the selected pack identity (`pack_id`, `pack_version`).
+  - `criteria_ref.entry_id` MUST be omitted or set to JSON null.
+- `signals` MUST be an empty array.
+
 ### Tie-breaking order for entry_id (normative)
 
 When multiple entries remain tied after steps 1 and 2, the evaluator MUST select the entry with the
@@ -440,6 +463,21 @@ CI MUST include fixture cases for selection determinism:
 - **Case sensitivity**: entries differ only in `entry_id` (`A` and `a`); expected selection is `A`.
 - **No Unicode normalization**: entries differ only in `entry_id` (`e\u0301` and `\u00e9`); expected
   selection is `e\u0301`.
+
+### Required conformance tests (evaluation outcomes)
+
+CI MUST include fixture cases that validate deterministic failure classification and stable field
+locations in `criteria/results.jsonl`:
+
+- **No matching entry**: when no criteria entry matches an executed action, the evaluator MUST emit
+  `status = "skipped"`, `reason_code = "criteria_unavailable"`, `signals = []`, and MUST omit
+  `criteria_ref.entry_id` or set it to JSON null.
+- **Invalid predicate or unsupported operator**: when a selected criteria entry cannot be evaluated
+  due to pack misconfiguration, the evaluator MUST emit `status = "skipped"` and
+  `reason_code = "criteria_misconfigured"` and MUST record a stable error token under
+  `extensions.criteria.error.error_code`.
+- These fixtures are distinct from criteria drift detection fixtures (drift detection is validated
+  separately and MUST remain distinct from the above cases).
 
 ## Criteria entry model
 
@@ -649,8 +687,12 @@ Minimum fields:
 - `action_id` (format is versioned; see data contracts)
 - `template_id` (v0.2+; stable procedure identity of the action template)
 - `action_key`
-- `criteria_ref` (pack id, pack version, and entry_id)
+- `criteria_ref` (object)
+  - `pack_id` (string)
+  - `pack_version` (string)
+  - `entry_id` (string, OPTIONAL; omitted or JSON null when `reason_code = "criteria_unavailable"`)
 - `status` (`pass`, `fail`, `skipped`)
+- `reason_code` (string, REQUIRED when `status = "skipped"`; omitted otherwise)
 - `signals` (array)
   - `signal_id`
   - `status` (`pass`, `fail`, `skipped`)
@@ -661,6 +703,39 @@ Minimum fields:
   - `verification_status` (`pass`, `fail`, `indeterminate`, `skipped`, `not_applicable`)
   - `results_ref` (optional path under `runner/`)
 
+Failure classification and reason codes (normative):
+
+- When `status = "skipped"`, the evaluator MUST set `reason_code` to a stable token. The minimum
+  required set is:
+  - `criteria_unavailable`: no criteria entry matched the action join keys.
+  - `criteria_misconfigured`: criteria evaluation cannot be trusted (example: drift detected,
+    invalid predicate, unsupported operator, schema invalid).
+- When `reason_code = "criteria_misconfigured"`, the evaluator SHOULD emit a stable error token at
+  `extensions.criteria.error.error_code` to enable deterministic triage without exposing sensitive
+  details.
+  - `extensions.criteria.error.error_code` MUST be one of:
+    - `unsupported_operator`
+    - `invalid_predicate`
+    - `schema_invalid`
+    - `drift_detected`
+    - `drift_unknown`
+- When criteria drift is detected or treated as detected (fail-closed), the evaluator MUST set
+  `reason_code = "criteria_misconfigured"` and MUST record drift details under
+  `extensions.criteria.drift` as specified above.
+
+Evidence pointers for reporting (normative intent):
+
+- Reporting/scoring conclusions that classify gaps as scoring-layer criteria issues SHOULD include
+  evidence references to `criteria/manifest.json` and `criteria/results.jsonl`.
+- For `criteria/results.jsonl`, report evidence references SHOULD use a selector keyed by
+  `action_id` (or `criteria_ref.entry_id` when present) rather than a line number.
+
+Deterministic ordering (normative):
+
+- The evaluator MUST emit `criteria/results.jsonl` rows in a deterministic order, sorted by:
+  1. `scenario_id` ascending (UTF-8 byte order, no locale)
+  1. `action_id` ascending (UTF-8 byte order, no locale)
+
 ## Design constraints
 
 - Criteria evaluation MUST operate on the normalized OCSF store (not raw telemetry).
@@ -668,6 +743,7 @@ Minimum fields:
   Atomic YAML content.
 - Criteria evaluation MUST be deterministic:
   - stable tie-breaking for entry selection
+  - stable row ordering for `criteria/results.jsonl` (as specified above)
   - stable ordering of result arrays (`signals`, `checks`) by id
   - stable sampling (if sampling is used)
 

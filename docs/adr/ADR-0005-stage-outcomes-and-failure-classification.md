@@ -63,6 +63,10 @@ Substages MAY be expressed as dotted identifiers (for example, `lab_provider.con
 `telemetry.windows_eventlog.raw_mode`, `validation.run_limits`) and are additive. Substages MUST NOT
 change the semantics of the parent stage outcome.
 
+Substage outcomes, when emitted, are treated as additional stage outcomes for run status derivation
+(see "Manifest status derivation"). Substage outcomes MUST NOT be interpreted as changing the
+success criteria of the parent stage; they provide additional, independently gateable outcomes.
+
 ### Stage outcome
 
 A stage outcome is a tuple emitted for each enabled pipeline stage (and for any defined substages
@@ -116,6 +120,10 @@ Warning-only entries (non-fatal degradations, informational signals) MUST be wri
 
 `runs/<run_id>/logs/health.json` MUST contain only stage outcomes.
 
+Per-gap classification (for example `measurement_layer` and deterministic evidence pointers used in
+reports) is a reporting/scoring concern. It MUST be emitted in stage output artifacts (for example
+under `runs/<run_id>/report/**`) and MUST NOT change `logs/health.json` semantics or structure.
+
 ## Determinism requirements
 
 ### Stable ordering
@@ -144,6 +152,14 @@ lexicographically by full `stage` string.
 - `reason_code` MUST be stable across runs and versions within v0.1.
 - `reason_code` MUST be selected from the normative catalog in this ADR for the relevant
   `(stage, reason_code)` pair.
+
+### CI conformance (normative)
+
+CI MUST validate deterministic outcome emission:
+
+- CI MUST reject `logs/health.json` and `manifest.json` stage lists that violate "Stable ordering".
+- CI MUST reject any emitted `(stage, reason_code)` pair that is not present in the normative
+  catalog in this ADR.
 
 ## Global failure rules
 
@@ -621,6 +637,38 @@ Reporting is presentation-oriented. Machine-readable required summary output is 
 - If `reporting.emit_html=true` and `reporting.fail_mode=fail_closed`, `html_render_error` is FATAL.
 - If HTML is configured as best-effort (either `emit_html=false` or stage
   `fail_mode=warn_and_skip`), record `html_render_error` as NON-FATAL warning-only.
+
+#### Regression compare substage (`reporting.regression_compare`)
+
+Regression comparison is a quality gate: it evaluates comparability to a baseline run and, when
+enabled, produces deterministic regression deltas in reporting artifacts. Regression comparison MUST
+NOT affect the reporting stage's ability to publish `report/**` artifacts; it is recorded as a
+separate substage outcome.
+
+Default `fail_mode`: `warn_and_skip` (quality gate)
+
+When regression comparison is enabled, the orchestrator or reporting implementation MUST emit a
+`logs/health.json` substage outcome with `stage: "reporting.regression_compare"`.
+
+`reason_code` for `reporting.regression_compare` MUST be constrained to:
+
+| Reason code                 | Severity  | Description                                                         |
+| --------------------------- | --------- | ------------------------------------------------------------------- |
+| `baseline_missing`          | NON-FATAL | Baseline run not found or unreadable.                               |
+| `baseline_incompatible`     | NON-FATAL | Required artifacts missing or contract versions are not comparable. |
+| `regression_compare_failed` | NON-FATAL | Unexpected runtime error computing regression deltas.               |
+
+Deterministic selection (normative):
+
+1. If the baseline reference cannot be resolved or the baseline run is unreadable, the substage
+   outcome MUST be recorded as `status="failed"` with `reason_code="baseline_missing"`.
+1. Otherwise, if required baseline or candidate artifacts are missing, or if contract/schema
+   versions are not comparable, the substage outcome MUST be recorded as `status="failed"` with
+   `reason_code="baseline_incompatible"`.
+1. Otherwise, if regression comparison fails due to an unexpected runtime error, the substage
+   outcome MUST be recorded as `status="failed"` with `reason_code="regression_compare_failed"`.
+1. Otherwise, the substage outcome MUST be recorded as `status="success"` (and MUST omit
+   `reason_code`).
 
 ### Signing stage (`signing`)
 

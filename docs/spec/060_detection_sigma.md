@@ -138,6 +138,17 @@ reporting and contribute to gap classification.
 See [ADR-0005](ADR-0005-stage-outcomes-and-failure-classification.md) for stage-level failure
 semantics.
 
+#### Gap category mapping for non-executable rules (normative):
+
+When a rule is marked non-executable, the detection/scoring pipeline MUST classify downstream gaps
+using the scoring taxonomy. The minimum required mapping is:
+
+| Reason code group                                                                             | Gap category         |
+| --------------------------------------------------------------------------------------------- | -------------------- |
+| `unrouted_logsource`, `unmapped_field`, `raw_fallback_disabled`, `ambiguous_field_alias`      | `bridge_gap_mapping` |
+| `unsupported_modifier`, `unsupported_operator`, `unsupported_regex`, `unsupported_value_type` | `bridge_gap_feature` |
+| `backend_compile_error`, `backend_eval_error`                                                 | `bridge_gap_other`   |
+
 ### Fail-closed behavior
 
 If a rule cannot be routed (unknown `logsource`) or references unmapped fields, it MUST be reported
@@ -156,11 +167,34 @@ Each detection instance includes:
 - `technique_ids` when available
 - Recommended: `extensions.bridge` metadata (mapping pack id/version, backend, fallback usage)
 
+Regression comparable detection metric inputs (normative):
+
+- Detection-stage comparable surfaces for regression analysis MUST be derived from deterministic run
+  bundle artifacts and MUST NOT depend on host-specific paths or non-deterministic iteration order.
+- For v0.1, the comparable detection metric inputs are:
+  - Bridge compilation and routing health derived from `bridge/coverage.json`, including
+    non-executable reason distributions (used by the reporting "Sigma-to-OCSF bridge health"
+    section).
+  - Detection instances from `detections/detections.jsonl` (used for coverage and attribution joins,
+    and for auditability of "detections exist" vs "no detections produced").
+
+Regression comparability keys (normative):
+
+- For runs intended for regression comparison, the run manifest MUST record pinned versions for
+  enabled pack-like artifacts:
+  - `manifest.versions.rule_set_id` and `manifest.versions.rule_set_version` when Sigma evaluation
+    is enabled.
+  - `manifest.versions.mapping_pack_id` and `manifest.versions.mapping_pack_version` when the
+    Sigma-to-OCSF bridge is enabled.
+
 ### Deterministic emission
 
 **Summary**: The evaluator MUST write `detections/detections.jsonl` deterministically to support
 reproducible diffs and regression tests.
 
+- When Sigma evaluation is enabled, implementations MUST emit `detections/detections.jsonl` even
+  when there are zero matches (empty file). Consumers MUST treat a missing file as a contract
+  failure.
 - Each detection instance MUST sort `matched_event_ids` using bytewise UTF-8 lexical ordering
   (case-sensitive, no locale).
 - The file MUST be ordered deterministically by the following stable key tuple:
@@ -171,6 +205,18 @@ reproducible diffs and regression tests.
 - Each JSONL line MUST be encoded as UTF-8 and MUST end with a single LF (`\n`).
 - Implementations SHOULD serialize each object without insignificant whitespace and with a
   deterministic key ordering to maximize byte-level stability across runtimes.
+
+### Required conformance tests (regression comparability)
+
+CI MUST include fixtures that validate regression comparability and evidence satisfiability for
+detection-stage gaps:
+
+- Constant telemetry + normalization inputs, but `mapping_pack_version` changes between baseline and
+  current:
+  - Expected: `bridge_gap_mapping` rates/counts increase while the measurement layer remains
+    `detection`.
+  - Evidence references MUST be satisfiable and include `bridge/coverage.json` and (when present)
+    `detections/detections.jsonl`.
 
 ## Joining detections to ground truth
 
@@ -246,12 +292,22 @@ Rule provenance enables:
 - Regression detection when rule content changes.
 - Filtering by rule maturity in downstream dashboards.
 
+Regression comparability requirements (normative):
+
+- For runs intended to be diffable, regression-tested, or trended:
+  - Detection outputs SHOULD include `extensions.sigma.rule_sha256` and
+    `extensions.sigma.rule_source_ref` so rule drift is explainable in reports.
+  - Detection outputs SHOULD include sufficient `extensions.bridge` provenance to explain
+    compilation differences (example: mapping pack version and fallback usage).
+- Consumers MUST treat runs as not comparable for regression deltas when required version pins for
+  the rule set or mapping pack are missing from `manifest.versions`.
+
 ## Gap classification
 
 When a ground truth action lacks a matching detection, the scoring stage classifies the gap using
 the normative taxonomy defined in [Scoring metrics](070_scoring_metrics.md).
 
-Detection-related gap categories:
+Detection-related gap categories:f
 
 | Category             | Description                                                   |
 | -------------------- | ------------------------------------------------------------- |
@@ -259,6 +315,16 @@ Detection-related gap categories:
 | `bridge_gap_feature` | Rule requires unsupported Sigma features (correlation, regex) |
 | `bridge_gap_other`   | Bridge failure not otherwise classified                       |
 | `rule_logic_gap`     | Fields present, rule executable, but rule did not fire        |
+
+Evidence pointer requirements (normative intent):
+
+- Detection-layer gap conclusions in reporting/scoring MUST be backed by deterministic evidence
+  references.
+- Minimum evidence refs for detection-layer gaps:
+  - MUST include `bridge/coverage.json`.
+  - SHOULD include `detections/detections.jsonl`.
+- When detection is enabled, this specification requires these artifacts to exist so evidence
+  references are always satisfiable.
 
 Gap classification enables prioritized remediation:
 

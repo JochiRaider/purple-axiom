@@ -562,6 +562,8 @@ run against the baseline.
 When regression analysis is performed, the report JSON MUST include `report/report.json.regression`
 as a structured object. This object is the authoritative machine-readable regression surface for CI
 and downstream tools.
+The authoritative regression surface is `report/report.json.regression`.
+Implementations MUST NOT emit `report/regression.json` or `report/regression_deltas.jsonl`.
 
 Required fields:
 

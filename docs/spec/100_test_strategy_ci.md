@@ -567,10 +567,10 @@ The baseline comparison fixture set MUST include at least:
     - Provide a pinned baseline run bundle and a current run executed with identical inputs (same
       scenario selection, same pins, same captured telemetry fixtures).
   - Expected:
-    - Regression delta outputs MUST be all-zero for the comparable metric surface.
+    - `report/report.json.regression.deltas[]` MUST be all-zero for the comparable metric surface.
     - Delta rows MUST be emitted in a deterministic ordering (as defined by reporting/scoring
       specifications).
-    - The harness SHOULD compute a stable hash over the regression delta JSON subsection
+    - The harness SHOULD compute a stable hash over the `report/report.json.regression` subtree
       (RECOMMENDED: RFC 8785 JCS hash) and assert it is identical across repeated runs with
       identical inputs.
 
@@ -580,7 +580,7 @@ The baseline comparison fixture set MUST include at least:
     - Provide a pinned baseline run bundle and a current run that introduces a controlled, declared
       change (for example, a mapping profile or ruleset change fixture).
   - Expected:
-    - At least one regression delta MUST be non-zero.
+    - At least one entry in `report/report.json.regression.deltas[]` MUST be non-zero.
     - Delta outputs MUST remain deterministic (stable rounding, stable ordering, stable
       identifiers).
 
@@ -594,7 +594,8 @@ The baseline comparison fixture set MUST include at least:
       - `status="failed"`
       - `fail_mode="warn_and_skip"`
       - `reason_code="baseline_missing"`
-    - Regression delta outputs MUST NOT be emitted as if comparison succeeded.
+    - Regression deltas MUST be absent or empty per the `report/report.json.regression` semantics.
+    - Stage outcome reason codes remain authoritative for `baseline_missing` handling.
 
 The measurement contract fixture set MUST include at least:
 
@@ -607,8 +608,9 @@ The measurement contract fixture set MUST include at least:
     - The machine-readable report (`report/report.json`) MUST include a gap entry for the condition.
     - Each gap entry MUST include:
       - `measurement_layer` (one of `telemetry | normalization | detection | scoring`), and
-      - at least one `evidence_ref.path` that is a deterministic relative path into the run bundle.
-    - For each `evidence_ref.path`, the referenced artifact MUST exist within the run bundle.
+      - at least one `evidence_refs[]` entry with `artifact_path` that is a deterministic relative
+        path into the run bundle.
+    - For each `evidence_refs[]` entry, the referenced artifact MUST exist within the run bundle.
 
 - `gap_taxonomy_tokens_match_scoring_spec`
 

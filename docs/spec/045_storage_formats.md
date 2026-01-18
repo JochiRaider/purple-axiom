@@ -70,20 +70,19 @@ Baseline reference (exactly one form is REQUIRED):
 If both forms are present, they MUST be consistent (the referenced baseline manifest hash must match
 the copied snapshot hash).
 
-Regression outputs (when produced) MUST use deterministic paths:
-
-- `runs/<run_id>/report/regression.json` (single JSON object)
-- `runs/<run_id>/report/regression_deltas.jsonl` (optional; large delta tables streamed as JSONL)
+Regression comparison results MUST be recorded only in
+`runs/<run_id>/report/report.json` under the `regression` object.
+Implementations MUST NOT produce standalone regression artifacts such as
+`report/regression.json` or `report/regression_deltas.jsonl`.
 
 Evidence references (normative):
 
-- Any artifact field that carries an evidence pointer (for example `evidence_refs[].path`) MUST use
+- Any artifact field that carries an evidence pointer (for example `evidence_refs[].artifact_path`) MUST use
   a run-relative path that follows the deterministic layout rules in this document.
 - Evidence paths MUST NOT be absolute paths and MUST NOT encode environment-specific prefixes.
 
-Verification hook (RECOMMENDED): CI SHOULD include a storage-format lint that fails if any
-contracted regression artifact uses a timestamped filename or deviates from the paths specified
-above.
+Verification hook (RECOMMENDED): CI SHOULD include a storage-format lint that fails if the
+regression surface deviates from `report/report.json.regression` or uses timestamped filenames.
 
 ### Tier 0: Ephemeral operational logs
 
@@ -217,7 +216,7 @@ Purpose:
 - `criteria/manifest.json`
 - `scoring/summary.json`
 - `normalized/mapping_coverage.json`
-- `report/regression.json` (optional; regression runs)
+- `report/report.json`
 
 Rationale:
 
@@ -231,7 +230,6 @@ Rationale:
 - `criteria/results.jsonl`
 - `detections/detections.jsonl`
 - `scoring/joins.jsonl` (if used early)
-- `report/regression_deltas.jsonl` (optional; regression runs)
 
 Rationale:
 

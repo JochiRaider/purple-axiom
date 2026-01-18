@@ -334,8 +334,8 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `detections/` (detections emitted by evaluators)
 - `scoring/` (joins and summary metrics)
 - `report/` (HTML and JSON report outputs)
-  - `report/regression.json` (optional; regression comparison summary)
-  - `report/regression_deltas.jsonl` (optional; regression delta tables)
+  - Regression results (when enabled) are embedded only in `report/report.json` under the
+    `regression` object (see `docs/spec/080_reporting.md` for the contract).
 - `logs/` (structured operability summaries and debug logs; not considered long-term storage)
   - `logs/health.json` (when enabled; see the [operability spec](110_operability.md))
   - `logs/telemetry_validation.json` (when telemetry validation is enabled)

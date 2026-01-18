@@ -225,11 +225,18 @@ Each executed action MUST include two identifiers:
 defined by RFC 8785 (JCS).
 
 - `engine` (`atomic` | `caldera` | `custom`)
+
 - `technique_id`
+
 - `engine_test_id` (Atomic test GUID / Caldera ability id / equivalent canonical id)
+
 - `parameters.resolved_inputs_sha256` (hash of resolved inputs; not the raw inputs)
+
 - `target_asset_id` (stable Purple Axiom logical asset id; see the
   [lab providers spec](015_lab_providers.md))
+
+- `parameters.resolved_inputs_sha256` MUST include the effective `plan.execution.principal_alias`
+  (explicit or default), in addition to merged requirements and merged input args.
 
 Action requirements and identity (normative):
 
@@ -379,6 +386,25 @@ See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for the plan execution m
     - `phase_outcome` (`success | failed | skipped`)
     - `started_at_utc`
     - `ended_at_utc`
+
+### Principal selection (non-secret) (normative)
+
+Scenarios MAY specify a human-meaningful principal selector:
+
+- `plan.execution.principal_alias` (string, optional)
+
+Requirements:
+
+- The value MUST be a non-secret alias token (examples: `user`, `admin`, `svc`).
+- The runner MUST map the alias to an actual execution principal via runner configuration. Scenarios
+  MUST NOT embed credentials or secret material.
+- The effective principal alias (explicit or default) MUST participate in action identity, because
+  execution context affects results.
+
+Evidence:
+
+- The runner records the typed principal identity context for the run in
+  `runs/<run_id>/runner/principal_context.json`.
 
 ## Seed schema: Scenario definition (v0.1)
 

@@ -112,6 +112,18 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
 See [ADR-0004: Deployment architecture and inter-component communication][adr-0004] for the
 normative deployment topology and inter-component communication contract.
 
+#### Run-scoped session state (normative)
+
+- All durable "discovered state" (environment facts, identity summaries, cache provenance) MUST be
+  written under `runs/<run_id>/`.
+  - Examples include `runs/<run_id>/runner/principal_context.json` and
+    `runs/<run_id>/logs/cache_provenance.json`.
+- Implementations MUST NOT rely on a global per-user session database (for example, home-directory
+  session stores) for correctness.
+- If any global cache exists, it MUST be treated as an optimization only.
+  - Any cache use that could affect run outputs MUST be recorded in the run bundle (see
+    `runs/<run_id>/logs/cache_provenance.json`).
+
 #### Publish gate (normative, v0.1)
 
 - Stages MUST write candidate outputs under `runs/<run_id>/.staging/<stage_id>/`.

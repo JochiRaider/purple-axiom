@@ -42,6 +42,15 @@ v0.1 policy (normative):
 
 ## Storage tiers
 
+### No timestamped contracted filenames (normative)
+
+- Contracted artifacts in Tier 1 and Tier 2 locations MUST have deterministic paths.
+  - See the data contracts specification for the canonical "deterministic artifact path" rule.
+- Timestamps belong inside artifact content, not in filenames.
+- If an implementation generates timestamped scratch outputs, it MUST place them under a
+  non-contracted, explicitly excluded directory, and MUST disclose the exclusion policy in
+  operability docs or configuration.
+
 ### Tier 0: Ephemeral operational logs
 
 Location:
@@ -116,7 +125,10 @@ Runner evidence notes:
   - `runner/actions/<action_id>/cleanup_verification.json`
 - Executor-level evidence for defensible debugging when orchestration logs are incomplete.
 
-Note: see [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
+Note (normative): The Tier 1 runner evidence paths listed above are contracted and MUST NOT be
+timestamp-variant. Timestamped scratch outputs MUST NOT be written by inventing new filenames for
+contracted artifacts. Note: see
+[Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
 
 Side-effect ledger encoding and hashing (normative):
 

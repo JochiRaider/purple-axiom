@@ -178,6 +178,14 @@
       "format": "yaml"
     },
     {
+      "contract_id": "report_schema",
+      "schema_path": "docs/contracts/report_schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Consolidated run report output (report/report.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
       "contract_id": "requirements_evaluation",
       "schema_path": "docs/contracts/requirements_evaluation.schema.json",
       "contract_version": "0.1.0",
@@ -245,6 +253,7 @@
     { "artifact_glob": "raw_parquet/netflow/manifest.json", "contract_id": "netflow_manifest", "validation_mode": "json_document" },
     { "artifact_glob": "raw_parquet/pcap/manifest.json", "contract_id": "pcap_manifest", "validation_mode": "json_document" },
     { "artifact_glob": "report/duckdb_conformance_report.json", "contract_id": "duckdb_conformance_report", "validation_mode": "json_document" },
+    { "artifact_glob": "report/report.json", "contract_id": "report_schema", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/cleanup_verification.json", "contract_id": "cleanup_verification", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/executor.json", "contract_id": "runner_executor_evidence", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/requirements_evaluation.json", "contract_id": "requirements_evaluation", "validation_mode": "json_document" },

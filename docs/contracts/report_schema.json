@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/report_schema.json",
+  "title": "Purple Axiom Run Report (report/report.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "generated_at_utc",
+    "status",
+    "status_reasons",
+    "executive_summary",
+    "plan",
+    "coverage",
+    "latency",
+    "fidelity",
+    "gaps",
+    "tier1_coverage",
+    "per_source",
+    "bridge_health",
+    "criteria_evaluation",
+    "cleanup_verification",
+    "event_volume",
+    "versions",
+    "regression",
+    "extensions"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract version for this report schema."
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Run identifier (RFC 4122 UUID)."
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the report was generated."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed"],
+      "description": "Overall run status."
+    },
+    "status_reasons": {
+      "type": "array",
+      "description": "Deterministic reason codes explaining non-success status or degradations.",
+      "items": { "$ref": "#/$defs/reason_code" }
+    },
+    "executive_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "scenario_version",
+        "techniques_executed",
+        "techniques_covered",
+        "coverage_pct",
+        "duration_seconds",
+        "target_count"
+      ],
+      "properties": {
+        "scenario_id": {
+          "$ref": "#/$defs/id_slug_v1",
+          "description": "Scenario identifier."
+        },
+        "scenario_version": {
+          "$ref": "#/$defs/semver",
+          "description": "Scenario version."
+        },
+        "techniques_executed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "techniques_covered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "target_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_version", "plan_type", "node_count", "group_count", "templates_executed"],
+      "properties": {
+        "model_version": {
+          "$ref": "#/$defs/semver",
+          "description": "Plan model version (SemVer)."
+        },
+        "plan_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Plan type identifier."
+        },
+        "node_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "group_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "templates_executed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Coverage metrics section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "latency": {
+      "type": "object",
+      "description": "Latency distribution section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "fidelity": {
+      "type": "object",
+      "description": "Detection fidelity section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "gaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by_category", "top_failures"],
+      "properties": {
+        "by_category": {
+          "type": "object",
+          "description": "Aggregate counts per gap category.",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "top_failures": {
+          "type": "array",
+          "description": "Top failures (limit and shape defined by 080_reporting.md).",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "tier1_coverage": {
+      "type": "object",
+      "description": "Tier 1 normalization coverage section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "per_source": {
+      "type": "array",
+      "description": "Per-source breakdown. Shape is defined by 080_reporting.md; left open for v0.1.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "bridge_health": {
+      "type": "object",
+      "description": "Sigma-to-OCSF bridge health section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "criteria_evaluation": {
+      "type": "object",
+      "description": "Criteria evaluation section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "cleanup_verification": {
+      "type": "object",
+      "description": "Cleanup verification section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "event_volume": {
+      "type": "object",
+      "description": "Event volume metrics section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "versions": {
+      "type": "object",
+      "description": "Version inventory section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "regression": {
+      "type": "object",
+      "description": "Regression section. Shape is defined by 080_reporting.md; left open for v0.1."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Extension point for forward-compatible additions and vendor-specific data.",
+      "additionalProperties": false,
+      "properties": {
+        "execution_context": { "$ref": "#/$defs/extensions_execution_context" }
+      },
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": {
+          "type": "object",
+          "description": "Extension namespace object (keys are namespace identifiers)."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Deterministic reason code (lowercase, digits, underscore)."
+    },
+    "id_slug_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])$",
+      "description": "id_slug_v1 identifier (lowercase, digits, hyphen; no double-hyphen)."
+    },
+    "semver": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "description": "SemVer 2.0.0 string (no leading 'v')."
+    },
+    "principal_kind": {
+      "type": "string",
+      "enum": [
+        "local_user",
+        "local_admin",
+        "domain_user",
+        "service_account",
+        "ssh_key",
+        "cloud_role_session",
+        "unknown"
+      ]
+    },
+    "principal_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_:\\-]{0,255}$",
+      "description": "Stable run-local principal identifier (opaque token; MUST NOT be a username)."
+    },
+    "extensions_execution_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_context", "cache_provenance"],
+      "properties": {
+        "principal_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifact_path",
+            "handling",
+            "counts_by_kind",
+            "unknown_kind_actions",
+            "principals"
+          ],
+          "properties": {
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Relative path to the principal context artifact in the run bundle."
+            },
+            "handling": {
+              "type": "string",
+              "enum": ["present", "withheld", "quarantined", "absent"],
+              "description": "Disclosure/handling state for principal context."
+            },
+            "counts_by_kind": {
+              "type": "object",
+              "description": "Counts of principals by kind.",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "unknown_kind_actions": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Count of actions attributed to an unknown principal kind."
+            },
+            "principals": {
+              "type": "array",
+              "description": "Redaction-safe principals table (sorted by principal_id ascending; ordering enforced by spec, not schema).",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["principal_id", "kind"],
+                "properties": {
+                  "principal_id": { "$ref": "#/$defs/principal_id" },
+                  "kind": { "$ref": "#/$defs/principal_kind" }
+                }
+              }
+            }
+          }
+        },
+        "cache_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["artifact_path", "present", "by_cache"],
+          "properties": {
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Relative path to the cache provenance artifact in the run bundle."
+            },
+            "present": {
+              "type": "boolean",
+              "description": "Whether cache provenance was produced for this run."
+            },
+            "by_cache": {
+              "type": "array",
+              "description": "Cache hit/miss summary grouped by (component, cache_name) (sorted by component, cache_name ascending; ordering enforced by spec, not schema).",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["component", "cache_name", "hits", "misses", "total"],
+                "properties": {
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "cache_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "hits": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "misses": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "bypassed": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "total": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

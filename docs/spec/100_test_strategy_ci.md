@@ -191,6 +191,59 @@ For each fixture, the runner requirements implementation MUST:
   `requirements_eval_jcs_sha256` over RFC 8785 JCS canonicalized JSON) and assert the hash is
   identical across repeated runs with identical inputs and probe snapshots.
 
+Principal context fixtures under `tests/fixtures/runner/principal_context/` validate deterministic
+principal capture and schema conformance for `runs/<run_id>/runner/principal_context.json`.
+
+The fixture set MUST include at least:
+
+- `single_principal_known`
+
+  - Assert `runs/<run_id>/runner/principal_context.json` exists and validates against
+    `docs/contracts/principal_context.schema.json`.
+  - Assert deterministic ordering:
+    - `principals[]` MUST be sorted lexicographically by `principal_id`.
+    - `action_principal_map[]` MUST be sorted lexicographically by `action_id`.
+  - Assert stable, deterministic counters:
+    - `runner_principal_context_total == 1`
+    - `runner_principal_context_known_total == 1`
+    - `runner_principal_context_unknown_total == 0`
+
+- `principal_unknown`
+
+  - Fixture setup MUST simulate probe-unavailable or probe-blocked behavior (for example: probe
+    disabled by configuration or blocked by environment constraints) while still producing
+    `principal_context.json`.
+  - Assert at least one principal is recorded with `kind = "unknown"` (and no secret-bearing
+    identity material).
+  - Assert deterministic ordering as above.
+  - Assert stable, deterministic counters:
+    - `runner_principal_context_total == 1`
+    - `runner_principal_context_known_total == 0`
+    - `runner_principal_context_unknown_total == 1`
+
+Cache provenance fixtures under `tests/fixtures/cache_provenance/` validate deterministic cache
+provenance recording for `runs/<run_id>/logs/cache_provenance.json` when caching is enabled.
+
+The fixture set MUST include at least:
+
+- `cache_hit_recorded`
+
+  - Assert `runs/<run_id>/logs/cache_provenance.json` exists and validates against
+    `docs/contracts/cache_provenance.schema.json`.
+  - Assert deterministic ordering: `entries[]` MUST be sorted lexicographically by
+    `(component, cache_name, key)`.
+  - Assert hit/miss status reflects a hit for the recorded entry.
+  - Assert stable, deterministic counters:
+    - `cache_provenance_hit_total == 1`
+    - `cache_provenance_miss_total == 0`
+
+- `cache_miss_recorded`
+
+  - Same assertions as `cache_hit_recorded`, but hit/miss status MUST reflect a miss.
+  - Assert stable, deterministic counters:
+    - `cache_provenance_hit_total == 0`
+    - `cache_provenance_miss_total == 1`
+
 State reconciliation fixtures under `tests/fixtures/runner/state_reconciliation/` validate
 deterministic environment drift reporting (distinct from baseline drift in evaluator and conformance
 harnesses).
@@ -199,6 +252,15 @@ Idempotence and lifecycle enforcement fixtures under `tests/fixtures/runner/life
 deterministic re-run safety behavior and lifecycle phase transition guards.
 
 The fixture set MUST include at least:
+
+- `dependency_mutation_blocked`
+
+  - Simulate an attempt by the runner (or an invoked action) to self-update or mutate runtime
+    dependencies during a run.
+  - Assert deterministic enforcement handling:
+    - The run MUST record a stable reason code for the block: `disallowed_runtime_self_update`.
+  - Assert counters:
+    - `runner_dependency_mutation_blocked_total == 1`
 
 - `unsafe_rerun_blocked_cleanup_suppressed`:
 
@@ -632,6 +694,22 @@ regress.
 ### Artifact validation
 
 Linting and validation for Sigma rules ensures syntactic and semantic correctness.
+
+Contract validation MUST also enforce deterministic artifact path rules for contracted directories.
+Fixtures MUST include a negative (fail-closed) case that introduces a prohibited timestamped
+filename in a contracted directory.
+
+The fixture set MUST include at least:
+
+- `artifact_path_timestamped_filename_blocked` (CI lint-style)
+  - Provide a minimal run bundle containing a file with a timestamped filename located inside a
+    contracted directory (for example, under `runs/<run_id>/runner/` or another contracted subtree).
+  - Assert contract validation fails closed and emits
+    `runs/<run_id>/logs/contract_validation_report.json`.
+  - Assert the contract validation report contains an error with:
+    - `artifact_relpath` matching the offending path
+    - `error_code = "timestamped_filename_disallowed"` (stable reason code for this class of
+      failure)
 
 Report generation sanity checks validate that reports render without errors.
 

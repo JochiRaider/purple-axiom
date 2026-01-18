@@ -68,6 +68,8 @@ The following artifacts MUST be present for a run to be considered reportable:
 | Path                                       | Source stage  | Purpose                                        |
 | ------------------------------------------ | ------------- | ---------------------------------------------- |
 | `runner/`                                  | runner        | Per-action transcripts and cleanup evidence    |
+| `runner/principal_context.json`            | runner        | Redaction-safe principal context summary       |
+| `logs/cache_provenance.json`               | orchestrator  | Cache hit/miss provenance (when enabled)       |
 | `plan/expanded_graph.json`                 | runner        | Compiled plan graph (v0.2+)                    |
 | `plan/expansion_manifest.json`             | runner        | Matrix expansion manifest (v0.2+)              |
 | `normalized/ocsf_events.*`                 | normalization | Full normalized event store (JSONL or Parquet) |
@@ -152,6 +154,53 @@ Required content:
 - Target asset summary (count by OS, roles)
 - Top-line coverage percentage
 - Status degradation reasons (if not `success`)
+
+### Execution context
+
+**Summary**: Safe-by-default execution context summary that supports “show your work” debugging
+without exposing sensitive raw details.
+
+Principal context summary:
+
+- Evidence reference: `runner/principal_context.json`.
+- The report MUST treat principal context as sensitive and MUST render only redaction-safe summary
+  fields (no raw usernames, SIDs, emails, access key IDs, or other secret-like identifiers).
+- The report MUST disclose principal context handling as one of:
+  - `present`
+  - `withheld`
+  - `quarantined`
+  - `absent` (not produced)
+- Count of principals by `kind` (from `principal_context.principals[]`).
+- Count of actions with `kind=unknown` attribution (from `principal_context.action_principal_map[]`,
+  counting rows whose referenced principal resolves to `kind=unknown`).
+- Principals table (stable ordering, required when `handling != absent`):
+  - Columns: `principal_id`, `kind`
+  - Sort rows by `principal_id` ascending (UTF-8 byte order, no locale).
+
+Cache provenance summary (when present):
+
+- Evidence reference: `logs/cache_provenance.json` (when produced).
+- Counts of cache results grouped by `(component, cache_name)`:
+  - `hits` (entries with `result=hit`)
+  - `misses` (entries with `result=miss`)
+  - `bypassed` (entries with `result=bypassed`, when present in the contract)
+- Cache summary table (stable ordering, required when the artifact is present):
+  - Columns: `component`, `cache_name`, `hits`, `misses`, `bypassed` (optional), `total`
+  - Sort rows by `(component, cache_name)` ascending (UTF-8 byte order, no locale).
+- The report MUST NOT disclose per-entry cache `key` values unless a future explicit debug-only
+  configuration gate allows it.
+
+Deterministic ordering (normative):
+
+- Principals MUST be sorted by `principal_id` as specified above.
+- If the report renders any per-entry cache provenance rows (debug-only), it MUST follow the cache
+  provenance contract ordering (entries sorted by `(component, cache_name, key)`).
+
+JSON equivalent (recommended):
+
+- The report JSON SHOULD mirror this section under
+  `report/report.json.extensions.execution_context`, including `principals[]` sorted by
+  `principal_id` and cache summaries sorted by `(component, cache_name)`.
 
 ### Action lifecycle outcomes
 
@@ -631,7 +680,22 @@ The `report/report.json` output MUST conform to the following structure:
   "event_volume": { },
   "versions": { },
   "regression": { },
-  "extensions": { }
+  "extensions": {
+    "execution_context": {
+      "principal_context": {
+        "artifact_path": "runner/principal_context.json",
+        "handling": "present | withheld | quarantined | absent",
+        "counts_by_kind": { },
+        "unknown_kind_actions": 0,
+        "principals": [ ]
+      },
+      "cache_provenance": {
+        "artifact_path": "logs/cache_provenance.json",
+        "present": false,
+        "by_cache": [ ]
+      }
+    }
+  }
 }
 ```
 

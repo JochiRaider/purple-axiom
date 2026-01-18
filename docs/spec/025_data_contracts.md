@@ -867,7 +867,7 @@ Purpose:
 - `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type or version,
   timestamps)
 - `runner/actions/<action_id>/resolved_inputs_redacted.json` (optional; redaction-safe resolved
-  inputs basis used for `parameters.resolved_inputs_sha256`)  
+  inputs basis used for `parameters.resolved_inputs_sha256`)
 - `runner/actions/<action_id>/requirements_evaluation.json` (effective requirements + per-check
   outcomes)
 - `runner/actions/<action_id>/side_effect_ledger.json` (append-only side-effect ledger; see below)

@@ -223,8 +223,8 @@ Required content:
   - evidence references (paths under `runner/actions/<action_id>/`), including requirements
     evaluation, resolved inputs evidence, and cleanup verification references when present
     - When `runner/actions/<action_id>/resolved_inputs_redacted.json` is present, the report MUST
-      treat it as sensitive and MUST NOT render resolved input values; the report SHOULD render
-      only the evidence reference (artifact path) and handling.
+      treat it as sensitive and MUST NOT render resolved input values; the report SHOULD render only
+      the evidence reference (artifact path) and handling.
     - The report SHOULD prefer rendering evidence links that are referenced by the ground truth
       lifecycle phase `evidence` pointers (when present), and otherwise fall back to the
       conventional runner paths.

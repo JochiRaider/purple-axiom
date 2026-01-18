@@ -143,8 +143,8 @@ Atomic runner determinism fixtures under `tests/fixtures/runner/atomic/` validat
 Atomic test to resolved inputs to `$ATOMICS_ROOT` canonicalization produces stable
 `resolved_inputs_sha256` and `action_key`.
 
-When a fixture includes `runner/actions/<action_id>/resolved_inputs_redacted.json`, tests MUST
-also validate that:
+When a fixture includes `runner/actions/<action_id>/resolved_inputs_redacted.json`, tests MUST also
+validate that:
 
 - the artifact validates against `resolved_inputs_redacted.schema.json`, and
 - `runner/actions/<action_id>/resolved_inputs_redacted.json.resolved_inputs_sha256` equals the

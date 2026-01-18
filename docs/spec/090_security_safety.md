@@ -217,8 +217,8 @@ increase sharing risk.
 
 Normative requirements:
 
-- The pipeline MUST apply the effective redaction policy to resolved inputs evidence contents
-  before writing the artifact to standard run bundle locations.
+- The pipeline MUST apply the effective redaction policy to resolved inputs evidence contents before
+  writing the artifact to standard run bundle locations.
 - The artifact MUST NOT contain plaintext secrets or credential material.
 - If the pipeline determines that resolved inputs evidence cannot be made redacted-safe
   deterministically, it MUST NOT store that content in standard long-term artifact locations.

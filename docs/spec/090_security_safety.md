@@ -205,10 +205,41 @@ Normative requirements:
 - When requirements evaluation content is quarantined or withheld, the run manifest and reports MUST
   disclose the affected artifact relative path and the applied handling (withheld or quarantined).
 
+### Principal context
+
+The per-run principal context artifact (`runner/principal_context.json`) is an evidence-tier
+artifact and MUST be treated as sensitive by default.
+
+Rationale: principal context may reveal environment identity details (example: account naming,
+domain membership, role session semantics) that are not necessary for most shared reports and may
+increase sharing risk.
+
+Normative requirements:
+
+- The pipeline MUST apply the effective redaction policy to principal context contents before
+  writing the artifact to standard run bundle locations.
+- Principal context MUST NOT contain secrets (credentials, tokens, private keys, session material).
+- Identity artifacts (including any identity probe summaries/fingerprints recorded in
+  `principal_context.json`) MUST be redaction-safe by construction:
+  - Implementations MUST store only a redaction-safe summary suitable for disclosure under the
+    effective redaction policy, and/or a hash-derived fingerprint computed from that summary.
+  - Implementations MUST NOT store raw secret-like material or raw session credentials. If a raw
+    identifier would increase sensitivity (example: usernames, SIDs, emails, access key IDs, role
+    session names), implementations SHOULD prefer hash-derived fingerprints or `kind=unknown`
+    attribution rather than emitting the raw identifier.
+- If the pipeline determines that principal context cannot be made redacted-safe deterministically,
+  it MUST NOT store that content in standard long-term artifact locations.
+  - Implementations MAY quarantine the unredacted content under the run's configured quarantine
+    directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by configuration.
+  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
+    placeholder at `runner/principal_context.json`.
+- When principal context content is quarantined or withheld, the run manifest and reports MUST
+  disclose the affected artifact relative path and the applied handling (withheld or quarantined).
+
 ### Side-effect ledger
 
 The per-action side-effect ledger (`runner/actions/<action_id>/side_effect_ledger.json`) is an
-evidence-tier artifact and MUST be treated as potentially sensitive.
+evidence-tier artifact and MUST be treated as sensitive by default.
 
 Normative requirements:
 
@@ -256,6 +287,24 @@ Guardrails (normative):
   - When reconciliation fails closed, the runner MUST still write a reconciliation report with
     `status=unknown` or `status=skipped` items, and MUST include a stable `reason_code` per item
     explaining the refusal.
+
+### Cache provenance
+
+The run-level cache provenance artifact (`logs/cache_provenance.json`) is expected to be safe by
+default, but it MUST be constrained to prevent accidental disclosure.
+
+Normative requirements:
+
+- Cache provenance MUST NOT contain secrets (credentials, tokens, private keys, session material).
+- Cache keys MUST be non-secret opaque identifiers. Implementations SHOULD use stable hashes for
+  keys rather than embedding raw inputs.
+- `entries[].notes`, when present, MUST be redaction-processed under the effective redaction policy
+  before writing to standard run bundle locations.
+  - If `security.redaction.enabled: false`, implementations MUST either omit `entries[].notes` or
+    replace them with a deterministic placeholder string rather than emitting unredacted identity-
+    or path-bearing notes.
+- Notes SHOULD avoid identity-bearing or environment-specific strings (example: tool paths,
+  usernames) unless strictly necessary for diagnosis. Prefer stable tokens over raw paths/usernames.
 
 ## Failure modes
 

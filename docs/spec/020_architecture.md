@@ -57,7 +57,8 @@ This document does NOT cover:
 - Storage formats and long-term retention rules (see
   [storage formats specification][storage-formats-spec])
 - Configuration surface area (see [configuration reference][config-ref])
-- Failure classification and reason codes (see [ADR-0005])
+- Failure classification and reason codes (see
+  [ADR-0005: Stage outcomes and failure classification][adr-0005])
 - Telemetry collection details (see [telemetry pipeline specification][telemetry-spec])
 
 ## Version scope
@@ -108,7 +109,8 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
 - The manifest (`runs/<run_id>/manifest.json`) MUST remain the authoritative index of what exists
   and which versions/config hashes were used.
 
-See [ADR-0004] for the normative deployment topology and inter-component communication contract.
+See [ADR-0004: Deployment architecture and inter-component communication][adr-0004] for the
+normative deployment topology and inter-component communication contract.
 
 #### Publish gate (normative, v0.1)
 
@@ -127,36 +129,37 @@ what exists in the bundle.
 
 Normative top-level entries (run-relative):
 
-| Path                          | Purpose                                                                     |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| `manifest.json`               | Authoritative run index and provenance pins                                 |
-| `ground_truth.jsonl`          | Append-only action timeline (what was attempted)                            |
-| `runner/`                     | Runner evidence (per-action subdirs, ledgers, verification, reconciliation) |
-| `runner/principal_context.json` | Run-level runner evidence (principal/execution context; when enabled)       |
-| `raw_parquet/`                | Raw telemetry datasets (Parquet)                                            |
-| `raw/`                        | Evidence-tier payloads and source-native blobs (when enabled)               |
-| `normalized/`                 | OCSF-normalized event store and mapping coverage                            |
-| `criteria/`                   | Criteria pack snapshot and evaluation results                               |
-| `bridge/`                     | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)    |
-| `detections/`                 | Detection output artifacts                                                  |
-| `scoring/`                    | Scoring summaries and metrics                                               |
-| `report/`                     | Human and machine-readable reports                                          |
-| `logs/`                       | Operability logs (including `health.json`); not long-term storage           |
-| `logs/contract_validation/`   | Contract validation reports by stage (emitted on validation failure)        |
-| `logs/cache_provenance.json`  | Cache provenance and determinism logs (when caching is enabled)             |
-| `security/`                   | Integrity artifacts when signing is enabled                                 |
-| `unredacted/`                 | Quarantined sensitive artifacts (when enabled); excluded from default disclosure |
-| `plan/`                       | [v0.2+] Plan expansion and execution artifacts                              |
+| Path                            | Purpose                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| `manifest.json`                 | Authoritative run index and provenance pins                                      |
+| `ground_truth.jsonl`            | Append-only action timeline (what was attempted)                                 |
+| `runner/`                       | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)      |
+| `runner/principal_context.json` | Run-level runner evidence (principal/execution context; when enabled)            |
+| `raw_parquet/`                  | Raw telemetry datasets (Parquet)                                                 |
+| `raw/`                          | Evidence-tier payloads and source-native blobs (when enabled)                    |
+| `normalized/`                   | OCSF-normalized event store and mapping coverage                                 |
+| `criteria/`                     | Criteria pack snapshot and evaluation results                                    |
+| `bridge/`                       | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)         |
+| `detections/`                   | Detection output artifacts                                                       |
+| `scoring/`                      | Scoring summaries and metrics                                                    |
+| `report/`                       | Human and machine-readable reports                                               |
+| `logs/`                         | Operability logs (including `health.json`); not long-term storage                |
+| `logs/contract_validation/`     | Contract validation reports by stage (emitted on validation failure)             |
+| `logs/cache_provenance.json`    | Cache provenance and determinism logs (when caching is enabled)                  |
+| `security/`                     | Integrity artifacts when signing is enabled                                      |
+| `unredacted/`                   | Quarantined sensitive artifacts (when enabled); excluded from default disclosure |
+| `plan/`                         | [v0.2+] Plan expansion and execution artifacts                                   |
 
 Common per-action evidence location (run-relative):
 
 - `runner/actions/<action_id>/...` (contracted per-action evidence; for example: `stdout.txt`,
   `stderr.txt`, `executor.json`, and additional artifacts such as `cleanup_verification.json`,
-  `requirements_evaluation.json`, `side_effect_ledger.json`, `state_reconciliation_report.json`)
+  `requirements_evaluation.json`, `side_effect_ledger.json`, `state_reconciliation_report.json`).
 
-See [ADR-0004] for filesystem publish semantics, the [data contracts specification][data-contracts]
-for contracted artifact paths and schemas, and the
-[storage formats specification][storage-formats-spec] for Parquet and evidence-tier layout rules.
+See [ADR-0004: Deployment architecture and inter-component communication][adr-0004] for filesystem
+publish semantics, the [data contracts specification][data-contracts] for contracted artifact paths
+and schemas, and the [storage formats specification][storage-formats-spec] for Parquet and
+evidence-tier layout rules.
 
 ## Stage identifiers
 
@@ -180,14 +183,16 @@ Substages MAY be expressed as dotted identifiers (for example, `lab_provider.con
 `runner.lifecycle_enforcement`, `runner.state_reconciliation`). Substages are additive and MUST NOT
 change the semantics of the parent stage outcome.
 
-See [ADR-0005] for stage outcome definitions and failure classification.
+See [ADR-0005: Stage outcomes and failure classification][adr-0005] for stage outcome definitions
+and failure classification.
 
 ## Stage execution order
 
 **Summary**: v0.1 stage execution order is deterministic and recorded in `logs/health.json` per
-[ADR-0005].
+[ADR-0005: Stage outcomes and failure classification][adr-0005].
 
-Preamble (normative, per [ADR-0004]):
+Preamble (normative, per
+[ADR-0004: Deployment architecture and inter-component communication][adr-0004]):
 
 - The orchestrator MUST acquire the run lock before writing stage outputs.
 - The orchestrator MUST create `runs/<run_id>/` and write an initial `manifest.json` skeleton before
@@ -226,31 +231,33 @@ defines the minimum IO contract for v0.1.
 > **Note**: This table defines the **minimum** contract. Implementations MAY produce additional
 > artifacts, but MUST produce at least these outputs for the stage to be considered successful.
 
-> **Note**: All stages contribute to `logs/health.json` per [ADR-0005]. Stage outcomes are recorded
-> in health files regardless of success or failure.
+> **Note**: All stages contribute to `logs/health.json` per
+> [ADR-0005: Stage outcomes and failure classification][adr-0005]. Stage outcomes are recorded in
+> health files regardless of success or failure.
 
-See [ADR-0004] for detailed publish semantics and filesystem coordination rules.
+See [ADR-0004: Deployment architecture and inter-component communication][adr-0004] for detailed
+publish semantics and filesystem coordination rules.
 
 ## Components
 
-### `lab_provider` (inventory resolution)
+### Lab provider (inventory resolution)
 
-**Summary**: Resolves a concrete list of target assets and connection metadata, producing a
-deterministic snapshot for the run.
+**Summary**: The `lab_provider` stage resolves a concrete list of target assets and connection
+metadata, producing a deterministic snapshot for the run.
 
 Responsibilities:
 
-- Resolve target assets from an external source (manual config, Ludus export, Terraform output)
-- Validate connectivity to resolved assets (substage: `lab_provider.connectivity`)
-- Produce a run-scoped inventory snapshot recorded in the run bundle
-- Ensure the snapshot is hashable and diffable for determinism
+- Resolve target assets from an external source (manual config, Ludus export, Terraform output).
+- Validate connectivity to resolved assets (substage: `lab_provider.connectivity`).
+- Produce a run-scoped inventory snapshot recorded in the run bundle.
+- Ensure the snapshot is hashable and diffable for determinism.
 
 Implementations:
 
-- `manual`: Inline `lab.assets` in run configuration
-- `ludus`: Parse Ludus-generated inventory export (input format: `ludus_json`)
+- `manual`: Inline `lab.assets` in run configuration.
+- `ludus`: Parse Ludus-generated inventory export (input format: `ludus_json`).
 - `terraform`: Parse Terraform output (input format: `terraform_output`) or generic JSON inventory
-  (input format: `json`)
+  (input format: `json`).
 
 The inventory snapshot is treated as an input for determinism; the manifest records
 `lab.inventory_snapshot_sha256`.
@@ -258,34 +265,34 @@ The inventory snapshot is treated as an input for determinism; the manifest reco
 See the [lab providers specification][lab-providers-spec] for input format details and adapter
 requirements.
 
-### runner (scenario execution)
+### Runner (scenario execution)
 
-**Summary**: Executes test plans and emits an append-only ground truth timeline with evidence
-artifacts.
+**Summary**: The `runner` stage executes test plans and emits an append-only ground truth timeline
+with evidence artifacts.
 
 Responsibilities:
 
 - Execute scenario actions per the test plan (Atomic Red Team for v0.1; additional runners are
-  future candidates)
+  future candidates).
 - Execute actions through a staged lifecycle: **prepare → execute → revert → teardown**
   - `prepare`: When requirements evaluation is enabled/performed, evaluate declared
     requirements/prerequisites; emit `runner/actions/<action_id>/requirements_evaluation.json`; and
-    enforce per configured policy
-  - `execute`: Invoke the primary command (detonation)
-  - `revert`: Invoke cleanup commands
-  - `teardown`: Verify cleanup post-conditions
+    enforce per configured policy.
+  - `execute`: Invoke the primary command (detonation).
+  - `revert`: Invoke cleanup commands.
+  - `teardown`: Verify cleanup post-conditions.
 - Requirements evaluation summary fields (when present) MUST be copied into the corresponding ground
   truth action record for deterministic downstream joins.
 - When plan execution is enabled (v0.2+), compile multi-action plans to a deterministic plan graph
   (expanded nodes + edges), write `plan/expanded_graph.json`, and assign deterministic action
-  instance ids (`action_id`)
-- Emit `ground_truth.jsonl`: what ran, when, where, with what resolved inputs
+  instance ids (`action_id`).
+- Emit `ground_truth.jsonl`: what ran, when, where, with what resolved inputs.
 - When enabled, emit a per-action synthetic correlation marker event and ensure it propagates
-  through telemetry, normalization, and reporting
-- Record resolved target identifiers (`asset_id` + resolved host identity)
+  through telemetry, normalization, and reporting.
+- Record resolved target identifiers (`asset_id` + resolved host identity).
 - Capture executor transcripts (stdout/stderr) and execution metadata (exit codes, durations,
   executor identity) under `runner/actions/<action_id>/` (for example: `stdout.txt`, `stderr.txt`,
-  `executor.json`)
+  `executor.json`).
 - When state reconciliation is enabled, the runner MUST consume `side_effect_ledger.json` (and
   `cleanup_verification.json` when present), emit
   `runner/actions/<action_id>/state_reconciliation_report.json`, and record substage outcome under
@@ -299,7 +306,6 @@ Responsibilities:
   also record additional lifecycle-phase side effects in the ledger when needed for recovery and
   reconciliation correctness.
 
-
 Ground truth records MUST include deterministic `action_key` values that remain stable across
 replays. In v0.2+ (multi-action plans), ground truth records MUST also include deterministic
 `action_id` values for action instances. See the [scenarios specification][scenarios-spec] for
@@ -310,62 +316,64 @@ Evidence artifacts are stored under `runner/actions/<action_id>/` (for example: 
 `stderr.txt`, `executor.json`, and additional artifacts such as `cleanup_verification.json`,
 `requirements_evaluation.json`, `side_effect_ledger.json`, `state_reconciliation_report.json`).
 
-### telemetry (collection and validation)
+### Telemetry (collection and validation)
 
-**Summary**: Captures raw events via OpenTelemetry Collectors and validates collection invariants.
-Collectors run concurrently during scenario execution; the `telemetry` stage boundary is the
-post-run harvest/validation/serialization step that materializes `raw_parquet/**` for downstream
-normalization.
+**Summary**: The `telemetry` stage captures raw events via OpenTelemetry Collectors and validates
+collection invariants. Collectors run concurrently during scenario execution; the `telemetry` stage
+boundary is the post-run harvest/validation/serialization step that materializes `raw_parquet/**`
+for downstream normalization.
 
 Responsibilities:
 
-- Ensure raw Windows Event Log events are captured in raw/unrendered mode (`raw: true`)
-- Support Sysmon event collection (via Windows Event Log receiver)
-- Support optional osquery results ingestion (event format NDJSON via `filelog` receiver)
-- Support Linux auditd log ingestion
-- Support Unix syslog ingestion
-- Execute runtime canaries (substage: `telemetry.windows_eventlog.raw_mode`)
-- Validate checkpointing and dedupe behavior (substage: `telemetry.checkpointing.storage_integrity`)
-- Validate resource budgets (substage: `telemetry.resource_budgets`)
-- Produce `raw_parquet/**` for downstream normalization
+- Ensure raw Windows Event Log events are captured in raw/unrendered mode (`raw: true`).
+- Support Sysmon event collection (via Windows Event Log receiver).
+- Support optional osquery results ingestion (event format NDJSON via `filelog` receiver).
+- Support Linux auditd log ingestion.
+- Support Unix syslog ingestion.
+- Execute runtime canaries (substage: `telemetry.windows_eventlog.raw_mode`).
+- Validate checkpointing and dedupe behavior (substage:
+  `telemetry.checkpointing.storage_integrity`).
+- Validate resource budgets (substage: `telemetry.resource_budgets`).
+- Produce `raw_parquet/**` for downstream normalization.
 
 See the [telemetry pipeline specification][telemetry-spec] for collection invariants, Windows Event
 Log requirements, and the [osquery integration specification][osquery-spec] for osquery-specific
 details.
 
-### `normalization` (OCSF mapping)
+### Normalization (OCSF mapping)
 
-**Summary**: Maps raw telemetry to OCSF categories/classes and attaches provenance fields.
+**Summary**: The `normalization` stage maps raw telemetry to OCSF categories/classes and attaches
+provenance fields.
 
 Responsibilities:
 
-- Map raw events to OCSF 1.7.0 envelopes per the configured mapping profile
+- Map raw events to OCSF 1.7.0 envelopes per the configured mapping profile.
 - Preserve the synthetic correlation marker envelope extension field, including for unmapped/raw
-  routing
+  routing.
 - Attach provenance fields: `metadata.source_type`, host identity, tool version, `scenario_id`,
-  `run_id`
-- Compute deterministic `metadata.event_id` / `metadata.uid` per [ADR-0002]
-- Emit `normalized/**` as the canonical OCSF event store
-- Emit `normalized/mapping_coverage.json` summarizing field coverage and unmapped events
-- Emit `normalized/mapping_profile_snapshot.json` capturing the effective mapping profile
+  `run_id`.
+- Compute deterministic `metadata.event_id` / `metadata.uid` per [ADR-0002].
+- Emit `normalized/**` as the canonical OCSF event store.
+- Emit `normalized/mapping_coverage.json` summarizing field coverage and unmapped events.
+- Emit `normalized/mapping_profile_snapshot.json` capturing the effective mapping profile.
 
 See the [OCSF normalization specification][ocsf-spec] for mapping rules and the
 [field tiers specification][field-tiers] for coverage requirements.
 
-### `validation` (criteria evaluation)
+### Validation (criteria evaluation)
 
-**Summary**: Evaluates versioned criteria packs against the normalized OCSF store. Cleanup
-verification is produced by the runner (teardown) and consumed for scoring/reporting.
+**Summary**: The `validation` stage evaluates versioned criteria packs against the normalized OCSF
+store. Cleanup verification is produced by the runner (teardown) and consumed for scoring/reporting.
 
 Responsibilities:
 
-- Load criteria pack snapshot pinned in the run manifest
-- For each ground truth action, match the appropriate criteria entry
-- Evaluate expected signals within configured time windows
-- Emit `criteria/manifest.json` (pack manifest snapshot)
-- Emit `criteria/criteria.jsonl` (criteria entries used)
-- Emit `criteria/results.jsonl` (evaluation results per action)
-- Consume cleanup verification outcomes produced by the runner (teardown) for scoring/reporting
+- Load criteria pack snapshot pinned in the run manifest.
+- For each ground truth action, match the appropriate criteria entry.
+- Evaluate expected signals within configured time windows.
+- Emit `criteria/manifest.json` (pack manifest snapshot).
+- Emit `criteria/criteria.jsonl` (criteria entries used).
+- Emit `criteria/results.jsonl` (evaluation results per action).
+- Consume cleanup verification outcomes produced by the runner (teardown) for scoring/reporting.
 
 Criteria packs are externalized and versioned independently of the pipeline. The manifest records
 `criteria.pack_sha256`.
@@ -373,10 +381,10 @@ Criteria packs are externalized and versioned independently of the pipeline. The
 See the [validation criteria specification][criteria-spec] for pack structure, matching semantics,
 and cleanup verification.
 
-### `detection` (Sigma evaluation)
+### Detection (Sigma evaluation)
 
-**Summary**: Compiles and evaluates Sigma rules against normalized OCSF events via the Sigma-to-OCSF
-bridge.
+**Summary**: The `detection` stage compiles and evaluates Sigma rules against normalized OCSF events
+via the Sigma-to-OCSF bridge.
 
 The detection stage has two sub-components:
 
@@ -386,17 +394,18 @@ A contract-driven compatibility layer that routes Sigma rules to OCSF event clas
 
 Artifacts produced:
 
-- `bridge/router_table.json`: Logsource → OCSF class routing table
-- `bridge/mapping_pack_snapshot.json`: Full bridge inputs (router + field aliases + fallback policy)
-- `bridge/compiled_plans/<rule_id>.plan.json`: Per-rule compilation output
-- `bridge/coverage.json`: Bridge success/failure summary
+- `bridge/router_table.json`: Logsource → OCSF class routing table.
+- `bridge/mapping_pack_snapshot.json`: Full bridge inputs (router + field aliases + fallback
+  policy).
+- `bridge/compiled_plans/<rule_id>.plan.json`: Per-rule compilation output.
+- `bridge/coverage.json`: Bridge success/failure summary.
 
 Bridge components:
 
 - **Logsource router**: Maps `sigma.logsource` → OCSF `class_uid` filter (+ optional producer/source
-  predicates via `filters[]`)
-- **Field alias map**: Maps Sigma field names → OCSF JSONPaths (or backend-specific expressions)
-- **Backend adapters**: Compile to batch plan (SQL over Parquet) or stream plan
+  predicates via `filters[]`).
+- **Field alias map**: Maps Sigma field names → OCSF JSONPaths (or backend-specific expressions).
+- **Backend adapters**: Compile to batch plan (SQL over Parquet) or stream plan.
 
 See the [Sigma-to-OCSF bridge specification][bridge-spec] for routing rules and field alias
 semantics.
@@ -407,10 +416,10 @@ Evaluates compiled Sigma rules against the normalized OCSF event store.
 
 Responsibilities:
 
-- Load Sigma rules and evaluate via the bridge
-- Produce `detections/detections.jsonl` (one line per detection instance)
-- Report non-executable rules with reasons (fail-closed behavior)
-- Compute technique coverage and detection latency
+- Load Sigma rules and evaluate via the bridge.
+- Produce `detections/detections.jsonl` (one line per detection instance).
+- Report non-executable rules with reasons (fail-closed behavior).
+- Compute technique coverage and detection latency.
 
 **Fail-closed behavior**: If the bridge cannot route a rule (unknown `logsource`) or map a
 referenced field, the rule is reported as **non-executable** for that run. Non-executable rules do
@@ -418,49 +427,51 @@ not produce detection instances but are included in coverage reporting.
 
 See the [Sigma detection specification][sigma-spec] for evaluation model and output schema.
 
-### `scoring` (metrics computation)
+### Scoring (metrics computation)
 
-**Summary**: Joins ground truth, validation results, and detections to produce coverage and latency
-metrics.
+**Summary**: The `scoring` stage joins ground truth, validation results, and detections to produce
+coverage and latency metrics.
 
 Responsibilities:
 
-- Join `ground_truth.jsonl` with `criteria/**` and `detections/**`
-- Compute technique coverage, detection latency, and gap metrics
+- Join `ground_truth.jsonl` with `criteria/**` and `detections/**`.
+- Compute technique coverage, detection latency, and gap metrics.
 - Classify gaps using the normative taxonomy (missing_telemetry, normalization_gap,
-  bridge_gap_mapping, bridge_gap_feature, rule_logic_gap, etc.)
-- Apply threshold gates when configured
-- Emit `scoring/summary.json` as the machine-readable scoring output
+  bridge_gap_mapping, bridge_gap_feature, rule_logic_gap, etc.).
+- Apply threshold gates when configured.
+- Emit `scoring/summary.json` as the machine-readable scoring output.
 
 The scoring summary is the primary input for the reporting stage and for CI threshold gates.
 
 See the [scoring metrics specification][scoring-spec] for gap taxonomy and metric definitions.
 
-### `reporting` (output generation)
+### Reporting (output generation)
 
-**Summary**: Generates human-readable and machine-readable report outputs from scoring data.
+**Summary**: The `reporting` stage generates human-readable and machine-readable report outputs from
+scoring data.
 
 Responsibilities:
 
-- Render HTML scorecard from `scoring/summary.json`
-- Emit JSON report artifacts for external tooling
-- Include run manifest summary and artifact index
-- Support diffing and trending across runs
+- Render HTML scorecard from `scoring/summary.json`.
+- Emit JSON report artifacts for external tooling.
+- Include run manifest summary and artifact index.
+- Support diffing and trending across runs.
 
 Outputs are stored under `report/**`.
 
 See the [reporting specification][reporting-spec] for output format requirements and trending keys.
 
-### `signing` (integrity verification, optional)
+### Signing (integrity verification, optional)
 
-**Summary**: When enabled, signs the finalized run bundle for integrity verification.
+**Summary**: The `signing` stage signs the finalized run bundle for integrity verification when
+enabled.
 
 Responsibilities:
 
-- Compute SHA-256 checksums for all long-term artifacts
-- Sign `security/checksums.txt` using Ed25519
-- Emit `security/signature.ed25519` and `security/public_key.ed25519`
-- Record `key_id` in manifest for downstream trust policies
+- Compute SHA-256 checksums for all long-term artifacts.
+- Sign `security/checksums.txt` using Ed25519.
+- Emit `security/signature.ed25519` and `security/public_key.ed25519`.
+- Record `key_id` in manifest for downstream trust policies.
 
 Signing MUST be the final stage after all other artifacts are materialized. The `signing` stage is
 optional and controlled by `security.signing.enabled`.
@@ -489,12 +500,13 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 ## Key decisions
 
 1. **Single-host, local-first execution**: v0.1 runs on a single host with no distributed control
-   plane. See [ADR-0004].
+   plane. See [ADR-0004: Deployment architecture and inter-component communication][adr-0004].
 1. **File-based stage coordination**: Stages communicate via filesystem artifacts, not RPC. The run
    bundle is the single source of truth.
 1. **One-shot orchestrator**: The pipeline runs as a single invocation per run. No daemon required.
 1. **Deterministic stage outcomes**: Every stage produces a deterministic outcome (success, failed,
-   skipped) with stable reason codes. See [ADR-0005].
+   skipped) with stable reason codes. See
+   [ADR-0005: Stage outcomes and failure classification][adr-0005].
 1. **Fail-closed detection**: If the bridge cannot route or map a Sigma rule, the rule is
    non-executable (not silently skipped).
 1. **Inventory snapshotting**: Lab providers resolve inventory into a run-scoped snapshot for

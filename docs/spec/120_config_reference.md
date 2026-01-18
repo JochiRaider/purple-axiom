@@ -94,7 +94,12 @@ Common keys:
 - `identity` (optional)
 
   - `emit_principal_context` (default: `true`)
-    - When `true`, the runner SHOULD emit `runner/principal_context.json` (schema-backed).
+    - When `true`, the runner MUST emit `runner/principal_context.json` (schema-backed) exactly once
+      per run.
+      - `principal_context.json` MUST include `principals[]` and `action_principal_map[]`.
+      - `action_principal_map[]` MUST include a mapping for every action recorded in
+        `ground_truth.jsonl` (including actions mapped to `kind=unknown` with explicit
+        `assertion_source`).
     - When `false`, the runner MUST NOT emit the artifact and MUST NOT populate
       `extensions.principal_id` in ground truth.
   - `probe_enabled` (default: `false`)
@@ -106,17 +111,22 @@ Common keys:
       - Probes MUST be local-only by default (no network, no domain queries) unless explicitly
         enabled by a future config gate.
       - Implementations MUST bound probes (timeouts/attempt limits) and MUST record probe-attempt
-        status deterministically in runner evidence.    
+        status deterministically in runner evidence.
+      - Probes MUST NOT capture or store secrets (credentials, tokens, private keys, session
+        material).
   - `probe_detail` (default: `summary`; enum: `summary | none`)
     - `summary`: populate the `principal_context.json` with `principals[]` +
       `action_principal_map[]` and MAY include `redacted_fingerprint` (hash-only / safe).
     - `none`: emit only the minimal typed mapping without fingerprints (still stable IDs and kinds).
+      The runner MUST still record probe-attempt status deterministically in runner evidence.
   - `cache_policy` (default: `per_run_only`; enum: `disabled | per_run_only | cross_run_allowed`)
     - Mirrors the cache provenance policy enum already defined for `cache_provenance.json`.
 
 - `dependencies` (optional)
 
   - `allow_runtime_self_update` (default: `false`)
+    - v0.1: MUST be `false`. Setting to `true` MUST be rejected by config validation (fail closed
+      with `reason_code=config_schema_invalid`).
     - When `false`, any runner-managed self-update attempt MUST be blocked deterministically.
       - “Self-update” here should be defined narrowly as runner-managed dependency mutation (for
         example: updating the runner’s executor tooling, updating pinned modules the runner relies
@@ -143,6 +153,16 @@ Common keys:
     - `atomic_operator`: execute Atomics via a cross-platform runner (Python), suitable for
       Linux/macOS targets
   - `timeout_seconds` (optional, default: 300): per-test execution timeout
+  - `prereqs` (optional)
+    - `mode` (optional, default: `check_only`): `check_only | check_then_get | get_only`
+      - `check_only`: the runner MUST NOT execute Atomic `get_prereq_command`.
+      - `check_then_get`: the runner MAY execute `get_prereq_command` only when prerequisite checks
+        fail. Any prerequisite get/install MUST be recorded as a side effect
+        (`effect_type=prereq_install`) attributable to `prepare` (see
+        `032_atomic_red_team_executor_integration.md`).
+      - `get_only`: the runner MAY execute `get_prereq_command` unconditionally. Any prerequisite
+        get/install MUST be recorded as a side effect (`effect_type=prereq_install`) attributable to
+        `prepare` (see `032_atomic_red_team_executor_integration.md`).
   - `capture_transcripts` (optional, default: true): persist per-test stdout/stderr under `runner/`
     evidence
   - `capture_executor_metadata` (optional, default: true): persist per-test executor.json (exit
@@ -203,6 +223,7 @@ Common keys:
   - `env` (optional): key/value map (values should be refs when sensitive)
 
 - If `runner.identity.cache_policy=cross_run_allowed`, config validation MUST fail closed unless:
+
   - `cache.cross_run_allowed=true`, and
   - `cache.emit_cache_provenance=true`.
 
@@ -254,7 +275,7 @@ Normative requirements:
 - Any cross-run cache usage MUST be recorded in `logs/cache_provenance.json` with stable ordering
   `(component, cache_name, key)` and the policy enum values already defined.
 - If `cross_run_allowed=true`, then `emit_cache_provenance` MUST be `true`. Otherwise, config
-  validation MUST fail closed.  
+  validation MUST fail closed.
 - If cross-run cache usage is detected at runtime while `cross_run_allowed=false`, the pipeline MUST
   fail closed.
 
@@ -788,6 +809,8 @@ runner:
   atomic:
     executor: invoke_atomic_red_team
     timeout_seconds: 300
+    prereqs:
+      mode: check_only    
     capture_transcripts: true
     synthetic_correlation_marker:
       enabled: false

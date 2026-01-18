@@ -1640,6 +1640,6 @@ CI gates should fail closed on contract violations.
 
 ## Changelog
 
-| Date | Change                                       |
-| ---- | -------------------------------------------- |
-| TBD  | Style guide migration (no technical changes) |
+| Date      | Change                                       |
+| --------- | -------------------------------------------- |
+| 1/17/2026 | Style guide migration (no technical changes) |

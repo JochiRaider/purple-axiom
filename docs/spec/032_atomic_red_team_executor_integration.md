@@ -146,6 +146,14 @@ identity-bearing materials.
 
 ## Contracted runner artifacts
 
+Run-level runner evidence is stored under:
+
+- `runs/<run_id>/runner/`
+
+The runner MUST write the following run-level artifacts:
+
+- `principal_context.json` (required; typed principal identity context for the run)
+
 Per-action evidence is stored under:
 
 Action id semantics (normative):
@@ -219,6 +227,10 @@ Minimum viable population for v0.1:
   is enabled, the runner MUST follow the requirements in
   [Synthetic correlation marker emission](#synthetic-correlation-marker-emission-optional-when-enabled),
   including appending an `execute`-phase ledger entry describing the emission attempt.
+- Prerequisite fetch/install attempts: when prerequisites evaluation is enabled and the effective
+  prerequisites mode executes `get_prereq_command`, the runner MUST append `prepare`-phase ledger
+  entries for each `get_prereq_command` attempt as specified by
+  [Prerequisites policy](#prerequisites-policy).
 - Cleanup verification checks as expected reverted effects: when `cleanup_verification.json` is
   produced, the runner MUST append one `teardown`-phase ledger entry per cleanup verification result
   row.
@@ -662,6 +674,80 @@ If the runner emits an integrity hash for the canonical expanded command strings
 separate field name to avoid conflicting semantics (example: `extensions.command_post_merge_sha256`)
 and MUST document the basis object and redaction behavior.
 
+### Principal context and action attribution (normative)
+
+The runner MUST record the principal identity context used during the run as a schema-backed
+runner-evidence artifact:
+
+- Artifact: `runs/<run_id>/runner/principal_context.json`
+- Schema: `docs/contracts/principal_context.schema.json`
+
+When `runner.identity.emit_principal_context=true` (default), the runner MUST:
+
+- Emit `runner/principal_context.json` exactly once per run.
+- Populate `principals[]` in stable order.
+  - Stable ordering rule: sort by `principal_id` ascending.
+- Populate `action_principal_map[]` mapping each action to a `principal_id`.
+  - The map MUST include exactly one entry for each `action_id` present in this run's
+    `ground_truth.jsonl`, including actions that are skipped before `execute`.
+  - The map MUST NOT omit actions. When a principal cannot be asserted safely, the mapping MUST
+    reference a principal entry whose `kind=unknown`.
+  - Stable ordering rule: sort by `action_id` ascending.
+
+When `runner.identity.emit_principal_context=false`, the runner MUST NOT emit
+`runner/principal_context.json` and MUST NOT populate `extensions.principal_id` in action ground
+truth.
+
+The runner MUST NOT assume the principal is user-shaped. Implementations MUST support:
+
+- `kind=unknown` when the principal cannot be safely asserted, and
+- a non-empty `assertion_source` for each principal describing how the principal was derived (or why
+  it is unknown), per the contract schema.
+
+Ground truth linkage (normative):
+
+- When `runner.identity.emit_principal_context=true` and the resolved principal is known, the runner
+  SHOULD populate action ground truth `extensions.principal_id` with the corresponding mapped
+  `principal_id`.
+
+Safety constraints (normative):
+
+- `principal_context.json` MUST NOT contain secrets (credentials, tokens, private keys, session
+  cookies).
+- If identity details cannot be represented safely, the runner MUST prefer `kind=unknown` with an
+  explicit `assertion_source` over storing raw identifiers.
+
+### Identity probing constraints (normative)
+
+If the runner performs identity probing (for example, to derive or refine principal attribution),
+then probes:
+
+- MUST be endpoint-only and local by default.
+  - Probes MUST NOT perform network calls (no domain queries, no directory lookups, no cloud API
+    calls).
+- MUST be read-only and MUST NOT mutate target or runner state.
+- MUST NOT capture or store secrets.
+- MUST store only a redaction-safe summary or a hash-derived fingerprint.
+  - If a fingerprint is recorded, it MUST be computed from a canonical JSON form (for example RFC
+    8785 JCS) and a cryptographic hash (for example SHA-256), and MUST NOT be reversible into raw
+    identity strings.
+
+Deterministic probe observability (normative):
+
+- Implementations MUST record whether probing was attempted and its outcome deterministically in
+  runner evidence.
+
+Config binding (normative):
+
+- If `runner.identity.probe_enabled=false`, the runner MUST NOT perform identity probing beyond
+  baseline information already available without additional collection steps.
+- If `runner.identity.probe_enabled=true`, probes MUST still obey the constraints above
+  (endpoint-only and local by default, read-only, no secrets) and the runner MUST record
+  probe-attempt status in runner evidence deterministically.
+- If `runner.identity.probe_detail=none`, the runner MUST NOT emit probe summaries or hash-derived
+  fingerprints. If `runner.identity.probe_detail=summary`, the runner MAY emit a redaction-safe
+  summary and/or a hash-derived fingerprint (as constrained above).
+
 ## Prerequisites and dependencies
 
 Atomic tests MAY declare prerequisites via a `dependencies` block. Each dependency commonly
@@ -670,6 +756,25 @@ includes:
 - `prereq_command`: a command that checks whether a prerequisite is satisfied
 - `get_prereq_command`: a command that attempts to satisfy the prerequisite (often by downloading or
   creating payloads)
+
+### Runner runtime dependency immutability (normative)
+
+The runner MUST NOT update or mutate its own runtime dependencies during a run (for example:
+module/library self-updates, package-manager upgrades, `git pull` on tool sources, dynamic plugin
+installs).
+
+- The runner MUST execute using a pre-resolved and pinned dependency set.
+- If a required runner-side dependency is missing or incompatible, the runner MUST fail closed
+  rather than attempting an on-the-fly update to satisfy it.
+
+If configuration includes a knob that would permit runtime self-updates (for example,
+`runner.dependencies.allow_runtime_self_update`), the v0.1 runner MUST reject configurations that
+set `runner.dependencies.allow_runtime_self_update=true` as part of runner configuration validation
+(before any action `prepare` begins).
+
+- The runner MUST fail the run without attempting action execution.
+- The runner MUST record the rejection as a failed stage outcome per ADR-0005.
+- The runner SHOULD use a stable reason code. RECOMMENDED: `disallowed_runtime_self_update`.
 
 ### Requirements evaluation (prepare)
 
@@ -717,7 +822,10 @@ Allowed values:
 - `check_then_get`: check prerequisites; if missing, attempt `get_prereq_command` then re-check
 - `get_only`: attempt `get_prereq_command` then check
 
-Default (v0.1): `check_then_get`
+Default (v0.1): `check_only`
+
+Any mode that executes `get_prereq_command` (`check_then_get` or `get_only`) MUST be explicitly
+enabled by configuration.
 
 Determinism requirements:
 
@@ -726,6 +834,21 @@ Determinism requirements:
 - Command normalization, input placeholder substitution, and `$ATOMICS_ROOT` canonicalization MUST
   be applied consistently to prerequisite commands using the same rules as for execution and cleanup
   commands.
+
+Side-effect ledger recording (normative):
+
+The runner MUST treat `get_prereq_command` execution as a target-mutating side effect.
+
+- For each attempt to execute `get_prereq_command`, the runner MUST append side-effect ledger
+  entries attributable to the `prepare` phase with `effect_type="prereq_install"`.
+  - A write-ahead entry MUST be appended and flushed immediately before executing
+    `get_prereq_command`.
+  - A completion entry MUST be appended after the `get_prereq_command` attempt completes.
+- Each `prereq_install` entry MUST include all contract-required fields, plus:
+  - `phase="prepare"`
+  - `effect_type="prereq_install"`
+  - `dependency_index` (1-based index into `dependencies[]`)
+  - an outcome field with one of: `attempted | succeeded | failed | blocked`
 
 ### Prerequisites execution algorithm (normative)
 

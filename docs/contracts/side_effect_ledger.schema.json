@@ -102,6 +102,68 @@
       "maxLength": 64,
       "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
     },
+    "effect_type": {
+      "type": "string",
+      "description": "Allowed effect_type tokens for v0.1.",
+      "enum": [
+        "cleanup_verification",
+        "declared_effect",
+        "marker_emission",
+        "prereq_install"
+      ]
+    },
+    "prereq_install_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Redaction-safe structured details for prerequisite fetch/install attempts (get_prereq_command). Raw commands MUST NOT be recorded here; use hashes and artifact references only.",
+      "required": ["dependency_ordinal", "get_prereq_command_sha256"],
+      "properties": {
+        "dependency_ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based ordinal of the dependency within Atomic `dependencies[]` (MUST preserve YAML order)."
+        },
+        "prereq_id": {
+          "$ref": "#/$defs/token",
+          "description": "Optional stable, runner-assigned prerequisite identifier (local to the action)."
+        },
+        "prereqs_mode": {
+          "type": "string",
+          "enum": ["check_then_get", "get_only"],
+          "description": "Effective prerequisites mode when this attempt occurred (only modes that execute get_prereq_command are permitted)."
+        },
+        "get_prereq_command_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hex of the normalized `get_prereq_command` list-of-strings (hash over canonical JSON bytes; see project canonicalization policy)."
+        },
+        "prereq_command_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Optional SHA-256 hex of the normalized `prereq_command` list-of-strings (hash over canonical JSON bytes)."
+        },
+        "stdout_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\\\]+$",
+          "description": "Optional relative path to a redacted-safe prerequisites stdout capture artifact (for example: prereqs_stdout.txt)."
+        },
+        "stderr_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\\\]+$",
+          "description": "Optional relative path to a redacted-safe prerequisites stderr capture artifact (for example: prereqs_stderr.txt)."
+        },
+        "exit_code": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "description": "Optional process exit code for the get/install attempt (informational; primary outcome is recorded via disposition)."
+        }
+      }
+    },    
     "ledger_entry": {
       "type": "object",
       "additionalProperties": false,
@@ -123,8 +185,8 @@
           "description": "Lifecycle phase to which this side effect is attributable."
         },
         "effect_type": {
-          "$ref": "#/$defs/token",
-          "description": "Stable classifier for the kind of side effect (for example: marker_emission, cleanup_verification, declared_effect)."
+          "$ref": "#/$defs/effect_type",
+          "description": "Stable classifier for the kind of side effect."
         },
         "disposition": {
           "type": "string",
@@ -195,7 +257,21 @@
           "description": "Optional structured details. Implementations MUST treat string values as subject to redaction policy.",
           "additionalProperties": true
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "effect_type": { "const": "prereq_install" } },
+            "required": ["effect_type"]
+          },
+          "then": {
+            "required": ["details"],
+            "properties": {
+              "details": { "$ref": "#/$defs/prereq_install_details" }
+            }
+          }
+        }
+      ]
     }
   }
 }

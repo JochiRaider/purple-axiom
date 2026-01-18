@@ -182,6 +182,75 @@ Replay start mode definitions (normative):
 - `reset_corrupt`: checkpoint corrupt and recovery was applied (fresh state); replay expected.
 - `reset_manual`: operator explicitly requested reset (ignore checkpoints).
 
+### Counter presence and zero semantics (normative)
+
+This document distinguishes between:
+
+- always-required per-run counters (listed unconditionally), and
+- feature-conditional counter groups (introduced with "when <feature> is enabled" or "when
+  <artifact> is produced").
+
+Rules:
+
+- Always-required counters MUST be emitted for every run. If a behavior is disabled or does not
+  occur, the counter MUST be present with value `0`.
+
+- Feature-conditional counter groups MUST follow "omit vs zero" semantics:
+
+  - If the feature is disabled for the run and the corresponding schema-backed artifact is not
+    produced, the counters in that feature group MUST be omitted.
+  - If the feature is enabled for the run, the counters in that feature group MUST be present. If no
+    qualifying events occurred, the counters MUST be present with value `0`.
+  - If a counter is explicitly marked optional (for example, `cache_bypassed_total`),
+    implementations MAY omit it even when the feature is enabled; consumers MUST treat omission as
+    value `0`.
+
+### Additional stable counters (principal context, cache provenance, dependency immutability) (normative)
+
+In addition to the checkpointing and dedupe counters above, implementations MUST emit the following
+stable per-run counters (u64) when the corresponding feature is enabled and the corresponding
+schema-backed artifact is produced.
+
+Principal context (when `runs/<run_id>/runner/principal_context.json` is produced):
+
+- `runner_principal_context_principals_total`
+- `runner_principal_context_actions_mapped_total`
+- `runner_principal_context_unknown_total`
+
+Cache provenance (when `runs/<run_id>/logs/cache_provenance.json` is produced):
+
+- `cache_hits_total`
+- `cache_misses_total`
+- `cache_bypassed_total` (optional; recommended)
+
+Dependency mutation blocked:
+
+- `runner_dependency_mutation_blocked_total`
+
+#### Counter semantics (normative)
+
+Principal context:
+
+- `runner_principal_context_principals_total` MUST equal the number of entries in
+  `principal_context.principals[]`.
+- `runner_principal_context_actions_mapped_total` MUST equal the number of entries in
+  `principal_context.action_principal_map[]` (one row per `action_id` mapped).
+- `runner_principal_context_unknown_total` MUST equal the number of entries in
+  `principal_context.action_principal_map[]` whose referenced principal has `kind=unknown`.
+
+Cache provenance:
+
+- `cache_hits_total` MUST equal the number of `cache_provenance.entries[]` with `result=hit`.
+- `cache_misses_total` MUST equal the number of `cache_provenance.entries[]` with `result=miss`.
+- `cache_bypassed_total` (when emitted) MUST equal the number of `cache_provenance.entries[]` with
+  `result=bypassed`.
+
+Dependency mutation blocked:
+
+- `runner_dependency_mutation_blocked_total` MUST increment once per runner-side dependency mutation
+  attempt that is blocked under the effective policy (for example, a runtime self-update attempt
+  that is refused).
+
 ## State reconciliation observability (normative)
 
 When state reconciliation is enabled, implementations MUST emit both:

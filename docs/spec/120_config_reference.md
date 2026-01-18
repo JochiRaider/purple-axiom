@@ -90,15 +90,50 @@ Controls scenario execution. The runner is responsible for producing ground trut
 Common keys:
 
 - `type` (required): `caldera | atomic | custom`
-  - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not
-    required). If enabled without an implementation, telemetry MUST fail closed with
-    `reason_code=source_not_implemented`.
+
+- `identity` (optional)
+
+  - `emit_principal_context` (default: `true`)
+    - When `true`, the runner SHOULD emit `runner/principal_context.json` (schema-backed).
+    - When `false`, the runner MUST NOT emit the artifact and MUST NOT populate
+      `extensions.principal_id` in ground truth.
+  - `probe_enabled` (default: `false`)
+    - When `false`, the runner MUST NOT execute “identity probes” beyond what is already available
+      without additional collection steps.
+    - When `true`, the runner MAY probe to improve principal attribution, but MUST still obey
+      redaction/disclosure constraints (no raw usernames/SIDs/creds).
+      - Probes MUST be read-only and MUST NOT mutate target state.
+      - Probes MUST be local-only by default (no network, no domain queries) unless explicitly
+        enabled by a future config gate.
+      - Implementations MUST bound probes (timeouts/attempt limits) and MUST record probe-attempt
+        status deterministically in runner evidence.    
+  - `probe_detail` (default: `summary`; enum: `summary | none`)
+    - `summary`: populate the `principal_context.json` with `principals[]` +
+      `action_principal_map[]` and MAY include `redacted_fingerprint` (hash-only / safe).
+    - `none`: emit only the minimal typed mapping without fingerprints (still stable IDs and kinds).
+  - `cache_policy` (default: `per_run_only`; enum: `disabled | per_run_only | cross_run_allowed`)
+    - Mirrors the cache provenance policy enum already defined for `cache_provenance.json`.
+
+- `dependencies` (optional)
+
+  - `allow_runtime_self_update` (default: `false`)
+    - When `false`, any runner-managed self-update attempt MUST be blocked deterministically.
+      - “Self-update” here should be defined narrowly as runner-managed dependency mutation (for
+        example: updating the runner’s executor tooling, updating pinned modules the runner relies
+        on, etc.), not the technique’s own intended side effects.
+    - When blocked, the runner MUST surface the outcome deterministically via existing runner
+      failure semantics (no new reason-code inventing in 120; keep it as a policy gate /
+      configuration-invalid or “dependency missing” path per existing runner behavior).
+
 - `caldera` (optional, when `type: caldera`)
+
   - `endpoint` (required)
   - `api_token_ref` (required): reference only (example: `env:CALDERA_TOKEN`)
   - `operation` (optional): profile or operation template identifier
   - `agent_selector` (optional): tags or asset ids
+
 - `atomic` (optional, when `type: atomic`)
+
   - `atomic_root` (optional): path to Atomic Red Team definitions
   - `executor` (optional, default: `invoke_atomic_red_team`):
     `invoke_atomic_red_team | atomic_operator | other`
@@ -160,10 +195,22 @@ Common keys:
   - `technique_allowlist` (optional): list of ATT&CK technique ids
   - `technique_denylist` (optional): list of ATT&CK technique ids
   - `executor_allowlist` (optional): list (example: `powershell`, `cmd`, `bash`)
+
 - `custom` (optional, when `type: custom`)
+
   - `command` (required): local command or script path
   - `args` (optional): list
   - `env` (optional): key/value map (values should be refs when sensitive)
+
+- If `runner.identity.cache_policy=cross_run_allowed`, config validation MUST fail closed unless:
+  - `cache.cross_run_allowed=true`, and
+  - `cache.emit_cache_provenance=true`.
+
+- If `emit_principal_context=true`, `principal_context.json` MUST follow the deterministic ordering
+  rules (sorted principals and action map).
+
+- If a self-update is required to proceed and `allow_runtime_self_update=false`, the runner MUST
+  fail closed rather than silently updating.
 
 Determinism guidance:
 
@@ -180,6 +227,36 @@ Plan execution defaults (reserved for v0.2+):
     requested concurrency MUST be clamped to this value.
   - `fail_fast` (optional, default: false): if true, halt scheduling of remaining nodes after the
     first failure.
+
+### Cache (optional, cache)
+
+Controls explicit enablement and provenance requirements for caches that may affect determinism.
+
+Definitions (normative):
+
+- A cache is considered **cross-run** if it can be read by a different run than the one that created
+  it.
+- Implementations MUST treat any on-disk cache directory outside `runs/<run_id>/` as cross-run.
+
+Common keys:
+
+- `cross_run_allowed` (default: `false`)
+  - Global gate: when `false`, any configuration that would enable cross-run caching MUST be
+    rejected by config validation (fail closed).
+- `emit_cache_provenance` (default: `true`)
+  - When `true`, the pipeline MUST write `logs/cache_provenance.json` and MUST record cache usage
+    deterministically.
+  - When `false`, cross-run caches MUST NOT be used.
+  - When `false`, the pipeline MAY use strictly per-run caches under `runs/<run_id>/`.
+
+Normative requirements:
+
+- Any cross-run cache usage MUST be recorded in `logs/cache_provenance.json` with stable ordering
+  `(component, cache_name, key)` and the policy enum values already defined.
+- If `cross_run_allowed=true`, then `emit_cache_provenance` MUST be `true`. Otherwise, config
+  validation MUST fail closed.  
+- If cross-run cache usage is detected at runtime while `cross_run_allowed=false`, the pipeline MUST
+  fail closed.
 
 ### Control plane (optional, control_plane)
 
@@ -431,6 +508,11 @@ Common keys:
       in detection outputs.
     - `compile_cache_dir` (optional): path for cached compiled plans keyed by (rule hash, mapping
       pack version, backend version)
+      - If `compile_cache_dir` points to a location reused across runs, it is a cross-run cache and
+        therefore:
+        - requires `cache.cross_run_allowed=true`, and
+        - MUST record an entry in `logs/cache_provenance.json` (component=`detection`,
+          cache_name=`sigma_compile_cache`, policy/result/key per contract).
   - `limits` (optional)
     - `max_rules` (optional)
     - `max_compile_errors` (optional)
@@ -716,6 +798,10 @@ runner:
       verification_profile: "default"
     technique_allowlist: ["T1059.001"]
     executor_allowlist: ["powershell", "cmd"]
+
+cache:
+  cross_run_allowed: true
+  emit_cache_provenance: true
 
 telemetry:
   otel:

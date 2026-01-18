@@ -88,8 +88,8 @@ The registry instance MUST include, at minimum:
 
 #### Contract version constant (normative)
 
-Each schema MUST include a `contract_version` constant. The contract version is bumped only when
-the contract meaningfully changes (new required fields, semantics changes, or validation tightening).
+Each schema MUST include a `contract_version` constant. The contract version is bumped only when the
+contract meaningfully changes (new required fields, semantics changes, or validation tightening).
 
 ### Human-readable schema inventory (non-authoritative)
 
@@ -226,15 +226,18 @@ Notes:
 
 - This report is a **debug/operability log** and is not part of long-term signed artifact sets by
   default (see signing exclusions).
-- Stages MUST still record the stage outcome with a stable `reason_code` per ADR-0005 and operability
-  rules.
+- Stages MUST still record the stage outcome with a stable `reason_code` per ADR-0005 and
+  operability rules.
 
 #### Deterministic artifact path rule (normative)
 
-- All contracted artifacts under `runs/<run_id>/` MUST use stable, spec-defined paths and MUST NOT include timestamps in filenames.
+- All contracted artifacts under `runs/<run_id>/` MUST use stable, spec-defined paths and MUST NOT
+  include timestamps in filenames.
+
 - “Timestamped exports” (if ever needed for ad-hoc operator workflows) MUST:
 
-  - be written only under an explicitly non-contracted scratch area (RECOMMENDED: `runs/<run_id>/logs/scratch/`), and
+  - be written only under an explicitly non-contracted scratch area (RECOMMENDED:
+    `runs/<run_id>/logs/scratch/`), and
   - MUST NOT be referenced by the manifest’s contracted artifact list, and
   - MUST NOT participate in hashing/signing/trending inputs.
 
@@ -271,7 +274,7 @@ Minimum publish-gate coverage (v0.1):
   - `runner/**` artifacts that have contracts (for example, executor evidence, side-effect ledger,
     cleanup verification)
   - `runs/<run_id>/runner/principal_context.json`
-  - `runs/<run_id>/logs/cache_provenance.json`  
+  - `runs/<run_id>/logs/cache_provenance.json`
   - `criteria/**` artifacts that have contracts (criteria pack snapshot, criteria results)
   - `normalized/**` artifacts that have contracts (OCSF event envelope for JSONL outputs, mapping
     coverage, mapping profile snapshot)
@@ -402,7 +405,7 @@ Recommended manifest additions (normative in schema when implemented):
 Recommended version recording (aligned with ADR-0001; normative if present):
 
 - `versions.contracts` (object): map of `contract_id -> contract_version` for all contract-backed
-  artifacts produced in the run. 
+  artifacts produced in the run.
 
 Plan model provenance (v0.2+; normative when implemented):
 
@@ -968,28 +971,37 @@ Validation:
 
 Fix:
 
-- Remove duplicate wording and treat publish-gate contract validation as required for these artifacts
-  when they are produced and contract-backed (see Validation engine and publish gates).
+- Remove duplicate wording and treat publish-gate contract validation as required for these
+  artifacts when they are produced and contract-backed (see Validation engine and publish gates).
 
 ##### Principal context (runner-level evidence, schema-backed)
 
-Purpose: Record the typed principal identity used during the run without secrets, and provide a deterministic mapping from `action_id` to principal identity.
+Purpose: Record the typed principal identity used during the run without secrets, and provide a
+deterministic mapping from `action_id` to principal identity.
 
 Format: JSON, schema-backed.
 
 Minimum required fields (normative):
 
 - `contract_version` (const, e.g. `"1.0.0"`)
+
 - `run_id` (string)
+
 - `generated_at_utc` (timestamp string)
+
 - `principals[]` (array; stable order)
 
-  - `principal_id` (string; stable run-local identifier; NOT a username; RECOMMENDED: `pa_pid_v1_<32hex>`)
+  - `principal_id` (string; stable run-local identifier; NOT a username; RECOMMENDED:
+    `pa_pid_v1_<32hex>`)
+
   - `kind` (enum):
 
     - `local_user | local_admin | domain_user | service_account | ssh_key | cloud_role_session | unknown`
+
   - `assertion_source` (enum): `live_probe | configured | inferred | unknown`
+
   - `redacted_fingerprint` (optional string; MUST be redaction-safe; RECOMMENDED hash-only form)
+
 - `action_principal_map[]` (array; stable order)
 
   - `action_id` (string)
@@ -1002,21 +1014,28 @@ Deterministic ordering (normative):
 
 Ground truth linkage (normative):
 
-- When the runner emits `principal_context.json`, it SHOULD also copy the selected `principal_id` onto each action record as `extensions.principal_id` (as defined above) to support report/scoring joins without loading runner internals.
+- When the runner emits `principal_context.json`, it SHOULD also copy the selected `principal_id`
+  onto each action record as `extensions.principal_id` (as defined above) to support report/scoring
+  joins without loading runner internals.
 
 Redaction / disclosure (normative):
 
-- `redacted_fingerprint`, if present, MUST be safe to disclose under the default redaction posture (hash-only; no raw usernames, no raw SIDs, no cloud credentials).
+- `redacted_fingerprint`, if present, MUST be safe to disclose under the default redaction posture
+  (hash-only; no raw usernames, no raw SIDs, no cloud credentials).
 
 ##### Cache provenance (run-level log, schema-backed)
 
-Purpose: Record cache usage across stages (runner, normalization, detection compilation) as an observable, deterministic artifact.
+Purpose: Record cache usage across stages (runner, normalization, detection compilation) as an
+observable, deterministic artifact.
 
 Minimum required fields (normative):
 
 - `contract_version`
+
 - `run_id`
+
 - `generated_at_utc`
+
 - `entries[]` (stable order)
 
   - `component` (string; examples: `runner`, `detection`, `normalization`)
@@ -1024,11 +1043,13 @@ Minimum required fields (normative):
   - `policy` (enum): `disabled | per_run_only | cross_run_allowed`
   - `key` (string; MUST NOT contain secrets; RECOMMENDED: `sha256:<hex>`)
   - `result` (enum): `hit | miss | bypassed`
-  - `notes` (optional string; MUST be redaction-safe; MUST avoid volatile data that would break determinism, such as raw timestamps)
+  - `notes` (optional string; MUST be redaction-safe; MUST avoid volatile data that would break
+    determinism, such as raw timestamps)
 
 Deterministic ordering (normative):
 
-- `entries[]` MUST be sorted by `(component, cache_name, key)` ascending (UTF-8 byte order for strings).
+- `entries[]` MUST be sorted by `(component, cache_name, key)` ascending (UTF-8 byte order for
+  strings).
 
 ### Network sensor placeholders
 
@@ -1042,9 +1063,9 @@ Purpose:
 When present:
 
 - `raw_parquet/pcap/manifest.json` MUST validate against `pcap_manifest.schema.json` and MUST
-  enumerate the capture files written under `raw_parquet/pcap/`. 
+  enumerate the capture files written under `raw_parquet/pcap/`.
 - `raw_parquet/netflow/manifest.json` MUST validate against `netflow_manifest.schema.json` and MUST
-  enumerate the flow log files written under `raw_parquet/netflow/`. 
+  enumerate the flow log files written under `raw_parquet/netflow/`.
 
 Absence semantics:
 
@@ -1091,9 +1112,9 @@ Optional envelope extensions (v0.1):
 
 Vendor-field rule (normative):
 
-- New project-owned envelope extension fields MUST be added under
-  `metadata.extensions.purple_axiom` (not as new `metadata.*` siblings), to preserve OCSF envelope
-  compatibility while remaining schema-permissive for downstream tools.
+- New project-owned envelope extension fields MUST be added under `metadata.extensions.purple_axiom`
+  (not as new `metadata.*` siblings), to preserve OCSF envelope compatibility while remaining
+  schema-permissive for downstream tools.
 
 Key semantics:
 
@@ -1543,7 +1564,7 @@ Strict artifacts (manifest, ground truth, detections, summary) are intentionally
   - `extensions.security`
   - `extensions.bridge`
   - `extensions.sigma`
-  - `extensions.runner`  
+  - `extensions.runner`
 - Each namespace value SHOULD be an object; new fields SHOULD be added within a namespace object
   rather than as top-level scalars.
 - Top-level fields outside `extensions` MUST NOT be introduced unless explicitly defined by this
@@ -1562,13 +1583,20 @@ Normalized events:
 #### `extensions.principal_id` (action-scoped, optional)
 
 - `extensions.principal_id` MAY be present on a ground-truth action record.
-- If present, it MUST be a **stable run-local identifier** for the principal used for that action and MUST NOT be a username.
+
+- If present, it MUST be a **stable run-local identifier** for the principal used for that action
+  and MUST NOT be a username.
+
 - RECOMMENDED format: `pa_pid_v1_<32hex>`.
+
 - If `runs/<run_id>/runner/principal_context.json` is present, then:
 
   - `extensions.principal_id` MUST equal a `principals[].principal_id` value from that artifact, and
   - the action MUST appear in `action_principal_map[]` for the same `principal_id`.
-- `extensions.principal_id` MUST NOT contain secrets and MUST be safe under the repo’s redaction posture (hash-only or opaque token).
+
+- `extensions.principal_id` MUST NOT contain secrets and MUST be safe under the repo’s redaction
+  posture (hash-only or opaque token).
+
 - `extensions.principal_id` MUST NOT participate in:
 
   - `metadata.event_id` identity basis (ADR-0002), or

@@ -34,7 +34,7 @@ RPC in v0.1. The stable stage identifiers are:
 
 See the
 [deployment architecture ADR (ADR-0004)](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
-for the normative run sequence, IO boundaries, and publish semantics
+for the normative run sequence, IO boundaries, and publish semantics.
 
 ## Motivation
 
@@ -50,13 +50,13 @@ for the normative run sequence, IO boundaries, and publish semantics
 - A run MUST be explainable and comparable across time by inspecting the run bundle and manifest,
   not by relying on external mutable state.
 - Asset identity MUST be stable across runs (provider-native identifiers are treated as optional
-  metadata, not the identity basis). See the [lab providers specification](015_lab_providers.md)
+  metadata, not the identity basis). See the [lab providers specification](015_lab_providers.md).
 
 ### Contract-driven, stage-scoped execution
 
 - Each stage MUST be implementable as "read inputs from run bundle, write outputs to run bundle."
 - For v0.1, stage ordering and the minimum published outputs are normative at the stage level (see
-  ADR-0004)
+  ADR-0004).
 
 ### Safety-by-default operation
 
@@ -78,7 +78,7 @@ outcomes, including:
 - Telemetry collection over the run window, including validation canaries.
 - Normalization into OCSF with mapping coverage outputs.
 - Validation against criteria packs and cleanup verification outputs.
-- Detection evaluation producing per-rule/per-technique outcomes.
+- Detection evaluation via the Sigma-to-OCSF bridge producing per-rule/per-technique outcomes.
 - Scoring that joins ground truth, validation, and detections into a machine-readable summary.
 - Reporting that renders human-readable artifacts derived from the machine-readable summary.
 - Optional signing as a stage with explicit failure semantics.
@@ -94,19 +94,21 @@ The MVP outcome is a single "one-click" run that produces a reproducible run bun
 minimum:
 
 - **Inventory snapshot**: a run-scoped snapshot that preserves the resolved target set even if the
-  provider state changes later. See the [lab providers specification](015_lab_providers.md)
+  provider state changes later. See the [lab providers specification](015_lab_providers.md).
 - **Ground truth timeline**: `ground_truth.jsonl`, one action per line, including deterministic
-  action identity and resolved target metadata. See the [scenarios specification](030_scenarios.md)
+  action identity and resolved target metadata. See the [scenarios specification](030_scenarios.md).
 - **Stage-scoped evidence**: runner evidence under `runner/**`, and telemetry validation evidence
-  when enabled
+  when enabled.
 - **Normalized event store**: `normalized/**` as the canonical normalized dataset for downstream
-  detection and scoring
-- **Detection outcomes**: `detections/detections.jsonl` produced from sigma evaluation via the
-  detection stage
+  detection and scoring, with mapping coverage outputs (`normalized/mapping_coverage.json`).
+- **Bridge artifacts**: `bridge/**` containing the Sigma-to-OCSF mapping pack snapshot, compiled
+  plans, and bridge coverage for reproducibility.
+- **Detection outcomes**: `detections/detections.jsonl` produced from Sigma evaluation via the
+  detection stage.
 - **Machine-readable scorecard**: `scoring/summary.json` as the required machine-readable run
-  summary output
+  summary output.
 - **Human-readable report**: `report/**` as presentation outputs derived from scoring and other run
-  artifacts
+  artifacts.
 
 Run bundle stage model, publish semantics, and minimum output paths are defined in ADR-0004. Run
 status derivation and stage outcome semantics are defined in ADR-0005.
@@ -118,7 +120,7 @@ status derivation and stage outcome semantics are defined in ADR-0005.
   deterministically). See the [operability specification](110_operability.md).
 - **Fail-closed behavior**: safety control violations are run-fatal by default and must be
   observable in deterministic stage outcomes and reason codes. See the
-  [security and safety specification](090_security_safety.md)
+  [security and safety specification](090_security_safety.md).
 
 ## Intended users
 
@@ -132,14 +134,16 @@ Normative dependencies are those relied upon by the v0.1 pipeline contracts. Pin
 [SUPPORTED_VERSIONS.md](../../SUPPORTED_VERSIONS.md).
 
 - **Atomic Red Team** as the primary v0.1 scenario plan type (other plan types are reserved). See
-  the [scenarios specification](030_scenarios.md).
+  the [scenarios specification](030_scenarios.md) and the
+  [Atomic executor integration specification](032_atomic_red_team_executor_integration.md).
 - **OpenTelemetry Collector Contrib** as the default telemetry collection mechanism (privileged,
   hardened, and minimized per the security boundary requirements). See the
   [security and safety specification](090_security_safety.md).
 - **OCSF schema** as the canonical normalized event model (the `normalized/**` store is the input to
-  detection and scoring stages). See ADR-0004.
+  detection and scoring stages). See the [normalization specification](050_normalization_ocsf.md).
 - **Sigma toolchain (pySigma + pySigma-pipeline-ocsf)** as the detection portability layer and
-  Sigma-to-OCSF bridge (evaluated in the detection stage). See ADR-0004.
+  Sigma-to-OCSF bridge (evaluated in the detection stage). See the
+  [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md).
 - **DuckDB** as the batch evaluator backend.
 - **pyarrow** as the Parquet scanning and schema inspection backend.
 - **jsonschema** as the contract validation engine.
@@ -165,8 +169,19 @@ Purple Axiom v0.1 is considered "done" when:
 
 Normative or orienting references for v0.1:
 
+- [Scope and non-goals specification](010_scope.md) (in-scope and out-of-scope boundaries)
 - [Lab providers specification](015_lab_providers.md) (inventory snapshotting, asset identity)
+- [Architecture specification](020_architecture.md) (stage boundaries, component responsibilities)
+- [Data contracts specification](025_data_contracts.md) (run bundle layout, artifact schemas,
+  cross-artifact invariants)
 - [Scenarios specification](030_scenarios.md) (scenario seed schema, ground truth timeline)
+- [Plan execution model specification](031_plan_execution_model.md) (reserved v0.2+ plan graph
+  model)
+- [Atomic executor integration specification](032_atomic_red_team_executor_integration.md)
+  (transcript capture, cleanup verification)
+- [Normalization specification](050_normalization_ocsf.md) (OCSF mapping, versioning policy)
+- [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md) (routing, field mapping,
+  detection evaluation)
 - [Security and safety specification](090_security_safety.md) (safety posture, boundaries,
   redaction, secrets)
 - [Operability specification](110_operability.md) (health signals, canaries, resource safeguards)
@@ -176,10 +191,13 @@ Normative or orienting references for v0.1:
   (stage model, run sequence, IO boundaries, publish semantics)
 - [Stage outcomes ADR (ADR-0005)](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
   (stage outcomes taxonomy and CI gating implications)
+- [Plan execution model ADR (ADR-0006)](../adr/ADR-0006-plan-execution-model.md) (reserved
+  multi-target and matrix plan semantics)
 
 ## Changelog
 
 | Date       | Change                                                                  |
 | ---------- | ----------------------------------------------------------------------- |
+| 2026-01-17 | Add bridge artifacts to MVP outcomes; expand references section         |
 | 2026-01-13 | Expand charter to reflect current v0.1 stage model, safety, operability |
 | 2026-01-12 | Formatting update                                                       |

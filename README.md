@@ -9,8 +9,8 @@ regression testing and trend tracking.
 
 ## Why Purple Axiom
 
-Most detection engineering loops still look like: run a test, eyeball logs, and call it “good
-enough.” Purple Axiom specifies a repeatable, defensible loop with explicit artifacts:
+Most detection engineering loops still look like: run a test, eyeball logs, and call it "good
+enough." Purple Axiom specifies a repeatable, defensible loop with explicit artifacts:
 
 - **Ground truth**: what ran, when, where, and with what resolved inputs
 - **Telemetry**: what was actually collected (and what was not)
@@ -25,7 +25,7 @@ Treat detections as the theorems you are trying to prove, and adversary emulatio
 (ground truth) you build upon.
 
 This project prioritizes measurable outcomes tied to specific techniques and behaviors, rather than
-opaque “security scores.”
+opaque "security scores."
 
 ## Scope and safety
 
@@ -36,7 +36,7 @@ rather than stealth, persistence, or destructive outcomes.
 
 - Exploit development, weaponization, or destructive testing
 - Production deployment guidance for hostile environments
-- “Full SIEM replacement” (external ingestion is optional)
+- "Full SIEM replacement" (external ingestion is optional)
 - A full-featured lab provisioning platform (Purple Axiom integrates with external lab providers; it
   does not replace them)
 - Network telemetry capture and ingestion (pcap and NetFlow/IPFIX) as a required v0.1 capability
@@ -65,7 +65,11 @@ rather than stealth, persistence, or destructive outcomes.
 
 ## Architecture overview
 
-Purple Axiom’s specified pipeline stages are:
+Purple Axiom v0.1 uses a single-host, local-first topology with a one-shot orchestrator and
+file-based stage coordination. Each stage reads inputs from the run bundle and writes outputs back
+to the run bundle. The filesystem is the inter-stage contract boundary.
+
+The specified pipeline stages are:
 
 1. **Lab provider** resolves target inventory and records a deterministic lab inventory snapshot.
 1. **Runner** executes scenario actions and emits an append-only ground-truth timeline plus runner
@@ -238,10 +242,12 @@ Configuration and contract validation are a first-class part of the runtime and 
 | Architecture                | `docs/spec/020_architecture.md`                         |
 | Data contracts              | `docs/spec/025_data_contracts.md`                       |
 | Scenario model              | `docs/spec/030_scenarios.md`                            |
+| Plan execution model        | `docs/spec/031_plan_execution_model.md`                 |
 | Atomic executor integration | `docs/spec/032_atomic_red_team_executor_integration.md` |
 | Validation criteria         | `docs/spec/035_validation_criteria.md`                  |
 | Telemetry pipeline          | `docs/spec/040_telemetry_pipeline.md`                   |
-| Osquery integration         | `docs/spec/042_osquery_integration.md`                  |
+| osquery integration         | `docs/spec/042_osquery_integration.md`                  |
+| Unix log ingestion          | `docs/spec/044_unix_log_ingestion.md`                   |
 | Storage formats             | `docs/spec/045_storage_formats.md`                      |
 | OCSF normalization          | `docs/spec/050_normalization_ocsf.md`                   |
 | OCSF field tiers            | `docs/spec/055_ocsf_field_tiers.md`                     |
@@ -263,13 +269,22 @@ Configuration and contract validation are a first-class part of the runtime and 
 | `docs/adr/ADR-0003-redaction-policy.md`                                          | Redaction policy posture and consequences                 |
 | `docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md` | Deployment architecture and inter-component communication |
 | `docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md`                 | Stage outcomes and failure classification rules           |
+| `docs/adr/ADR-0006-plan-execution-model.md`                                      | Plan execution model and reserved multi-target semantics  |
 
 ## Requirements
 
 - Isolated lab environment (required)
 - Python 3.12.3 (pinned; see `SUPPORTED_VERSIONS.md` for toolchain details)
-- Pinned runtime dependencies as specified in `SUPPORTED_VERSIONS.md` (including the OpenTelemetry
-  Collector Contrib distribution and DuckDB)
+- Pinned runtime dependencies as specified in `SUPPORTED_VERSIONS.md`:
+  - OpenTelemetry Collector Contrib 0.143.1
+  - pySigma 1.1.0
+  - pySigma-pipeline-ocsf 0.1.1
+  - DuckDB 1.4.3
+  - pyarrow 22.0.0
+  - jsonschema 4.26.0
+  - osquery 5.14.1 (for lab endpoints)
+  - OCSF schema 1.7.0 (normalization target)
+  - PowerShell 7.4.6 (for Atomic executor)
 - Optional packaging: Docker Compose MAY be provided for installation convenience, but it is not a
   normative requirement for v0.1
 

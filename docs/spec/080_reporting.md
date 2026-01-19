@@ -307,8 +307,9 @@ Required content:
 **Summary**: Categorized failure reasons aligned with the normative gap taxonomy.
 
 The report MUST classify failures using the categories defined in
-[Scoring metrics](070_scoring_metrics.md). Failure categories are mutually exclusive and
-collectively exhaustive for detection gaps.
+[Scoring metrics](070_scoring_metrics.md) (Pipeline health, v0.1). Gap categories are mutually
+exclusive and collectively exhaustive for reported pipeline-health gaps. Implementations MUST NOT
+emit additional gap category tokens.
 
 #### Gap taxonomy (normative)
 
@@ -328,9 +329,11 @@ Required content:
 
 - Aggregate counts per gap category
 - Top failures by category (limit 10 per category) with:
+  - Gap category (`gap_category`; MUST be one of the taxonomy tokens above)
   - Technique ID
   - Measurement layer
-  - Evidence references (paths to relevant artifacts)
+  - Evidence references (`evidence_refs[]`; run-relative artifact paths; see
+    `025_data_contracts.md`)
   - Actionable remediation hint
 - Gap rate percentages relative to executed actions
 
@@ -348,27 +351,47 @@ Measurement layers (closed set):
 
 Normative requirements:
 
-- Each gap entry MUST include `measurement_layer`.
+- Gap category identifiers used in the report JSON (for example `gaps.by_category` keys and any
+  `top_failures[].gap_category`) MUST be canonical pipeline-health gap taxonomy tokens defined in
+  [Scoring metrics](070_scoring_metrics.md) (Pipeline health, v0.1). Implementations MUST NOT emit
+  additional gap category tokens.
+- Each per-category aggregate under `gaps.by_category` MUST include `measurement_layer`.
+- Each gap instance in any `top_failures[]` array MUST include:
+  - `gap_category`
+  - `measurement_layer`
+  - `evidence_refs[]` (at least one entry)
+- For `gaps.by_category["<gap_category>"].top_failures[]`, each entry's `gap_category` MUST equal
+  the parent category key.
 - `measurement_layer` MUST match the mapping in [Scoring metrics](070_scoring_metrics.md) (Gap
   category to measurement layer mapping, normative).
-- Each gap entry MUST include `evidence_refs[]` that justify the classification.
+- `evidence_refs[]` MUST conform to the evidence ref shape, selector grammar, and deterministic
+  ordering rules defined in `025_data_contracts.md` (Evidence references (shared shape)).
 - Evidence refs MUST be run-relative artifact paths. Selectors are optional.
 - Evidence refs MUST NOT embed secrets or raw sensitive identifiers.
 
-Minimum evidence refs by measurement layer:
+Minimum evidence refs by measurement layer (normative):
 
-- telemetry: MUST include `logs/health.json` and SHOULD include `telemetry/` validation artifacts
-  when present.
-- normalization: MUST include `normalized/mapping_coverage.json`.
-- detection: MUST include `bridge/coverage.json` and SHOULD include `detections/detections.jsonl`.
-- scoring: MUST include `scoring/summary.json` and SHOULD include `criteria/**` artifacts when
-  applicable to the gap category.
+- telemetry:
+  - MUST include `logs/health.json`.
+  - SHOULD include telemetry validation artifacts under `telemetry/` when present.
+- normalization:
+  - MUST include `normalized/mapping_coverage.json`.
+- detection:
+  - MUST include `bridge/coverage.json`.
+  - SHOULD include `detections/detections.jsonl`.
+- scoring:
+  - MUST include `scoring/summary.json`.
 
-Evidence ref shape (recommended for JSON):
+Conditional minimums by gap category (normative):
 
-- `artifact_path` (string; run-relative)
-- `selector` (string; optional; see selector grammar in `025_data_contracts.md`)
-- `handling` (enum): `present | withheld | quarantined | absent`
+- `missing_telemetry`:
+  - MUST include `logs/health.json`.
+  - SHOULD include the most directly causal telemetry validation artifact(s) when present.
+- `criteria_unavailable`, `criteria_misconfigured`:
+  - When criteria validation is enabled, MUST include `criteria/manifest.json` and
+    `criteria/results.jsonl`.
+- `cleanup_verification_failed`:
+  - MUST include runner cleanup verification evidence under `runner/` when present.
 
 Deterministic ordering (normative):
 
@@ -639,19 +662,54 @@ Required fields:
     - `metric_id` (string)
     - `kind` (string)
     - `unit` (string)
-    - `baseline_value` (number or integer; may be `null` when indeterminate)
-    - `current_value` (number or integer; may be `null` when indeterminate)
-    - `delta` (number or integer; may be `null` when indeterminate)
+    - `baseline_value` (number or integer; may be `null`)
+    - `candidate_value` (number or integer; may be `null`)
+    - `delta` (number or integer; may be `null`)
     - `tolerance` (number or integer)
-    - `within_tolerance` (boolean; MUST be false when any of baseline/current/delta is null)
-    - `regression_flag` (boolean)
+    - `status` (string): `computed | indeterminate`
+    - `indeterminate_reason` (string; REQUIRED when `status=indeterminate`):
+      `not_applicable | excluded_by_config | taxonomy_mismatch`
+    - `within_tolerance` (boolean; MUST be false when `status=indeterminate` or `delta` is `null`)
+    - `regression_flag` (boolean; MUST be false when `status=indeterminate`)
+    - `evidence_refs[]` (array; REQUIRED when `status=indeterminate` and
+      `indeterminate_reason=taxonomy_mismatch`):
+      - Each entry MUST follow the `evidence_refs[]` shape and selector grammar defined in
+        `025_data_contracts.md`.
+      - `evidence_refs[]` MUST include entries pointing to the baseline and candidate effective
+        taxonomy sources (for example, the `meta.effective_gap_taxonomy` field in the scoring
+        summary, or a config snapshot referenced by the manifest/report).
+      - Entries MUST be sorted by `artifact_path` ascending (UTF-8 byte order, no locale).
+  - Deterministic indeterminate handling (normative):
+    - If `status=indeterminate`, then `delta` MUST be `null`, and `within_tolerance` MUST be
+      `false`.
+    - Indeterminate delta entries MUST NOT be evaluated against thresholds and MUST NOT contribute
+      to `regression_alerted` or `alert_reasons[]`.
+  - Deterministic excluded-category handling (normative):
+    - If a metric is excluded in both baseline and candidate (for example, both values are `null`
+      due to `excluded_by_config`), then `status` MUST be `indeterminate` with
+      `indeterminate_reason="excluded_by_config"`.
+    - If a metric is excluded in exactly one of baseline or candidate, then `status` MUST be
+      `indeterminate` with `indeterminate_reason="taxonomy_mismatch"` (do not compute a delta from a
+      `null`).
+    - If a metric’s definition depends on the effective included set (for example, aggregates
+      computed over an effective taxonomy) and the baseline and candidate effective taxonomies are
+      not identical, then `status` MUST be `indeterminate` with
+      `indeterminate_reason="taxonomy_mismatch"`.
   - `deltas[]` MUST be sorted by `metric_id` ascending (UTF-8 byte order, no locale).
   - Delta rounding, tolerance semantics, and indeterminate handling MUST follow
     [Scoring metrics](070_scoring_metrics.md) (Deterministic comparison semantics, normative).
+- `computed_metrics_total` (integer):
+  - Count of `deltas[]` entries with `status=computed`.
+- `indeterminate_metrics_total` (integer):
+  - Count of `deltas[]` entries with `status=indeterminate`.
+- `indeterminate_reasons_breakdown` (object; OPTIONAL):
+  - Map of `indeterminate_reason` token → count across `deltas[]` where `status=indeterminate`.
+  - Keys MUST be sorted ascending (UTF-8 byte order, no locale).
 - `regression_alerted` (boolean)
 - `alert_reasons[]`:
   - Stable list of tokens describing which thresholds were exceeded.
   - MUST be sorted ascending (UTF-8 byte order, no locale).
+  - MUST NOT include reasons derived from indeterminate delta entries.
 
 Baseline field derivation (normative):
 
@@ -807,21 +865,26 @@ The report MUST compute deltas for comparable metrics as defined in
 
 At minimum, the report MUST compute regression deltas for:
 
-| Metric                          | Delta computation    | Regression threshold |
-| ------------------------------- | -------------------- | -------------------- |
-| `technique_coverage_rate`       | `current - baseline` | < -0.0500            |
-| `detection_latency_p95_seconds` | `current - baseline` | > +60.000            |
-| `tier1_field_coverage_pct`      | `current - baseline` | < -0.0500            |
-| `missing_telemetry_count`       | `current - baseline` | > +2                 |
-| `bridge_gap_mapping_count`      | `current - baseline` | > +5                 |
+| Metric                          | Delta computation      | Regression threshold |
+| ------------------------------- | ---------------------- | -------------------- |
+| `technique_coverage_rate`       | `candidate - baseline` | < -0.0500            |
+| `detection_latency_p95_seconds` | `candidate - baseline` | > +60.000            |
+| `tier1_field_coverage_pct`      | `candidate - baseline` | < -0.0500            |
+| `missing_telemetry_count`       | `candidate - baseline` | > +2                 |
+| `bridge_gap_mapping_count`      | `candidate - baseline` | > +5                 |
 
-A regression is flagged when any delta exceeds the configured threshold.
+A regression is flagged when any computed delta exceeds the configured threshold. Indeterminate
+delta entries (for example, `excluded_by_config` or `taxonomy_mismatch`) MUST NOT be evaluated
+against thresholds and MUST NOT contribute to `regression_alerted` or `alert_reasons[]`.
 
 ### Regression summary content
 
 - Baseline `run_id` and timestamp
 - Comparable keys status (match/mismatch warnings)
-- Delta table with: metric, baseline value, current value, delta, regression flag
+- Delta table with: metric id, baseline value, candidate value, delta, status, indeterminate reason,
+  regression flag
+- `computed_metrics_total` and `indeterminate_metrics_total`
+- (optional) `indeterminate_reasons_breakdown`
 - New failures not present in baseline (technique ID + gap category)
 - Resolved failures present in baseline but not current
 
@@ -1089,13 +1152,19 @@ The `report/report.json` output MUST conform to the following structure:
         "kind": "<string>",
         "unit": "<string>",
         "baseline_value": 0,
-        "current_value": 0,
+        "candidate_value": 0,
         "delta": 0,
         "tolerance": 0,
+        "status": "computed | indeterminate",
+        "indeterminate_reason": "<string|null>",
         "within_tolerance": true,
-        "regression_flag": false
+        "regression_flag": false,
+        "evidence_refs": [ ]
       }
     ],
+    "computed_metrics_total": 0,
+    "indeterminate_metrics_total": 0,
+    "indeterminate_reasons_breakdown": { },
     "regression_alerted": false,
     "alert_reasons": [ ]
   },

@@ -596,9 +596,66 @@ Common keys:
 
 Notes:
 
-- `gap_taxonomy` selects which gap categories are budgeted/gated and appear in scoring outputs.
+Notes:
+
+- `gap_taxonomy` is a selection/filter for evaluation, budgeting, and CI gating. It MUST NOT change
+  the schema shape of scoring outputs or the regression comparable metric surface.
+- Excluded categories MUST still appear in scoring outputs as indeterminate to preserve a stable row
+  set for regression diffs:
+  - For per-category tables (for example, "gap rate by category"), excluded categories MUST be
+    present with `value: null` and `indeterminate_reason: "excluded_by_config"`.
+  - For per-category comparable metrics (for example, `criteria_misconfigured_rate`), excluded
+    categories MUST be present with `value: null` and `indeterminate_reason: "excluded_by_config"`.
+  - Implementations MUST NOT omit per-category rows or per-category metric identifiers due to
+    `gap_taxonomy` exclusions.
+- Regression guidance: baseline and candidate runs SHOULD use identical effective `gap_taxonomy`
+  selections to avoid indeterminate deltas. If the effective selections differ, regression deltas
+  for affected metrics MUST be indeterminate with `indeterminate_reason: "taxonomy_mismatch"` (see
+  `070_scoring_metrics.md`).
+- The `gap_taxonomy` list MUST be a subset of the canonical pipeline-health gap taxonomy tokens
+  defined in `070_scoring_metrics.md` (Pipeline health, v0.1). Configuration validation MUST reject
+  unknown `gap_taxonomy` entries (fail closed).
 - Gap category to measurement layer mapping is defined in `070_scoring_metrics.md` and is normative.
   Configuration MUST NOT redefine or remap categories into different layers.
+
+Example (non-normative): excluding a category without changing the stable row set
+
+Config excerpt (YAML):
+
+```yaml
+scoring:
+  enabled: true
+  gap_taxonomy:
+    - missing_telemetry
+    - criteria_unavailable
+    # criteria_misconfigured intentionally excluded
+    - normalization_gap
+    - bridge_gap_mapping
+    - bridge_gap_feature
+    - bridge_gap_other
+    - rule_logic_gap
+    - cleanup_verification_failed
+```
+
+Expected scoring output excerpt (JSON; illustrative; the full output includes a row/value for every
+canonical `gap_category`):
+
+```json
+{
+  "pipeline_health_by_gap_category": [
+    {
+      "gap_category": "missing_telemetry",
+      "value": 0.0312,
+      "indeterminate_reason": null
+    },
+    {
+      "gap_category": "criteria_misconfigured",
+      "value": null,
+      "indeterminate_reason": "excluded_by_config"
+    }
+  ]
+}
+```
 
 ### Reporting (reporting)
 
@@ -645,6 +702,10 @@ Common keys:
     - Pack-like inputs that affect comparability SHOULD be explicitly pinned (see
       `criteria_pack.pack_version`, `detection.sigma.rule_set_version`, and
       `detection.sigma.bridge.mapping_pack_version`).
+    - Baseline and candidate runs SHOULD use identical effective `scoring.gap_taxonomy` selections
+      to avoid indeterminate regression deltas for gap-category-derived metrics. When effective
+      taxonomy selections differ, affected deltas MUST be indeterminate with
+      `indeterminate_reason: "taxonomy_mismatch"` (see `070_scoring_metrics.md`).
 - `requirements` (optional)
   - `detail_level` (default: `reason_codes_only`): `reason_codes_only | include_sensitive_details`
     - `reason_codes_only`: reports MUST include only stable `reason_code` tokens and aggregate

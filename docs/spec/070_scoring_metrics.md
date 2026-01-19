@@ -143,6 +143,10 @@ Indeterminate reasons (normative):
   eligible denominator).
 - `excluded_by_config`: the metric is part of the comparable surface but is suppressed by explicit
   configuration; emitted as `null` to preserve stable metric identifiers for regression.
+- `taxonomy_mismatch`: the metric depends on a configured gap taxonomy (for example, inclusion or
+  aggregation over a selected set), and baseline/current runs used different effective taxonomy
+  selections; emitted as `null` to preserve stable metric identifiers and deterministic regression
+  semantics.
 - `incomparable_pins`: regression delta computation is not permitted because baseline/current runs
   are not comparable (see Deterministic comparison semantics below).
 
@@ -152,6 +156,73 @@ Scoring summary metadata (recommended):
   sufficient to compute regression joins without re-reading `manifest.json` (for example:
   `scenario_id`, `scenario_version`, `pipeline_version`, `ocsf_version`, and any enabled pack ids
   and versions).
+
+#### Stable emission and indeterminate semantics (normative)
+
+The regression comparable metric surface is a contract for a stable row set across runs and
+configurations.
+
+- For every `metric_id` in the comparable surface, `scoring/summary.json` MUST include a value entry
+  for that metric identifier.
+
+  - The entry MUST include either a numeric `value` or `value=null` with a deterministic
+    `indeterminate_reason` token.
+  - Implementations MUST NOT omit a `metric_id` due to configuration (including
+    `scoring.gap_taxonomy` exclusions).
+
+- If an implementation represents per-gap-category values as a table (rather than distinct
+  `metric_id` values), the table MUST be a stable row set:
+
+  - One row per canonical `gap_category` token in the v0.1 taxonomy (see "Primary metrics (seed)" →
+    "Pipeline health"), in that canonical order.
+  - Each row MUST include: `gap_category`, `value` (number or null), and `indeterminate_reason`
+    (string or null).
+
+Effective taxonomy recording (normative):
+
+- `scoring/summary.json` MUST record the effective gap taxonomy used for any metrics that aggregate
+  "over categories" (for example, totals computed over a configured subset).
+  - Required: `meta.effective_gap_taxonomy` as an ordered list of included `gap_category` tokens.
+  - Optional: `meta.effective_gap_taxonomy_sha256` as SHA-256 over the RFC 8785 canonical JSON
+    encoding of `meta.effective_gap_taxonomy` (UTF-8). The value MUST be a lowercase hex string.
+
+Aggregate comparability (normative):
+
+- Metrics whose definition depends on the effective included set (for example, aggregates computed
+  over `meta.effective_gap_taxonomy`) are comparable only when baseline and current runs have
+  identical `meta.effective_gap_taxonomy` values.
+  - Otherwise, regression deltas for those metrics MUST be indeterminate with
+    `indeterminate_reason="taxonomy_mismatch"`.
+
+Example (non-normative): stable emission for excluded categories
+
+```json
+{
+  "meta": {
+    "effective_gap_taxonomy": [
+      "missing_telemetry",
+      "normalization_gap",
+      "bridge_gap_mapping",
+      "bridge_gap_feature",
+      "bridge_gap_other",
+      "rule_logic_gap"
+    ],
+    "effective_gap_taxonomy_sha256": "<hex>"
+  },
+  "pipeline_health_by_gap_category": [
+    {
+      "gap_category": "missing_telemetry",
+      "value": 0.0312,
+      "indeterminate_reason": null
+    },
+    {
+      "gap_category": "criteria_unavailable",
+      "value": null,
+      "indeterminate_reason": "excluded_by_config"
+    }
+  ]
+}
+```
 
 Comparable metrics (v0.1 minimum set):
 
@@ -203,8 +274,14 @@ Comparability prerequisites (normative):
     `delta=null` and `indeterminate_reason="incomparable_pins"`.
   - Implementations MAY alternatively emit an empty delta table, but MUST do so deterministically
     and MUST NOT interpret the absence of a row as `delta=0`.
-- When a metric is excluded by configuration, its baseline/current values MAY be present, but
-  `delta` MUST be `null` with `indeterminate_reason="excluded_by_config"`.
+- When a metric is excluded by configuration:
+  - If the metric is excluded in both baseline and current runs, `delta` MUST be `null` with
+    `indeterminate_reason="excluded_by_config"`.
+  - If the metric is excluded in exactly one of baseline or current runs, `delta` MUST be `null`
+    with `indeterminate_reason="taxonomy_mismatch"`.
+- When a metric’s definition depends on the effective included set (for example, aggregates computed
+  over `meta.effective_gap_taxonomy`), and baseline/current `meta.effective_gap_taxonomy` values are
+  not identical, `delta` MUST be `null` with `indeterminate_reason="taxonomy_mismatch"`.
 
 Canonical rounding:
 
@@ -300,25 +377,46 @@ Mapping (v0.1):
 | `criteria_misconfigured`      | `scoring`         |
 | `cleanup_verification_failed` | `scoring`         |
 
+Conformance (normative):
+
+- The v0.1 pipeline-health gap taxonomy tokens are defined in this specification (see "Primary
+  metrics (seed)" → "Pipeline health").
+- Every gap category token in that taxonomy MUST appear exactly once in the mapping table above.
+- The mapping table MUST NOT contain gap category tokens that are not present in the taxonomy.
+
 ### Evidence pointer requirements (normative)
 
 Implementations MUST be able to provide run-relative evidence pointers that justify any gap
 classification. Evidence pointers MUST be stable artifact paths (selectors are optional).
 
-Minimum evidence pointer set by measurement layer:
+Evidence pointers in scoring and reporting outputs MUST conform to the evidence ref shape and
+selector grammar defined in `025_data_contracts.md` (Evidence references (shared shape)).
+
+Minimum evidence pointer set by measurement layer (normative):
 
 - telemetry:
-  - `logs/health.json`
-  - telemetry validation artifacts under `telemetry/` (when present)
+  - MUST include `logs/health.json`.
+  - SHOULD include telemetry validation artifacts under `telemetry/` when present.
 - normalization:
-  - `normalized/mapping_coverage.json`
+  - MUST include `normalized/mapping_coverage.json`.
 - detection:
-  - `bridge/coverage.json`
-  - `detections/detections.jsonl`
+  - MUST include `bridge/coverage.json`.
+  - SHOULD include `detections/detections.jsonl`.
 - scoring:
-  - `criteria/manifest.json` and `criteria/results.jsonl` (when validation is enabled)
-  - `scoring/summary.json`
-  - runner cleanup evidence under `runner/` (when present for `cleanup_verification_failed`)
+  - MUST include `scoring/summary.json`.
+
+Conditional minimums by gap category (normative):
+
+- `missing_telemetry`:
+  - Evidence pointers MUST include `logs/health.json`.
+  - Evidence pointers SHOULD include the most directly causal telemetry validation artifact(s) when
+    present.
+- `criteria_unavailable`, `criteria_misconfigured`:
+  - When criteria validation is enabled, evidence pointers MUST include `criteria/manifest.json` and
+    `criteria/results.jsonl`.
+- `cleanup_verification_failed`:
+  - Evidence pointers MUST include runner cleanup verification evidence under `runner/` when
+    present.
 
 ### Thresholds (CI gates)
 

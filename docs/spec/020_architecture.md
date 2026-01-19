@@ -26,9 +26,10 @@ scenarios, captures telemetry, normalizes events into OCSF, evaluates detections
 reproducible run bundles.
 
 The system resolves lab inventory, executes scenarios, captures telemetry, normalizes events,
-evaluates criteria, runs detection rules, computes scores, and generates reports. Each stage reads
-inputs from the run bundle and writes outputs back to the run bundle. The filesystem is the
-inter-stage contract boundary.
+evaluates criteria, runs detection rules, computes scores, and generates reports. In regression
+mode, the pipeline compares a candidate run to a baseline run using pinned inputs and emits
+deterministic deltas in reporting artifacts. Each stage reads inputs from the run bundle and writes
+outputs back to the run bundle. The filesystem is the inter-stage contract boundary.
 
 Agent navigation (non-normative):
 
@@ -109,6 +110,12 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
 - The manifest (`runs/<run_id>/manifest.json`) MUST remain the authoritative index of what exists
   and which versions/config hashes were used.
 
+Regression comparison (when enabled) reads baseline reference inputs under `runs/<run_id>/inputs/`
+and emits deltas under `runs/<run_id>/report/**`. For artifact shapes and selection rules, see the
+[data contracts specification][data-contracts], the
+[storage formats specification][storage-formats-spec], and the
+[reporting specification][reporting-spec].
+
 See [ADR-0004: Deployment architecture and inter-component communication][adr-0004] for the
 normative deployment topology and inter-component communication contract.
 
@@ -144,6 +151,7 @@ Normative top-level entries (run-relative):
 | Path                            | Purpose                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------- |
 | `manifest.json`                 | Authoritative run index and provenance pins                                      |
+| `inputs/`                       | Run-scoped operator inputs and baseline references (when regression is enabled)  |
 | `ground_truth.jsonl`            | Append-only action timeline (what was attempted)                                 |
 | `runner/`                       | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)      |
 | `runner/principal_context.json` | Run-level runner evidence (principal/execution context; when enabled)            |
@@ -228,17 +236,17 @@ The orchestrator MUST execute stages in the following order for v0.1:
 **Summary**: Each stage reads inputs from the run bundle and writes outputs back. The table below
 defines the minimum IO contract for v0.1.
 
-| Stage ID        | Minimum inputs                                                                          | Minimum outputs                                                                                                        |
-| --------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `lab_provider`  | Run configuration, provider inputs                                                      | Inventory snapshot artifact (referenced by manifest)                                                                   |
-| `runner`        | Inventory snapshot, scenario plan                                                       | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; \[v0.2+: `plan/**`\]                                   |
-| `telemetry`     | Inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding) | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled) |
-| `normalization` | `raw_parquet/**`, mapping profiles                                                      | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                        |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                           | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                          |
-| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                  | `bridge/**`, `detections/detections.jsonl`                                                                             |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                   | `scoring/summary.json`                                                                                                 |
-| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, manifest                                  | `report/**` (HTML + supplemental artifacts)                                                                            |
-| `signing`       | Finalized manifest, selected artifacts                                                  | `security/**` (checksums, signature, public key)                                                                       |
+| Stage ID        | Minimum inputs                                                                                | Minimum outputs                                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `lab_provider`  | Run configuration, provider inputs                                                            | Inventory snapshot artifact (referenced by manifest)                                                                   |
+| `runner`        | Inventory snapshot, scenario plan                                                             | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; \[v0.2+: `plan/**`\]                                   |
+| `telemetry`     | Inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)       | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled) |
+| `normalization` | `raw_parquet/**`, mapping profiles                                                            | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                        |
+| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                 | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                          |
+| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                        | `bridge/**`, `detections/detections.jsonl`                                                                             |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                         | `scoring/summary.json`                                                                                                 |
+| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, manifest, `inputs/**` (when regression enabled) | `report/**` (HTML + supplemental artifacts)                                                                            |
+| `signing`       | Finalized manifest, selected artifacts                                                        | `security/**` (checksums, signature, public key)                                                                       |
 
 > **Note**: This table defines the **minimum** contract. Implementations MAY produce additional
 > artifacts, but MUST produce at least these outputs for the stage to be considered successful.
@@ -467,6 +475,8 @@ Responsibilities:
 - Render HTML scorecard from `scoring/summary.json`.
 - Emit JSON report artifacts for external tooling.
 - Include run manifest summary and artifact index.
+- When regression comparison is enabled, read baseline reference inputs under `inputs/**` and emit
+  regression comparison outputs under `report/**`.
 - Support diffing and trending across runs.
 
 Outputs are stored under `report/**`.

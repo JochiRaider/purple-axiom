@@ -357,7 +357,14 @@ triage.
 
 Evidence refs appear most prominently in the report JSON (see the reporting spec), but the same
 requirements apply wherever evidence pointers are used. This section is authoritative for evidence
-ref shape and selector grammar; other docs must reference it and MUST NOT redefine the format.
+ref shape and selector grammar; other docs MUST reference it and MUST NOT redefine the format.
+
+Other docs MUST NOT restate the evidence ref field list (for example as "recommended for JSON").
+Instead, they MUST reference this section.
+
+Other docs MAY include non-normative examples that include evidence refs, but those examples MUST
+use the field names, selector prefix forms, and deterministic ordering rules defined in this
+section.
 
 Minimum evidence ref fields (normative):
 
@@ -491,10 +498,16 @@ Normative requirements (for reporting artifacts):
   MUST include:
   - `measurement_layer`, and
   - `evidence_refs[]` (at least one entry).
+- Any gap category identifier used in reporting/scoring outputs (for example,
+  `top_failures[].gap_category` in the report JSON, or the map keys under `gaps.by_category`) MUST
+  be one of the canonical scoring taxonomy tokens defined in `070_scoring_metrics.md` (Pipeline
+  health, v0.1). Implementations MUST NOT emit additional gap category tokens.
 - `measurement_layer` MUST match the normative mapping defined in `070_scoring_metrics.md` (gap
   category to measurement layer mapping).
+- Each `evidence_refs[]` entry MUST follow the authoritative `evidence_refs[]` shape and selector
+  grammar defined in [Evidence references (shared shape)](#evidence-references-shared-shape).
 - Reporting publish-gate validation MUST fail closed if the report JSON violates the above
-  requirements.
+  requirements, including unknown gap category tokens.
 
 ### Run manifest
 
@@ -1826,4 +1839,5 @@ CI gates should fail closed on contract violations.
 
 | Date      | Change                                       |
 | --------- | -------------------------------------------- |
+| 1/17/2026 | update                                       |
 | 1/17/2026 | Style guide migration (no technical changes) |

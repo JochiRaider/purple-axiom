@@ -25,11 +25,21 @@ topology, pipeline stages, stage IO boundaries, and supported extension points.
 scenarios, captures telemetry, normalizes events into OCSF, evaluates detections, and produces
 reproducible run bundles.
 
-The system resolves lab inventory, executes scenarios, captures telemetry, normalizes events,
-evaluates criteria, runs detection rules, computes scores, and generates reports. In regression
-mode, the pipeline compares a candidate run to a baseline run using pinned inputs and emits
-deterministic deltas in reporting artifacts. Each stage reads inputs from the run bundle and writes
-outputs back to the run bundle. The filesystem is the inter-stage contract boundary.
+The system resolves lab inventory, applies run-scoped environment configuration, executes scenarios,
+captures telemetry, normalizes events, evaluates criteria, runs detection rules, computes scores,
+and generates reports. In regression mode, the pipeline compares a candidate run to a baseline run
+using pinned inputs and emits deterministic deltas in reporting artifacts. Each stage reads inputs
+from the run bundle and writes outputs back to the run bundle. The filesystem is the inter-stage
+contract boundary. Operators and CI drive the orchestrator via a small set of range lifecycle verbs
+(build, simulate, replay, export, destroy) that map to deterministic stage subsets.
+
+Module boundaries (v0.1; normative where stated):
+
+- **Provision**: resolve and snapshot lab inventory (maps to `lab_provider`).
+- **Configure**: apply run-scoped environment readiness work required for telemetry collection and
+  scenario execution. When performed, it MUST be recorded as additive runner substage
+  `runner.environment_config` and MUST NOT introduce a new stable stage identifier in v0.1.
+- **Simulate**: execute scenario actions and emit ground truth + runner evidence (maps to `runner`).
 
 Agent navigation (non-normative):
 
@@ -89,6 +99,67 @@ owns `runs/<run_id>/`).
   some steps invoke external binaries.
 - Core stages MUST NOT require service-to-service RPC for coordination.
 
+### Range lifecycle verbs (v0.1; normative where stated)
+
+The orchestrator MAY expose a small set of stable **range lifecycle verbs** that define how
+operators and CI drive the pipeline. Verbs are orchestrator entrypoints that map to a deterministic
+subset of stages and to deterministic run-bundle side effects.
+
+Common invariants (normative, v0.1):
+
+- Every verb invocation MUST target exactly one run bundle (`runs/<run_id>/`) and MUST acquire the
+  run lock before writing any stage outputs.
+- Any verb that executes one or more stages MUST record stage outcomes in `logs/health.json` per
+  [ADR-0005: Stage outcomes and failure classification][adr-0005].
+- Any verb that writes contract-backed artifacts MUST follow the publish gate rules in this document
+  (staging + validation + atomic publish).
+- Verbs MUST NOT introduce service-to-service RPC for coordination.
+
+Verb definitions (v0.1):
+
+- `build`
+
+  - Stages executed: `lab_provider`.
+  - Intent: initialize the run bundle skeleton and produce an inventory snapshot.
+  - MUST NOT execute scenario actions or collect telemetry.
+
+- `simulate`
+
+  - Stages executed: the canonical v0.1 stage sequence (see
+    [ADR-0004: Deployment architecture and inter-component communication][adr-0004]).
+  - Intent: perform a complete run and produce a complete run bundle.
+  - When environment configuration is enabled, the orchestrator MUST record an additive `runner`
+    substage `runner.environment_config` before any action enters the `execute` lifecycle phase.
+  - When regression comparison is enabled, `simulate` MUST treat baseline reference inputs under
+    `inputs/**` as read-only.
+
+- `replay`
+
+  - Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and
+    optional `signing`).
+  - Preconditions: the candidate run bundle MUST already contain `raw_parquet/**` and
+    `ground_truth.jsonl`. `replay` MUST treat these inputs as read-only.
+  - MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or
+    `raw_parquet/**` except for operability logs under `logs/**`.
+  - When regression comparison is enabled, `replay` MUST treat baseline reference inputs under
+    `inputs/**` as read-only and MUST NOT rewrite them.
+
+- `export`
+
+  - Stages executed: none.
+  - Intent: package a run bundle (or disclosed subset) for sharing or archival.
+  - By default, exports MUST exclude `unredacted/**` and MUST NOT disclose artifacts that are not
+    redaction-safe under the configured policy.
+  - Export outputs (for example, an archive file) are implementation-defined and MAY be written
+    outside the run bundle.
+
+- `destroy`
+
+  - Stages executed: none.
+  - Intent: clean up run-local resources and (optionally) tear down lab resources.
+  - Provider mutation (for example, deleting lab resources) MUST be explicitly enabled and MUST be
+    recorded deterministically in operability logs; it MUST NOT be implied by default.
+
 ### Telemetry plane
 
 Telemetry collection follows the canonical OpenTelemetry model:
@@ -109,9 +180,14 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
   root.
 - The manifest (`runs/<run_id>/manifest.json`) MUST remain the authoritative index of what exists
   and which versions/config hashes were used.
+- When environment configuration is enabled, the runner MUST record the configuration boundary as
+  substage `runner.environment_config` and MUST emit deterministic operability evidence under
+  `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
+  [operability specification][operability-spec]).
 
 Regression comparison (when enabled) reads baseline reference inputs under `runs/<run_id>/inputs/`
-and emits deltas under `runs/<run_id>/report/**`. For artifact shapes and selection rules, see the
+and emits deltas under `runs/<run_id>/report/**`. All verbs and stages MUST treat `inputs/**` as
+read-only. For artifact shapes and selection rules, see the
 [data contracts specification][data-contracts], the
 [storage formats specification][storage-formats-spec], and the
 [reporting specification][reporting-spec].
@@ -199,8 +275,10 @@ logs. Substages use dotted notation.
 | `signing`       | Sign artifacts for integrity verification   | Yes      |
 
 Substages MAY be expressed as dotted identifiers (for example, `lab_provider.connectivity`,
-`telemetry.windows_eventlog.raw_mode`, `validation.cleanup`, `runner.requirements`,
-`runner.lifecycle_enforcement`, `runner.state_reconciliation`). Substages are additive and MUST NOT
+`runner.environment_config`, `telemetry.windows_eventlog.raw_mode`, `validation.cleanup`,
+`runner.requirements`, `runner.lifecycle_enforcement`, `runner.state_reconciliation`). The reserved
+substage `runner.environment_config` represents run-scoped environment configuration ("configure")
+without introducing a new stable stage identifier in v0.1. Substages are additive and MUST NOT
 change the semantics of the parent stage outcome.
 
 See [ADR-0005: Stage outcomes and failure classification][adr-0005] for stage outcome definitions
@@ -230,6 +308,10 @@ The orchestrator MUST execute stages in the following order for v0.1:
 1. `scoring`
 1. `reporting`
 1. `signing` (optional; when enabled, MUST be last)
+
+When environment configuration is enabled, the orchestrator MUST record an additive `runner`
+substage `runner.environment_config` after `lab_provider` completes and before any action enters the
+runner `execute` lifecycle phase. This substage MUST be observable via `logs/health.json`.
 
 ## Stage IO boundaries
 
@@ -271,6 +353,12 @@ Responsibilities:
 - Validate connectivity to resolved assets (substage: `lab_provider.connectivity`).
 - Produce a run-scoped inventory snapshot recorded in the run bundle.
 - Ensure the snapshot is hashable and diffable for determinism.
+- MUST NOT implicitly provision, modify, or tear down lab resources as a side effect of inventory
+  resolution; provider mutation requires an explicit operator gate and deterministic logging (see
+  `destroy`).
+- MUST NOT perform run-scoped environment configuration (telemetry agent bootstrap, collector
+  configuration placement, readiness canaries). When environment configuration is required, it MUST
+  be recorded as additive runner substage `runner.environment_config` (see Runner below).
 
 Implementations:
 
@@ -289,6 +377,18 @@ requirements.
 
 **Summary**: The `runner` stage executes test plans and emits an append-only ground truth timeline
 with evidence artifacts.
+
+Environment configuration boundary (normative, v0.1):
+
+- The runner MAY perform run-scoped environment configuration work that is required to make the lab
+  ready for telemetry collection and scenario execution (for example: telemetry agent bootstrap,
+  collector configuration placement, readiness canaries).
+- When such configuration is performed, the runner MUST record an additive substage outcome
+  `runner.environment_config` in `logs/health.json` and MUST emit deterministic operability evidence
+  under `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
+  [operability specification][operability-spec]).
+- Environment configuration is distinct from per-action requirements evaluation in `prepare`. It
+  MUST NOT change the semantics of per-action lifecycle outcomes.
 
 Responsibilities:
 
@@ -505,17 +605,18 @@ artifact selection rules.
 
 Purple Axiom is designed for extensibility at defined boundaries:
 
-| Extension type       | Examples                                              | Interface                          |
-| -------------------- | ----------------------------------------------------- | ---------------------------------- |
-| Lab providers        | Manual, Ludus, Terraform, custom                      | Inventory snapshot contract        |
-| Scenario runners     | Atomic Red Team, Caldera, custom                      | Ground truth + evidence contracts  |
-| Telemetry sources    | Windows Event Log, Sysmon, osquery, auditd, EDR, pcap | OTel receiver + raw schema         |
-| Schema mappings      | OCSF 1.7.0, future OCSF versions, profiles            | Mapping profile contract           |
-| Rule languages       | Sigma, YARA, Suricata (future)                        | Bridge + evaluator contracts       |
-| Bridge mapping packs | Logsource routers, field alias maps                   | Mapping pack schema                |
-| Evaluator backends   | DuckDB/SQL, Tenzir, streaming engines                 | Compiled plan + detection contract |
-| Criteria packs       | Default, environment-specific                         | Criteria pack manifest + entries   |
-| Redaction policies   | Default patterns, custom patterns                     | Redaction policy contract          |
+| Extension type            | Examples                                              | Interface                                     |
+| ------------------------- | ----------------------------------------------------- | --------------------------------------------- |
+| Lab providers             | Manual, Ludus, Terraform, custom                      | Inventory snapshot contract                   |
+| Environment configurators | Ansible, scripts, image-baked profiles, custom        | Readiness profile + deterministic operability |
+| Scenario runners          | Atomic Red Team, Caldera, custom                      | Ground truth + evidence contracts             |
+| Telemetry sources         | Windows Event Log, Sysmon, osquery, auditd, EDR, pcap | OTel receiver + raw schema                    |
+| Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles            | Mapping profile contract                      |
+| Rule languages            | Sigma, YARA, Suricata (future)                        | Bridge + evaluator contracts                  |
+| Bridge mapping packs      | Logsource routers, field alias maps                   | Mapping pack schema                           |
+| Evaluator backends        | DuckDB/SQL, Tenzir, streaming engines                 | Compiled plan + detection contract            |
+| Criteria packs            | Default, environment-specific                         | Criteria pack manifest + entries              |
+| Redaction policies        | Default patterns, custom patterns                     | Redaction policy contract                     |
 
 Extensions MUST preserve the stage IO boundaries and produce contract-compliant artifacts.
 
@@ -533,6 +634,10 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
    non-executable (not silently skipped).
 1. **Inventory snapshotting**: Lab providers resolve inventory into a run-scoped snapshot for
    determinism and reproducibility.
+1. **Separation of provision/configure/simulate**: Inventory resolution is isolated in
+   `lab_provider`; run-scoped environment configuration (when performed) is recorded as additive
+   runner substage `runner.environment_config`; scenario execution and evidence emission remain the
+   responsibility of `runner`.
 1. **Ground truth as append-only timeline**: The runner emits an immutable record of executed
    actions for downstream joins.
 1. **Four-phase action lifecycle**: Actions execute through prepare → execute → revert → teardown

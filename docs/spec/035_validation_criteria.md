@@ -72,7 +72,10 @@ Version bumps:
 Determinism requirement:
 
 - For any run intended to be diffable or regression-tested, the effective criteria pack MUST be
-  pinned by `pack_id` and a concrete `pack_version`.
+  pinned by `pack_id` and a concrete `pack_version`, and MUST be recorded in the run manifest under
+  `manifest.versions.*` as:
+  - `manifest.versions.criteria_pack_id = <pack_id>`
+  - `manifest.versions.criteria_pack_version = <pack_version>`
 
 If `pack_version` is not provided (non-recommended):
 
@@ -83,7 +86,11 @@ If `pack_version` is not provided (non-recommended):
 1. If the same `(pack_id, pack_version)` appears in multiple search paths, fail closed unless they
    are byte-identical as proven by matching `criteria_sha256` and `manifest_sha256`.
 
-The resolved `pack_version` MUST be recorded in run provenance (manifest and report).
+The resolved `(pack_id, pack_version)` MUST be recorded in run provenance (manifest and report).
+
+Note: `criteria_sha256` and `manifest_sha256` are snapshot content hashes and MUST NOT be used as a
+substitute for the version pins (`manifest.versions.criteria_pack_id` and
+`manifest.versions.criteria_pack_version`).
 
 ### Recommended source control practice (non-normative)
 
@@ -99,7 +106,14 @@ even if the repo changes:
 - `runs/<run_id>/criteria/criteria.jsonl`
 - `runs/<run_id>/criteria/results.jsonl`
 
-The run manifest pins the pack identity and hashes.
+The run manifest MUST pin the criteria pack identity using version pins under `manifest.versions.*`:
+
+- `manifest.versions.criteria_pack_id`
+- `manifest.versions.criteria_pack_version`
+
+Pack snapshot content hashes (for example `manifest_sha256` and `criteria_sha256`) MUST be recorded
+separately from version pins (for example in `runs/<run_id>/criteria/manifest.json`) and MUST NOT be
+used as a substitute for the version pins.
 
 ## Drift detection (execution definitions vs criteria expectations)
 
@@ -352,11 +366,35 @@ Regression comparability requirement (normative):
 
 - For regression runs, criteria evaluation results MUST be treated as comparable only when the
   following are pinned and recorded in run outputs:
-  - Criteria pack identity (at minimum `pack_id` and a concrete `pack_version`).
-  - Criteria pack snapshot content hashes (manifest and criteria content hashes), as pinned in the
-    run bundle snapshot.
-- If criteria pack identity or snapshot hashes are missing from run outputs, consumers MUST treat
-  criteria evaluation results as not comparable for regression deltas.
+
+  - Criteria pack identity pins (version pins):
+
+    - `manifest.versions.criteria_pack_id`
+    - `manifest.versions.criteria_pack_version`
+
+  - Criteria pack snapshot content hashes (separate from version pins):
+
+    - Snapshot hashes for the selected pack manifest and criteria content (for example
+      `manifest_sha256` and `criteria_sha256`) as recorded in the run bundle snapshot
+      (`runs/<run_id>/criteria/manifest.json` or an equivalent deterministic location).
+
+- If the criteria pack identity pins or snapshot hashes are missing from run outputs, consumers MUST
+  treat criteria evaluation results as not comparable for regression deltas.
+
+- By default, baseline/current runs with differing `manifest.versions.criteria_pack_version` MUST be
+  treated as not comparable. If the reporting layer supports an explicit regression policy that
+  allows criteria pack version drift, such drift MUST be explicitly enabled and recorded in the
+  report; otherwise, comparison MUST NOT proceed.
+
+Verification hooks (normative):
+
+- Fixture: criteria pack version differs baseline/current (strict default):
+  - Expected: regression comparability is not comparable (recorded as `baseline_incompatible`) and
+    criteria-related regression deltas are not computed (or are marked indeterminate
+    deterministically).
+- Fixture: criteria pack version differs baseline/current (allow-drift mode, if supported):
+  - Expected: mismatch is recorded as a warning, and regression deltas MAY be computed under the
+    explicit allow-drift policy.
 
 ### Drift detection algorithm (normative)
 
@@ -436,6 +474,8 @@ No-match behavior (normative):
   - `status: "skipped"`
   - `reason_code: "criteria_unavailable"`
 - `criteria_ref` MUST include the selected pack identity (`pack_id`, `pack_version`).
+  - `criteria_ref.pack_id` MUST equal `manifest.versions.criteria_pack_id`.
+  - `criteria_ref.pack_version` MUST equal `manifest.versions.criteria_pack_version`.
   - `criteria_ref.entry_id` MUST be omitted or set to JSON null.
 - `signals` MUST be an empty array.
 
@@ -689,7 +729,9 @@ Minimum fields:
 - `action_key`
 - `criteria_ref` (object)
   - `pack_id` (string)
+    - MUST equal `manifest.versions.criteria_pack_id` for the run.
   - `pack_version` (string)
+    - MUST equal `manifest.versions.criteria_pack_version` for the run.
   - `entry_id` (string, OPTIONAL; omitted or JSON null when `reason_code = "criteria_unavailable"`)
 - `status` (`pass`, `fail`, `skipped`)
 - `reason_code` (string, REQUIRED when `status = "skipped"`; omitted otherwise)
@@ -702,6 +744,10 @@ Minimum fields:
   - `invoked` (bool)
   - `verification_status` (`pass`, `fail`, `indeterminate`, `skipped`, `not_applicable`)
   - `results_ref` (optional path under `runner/`)
+
+Note: pack snapshot hashes (for example `manifest_sha256` and `criteria_sha256`) are not version
+pins. They MUST be recorded separately (for example in `criteria/manifest.json`) and referenced as
+evidence where needed; they MUST NOT replace the version pins.
 
 Failure classification and reason codes (normative):
 

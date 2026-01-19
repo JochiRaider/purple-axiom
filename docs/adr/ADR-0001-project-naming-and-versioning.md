@@ -130,6 +130,11 @@ resolved pins for a run (after any “latest” or omitted-version resolution is
 
 Minimum required keys in `manifest.versions` (v0.1 baseline, normative):
 
+These keys are the canonical pin set for regression comparability and trending joins. Downstream
+specifications that define regression comparability checks (for example, the reporting
+specification) MUST treat this list as authoritative and MUST NOT redefine pin names or introduce
+alternate pin locations for regression comparisons.
+
 - `project_version` (SemVer)
 - `pipeline_version` (SemVer)
   - Definition: the pipeline definition version used to interpret config and produce artifacts. This
@@ -257,7 +262,9 @@ If recorded in the manifest, the following shapes are RECOMMENDED:
 ### Trending keys and join dimensions
 
 Exporters and reporting tools MUST treat the following as stable join dimensions for trending and
-regression comparisons:
+regression comparisons. Reporting-level regression comparability checks MUST be computed using these
+pins (and other `manifest.versions.*` keys as applicable) and MUST NOT depend on environment-derived
+fields (for example, hostnames, absolute paths, timestamps).
 
 - `versions.scenario_id`
 - `versions.scenario_version` (SHOULD be present for trending)
@@ -334,3 +341,4 @@ Minimum conformance checks (normative):
 | ---------- | --------------------------------------------------------- |
 | 2026-01-12 | Formatting update                                         |
 | 2026-01-13 | Expand ADR into a complete naming and versioning contract |
+| 2026-01-18 | update |

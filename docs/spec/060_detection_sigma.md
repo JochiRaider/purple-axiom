@@ -180,12 +180,38 @@ Regression comparable detection metric inputs (normative):
 
 Regression comparability keys (normative):
 
-- For runs intended for regression comparison, the run manifest MUST record pinned versions for
-  enabled pack-like artifacts:
+- Regression comparability decisions MUST use pinned values recorded under `manifest.versions.*` as
+  the authoritative source of join dimensions (ADR-0001). Implementations MUST NOT use environment-
+  derived identifiers (for example, hostnames, absolute paths, local usernames, ephemeral
+  timestamps) as comparability keys.
+
+- For runs intended for regression comparison, the run manifest MUST record pinned versions for the
+  ADR-0001 minimum join dimensions:
+
+  - `manifest.versions.scenario_id` and `manifest.versions.scenario_version`
+  - `manifest.versions.pipeline_version`
+  - `manifest.versions.ocsf_version`
+
+- In addition, the run manifest MUST record pinned versions for enabled pack-like artifacts:
+
   - `manifest.versions.rule_set_id` and `manifest.versions.rule_set_version` when Sigma evaluation
     is enabled.
   - `manifest.versions.mapping_pack_id` and `manifest.versions.mapping_pack_version` when the
     Sigma-to-OCSF bridge is enabled.
+  - `manifest.versions.criteria_pack_id` and `manifest.versions.criteria_pack_version` when criteria
+    evaluation is enabled (even though the detection stage does not consume criteria directly, the
+    regression comparability posture is run-level and MUST be coherent across reporting outputs).
+
+- Drift gate semantics (normative):
+
+  - By default, `manifest.versions.mapping_pack_version` drift between baseline and current runs
+    MUST be treated as not comparable.
+  - The only exception is an explicit regression policy (recorded in the run report) that allows
+    mapping pack version drift (for example,
+    `report/report.json.regression.comparability.policy.allow_mapping_pack_version_drift=true`).
+  - When drift is disallowed and a mismatch is observed, the reporting regression-compare substage
+    MUST record `baseline_incompatible`, and regression deltas MUST NOT be computed (or MUST be
+    marked indeterminate) for detection-stage comparable surfaces.
 
 ### Deterministic emission
 
@@ -208,13 +234,50 @@ reproducible diffs and regression tests.
 
 ### Required conformance tests (regression comparability)
 
-CI MUST include fixtures that validate regression comparability and evidence satisfiability for
-detection-stage gaps:
+CI MUST include fixtures that validate regression comparability behavior and evidence satisfiability
+for detection-stage gaps.
 
-- Constant telemetry + normalization inputs, but `mapping_pack_version` changes between baseline and
-  current:
-  - Expected: `bridge_gap_mapping` rates/counts increase while the measurement layer remains
-    `detection`.
+#### Fixture A: Strict mode (default) - mapping pack version drift is NOT comparable
+
+- Setup:
+
+  - Constant telemetry + normalization inputs, but `manifest.versions.mapping_pack_version` differs
+    between baseline and current runs.
+  - No explicit “allow drift” policy is enabled.
+
+- Expected:
+
+  - The regression comparability decision MUST be recorded deterministically as not comparable:
+    - `report/report.json.regression.comparability.status` is `indeterminate`
+    - `report/report.json.regression.comparability.reason_code` is `baseline_incompatible`
+  - `report/report.json.regression.comparability_checks[]` MUST include an entry for the mapping
+    pack version key indicating a policy-disallowed drift condition (for example, reason code
+    `drift_disallowed_by_policy`), and the run MUST NOT emit computed regression deltas for the
+    detection-stage comparable surfaces (deltas MUST be empty or marked indeterminate
+    deterministically).
+  - Evidence references MUST be satisfiable and MUST include run-relative pointers to:
+    - `manifest.json` (current run)
+    - `inputs/baseline_run_ref.json` and/or `inputs/baseline/manifest.json` (when present)
+
+#### Fixture B: Allow-drift mode - mapping pack version drift is explicitly allowed
+
+- Setup:
+
+  - Constant telemetry + normalization inputs, but `manifest.versions.mapping_pack_version` differs
+    between baseline and current runs.
+  - An explicit regression policy allowing mapping pack version drift is enabled and recorded in the
+    run report (for example,
+    `report/report.json.regression.comparability.policy.allow_mapping_pack_version_drift=true`).
+
+- Expected:
+
+  - The mismatch MUST be recorded in `comparability_checks[]`, and the overall regression
+    `comparability.status` MUST be at least `warning` (comparison MAY proceed).
+  - Detection-stage regression deltas MUST be computed and MUST remain attributable to the
+    `detection` measurement layer.
+  - For a scenario intentionally constructed to surface mapping drift, `bridge_gap_mapping`
+    rates/counts SHOULD increase between baseline and current while telemetry and normalization are
+    held constant.
   - Evidence references MUST be satisfiable and include `bridge/coverage.json` and (when present)
     `detections/detections.jsonl`.
 

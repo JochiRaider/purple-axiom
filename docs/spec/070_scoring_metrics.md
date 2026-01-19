@@ -133,6 +133,25 @@ Normative requirements:
 - Comparable metrics MUST be emitted deterministically (stable rounding and stable ordering).
 - If a comparable metric cannot be computed, it MUST be recorded as `null` and accompanied by a
   deterministic `indeterminate_reason` token.
+- Implementations MUST NOT omit a metric from the comparable metric surface due to configuration
+  (for example, disabled gap categories). Instead, the metric MUST be present with value `null` and
+  `indeterminate_reason="excluded_by_config"`.
+
+Indeterminate reasons (normative):
+
+- `not_applicable`: the metric does not apply to the run (feature disabled, pack not enabled, or no
+  eligible denominator).
+- `excluded_by_config`: the metric is part of the comparable surface but is suppressed by explicit
+  configuration; emitted as `null` to preserve stable metric identifiers for regression.
+- `incomparable_pins`: regression delta computation is not permitted because baseline/current runs
+  are not comparable (see Deterministic comparison semantics below).
+
+Scoring summary metadata (recommended):
+
+- `scoring/summary.json` SHOULD include `meta.versions`, a normalized subset of `manifest.versions`
+  sufficient to compute regression joins without re-reading `manifest.json` (for example:
+  `scenario_id`, `scenario_version`, `pipeline_version`, `ocsf_version`, and any enabled pack ids
+  and versions).
 
 Comparable metrics (v0.1 minimum set):
 
@@ -173,6 +192,20 @@ Notes:
 
 Regression delta computation MUST be deterministic and reproducible across platforms.
 
+Comparability prerequisites (normative):
+
+- Regression deltas MUST be computed only when reporting-level comparability checks pass.
+  - Implementations MUST treat `report/report.json.regression.comparability.status="indeterminate"`
+    as not comparable.
+- When runs are not comparable (comparability is indeterminate):
+  - Implementations MUST NOT emit a computed numeric delta for any comparable metric.
+  - Implementations SHOULD emit one delta row per `metric_id` in the comparable surface with
+    `delta=null` and `indeterminate_reason="incomparable_pins"`.
+  - Implementations MAY alternatively emit an empty delta table, but MUST do so deterministically
+    and MUST NOT interpret the absence of a row as `delta=0`.
+- When a metric is excluded by configuration, its baseline/current values MAY be present, but
+  `delta` MUST be `null` with `indeterminate_reason="excluded_by_config"`.
+
 Canonical rounding:
 
 - `rate` values MUST be rounded to 4 decimal places using round-half-up.
@@ -196,6 +229,21 @@ Default tolerances (v0.1):
 Stable ordering:
 
 - Any regression delta table MUST be sorted by `metric_id` ascending (ASCII byte order).
+
+### Verification hooks (regression comparability)
+
+CI MUST include fixtures that validate regression delta determinism under comparability failures:
+
+- Pins differ but scoring metrics are otherwise valid:
+  - Setup: baseline and current runs produce valid `scoring/summary.json`, but at least one required
+    `manifest.versions.*` pin differs (for example, `mapping_pack_version`).
+  - Expected: regression deltas MUST be indeterminate and MUST use
+    `indeterminate_reason="incomparable_pins"` (or the implementation’s documented deterministic
+    alternate shape, such as an empty delta table).
+- Excluded category does not cause omission instability:
+  - Setup: a gap category metric is excluded by configuration in both baseline and current.
+  - Expected: the comparable metric identifier MUST remain present in the delta surface, and delta
+    MUST be indeterminate with `indeterminate_reason="excluded_by_config"` (not silently omitted).
 
 ## Methodology inspiration
 

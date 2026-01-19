@@ -272,6 +272,8 @@ Minimum publish-gate coverage (v0.1):
   that publishes them:
   - `manifest.json`
   - `ground_truth.jsonl`
+  - `runs/<run_id>/inputs/baseline_run_ref.json` when regression is enabled
+  - `runs/<run_id>/inputs/baseline/manifest.json` when produced (regression baseline snapshot form)
   - `runner/**` artifacts that have contracts (for example, executor evidence, side-effect ledger,
     cleanup verification)
   - `runs/<run_id>/runner/principal_context.json`
@@ -320,7 +322,8 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `manifest.json` (single JSON object)
 - `ground_truth.jsonl` (JSONL)
 - `inputs/` (input snapshots and references used to interpret and compare runs)
-  - `inputs/baseline_run_ref.json` (optional; regression baseline pointer form)
+  - `inputs/baseline_run_ref.json` (required when regression is enabled; regression baseline pointer
+    form)
   - `inputs/baseline/manifest.json` (optional; regression baseline snapshot form)
 - `plan/` (v0.2+; compiled plan graph and expansion manifests)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
@@ -378,6 +381,97 @@ Selector constraints (normative when present):
 - `selector` MUST match one of the following prefix forms:
   - `json_pointer:` followed by an RFC 6901 JSON Pointer starting with `/`
   - `jsonl_line:` followed by a 1-indexed positive integer
+
+### Regression baseline reference inputs (normative)
+
+Regression analysis compares a candidate run to a baseline run. When regression is enabled
+(`reporting.regression.enabled=true`), implementations MUST materialize baseline reference inputs
+under `runs/<run_id>/inputs/` as defined by the storage formats spec (`045_storage_formats.md`).
+These artifacts are treated as inputs used to interpret and compare runs and MAY be referenced by
+`evidence_refs[]` in reporting artifacts.
+
+Implementations MUST support two baseline reference forms. The pointer form is required when
+regression is enabled; the snapshot form is optional but RECOMMENDED when the baseline manifest is
+readable.
+
+#### A) Snapshot form: `inputs/baseline/manifest.json`
+
+Normative requirements:
+
+- When present, `inputs/baseline/manifest.json` MUST be a byte-for-byte copy of the baseline run’s
+  `manifest.json` (no normalization, reformatting, or key reordering).
+- When present, `inputs/baseline/manifest.json` MUST validate against the existing manifest schema
+  at publish gate (`docs/contracts/manifest.schema.json`).
+- If `inputs/baseline_run_ref.json` is also present, the SHA-256 of the snapshot bytes MUST equal
+  `baseline_manifest_sha256` recorded in the pointer form (consistency requirement; see
+  `045_storage_formats.md`).
+
+#### B) Pointer form: `inputs/baseline_run_ref.json`
+
+The pointer form is a schema-backed JSON object that records baseline selection and integrity. This
+object MUST be stable across repeated runs using the same baseline selection: it MUST NOT include
+timestamps or environment-specific values (for example, hostnames).
+
+Minimum fields (normative):
+
+- Baseline selection (exactly one is REQUIRED):
+  - `baseline_run_id` (string; UUID): baseline run identifier
+  - `baseline_manifest_path` (string): relative path to a baseline `manifest.json`
+    - `baseline_manifest_path` MUST be relative to `reporting.output_dir`.
+    - Absolute paths MUST NOT be used for baseline selection.
+- `baseline_manifest_sha256` (string; conditional): lowercase hex SHA-256 of the baseline manifest
+  bytes, computed over the exact baseline manifest bytes read (and, if snapshot form is
+  materialized, MUST match the snapshot bytes).
+  - `baseline_manifest_sha256` MUST be present when the baseline manifest bytes were successfully
+    read.
+  - `baseline_manifest_sha256` MUST be omitted when the baseline manifest cannot be located or read.
+- `baseline_manifest_ref` (string; optional): resolved reference used by the implementation to
+  locate the baseline manifest.
+  - RECOMMENDED values:
+    - `runs/<baseline_run_id>/manifest.json` when selecting by `baseline_run_id`
+    - the provided `baseline_manifest_path` when selecting by `baseline_manifest_path`
+- `expected_contract_versions` (object; optional): map of `contract_id` to expected
+  `contract_version` for artifacts required by regression comparison.
+  - Keys SHOULD be stable `contract_id` values from `docs/contracts/contract_registry.json`.
+  - This field is intended to make “baseline incompatible” triage deterministic and auditable.
+
+#### Deterministic baseline resolution and failure mapping (normative)
+
+Inputs:
+
+- Baseline selection is provided by configuration via `reporting.regression.baseline_run_id` or
+  `reporting.regression.baseline_manifest_path` (see `120_config_reference.md`).
+
+Output guarantees (when regression is enabled):
+
+- `runs/<run_id>/inputs/baseline_run_ref.json` MUST be materialized.
+- At least one baseline reference form MUST be present under `runs/<run_id>/inputs/`.
+- When the baseline manifest bytes are readable, implementations SHOULD also materialize
+  `runs/<run_id>/inputs/baseline/manifest.json` (snapshot form).
+
+Resolution algorithm (normative):
+
+1. Determine `baseline_manifest_ref`:
+   - If `baseline_run_id` is selected, `baseline_manifest_ref` MUST be
+     `runs/<baseline_run_id>/manifest.json` (relative to `reporting.output_dir`).
+   - If `baseline_manifest_path` is selected, `baseline_manifest_ref` MUST be the provided
+     `baseline_manifest_path` (relative to `reporting.output_dir`).
+1. Implementations MUST write `inputs/baseline_run_ref.json` with the selected baseline fields and
+   `baseline_manifest_ref` prior to regression comparison.
+1. Implementations MUST attempt to read the baseline manifest bytes from `baseline_manifest_ref`:
+   - On success, implementations MUST compute `baseline_manifest_sha256` over the exact bytes read
+     and SHOULD snapshot those same bytes to `inputs/baseline/manifest.json`.
+   - On failure, implementations MUST omit `baseline_manifest_sha256` from
+     `inputs/baseline_run_ref.json` and MUST classify the condition as `baseline_missing`.
+
+Failure mapping (normative):
+
+- Failure to locate or read the baseline manifest MUST be classified as `baseline_missing` (maps to
+  the ADR-0005 `reporting.regression_compare` substage reason code).
+- Missing required baseline or candidate artifacts for regression comparison, or schema/contract
+  version incompatibility, MUST be classified as `baseline_incompatible`.
+- Unexpected runtime errors during regression comparison MUST be classified as
+  `regression_compare_failed`.
 
 ### Measurement layers for conclusions (triage taxonomy)
 

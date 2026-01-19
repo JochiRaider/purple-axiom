@@ -554,30 +554,83 @@ Additional provenance:
 
 ## Regression analysis
 
-When a baseline run is provided, the report MUST include a regression summary comparing the current
-run against the baseline.
+Regression analysis is controlled by configuration (`reporting.regression.enabled`; see
+`120_config_reference.md`). When disabled, the report MUST NOT include
+`report/report.json.regression`. When enabled, the reporting stage MUST attempt a deterministic
+comparison against the configured baseline and MUST emit `report/report.json.regression` as
+described below.
+
+If regression is enabled but the baseline cannot be located/read, is incompatible, or the comparison
+fails unexpectedly, the reporting stage MUST still emit the `reporting.regression_compare` health
+substage outcome with the appropriate reason code (see ADR-0005). In these cases, the report MUST
+emit `report/report.json.regression` in an indeterminate form with an empty `deltas[]` array.
 
 ### Regression JSON contract (normative)
 
-When regression analysis is performed, the report JSON MUST include `report/report.json.regression`
-as a structured object. This object is the authoritative machine-readable regression surface for CI
-and downstream tools. The authoritative regression surface is `report/report.json.regression`.
-Implementations MUST NOT emit `report/regression.json` or `report/regression_deltas.jsonl`.
+`report/report.json.regression` is the authoritative machine-readable regression surface for CI and
+downstream tools.
+
+Presence rules (normative):
+
+- If `reporting.regression.enabled=false`, `report/report.json.regression` MUST be absent.
+- If `reporting.regression.enabled=true` and the baseline is resolved and compared, the report JSON
+  MUST include `report/report.json.regression` populated per this contract.
+- If `reporting.regression.enabled=true` but baseline resolution or comparison fails, the report
+  JSON MUST still include `report/report.json.regression` in an indeterminate form:
+  - `comparability.status` MUST be `indeterminate`.
+  - `comparability.reason_code` MUST be one of
+    `baseline_missing | baseline_incompatible | regression_compare_failed`.
+  - `deltas[]` MUST be an empty array (`[]`).
+  - `regression_alerted` MUST be `false`.
+  - `alert_reasons[]` MUST be an empty array (`[]`).
+  - The reporting stage MUST emit the `reporting.regression_compare` health substage outcome with
+    the same `reason_code` (see ADR-0005).
 
 Required fields:
 
 - `baseline`:
-  - `run_id` (string; baseline run id)
-  - `generated_at_utc` (string; baseline report generation timestamp)
-  - `manifest_ref` (string; run-relative artifact path or content-addressed reference)
+  - `run_id` (string; baseline run id; may be `null` when unavailable)
+  - `generated_at_utc` (string; baseline report generation timestamp; may be `null` when
+    unavailable)
+  - `manifest_ref` (string; run-relative artifact path or content-addressed reference; may be `null`
+    when unavailable)
+- `comparability`:
+  - `status` (string): `comparable | warning | indeterminate`
+  - `reason_code` (string; required when `status=indeterminate`):
+    `baseline_missing | baseline_incompatible | regression_compare_failed`
+  - `policy` (object; REQUIRED when `report/report.json.regression` is present):
+    - Purpose: record the resolved comparability policy that was applied, so comparisons remain
+      explainable and reproducible.
+    - `allow_mapping_pack_version_drift` (boolean; default: `false`)
+      - If `false`, mismatches on `versions.mapping_pack_version` MUST be treated as not comparable
+        (`baseline_incompatible`) unless the key is not applicable to both runs.
+      - If `true`, mismatches on `versions.mapping_pack_version` MUST be treated as warnings
+        (comparison MAY proceed), and the mismatch MUST still be recorded in
+        `comparability_checks[]`.
+  - `evidence_refs[]`:
+    - Each entry MUST follow the `evidence_refs[]` shape and selector grammar defined in
+      `025_data_contracts.md`.
+    - `evidence_refs[]` MUST include entries with:
+      - `artifact_path="manifest.json"` (current run)
+      - `artifact_path="inputs/baseline_run_ref.json"`
+    - When `inputs/baseline/manifest.json` is present, `evidence_refs[]` SHOULD include it.
+    - Entries MUST be sorted by `artifact_path` ascending (UTF-8 byte order, no locale).
 - `comparability_checks[]`:
   - Each entry MUST include:
     - `key` (string)
-    - `baseline_value` (string)
-    - `current_value` (string)
-    - `match` (boolean)
-  - `comparability_checks[]` MUST include all keys listed in [Comparable keys](#comparable-keys).
-  - The array MUST be emitted in the same order as the table in [Comparable keys](#comparable-keys).
+    - `baseline_value` (string; may be `null` when unavailable)
+    - `current_value` (string; may be `null` when unavailable)
+    - `match` (boolean; MUST be false when `baseline_value` or `current_value` is null)
+    - `status` (string): `pass | fail | skipped`
+    - `reason_code` (string; REQUIRED when `status != pass`):
+      `missing_baseline_pin | missing_current_pin | pin_mismatch | drift_disallowed_by_policy | not_applicable`
+    - `evidence_refs[]` (array; REQUIRED when `status=fail`):
+      - Each entry MUST follow the `evidence_refs[]` shape and selector grammar defined in
+        `025_data_contracts.md`.
+      - Entries MUST be sorted by `artifact_path` ascending (UTF-8 byte order, no locale).
+  - `comparability_checks[]` MUST include all keys listed in
+    [Regression comparability keys](#regression-comparability-keys).
+  - `comparability_checks[]` MUST be sorted by `key` ascending (UTF-8 byte order, no locale).
 - `metric_surface_ref`:
   - A string reference to the comparable metric surface defined in
     [Scoring metrics](070_scoring_metrics.md) (Regression comparable metric surface, normative).
@@ -600,27 +653,152 @@ Required fields:
   - Stable list of tokens describing which thresholds were exceeded.
   - MUST be sorted ascending (UTF-8 byte order, no locale).
 
+Baseline field derivation (normative):
+
+- `baseline.manifest_ref` derivation:
+  - If `inputs/baseline/manifest.json` exists, `baseline.manifest_ref` MUST be
+    `inputs/baseline/manifest.json`.
+  - Otherwise, if `inputs/baseline_run_ref.json` records `baseline_manifest_sha256`, then
+    `baseline.manifest_ref` SHOULD be `sha256:<baseline_manifest_sha256>`.
+  - Otherwise (baseline not readable), `baseline.manifest_ref` MUST be `null`.
+- `baseline.generated_at_utc` derivation:
+  - If `baseline.run_id` is known and the baseline report exists at
+    `runs/<baseline_run_id>/report/report.json`, then `baseline.generated_at_utc` MUST equal the
+    baseline report’s top-level `generated_at_utc`.
+  - Otherwise, `baseline.generated_at_utc` MUST be `null` (implementations MUST NOT invent a
+    timestamp).
+
 Interaction with status recommendation (normative):
 
 - If `regression_alerted=true`, then:
-  - `report/thresholds.json.status_recommendation` MUST be downgraded to at least `partial`, and
+  - `report/thresholds.json.status_recommendation` MUST be set according to the configured policy:
+    - If `reporting.regression.alert_status_recommendation=failed`, it MUST be `failed`.
+    - Otherwise, it MUST be downgraded to at least `partial`.
   - `report/report.json.status_reasons[]` MUST include `regression_alert`.
-- Implementations MAY support a strict policy that treats regression alerts as `failed`, but that
-  policy MUST be explicitly configured and MUST be recorded in `report/thresholds.json` (TODO:
-  specify the config key in `120_config_reference.md`).
+- The effective regression alert policy MUST be explicitly configured via
+  `reporting.regression.alert_status_recommendation` (see `120_config_reference.md`) and MUST be
+  recorded in `report/thresholds.json` under `regression.alert_status_recommendation`.
 
-### Comparable keys
+### Regression comparability keys
 
-Two runs are comparable when the following keys match:
+Regression analysis assumes that the baseline and current runs were produced with the same effective
+pins. For regression comparability decisions, the authoritative pin source is `manifest.versions.*`
+(per ADR-0001). Exporters and reporting tools MUST treat the `versions.*` keys below as stable join
+dimensions for regression comparisons (ADR-0001). Keys outside these pins (for example, hostnames,
+timestamps, absolute paths, or other environment-specific fields) MUST NOT be used to decide
+comparability.
 
-| Key                | Source                               | Match requirement |
-| ------------------ | ------------------------------------ | ----------------- |
-| `scenario_id`      | `manifest.scenario.scenario_id`      | MUST match        |
-| `scenario_version` | `manifest.scenario.scenario_version` | SHOULD match      |
-| `ocsf_version`     | `manifest.versions.ocsf_version`     | SHOULD match      |
+#### Comparable pins (normative)
 
-Runs with mismatched `scenario_id` MUST NOT be compared. Mismatched `scenario_version` or
-`ocsf_version` SHOULD trigger a warning in the regression summary.
+The canonical key set for regression comparability is the ADR-0001 minimum required pin set recorded
+under `manifest.versions` for diffable/regression-tested/trended runs, plus an optional
+pipeline/config hash key until a canonical `manifest.versions.*` config-hash field is standardized.
+
+The table order is canonical. `report/report.json.regression.comparability_checks[]` MUST be sorted
+by `key` ascending (UTF-8 byte order, no locale) and MUST include exactly one entry per key below.
+
+| Key                              | Source (baseline & current)               | Applicability (deterministic)                    | Requirement                             |
+| -------------------------------- | ----------------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| `inputs.range_yaml_sha256`       | `manifest.inputs.range_yaml_sha256`       | OPTIONAL: compare only when present in both runs | SHOULD match (non-fatal)                |
+| `versions.criteria_pack_id`      | `manifest.versions.criteria_pack_id`      | Applicable when present in either run            | MUST match                              |
+| `versions.criteria_pack_version` | `manifest.versions.criteria_pack_version` | Applicable when present in either run            | MUST match                              |
+| `versions.mapping_pack_id`       | `manifest.versions.mapping_pack_id`       | Applicable when present in either run            | MUST match                              |
+| `versions.mapping_pack_version`  | `manifest.versions.mapping_pack_version`  | Applicable when present in either run            | MUST match (unless policy allows drift) |
+| `versions.ocsf_version`          | `manifest.versions.ocsf_version`          | Always applicable                                | MUST match                              |
+| `versions.pipeline_version`      | `manifest.versions.pipeline_version`      | Always applicable                                | MUST match                              |
+| `versions.rule_set_id`           | `manifest.versions.rule_set_id`           | Applicable when present in either run            | MUST match                              |
+| `versions.rule_set_version`      | `manifest.versions.rule_set_version`      | Applicable when present in either run            | MUST match                              |
+| `versions.scenario_id`           | `manifest.versions.scenario_id`           | Always applicable                                | MUST match                              |
+| `versions.scenario_version`      | `manifest.versions.scenario_version`      | Always applicable                                | MUST match                              |
+
+Notes:
+
+- The `versions.*` key names above correspond to the `manifest.versions` minimum required keys
+  defined by ADR-0001 (including scenario, pipeline, OCSF, and pack pins). The reporting spec MUST
+  not use `manifest.scenario.*` as the primary comparability pin source for regression runs.
+
+- `inputs.range_yaml_sha256` is an OPTIONAL best-effort pipeline/config hash until a canonical
+  `manifest.versions.*` configuration-hash field is standardized. It MUST NOT fail comparability by
+  default because it may include environment-dependent configuration.
+
+#### Deterministic check generation (normative)
+
+For each key in the table above, the reporting stage MUST emit exactly one entry in
+`comparability_checks[]` with the following deterministic semantics:
+
+- Value extraction:
+
+  - If `key` starts with `versions.`, extract the value from `manifest.versions` using the suffix
+    after `versions.` (example: `versions.pipeline_version` maps to
+    `manifest.versions.pipeline_version`).
+  - If `key` starts with `inputs.`, extract the value from `manifest.inputs` using the suffix after
+    `inputs.`.
+
+- `baseline_value` MUST be extracted from the baseline run’s `manifest.json` content that was read
+  during baseline resolution. When `inputs/baseline/manifest.json` is present, implementations
+  SHOULD use that snapshot as the baseline source.
+
+- `current_value` MUST be extracted from the current run `manifest.json`.
+
+- `match` MUST be computed as byte-for-byte equality of the two string values, with no additional
+  normalization. If either value is `null`, `match` MUST be `false`.
+
+- `status` computation:
+
+  - For REQUIRED/MUST-match keys:
+    - If `baseline_value` is `null`: `status=fail`, `reason_code=missing_baseline_pin`
+    - If `current_value` is `null`: `status=fail`, `reason_code=missing_current_pin`
+    - If both are present and differ:
+      - `status=fail`, `reason_code=pin_mismatch` (except `versions.mapping_pack_version`, see drift
+        policy)
+    - If both are present and equal: `status=pass`
+  - For OPTIONAL non-fatal keys (currently: `inputs.range_yaml_sha256`):
+    - If either side is `null`: `status=skipped`, `reason_code=not_applicable`
+    - If both present and equal: `status=pass`
+    - If both present and differ: `status=pass` and the overall `comparability.status` MUST be at
+      least `warning`.
+
+#### Drift policy (normative)
+
+By default, `versions.mapping_pack_version` drift is DISALLOWED.
+
+- If `versions.mapping_pack_version` differs and
+  `comparability.policy.allow_mapping_pack_version_drift=false`, the corresponding check MUST be:
+  - `status=fail`
+  - `reason_code=drift_disallowed_by_policy`
+
+If drift is allowed (`allow_mapping_pack_version_drift=true`), the mismatch MUST still be recorded
+in `comparability_checks[]`, and the overall `comparability.status` MUST be at least `warning`.
+
+#### Evidence pointers (normative)
+
+Every `comparability_checks[]` entry with `status=fail` MUST include `evidence_refs[]` with
+run-relative `artifact_path` pointers. At minimum:
+
+- `artifact_path="manifest.json"` (current run)
+- `artifact_path="inputs/baseline/manifest.json"` when present; otherwise
+  `artifact_path="inputs/baseline_run_ref.json"`
+
+Within each such `evidence_refs[]`, entries MUST be sorted by `artifact_path` ascending.
+
+#### Impact on regression deltas (normative)
+
+If any MUST-match key results in `status=fail`:
+
+- `comparability.status` MUST be `indeterminate`
+- `comparability.reason_code` MUST be `baseline_incompatible`
+- `deltas[]` MUST be an empty array (`[]`)
+- The reporting stage MUST emit `reporting.regression_compare` with
+  `reason_code=baseline_incompatible` (ADR-0005)
+
+#### Verification hooks (normative)
+
+- Fixture: changing only `manifest.versions.mapping_pack_version` MUST produce
+  `baseline_incompatible` by default, with `comparability_checks[]` including a failed entry whose
+  `reason_code` is `drift_disallowed_by_policy`.
+- Fixture: runs with identical `manifest.versions.*` pins but differing environment fields
+  (hostnames, timestamps, absolute paths) MUST remain comparable; comparability MUST NOT depend on
+  ephemeral fields.
 
 ### Regression deltas
 
@@ -720,6 +898,9 @@ The reporting stage MUST emit `report/thresholds.json` for CI integration.
   "run_id": "<uuid>",
   "evaluated_at_utc": "<ISO8601>",
   "overall_pass": true,
+  "regression": {
+    "alert_status_recommendation": "partial"
+  },  
   "gates": [
     {
       "gate_id": "min_technique_coverage",
@@ -851,16 +1032,54 @@ The `report/report.json` output MUST conform to the following structure:
   "versions": { },
   "regression": {
     "baseline": {
-      "run_id": "<uuid>",
-      "generated_at_utc": "<ISO8601>",
-      "manifest_ref": "<string>"
+      "run_id": "<uuid|null>",
+      "generated_at_utc": "<ISO8601|null>",
+      "manifest_ref": "<string|null>"
+    },
+    "comparability": {
+      "status": "comparable | warning | indeterminate",
+      "reason_code": "<string|null>",
+      "policy": {
+        "allow_mapping_pack_version_drift": false
+      },
+      "evidence_refs": [
+        {
+          "artifact_path": "inputs/baseline/manifest.json",
+          "selector": "json_pointer:/versions",
+          "handling": "present | withheld | quarantined | absent"
+        },
+        {
+          "artifact_path": "inputs/baseline_run_ref.json",
+          "selector": "json_pointer:/",
+          "handling": "present | withheld | quarantined | absent"
+        },
+        {
+          "artifact_path": "manifest.json",
+          "selector": "json_pointer:/versions",
+          "handling": "present | withheld | quarantined | absent"
+        }
+      ]
     },
     "comparability_checks": [
       {
-        "key": "<string>",
-        "baseline_value": "<string>",
-        "current_value": "<string>",
-        "match": true
+        "key": "versions.pipeline_version",
+        "baseline_value": "<string|null>",
+        "current_value": "<string|null>",
+        "match": true,
+        "status": "pass | fail | skipped",
+        "reason_code": "<string|null>",
+        "evidence_refs": [
+          {
+            "artifact_path": "inputs/baseline/manifest.json",
+            "selector": "json_pointer:/versions/pipeline_version",
+            "handling": "present | withheld | quarantined | absent"
+          },
+          {
+            "artifact_path": "manifest.json",
+            "selector": "json_pointer:/versions/pipeline_version",
+            "handling": "present | withheld | quarantined | absent"
+          }
+        ]
       }
     ],
     "metric_surface_ref": "070_scoring_metrics.md#regression-comparable-metric-surface-normative",

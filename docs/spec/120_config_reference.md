@@ -612,16 +612,35 @@ Common keys:
 - `include_debug_sections` (default: false)
 - `regression` (optional)
   - `enabled` (default: false)
-    - When `true`, reporting MUST attempt a deterministic comparison against a baseline run and emit
-      regression outputs under `report/` (see `080_reporting.md` and `045_storage_formats.md`).
+    - When `true`, reporting MUST attempt a deterministic comparison against a baseline run and MUST
+      record regression results only in `report/report.json` under the `regression` object.
+      - Implementations MUST NOT emit standalone regression artifacts (for example
+        `report/regression.json`); see `045_storage_formats.md`.
   - Baseline selection (exactly one when `enabled: true`):
     - `baseline_run_id` (string, UUID): baseline run identifier
     - `baseline_manifest_path` (string): relative path to a baseline `manifest.json`
       - `baseline_manifest_path` MUST be relative to `reporting.output_dir`. Absolute paths MUST NOT
         be used for baseline selection.
+  - Baseline reference materialization (normative when `enabled: true`):
+    - Reporting MUST record baseline selection inputs in
+      `runs/<run_id>/inputs/baseline_run_ref.json` (schema-backed; see `025_data_contracts.md`).
+    - When baseline resolution succeeds, reporting SHOULD snapshot the baseline manifest bytes to
+      `runs/<run_id>/inputs/baseline/manifest.json` (preferred for portability).
+    - If both snapshot and pointer forms are present, they MUST be consistent (the baseline manifest
+      SHA-256 must match) per `045_storage_formats.md`.
   - `thresholds` (optional): allowlist of comparable metrics and tolerances used to classify deltas
+    - Entries are used to populate `report/report.json.regression.deltas[].tolerance` and determine
+      `within_tolerance` and `regression_flag` (see `080_reporting.md`).
     - Comparable metric identifiers and rounding/tolerance semantics are defined in
       `070_scoring_metrics.md`.
+  - `alert_status_recommendation` (optional, default: `partial`; enum: `partial | failed`)
+    - Controls how regression alerts (`report/report.json.regression.regression_alerted=true`)
+      affect `report/thresholds.json.status_recommendation` (see `080_reporting.md`).
+    - When `partial` (default), regression alerts MUST downgrade status recommendation to at least
+      `partial`.
+    - When `failed`, regression alerts MUST set status recommendation to `failed`.
+    - The effective value MUST be recorded in `report/thresholds.json` (schema in
+      `080_reporting.md`).
   - Notes (recommended for CI/regression runs):
     - Pack-like inputs that affect comparability SHOULD be explicitly pinned (see
       `criteria_pack.pack_version`, `detection.sigma.rule_set_version`, and

@@ -54,12 +54,21 @@ v0.1 policy (normative):
 
 ### Regression baseline reference and outputs (v0.1; optional when enabled)
 
-When regression comparison is enabled, the pipeline MUST materialize a deterministic baseline
-reference under the candidate run bundle.
+When regression comparison is enabled, the reporting stage MUST materialize a deterministic baseline
+reference under the candidate run bundle and MUST compute regression results as part of reporting.
+Baseline reference materialization and regression computation are owned by the reporting stage (see
+the `reporting.regression_compare` health substage in ADR-0005).
 
-Baseline reference (exactly one form is REQUIRED):
+Timing (normative):
 
-- Snapshot form (preferred for local-first portability):
+- Baseline reference materialization MUST occur during the reporting stage, in its staging area,
+  before the reporting publish gate finalizes/publishes the run bundle. This ensures the baseline
+  reference artifacts are atomically published with the run bundle and can be referenced by evidence
+  pointers in `report/**`.
+
+Baseline reference (at least one form MUST be present; snapshot form is RECOMMENDED):
+
+- Snapshot form (RECOMMENDED; preferred for local-first portability):
   - `runs/<run_id>/inputs/baseline/manifest.json`
     - A byte-for-byte copy of the baseline run's `manifest.json`.
 - Pointer form (allowed when the baseline is not copied into the run bundle):
@@ -70,16 +79,20 @@ Baseline reference (exactly one form is REQUIRED):
 If both forms are present, they MUST be consistent (the referenced baseline manifest hash must match
 the copied snapshot hash).
 
-Regression comparison results MUST be recorded only in
-`runs/<run_id>/report/report.json` under the `regression` object.
-Implementations MUST NOT produce standalone regression artifacts such as
+Regression comparison results MUST be recorded only in `runs/<run_id>/report/report.json` under the
+`regression` object. Implementations MUST NOT produce standalone regression artifacts such as
 `report/regression.json` or `report/regression_deltas.jsonl`.
 
 Evidence references (normative):
 
-- Any artifact field that carries an evidence pointer (for example `evidence_refs[].artifact_path`) MUST use
-  a run-relative path that follows the deterministic layout rules in this document.
+- Any artifact field that carries an evidence pointer (for example `evidence_refs[].artifact_path`)
+  MUST use a run-relative path that follows the deterministic layout rules in this document.
 - Evidence paths MUST NOT be absolute paths and MUST NOT encode environment-specific prefixes.
+- Regression-related evidence pointers SHOULD commonly reference:
+  - `runs/<run_id>/inputs/baseline_run_ref.json`
+  - `runs/<run_id>/inputs/baseline/manifest.json` (when present)
+  - any missing or mismatched artifact paths that caused `baseline_incompatible` (for example, a
+    required baseline or candidate artifact path referenced in the regression compare algorithm)
 
 Verification hook (RECOMMENDED): CI SHOULD include a storage-format lint that fails if the
 regression surface deviates from `report/report.json.regression` or uses timestamped filenames.

@@ -372,6 +372,15 @@ A telemetry stage is only considered "validated" for an asset when a validation 
 
 Additional normative checks:
 
+- The validator MUST emit a `health.json.stages[]` entry with `stage: "telemetry.agent.liveness"`.
+  - The validator MUST treat collector self-telemetry as the OS-neutral heartbeat for each asset
+    with `telemetry.otel.enabled=true` (see the telemetry pipeline specification).
+  - If no heartbeat is observed for one or more expected assets within
+    `telemetry.otel.agent_liveness.startup_grace_seconds` from the start of the telemetry window,
+    the stage MUST be `status=failed`, `fail_mode=fail_closed`,
+    `reason_code=agent_heartbeat_missing`.
+  - The validator MUST record per-asset liveness evidence in
+    `runs/<run_id>/logs/telemetry_validation.json` under `agent_liveness`.
 - The validator MUST emit a `health.json.stages[]` entry with
   `stage: "telemetry.windows_eventlog.raw_mode"`.
 - When collector checkpoint corruption prevents the collector from starting, the validator MUST emit

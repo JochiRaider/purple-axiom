@@ -448,13 +448,23 @@ Minimum artifacts when enabled: `raw_parquet/**`, `manifest.json`
 
 #### FATAL reason codes
 
-| Reason code                   | Severity | Description                                                                                            |
-| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `required_source_missing`     | FATAL    | Required telemetry source is not installed or configured (for example Sysmon).                         |
-| `source_not_implemented`      | FATAL    | Source is enabled but not implemented in v0.1 (for example pcap placeholder).                          |
-| `collector_startup_failed`    | FATAL    | Collector cannot start (config parse error, binding failure).                                          |
-| `checkpoint_corruption_fatal` | FATAL    | Checkpoint is corrupt and automatic recovery failed.                                                   |
-| `raw_xml_unavailable`         | FATAL^   | Required raw XML (or equivalent raw record) cannot be acquired when strict fail-closed policy applies. |
+| Reason code                     | Severity | Description                                                                                            |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `required_source_missing`       | FATAL    | Required telemetry source is not installed or configured (for example Sysmon).                         |
+| `source_not_implemented`        | FATAL    | Source is enabled but not implemented in v0.1 (for example pcap placeholder).                          |
+| `collector_startup_failed`      | FATAL    | Collector cannot start (config parse error, binding failure).                                          |
+| `checkpoint_store_corrupt`      | FATAL    | Checkpoint/offset store corruption prevents reliable ingestion or collector startup.                   |
+| `checkpoint_corruption_fatal`   | FATAL    | Legacy alias for `checkpoint_store_corrupt`; SHOULD NOT be emitted in new runs.                        |
+| `agent_heartbeat_missing`       | FATAL    | No agent self-telemetry heartbeat observed for one or more expected assets within startup grace.       |
+| `disk_free_space_insufficient`  | FATAL    | Disk preflight indicates insufficient free space for configured run budgets.                           |
+| `disk_metrics_missing`          | FATAL    | Disk preflight metrics could not be computed deterministically.                                        |
+| `resource_budgets_unconfigured` | FATAL    | Resource budget thresholds are required but not configured.                                            |
+| `resource_metrics_missing`      | FATAL    | Required collector self-telemetry measurements are missing.                                            |
+| `eps_target_not_met`            | FATAL    | Sustained EPS target was not met, preventing deterministic budget measurement window selection.        |
+| `egress_canary_unconfigured`    | FATAL    | Egress canary endpoint is required but not configured.                                                 |
+| `egress_probe_unavailable`      | FATAL    | Egress probe could not be executed on the asset.                                                       |
+| `egress_violation`              | FATAL    | Egress probe succeeded despite deny policy.                                                            |
+| `raw_xml_unavailable`           | FATAL^   | Required raw XML (or equivalent raw record) cannot be acquired when strict fail-closed policy applies. |
 
 ^ Policy-dependent override:
 
@@ -485,6 +495,57 @@ If this substage fails, the telemetry stage MUST fail closed. The telemetry stag
 - `egress_canary_unconfigured` (no canary endpoint configured when required)
 - `egress_probe_unavailable` (probe could not be executed on the asset)
 - `egress_violation` (probe succeeded despite deny policy)
+
+#### Agent liveness (substage: `telemetry.agent.liveness`)
+
+This substage distinguishes "agent is idle" from "agent failed before exporting telemetry" in
+push-only OTLP architectures by requiring an OS-neutral heartbeat derived from collector
+self-telemetry.
+
+If this substage fails, the telemetry stage MUST fail closed. The telemetry stage MAY use the same
+`reason_code` as the substage outcome.
+
+`reason_code` for this substage MUST be constrained to:
+
+- `agent_heartbeat_missing` (no self-telemetry heartbeat observed within startup grace)
+
+#### Disk preflight (substage: `telemetry.disk.preflight`)
+
+This substage is a fail-closed safety gate that verifies the run host has sufficient free space to
+complete the run within configured disk budgets.
+
+If this substage fails, the telemetry stage MUST fail closed. The telemetry stage MAY use the same
+`reason_code` as the substage outcome.
+
+`reason_code` for this substage MUST be constrained to:
+
+- `disk_metrics_missing` (cannot compute free space or required bytes deterministically)
+- `disk_free_space_insufficient` (computed free space is less than projected required bytes)
+
+#### Checkpointing storage integrity (substage: `telemetry.checkpointing.storage_integrity`)
+
+This substage records checkpoint store integrity failures that prevent reliable ingestion.
+
+If this substage fails, the telemetry stage MUST fail closed. The telemetry stage MAY use the same
+`reason_code` as the substage outcome.
+
+`reason_code` for this substage MUST be constrained to:
+
+- `checkpoint_store_corrupt` (checkpoint corruption prevents collector startup or reliable reads)
+
+#### Resource budgets (substage: `telemetry.resource_budgets`)
+
+This substage enforces comparability gates (EPS and resource budgets) using collector
+self-telemetry.
+
+`reason_code` for this substage MUST be constrained to:
+
+- `resource_budgets_unconfigured` (required thresholds are missing; fail closed)
+- `resource_metrics_missing` (required self-telemetry measurements missing; fail closed)
+- `eps_target_not_met` (cannot select sustained EPS window deterministically; fail closed)
+- `resource_budget_cpu_exceeded` (CPU budget exceeded; warn-and-skip)
+- `resource_budget_memory_exceeded` (memory budget exceeded; warn-and-skip)
+- `resource_budget_queue_pressure` (queue pressure indicates backpressure; warn-and-skip)
 
 #### NON-FATAL reason codes
 

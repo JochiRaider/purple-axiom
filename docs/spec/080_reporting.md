@@ -1266,7 +1266,7 @@ The `report/report.json` output MUST conform to the following structure:
 }
 ```
 
-Full schema definition: `report_schema.json` (to be added to contracts/).
+Full schema definition: `report_schema.json` see `docs/contracts/report_schema.json`.
 
 ## HTML report structure
 

@@ -153,6 +153,36 @@ Network egress enforcement check (required when outbound egress is denied):
   `runs/<run_id>/logs/telemetry_validation.json` under `network_egress_policy` (see
   [Practical validation harness](#practical-validation-harness-required)).
 
+#### Agent liveness (dead-on-arrival) canary (required for push-only OTLP)
+
+In a push-only OTLP architecture, "no scenario telemetry observed" is ambiguous: the agent may be
+healthy but idle, or it may have failed before exporting any records. Purple Axiom MUST disambiguate
+these cases without introducing orchestrator->agent RPC by requiring an OS-neutral agent liveness
+signal derived from collector self-telemetry.
+
+Normative requirements:
+
+- For every asset with `telemetry.otel.enabled=true`, the effective collector deployment MUST export
+  collector self-telemetry (at minimum process metrics) upstream during the run telemetry window.
+  - The RECOMMENDED implementation is:
+    1. Enable the collector's Prometheus metrics endpoint (internal telemetry).
+    1. Scrape it with a Prometheus receiver.
+    1. Export the scraped metrics via OTLP to the run host / gateway.
+- Telemetry validation MUST treat the presence of collector self-telemetry for an asset as the
+  authoritative "agent alive" heartbeat.
+- Telemetry validation MUST fail closed if no heartbeat is observed for an expected asset within
+  `telemetry.otel.agent_liveness.startup_grace_seconds` from the start of the run telemetry window.
+  - Default: 30 seconds.
+- Heartbeat evaluation MUST be based on the presence of one or more metric time series whose names
+  match `telemetry.otel.agent_liveness.required_metric_names` (default:
+  `otelcol_process_memory_rss`, `otelcol_process_cpu_seconds`).
+- If the heartbeat is missing for one or more expected assets, telemetry validation MUST record a
+  stage outcome `telemetry.agent.liveness` with `reason_code=agent_heartbeat_missing` (see
+  operability and stage outcome specifications).
+- The validator MUST record deterministic liveness evidence in
+  `runs/<run_id>/logs/telemetry_validation.json` under `agent_liveness` (see
+  [Practical validation harness](#practical-validation-harness-required)).
+
 ### Manifest independence and publisher metadata failures
 
 Windows Event Log rendering (human-readable message strings) depends on provider metadata and OS
@@ -530,6 +560,8 @@ checklist.
 
 - Generate known events (Security 4624/4625, Sysmon 1/3, PowerShell 4104, and similar).
 - Verify they arrive in the raw store with `raw: true` payloads intact.
+- Verify collector self-telemetry is present within the configured startup grace so "no events" can
+  be distinguished from agent startup failure (dead on arrival).
 
 ### Determinism
 
@@ -616,6 +648,18 @@ Recommended additional fields (network egress policy enforcement):
   - `probe_observed` (object)
     - `outcome` (one of `blocked | reachable | error`)
     - `error_code` (string, OPTIONAL; ASCII `lower_snake_case` when present)
+
+Recommended additional fields (agent liveness / dead-on-arrival triage):
+
+- `agent_liveness` (object, OPTIONAL; REQUIRED when telemetry validation is enabled)
+  - `startup_grace_seconds` (int)
+  - `required_metric_names` (array of strings; sorted)
+  - `assets` (array of objects; sorted by `asset_id` ascending)
+    - `asset_id` (string)
+    - `observed` (bool)
+    - `first_seen` (string; RFC 3339 UTC, OPTIONAL when `observed=false`)
+    - `last_seen` (string; RFC 3339 UTC, OPTIONAL when `observed=false`)
+    - `evidence_path` (string; run-relative POSIX-style path)
 
 Recommended additional fields (checkpointing diagnostics):
 

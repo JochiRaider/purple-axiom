@@ -344,9 +344,10 @@ JSON Schema. They do not replace publish-gate contract validation.
 
 v0.1 baseline canaries (non-exhaustive; see operability and telemetry specs for full details):
 
-- Telemetry Windows Event Log raw mode canary (`telemetry.windows_eventlog.raw_mode`)
-- Telemetry checkpointing storage integrity (`telemetry.checkpointing.storage_integrity`)
-- Resource budget enforcement and footprint reporting where required
+- **Agent liveness (push-only DOA detection):** `telemetry.agent.liveness`
+- **Windows raw-mode canary:** `telemetry.windows_eventlog.raw_mode`
+- **Checkpointing and replay validation:** `telemetry.checkpointing.storage_integrity`
+- **Resource budget enforcement:** `telemetry.resource_budgets`
 
 Authoritative definitions for these canaries, reason codes, and required evidence pointers are in
 the [operability spec](110_operability.md) and the

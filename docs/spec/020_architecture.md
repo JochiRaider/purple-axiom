@@ -108,7 +108,9 @@ subset of stages and to deterministic run-bundle side effects.
 Common invariants (normative, v0.1):
 
 - Every verb invocation MUST target exactly one run bundle (`runs/<run_id>/`) and MUST acquire the
-  run lock before writing any stage outputs.
+  run lock (atomic create of `runs/.locks/<run_id>.lock` per
+  [ADR-0004: Deployment architecture and inter-component communication][adr-0004]) before creating
+  or mutating any run bundle artifacts (including `manifest.json`).
 - Any verb that executes one or more stages MUST record stage outcomes in `logs/health.json` per
   [ADR-0005: Stage outcomes and failure classification][adr-0005].
 - Any verb that writes contract-backed artifacts MUST follow the publish gate rules in this document
@@ -130,8 +132,9 @@ Verb definitions (v0.1):
   - Intent: perform a complete run and produce a complete run bundle.
   - When environment configuration is enabled, the orchestrator MUST record an additive `runner`
     substage `runner.environment_config` before any action enters the `execute` lifecycle phase.
-  - When regression comparison is enabled, `simulate` MUST treat baseline reference inputs under
-    `inputs/**` as read-only.
+  - When regression comparison is enabled, `simulate` MUST treat any pre-existing artifacts under
+    `inputs/**` as read-only. See "Run bundle (coordination plane)" for baseline reference
+    materialization semantics.
 
 - `replay`
 
@@ -141,8 +144,9 @@ Verb definitions (v0.1):
     `ground_truth.jsonl`. `replay` MUST treat these inputs as read-only.
   - MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or
     `raw_parquet/**` except for operability logs under `logs/**`.
-  - When regression comparison is enabled, `replay` MUST treat baseline reference inputs under
-    `inputs/**` as read-only and MUST NOT rewrite them.
+  - When regression comparison is enabled, `replay` MUST treat any pre-existing artifacts under
+    `inputs/**` as read-only and MUST NOT rewrite them. See "Run bundle (coordination plane)" for
+    baseline reference materialization semantics.
 
 - `export`
 
@@ -185,10 +189,19 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
   `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
   [operability specification][operability-spec]).
 
-Regression comparison (when enabled) reads baseline reference inputs under `runs/<run_id>/inputs/`
-and emits deltas under `runs/<run_id>/report/**`. All verbs and stages MUST treat `inputs/**` as
-read-only. For artifact shapes and selection rules, see the
-[data contracts specification][data-contracts], the
+Regression comparison (when enabled) reads baseline reference artifacts under
+`runs/<run_id>/inputs/` and emits deltas under `runs/<run_id>/report/**`.
+
+- `inputs/` contains both operator-supplied run inputs (always read-only) and pipeline-materialized
+  baseline reference artifacts (write-once, owned by the `reporting` stage).
+- When regression comparison is enabled, the `reporting` stage MUST materialize
+  `inputs/baseline_run_ref.json` and SHOULD materialize `inputs/baseline/manifest.json` when
+  baseline resolution succeeds (see the [storage formats specification][storage-formats-spec]).
+- All stages MUST treat any pre-existing files under `inputs/**` as read-only.
+- The `reporting` stage MUST NOT overwrite any pre-existing `inputs/**` content; it MUST write new
+  baseline reference artifacts only via the publish gate (staging + validation + atomic publish).
+
+For artifact shapes and selection rules, see the [data contracts specification][data-contracts], the
 [storage formats specification][storage-formats-spec], and the
 [reporting specification][reporting-spec].
 
@@ -224,27 +237,32 @@ what exists in the bundle.
 
 Normative top-level entries (run-relative):
 
-| Path                            | Purpose                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------- |
-| `manifest.json`                 | Authoritative run index and provenance pins                                      |
-| `inputs/`                       | Run-scoped operator inputs and baseline references (when regression is enabled)  |
-| `ground_truth.jsonl`            | Append-only action timeline (what was attempted)                                 |
-| `runner/`                       | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)      |
-| `runner/principal_context.json` | Run-level runner evidence (principal/execution context; when enabled)            |
-| `raw_parquet/`                  | Raw telemetry datasets (Parquet)                                                 |
-| `raw/`                          | Evidence-tier payloads and source-native blobs (when enabled)                    |
-| `normalized/`                   | OCSF-normalized event store and mapping coverage                                 |
-| `criteria/`                     | Criteria pack snapshot and evaluation results                                    |
-| `bridge/`                       | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)         |
-| `detections/`                   | Detection output artifacts                                                       |
-| `scoring/`                      | Scoring summaries and metrics                                                    |
-| `report/`                       | Human and machine-readable reports                                               |
-| `logs/`                         | Operability logs (including `health.json`); not long-term storage                |
-| `logs/contract_validation/`     | Contract validation reports by stage (emitted on validation failure)             |
-| `logs/cache_provenance.json`    | Cache provenance and determinism logs (when caching is enabled)                  |
-| `security/`                     | Integrity artifacts when signing is enabled                                      |
-| `unredacted/`                   | Quarantined sensitive artifacts (when enabled); excluded from default disclosure |
-| `plan/`                         | [v0.2+] Plan expansion and execution artifacts                                   |
+| Path                               | Purpose                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------- |
+| `manifest.json`                    | Authoritative run index and provenance pins                                      |
+| `inputs/`                          | Operator-supplied run inputs (read-only) and regression baseline references      |
+| `inputs/baseline/`                 | Baseline run snapshot materialization (regression; optional but recommended)     |
+| `inputs/baseline_run_ref.json`     | Baseline selection and resolution record (regression; required when enabled)     |
+| `ground_truth.jsonl`               | Append-only action timeline (what was attempted)                                 |
+| `runner/`                          | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)      |
+| `runner/principal_context.json`    | Run-level runner evidence (principal/execution context; when enabled)            |
+| `raw_parquet/`                     | Raw telemetry datasets (Parquet)                                                 |
+| `raw/`                             | Evidence-tier payloads and source-native blobs (when enabled)                    |
+| `normalized/`                      | OCSF-normalized event store and mapping coverage                                 |
+| `criteria/`                        | Criteria pack snapshot and evaluation results                                    |
+| `bridge/`                          | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)         |
+| `detections/`                      | Detection output artifacts                                                       |
+| `scoring/`                         | Scoring summaries and metrics                                                    |
+| `report/`                          | Report outputs (required: `report/report.json`, `report/thresholds.json`)        |
+| `logs/`                            | Operability summaries and debug logs; not considered long-term storage           |
+| `logs/health.json`                 | Stage/substage outcomes and run status derivation                                |
+| `logs/telemetry_validation.json`   | Telemetry validation evidence (when validation enabled)                          |
+| `logs/lab_inventory_snapshot.json` | Inventory snapshot produced by `lab_provider` (referenced by manifest)           |
+| `logs/contract_validation/`        | Contract validation reports by stage (emitted on validation failure)             |
+| `logs/cache_provenance.json`       | Cache provenance and determinism logs (when caching is enabled)                  |
+| `security/`                        | Integrity artifacts when signing is enabled                                      |
+| `unredacted/`                      | Quarantined sensitive artifacts (when enabled); excluded from default disclosure |
+| `plan/`                            | [v0.2+] Plan expansion and execution artifacts                                   |
 
 Common per-action evidence location (run-relative):
 
@@ -275,11 +293,12 @@ logs. Substages use dotted notation.
 | `signing`       | Sign artifacts for integrity verification   | Yes      |
 
 Substages MAY be expressed as dotted identifiers (for example, `lab_provider.connectivity`,
-`runner.environment_config`, `telemetry.windows_eventlog.raw_mode`, `validation.cleanup`,
-`runner.requirements`, `runner.lifecycle_enforcement`, `runner.state_reconciliation`). The reserved
-substage `runner.environment_config` represents run-scoped environment configuration ("configure")
-without introducing a new stable stage identifier in v0.1. Substages are additive and MUST NOT
-change the semantics of the parent stage outcome.
+`runner.environment_config`, `telemetry.windows_eventlog.raw_mode`,
+`telemetry.checkpointing.storage_integrity`, `validation.cleanup`, `runner.requirements`,
+`runner.lifecycle_enforcement`, `runner.state_reconciliation`, `reporting.regression_compare`). The
+reserved substage `runner.environment_config` represents run-scoped environment configuration
+("configure") without introducing a new stable stage identifier in v0.1. Substages are additive and
+MUST NOT change the semantics of the parent stage outcome.
 
 See [ADR-0005: Stage outcomes and failure classification][adr-0005] for stage outcome definitions
 and failure classification.
@@ -292,7 +311,9 @@ and failure classification.
 Preamble (normative, per
 [ADR-0004: Deployment architecture and inter-component communication][adr-0004]):
 
-- The orchestrator MUST acquire the run lock before writing stage outputs.
+- The orchestrator MUST acquire the run lock (atomic create of `runs/.locks/<run_id>.lock`) before
+  creating or mutating any run bundle artifacts (including the initial `manifest.json` skeleton and
+  all stage outputs).
 - The orchestrator MUST create `runs/<run_id>/` and write an initial `manifest.json` skeleton before
   running the first stage.
 - The orchestrator MUST treat `manifest.json` as the authoritative run index throughout the run.
@@ -318,17 +339,17 @@ runner `execute` lifecycle phase. This substage MUST be observable via `logs/hea
 **Summary**: Each stage reads inputs from the run bundle and writes outputs back. The table below
 defines the minimum IO contract for v0.1.
 
-| Stage ID        | Minimum inputs                                                                                | Minimum outputs                                                                                                        |
-| --------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `lab_provider`  | Run configuration, provider inputs                                                            | Inventory snapshot artifact (referenced by manifest)                                                                   |
-| `runner`        | Inventory snapshot, scenario plan                                                             | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; \[v0.2+: `plan/**`\]                                   |
-| `telemetry`     | Inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)       | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled) |
-| `normalization` | `raw_parquet/**`, mapping profiles                                                            | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                        |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                 | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                          |
-| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                        | `bridge/**`, `detections/detections.jsonl`                                                                             |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                         | `scoring/summary.json`                                                                                                 |
-| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, manifest, `inputs/**` (when regression enabled) | `report/**` (HTML + supplemental artifacts)                                                                            |
-| `signing`       | Finalized manifest, selected artifacts                                                        | `security/**` (checksums, signature, public key)                                                                       |
+| Stage ID        | Minimum inputs                                                                                                | Minimum outputs                                                                                                                                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lab_provider`  | Run configuration, provider inputs                                                                            | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                  |
+| `runner`        | Inventory snapshot, scenario plan                                                                             | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); \[v0.2+: `plan/**`\]                                                                             |
+| `telemetry`     | Inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)                       | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)                                                                                           |
+| `normalization` | `raw_parquet/**`, mapping profiles                                                                            | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                  |
+| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                                 | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                    |
+| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                        | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                       |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                         | `scoring/summary.json`                                                                                                                                                                                           |
+| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `logs/health.json`, `inputs/**` (when enabled) | `report/report.json`, `report/thresholds.json`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
+| `signing`       | Finalized `manifest.json`, selected artifacts                                                                 | `security/**` (checksums, signature, public key)                                                                                                                                                                 |
 
 > **Note**: This table defines the **minimum** contract. Implementations MAY produce additional
 > artifacts, but MUST produce at least these outputs for the stage to be considered successful.
@@ -351,7 +372,8 @@ Responsibilities:
 
 - Resolve target assets from an external source (manual config, Ludus export, Terraform output).
 - Validate connectivity to resolved assets (substage: `lab_provider.connectivity`).
-- Produce a run-scoped inventory snapshot recorded in the run bundle.
+- Produce `logs/lab_inventory_snapshot.json` (contract-backed inventory snapshot) recorded in the
+  run bundle and referenced by the manifest.
 - Ensure the snapshot is hashable and diffable for determinism.
 - MUST NOT implicitly provision, modify, or tear down lab resources as a side effect of inventory
   resolution; provider mutation requires an explicit operator gate and deterministic logging (see
@@ -363,9 +385,12 @@ Responsibilities:
 Implementations:
 
 - `manual`: Inline `lab.assets` in run configuration.
-- `ludus`: Parse Ludus-generated inventory export (input format: `ludus_json`).
-- `terraform`: Parse Terraform output (input format: `terraform_output`) or generic JSON inventory
-  (input format: `json`).
+- `ludus`: Parse Ludus-generated inventory export (inventory format: `json`).
+- `terraform`: Parse Terraform output JSON (inventory format: `json`) and normalize provider wrapper
+  shape when present.
+
+Inventory input formats are defined by `lab.inventory.format` (supported: `json`, `ansible_yaml`,
+`ansible_ini`).
 
 The inventory snapshot is treated as an input for determinism; the manifest records
 `lab.inventory_snapshot_sha256`.
@@ -421,10 +446,11 @@ Responsibilities:
     blocked and record the blocked intent deterministically in reconciliation outputs and outcomes.
   - Repair (when supported) requires an explicit config gate and, when applicable, an allowlist.
 - At minimum, for every action where `execute` is attempted, the runner MUST emit
-  `runner/actions/<action_id>/side_effect_ledger.json` (append-only for the run) to record observed
-  side effects and runner-injected emissions (for example, marker emission). Implementations MAY
-  also record additional lifecycle-phase side effects in the ledger when needed for recovery and
-  reconciliation correctness.
+  `runner/actions/<action_id>/side_effect_ledger.json` (append-only: entries MUST be appended and
+  previously written entries MUST NOT be modified or reordered) to record observed side effects and
+  runner-injected emissions (for example, marker emission). Implementations MAY also record
+  additional lifecycle-phase side effects in the ledger when needed for recovery and reconciliation
+  correctness.
 
 Ground truth records MUST include deterministic `action_key` values that remain stable across
 replays. In v0.2+ (multi-action plans), ground truth records MUST also include deterministic
@@ -445,7 +471,11 @@ for downstream normalization.
 
 Responsibilities:
 
-- Ensure raw Windows Event Log events are captured in raw/unrendered mode (`raw: true`).
+- Ensure raw Windows Event Log events are captured in raw/unrendered mode (`raw: true`) via
+  pre-provisioned collector configuration and runtime canary validation (not remote config injection
+  in v0.1).
+- Validate agent liveness (dead-on-arrival detection) using OS-neutral collector self-telemetry
+  heartbeats (substage: `telemetry.agent.liveness`).
 - Support Sysmon event collection (via Windows Event Log receiver).
 - Support optional osquery results ingestion (event format NDJSON via `filelog` receiver).
 - Support Linux auditd log ingestion.
@@ -572,11 +602,18 @@ scoring data.
 
 Responsibilities:
 
-- Render HTML scorecard from `scoring/summary.json`.
-- Emit JSON report artifacts for external tooling.
+- Emit required machine-readable report artifacts:
+  - `report/report.json` (primary machine report; includes regression results when enabled)
+  - `report/thresholds.json` (threshold evaluation summary and status recommendation)
+- When `reporting.emit_html=true`, render HTML scorecard to `report/report.html`.
 - Include run manifest summary and artifact index.
-- When regression comparison is enabled, read baseline reference inputs under `inputs/**` and emit
-  regression comparison outputs under `report/**`.
+- When regression comparison is enabled:
+  - Materialize baseline reference artifacts under `inputs/`:
+    - MUST write `inputs/baseline_run_ref.json`.
+    - SHOULD write `inputs/baseline/manifest.json` when baseline resolution succeeds.
+  - Emit regression comparison results under `report/report.json.regression`.
+  - Record a `reporting.regression_compare` substage outcome in `logs/health.json` (even when
+    baseline resolution or comparison is indeterminate).
 - Support diffing and trending across runs.
 
 Outputs are stored under `report/**`.

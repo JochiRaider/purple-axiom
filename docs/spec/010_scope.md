@@ -124,8 +124,9 @@ This document does NOT cover:
     - analytics-tier telemetry datasets under `raw_parquet/**`, and
     - evidence-tier source-native payloads under `raw/**` when raw preservation is enabled.
 
-  - Telemetry validation includes required runtime canaries and records deterministic evidence
-    pointers into run logs (for example Windows raw mode and checkpoint storage integrity canaries).
+  - Telemetry validation includes required runtime canaries and fail modes (for example agent
+    liveness heartbeats for dead-on-arrival detection in push-only OTLP, raw Windows Event Log
+    capture, checkpointing integrity, resource budgets).
 
 - Normalization into OCSF:
 

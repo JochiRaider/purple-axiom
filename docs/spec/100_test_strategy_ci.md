@@ -628,6 +628,18 @@ The measurement contract fixture set MUST include at least:
 The telemetry fixture provides a raw Windows event XML corpus including missing rendered messages
 and at least one event containing binary-like payload data.
 
+- Raw mode canary injection: during a fixture run on Windows, emit the canary EventCreate event and
+  assert `body` begins with `<Event` and does not contain `<RenderingInfo>`.
+- Agent liveness (dead-on-arrival detection): provide one fixture where collector self-telemetry is
+  present for the expected asset(s) and assert `health.json` includes a successful
+  `telemetry.agent.liveness` outcome; provide a second fixture with no self-telemetry for an
+  expected asset and assert `telemetry.agent.liveness` fails closed with
+  `reason_code=agent_heartbeat_missing`.
+- Checkpoint corruption path: corrupt the checkpoint DB and verify the run fails closed unless the
+  operator has configured `recreate_fresh`, and record which behavior occurred.
+- Out-of-order and duplicates: ensure dedupe uses `metadata.event_id` and remains stable across
+  restarts.
+
 #### Windows Event Log raw-mode conformance
 
 This test validates the collector plus validator integration. Use an OTel collector config where

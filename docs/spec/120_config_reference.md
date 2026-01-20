@@ -304,6 +304,9 @@ Common keys:
 
 Notes:
 
+- Implication: v0.1 does not remotely modify agent collector configs; required invariants (for
+  example Windows `raw: true`) are enforced by pre-provisioned configuration plus telemetry
+  validation canaries.
 - Control-plane functionality is out of scope for v0.1. The v0.1 pipeline MUST NOT require remote
   management credentials and MUST NOT depend on control-plane actions for correctness.
 
@@ -337,21 +340,25 @@ Common keys:
     - `require_fsync` (default: true): when the checkpoint backend supports an fsync option
       (example: OTel `file_storage.fsync`), validation MUST require that it is enabled unless the
       operator explicitly disables this check.
+  - `agent_liveness`
+    - `startup_grace_seconds` (default: `30`)
+      - Startup grace period for observing the agent heartbeat derived from collector
+        self-telemetry.
+    - `required_metric_names` (default:
+      `["otelcol_process_memory_rss", "otelcol_process_cpu_seconds"]`)
+      - Ordered allowlist of metric names that qualify as a heartbeat. If none are observed for an
+        expected asset within the startup grace, telemetry validation MUST fail closed with
+        `reason_code=agent_heartbeat_missing` (see operability and stage outcome specifications).
 - `sources` (optional)
   - Additional non-OTel sources (example: `osquery`, `pcap`, `netflow`)
-
   - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not
     required). If enabled without an implementation, telemetry MUST fail closed with
     `reason_code=source_not_implemented`.
-
   - Each source should include:
-
     - `enabled`
     - `config_path` or equivalent
     - `output_path` under `raw/`
-
   - `osquery` (optional)
-
     - `enabled` (default: false)
     - `config_path` (optional): path to an osquery configuration file (deployment is
       runner/provider-defined). If present, the effective config SHOULD be snapshotted into the run
@@ -379,6 +386,8 @@ Notes:
 
 - For Windows Event Log sources, the referenced OTel Collector config MUST set `raw: true` for every
   enabled `windowseventlog/*` receiver.
+- Collector self-telemetry MUST be exported upstream (for example Prometheus self-scrape plus OTLP
+  export) to support resource budgets and agent liveness (dead-on-arrival detection).
 - For v0.1, the config SHOULD also set `suppress_rendering_info: true` and a persistent `storage`
   extension for bookmarks (see the [telemetry pipeline specification](040_telemetry_pipeline.md)
   §2).

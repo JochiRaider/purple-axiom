@@ -47,9 +47,12 @@ and how pack changes are managed so operational handoff is deterministic.
 
 - `pack_id` MUST be a stable identifier for a logical criteria pack (example: `default`,
   `windows-enterprise`, `lab-small`).
-- `pack_version` MUST be a SemVer string (`MAJOR.MINOR.PATCH`).
-- Pre-release identifiers MAY be used for development (`-alpha.1`), but production CI SHOULD pin
-  only stable versions.
+  - `pack_id` MUST conform to `id_slug_v1` (lowercase ASCII and hyphen-separated).
+  - Allowed form (normative): `^[a-z0-9]+(-[a-z0-9]+)*$`
+- `pack_version` MUST be a SemVer string (`MAJOR.MINOR.PATCH`) and MUST be compared using SemVer
+  precedence rules.
+- Pre-release identifiers MAY be used for development (for example `-alpha.1`), but production CI
+  SHOULD pin only stable versions.
 
 ### Immutability and change discipline
 
@@ -79,19 +82,21 @@ Determinism requirement:
 
 If `pack_version` is not provided (non-recommended):
 
-1. Enumerate available `<pack_id>/<pack_version>/` directories across the configured search paths.
+1. Enumerate available `<pack_id>/<pack_version>/` directories across the configured search paths
+   (`validation.criteria_pack.paths[]`).
 1. Parse candidate versions as SemVer.
 1. Select the highest SemVer version.
 1. If no candidates parse as SemVer, fail closed (do not guess lexicographically).
 1. If the same `(pack_id, pack_version)` appears in multiple search paths, the runner MUST fail
-   closed unless the packs are identical as proven by matching `criteria_sha256` and
-   `manifest_sha256` in the pack manifests. If present, `criteria.pack_sha256` MUST also match.
+   closed unless the packs are identical as proven by:
+   - matching `criteria.pack_sha256` in the pack manifests, and
+   - matching `criteria_sha256` and `manifest_sha256` in the pack manifests.
 
 The resolved `(pack_id, pack_version)` MUST be recorded in run provenance (manifest and report).
 
-Note: Note: `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` are content
-fingerprints and MUST NOT be used as a substitute for the version pins
-(`manifest.versions.criteria_pack_id` and `manifest.versions.criteria_pack_version`).
+Note: `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` are content fingerprints and
+MUST NOT be used as a substitute for the version pins (`manifest.versions.criteria_pack_id` and
+`manifest.versions.criteria_pack_version`).
 
 ### Recommended source control practice (non-normative)
 
@@ -107,17 +112,47 @@ even if the repo changes:
 - `runs/<run_id>/criteria/criteria.jsonl`
 - `runs/<run_id>/criteria/results.jsonl`
 
+Unless a `runs/<run_id>/` prefix is explicitly included, paths in this document are run-relative.
+
 The run manifest MUST pin the criteria pack identity using version pins under `manifest.versions.*`:
 
 - `manifest.versions.criteria_pack_id`
 - `manifest.versions.criteria_pack_version`
 
-The criteria pack content hashes MUST be present in the snapped pack manifest
-(`runs/<run_id>/criteria/manifest.json`) and MUST NOT be used as a substitute for the version pins:
+### Snapshot schema validation (normative)
+
+- `criteria/manifest.json` MUST validate against `criteria_pack_manifest.schema.json`.
+- Each line of `criteria/criteria.jsonl` MUST validate against `criteria_entry.schema.json`.
+- Each line of `criteria/results.jsonl` MUST validate against `criteria_result.schema.json`.
+
+### Criteria pack content hash fields (normative)
+
+The following hash fields MUST be present in the snapped pack manifest (`criteria/manifest.json`)
+and MUST NOT be used as a substitute for the version pins:
 
 - `manifest_sha256`
 - `criteria_sha256`
 - `criteria.pack_sha256`
+
+Definitions (normative):
+
+- `criteria_sha256` MUST equal `sha256_hex(canonical_criteria_jsonl_bytes(criteria.jsonl))`, where
+  `canonical_criteria_jsonl_bytes` is produced by:
+  1. Parse `criteria.jsonl` as JSON Lines with no blank lines (each line is one JSON object).
+  1. For each line object, serialize using `canonical_json_bytes` (RFC 8785 JCS; UTF-8 bytes).
+  1. Join serialized objects with `\n` and append a trailing `\n`.
+- `manifest_sha256` MUST equal `sha256_hex(canonical_json_bytes(manifest_basis))`, where
+  `manifest_basis` is the manifest JSON object with the following fields removed before
+  canonicalization:
+  - `manifest_sha256`
+  - `criteria_sha256`
+  - `criteria.pack_sha256`
+- `criteria.pack_sha256` MUST equal `sha256_hex(canonical_json_bytes(pack_basis_v1))`, where:
+  - `pack_basis_v1.v = 1`
+  - `pack_basis_v1.criteria_pack_id = <criteria_pack_id>`
+  - `pack_basis_v1.criteria_pack_version = <criteria_pack_version>`
+  - `pack_basis_v1.manifest_sha256 = <manifest_sha256>`
+  - `pack_basis_v1.criteria_sha256 = <criteria_sha256>`
 
 ## Drift detection (execution definitions vs criteria expectations)
 
@@ -161,12 +196,15 @@ Deterministic tree hash basis (normative):
   feasible. If this field is missing (for example due to fail-open policy), drift detection MUST
   treat the drift status as `unknown`.
 - `source_tree_sha256` MUST be computed as:
-  - Build `tree_basis_v1` with `v`, `engine`, and `files[]`.
-  - `files[]` is a sorted array of `{ path, sha256 }`.
-  - `path` MUST be repo-relative and normalized to `/` separators.
-  - `sha256` MUST be lowercase hex SHA-256 of the file bytes.
-  - `files[]` MUST be sorted by `path` using bytewise UTF-8 lexical ordering.
-  - `source_tree_sha256 = sha256_hex(canonical_json_bytes(tree_basis_v1))`.
+  - Build `tree_basis_v1` with:
+    - `v: 1`
+    - `engine`
+    - `files[]`
+  - `files[]` MUST include one record per included file, with:
+    - `path`: repo-relative path (forward slashes)
+    - `sha256`: lowercase hex SHA-256 of raw file bytes
+  - Sort `files[]` by `path` ascending using bytewise lexicographic order (UTF-8).
+  - Compute `sha256_hex(canonical_json_bytes(tree_basis_v1))`.
 
 ### Deterministic source tree hashing algorithm (v1)
 
@@ -213,12 +251,14 @@ tarball containing only the `atomics/` subtree.
 
 **Engine `caldera`**:
 
-- The effective hash scope MUST include all files under any detected `*/data/abilities/` subtree and
-  all files under any detected `*/data/payloads/` subtree.
-- Detection rules MUST identify directories or tar path prefixes that match
-  `plugins/<plugin_name>/data/abilities/` and `plugins/<plugin_name>/data/payloads/`, or
-  `data/abilities/` and `data/payloads/` for abilities-only distributions.
-- If no `abilities` subtree is detected, the implementation MUST fail closed.
+- include only files under any detected `plugins/<plugin_name>/data/abilities/**` subtree and
+  `plugins/<plugin_name>/data/payloads/**` subtree.
+- repo-relative `path` values MUST be computed from the effective hash root directory passed in
+  provenance (`hash_root`) and therefore SHOULD include the plugin prefix (for example
+  `plugins/stockpile/data/abilities/...`).
+- if the source tree is a single-plugin checkout (no `plugins/` directory), implementations MAY use
+  the plugin root as `hash_root` and include `data/abilities/**` and `data/payloads/**` relative to
+  it.
 
 Rationale: abilities and payloads are both execution-definition material. Hashing only YAML
 frequently misses behavior changes introduced by payload updates.
@@ -463,38 +503,53 @@ Minimum join keys:
 - `technique_id` (ATT&CK)
 - `engine_test_id` (Atomic GUID, Caldera ability ID, or equivalent canonical ID)
 
-Optional `selectors` allow more specific matching within a pack. Selector evaluation is performed
-against a resolved selector context derived from run configuration (and optionally action metadata):
+Optional selectors allow more specific matching without changing join keys:
 
-- `selectors.os`: OS family (e.g., `windows`, `linux`, `macos`). If present, MUST match the resolved
-  selector context `os`.
-- `selectors.roles`: An array of strings (e.g., `["dc","workstation"]`). If present, at least one
-  role MUST match the resolved selector context `roles[]`.
-- `selectors.executor`: Executor or runner type (e.g., `atomic-red-team`, `caldera-agent`). If
-  present, MUST match the resolved selector context `executor`.
+- `selectors.os`: OS family (`windows`, `linux`, `macos`)
+- `selectors.roles`: array of environment role tokens (example: `["domain_controller"]`,
+  `["endpoint"]`)
+- `selectors.executor`: executor type (`atomic`, `caldera`)
 
-The selector context MUST start from `validation.criteria_pack.entry_selectors` in config. If a
-context dimension is missing, selector satisfaction MUST evaluate to not satisfied for entries that
-require that dimension.
+Selector context MUST start from `validation.criteria_pack.entry_selectors` in config:
 
-Selectors are evaluated after join keys match and before tie-breaking.
+- `os`: resolved OS family for the action's target
+- `roles`: resolved roles for the action's target/environment
+- `executor`: selected executor type for this run/action
 
-Deterministic selection:
+Selector matching (normative):
 
-1. If the ground truth action includes a pinned `criteria_ref.criteria_entry_id`, the evaluator MUST
-   select that exact criteria entry (by `entry_id`) from the selected pack, and MUST verify the join
-   keys match. If the entry is missing or join keys do not match, the evaluator MUST treat this as
-   `criteria_misconfigured`.
-1. Otherwise, collect candidate entries where `engine`, `technique_id`, and `engine_test_id` all
-   match.
-1. Filter candidates by selector satisfaction (using the resolved selector context):
-   - If an entry has no selectors, it is always eligible.
-   - If an entry has selectors, it is eligible only if all specified selector dimensions are
-     satisfied.
-1. If multiple eligible candidates remain, prefer entries with the greatest selector specificity,
-   measured as the count of recognized selector keys present on the entry (from
-   `{os, roles, executor}`).
-1. If still tied, choose the candidate with the lexicographically smallest `entry_id` (see below).
+- String comparisons for selector values MUST be performed on lowercased values.
+- `selectors.os` is satisfied iff `selectors.os == context.os`.
+- `selectors.executor` is satisfied iff `selectors.executor == context.executor`.
+- `selectors.roles` is satisfied iff every role token listed in `selectors.roles` is present in
+  `context.roles` (treat both arrays as sets; order does not matter; duplicates ignored).
+- If a selector dimension is missing in context (for example roles unknown), then selector
+  satisfaction MUST evaluate to "not satisfied" for entries requiring that dimension.
+- If an entry's `selectors` object contains any key other than `os`, `roles`, or `executor`, that
+  entry MUST be treated as not eligible by evaluators that do not recognize the key.
+
+Selection algorithm (normative):
+
+1. If ground truth includes pinned `criteria_ref.criteria_entry_id`:
+   - Evaluator MUST select that exact criteria entry (by `entry_id`) from the selected pack.
+   - Evaluator MUST verify that the entry join keys match the ground truth join keys.
+   - If the entry is missing or join keys mismatch: mark action `skipped` with
+     `reason_code=criteria_misconfigured` and set
+     `extensions.criteria.error.error_code=criteria_ref_invalid`.
+1. Else, compute the candidate set:
+   - candidates = entries in pack where join keys exactly match.
+   - eligible = candidates filtered by selector satisfaction (if selectors present).
+1. If `eligible` is empty:
+   - If `candidates` is empty: mark action `skipped` with `reason_code=criteria_unavailable`.
+   - If `candidates` is non-empty but all candidates were excluded due to unsupported selector keys:
+     mark action `skipped` with `reason_code=criteria_misconfigured` and set
+     `extensions.criteria.error.error_code=unsupported_selector`.
+1. If exactly one eligible candidate remains: select it.
+1. If multiple eligible candidates remain, prefer the greatest selector specificity:
+   - specificity = count of recognized selector keys present on the entry (from
+     `{os, roles, executor}`).
+1. If tie remains: select the candidate whose `entry_id` sorts first by the stable ordering rule
+   below.
 
 If no entry matches, criteria evaluation emits `criteria_unavailable` for the action.
 
@@ -644,7 +699,7 @@ Effective windowing:
 
 A normalized event is eligible for a signal only if:
 
-- `event.class_uid == signal.class_uid`, and
+- `event.class_uid == signal.predicate.class_uid`, and
 - `event.time` is within `[t0 - before_ms, t0 + after_ms]` (inclusive), and
 - all constraints evaluate to true.
 
@@ -661,11 +716,14 @@ Counts and verdicts:
 
 Sampling:
 
-- `sample_event_ids` MUST contain up to `validation.evaluation.max_sample_event_ids` event IDs from
-  matching events.
-- The sample MUST be deterministic: sort matching events by `metadata.event_id` ascending and take
-  the first N. Events missing `metadata.event_id` MUST still count toward `matched_count` but MUST
-  be omitted from `sample_event_ids`.
+- `sample_event_ids` MUST contain up to `max_sample_event_ids` event IDs from matching events.
+- The sample MUST be deterministic:
+  - Collect `metadata.event_id` for all matching events where present.
+  - De-duplicate event IDs (set semantics).
+  - Sort event IDs ascending using bytewise lexicographic order (UTF-8).
+  - Take the first N.
+- Events missing `metadata.event_id` MUST still count toward `matched_count` but MUST be omitted
+  from `sample_event_ids`.
 
 Case sensitivity:
 
@@ -693,17 +751,22 @@ Required conformance fixtures (constraint matching):
 
 ### Cleanup verification model
 
-Cleanup verification defines post-conditions that must hold after cleanup runs.
+A criteria entry may optionally include a `cleanup_verification` object that declares how to verify
+that cleanup reverted key side-effects.
 
-- `enabled` (optional bool, default true)
-- `checks` (required array when enabled)
+- If `cleanup_verification.enabled=true`, the entry declares cleanup verification checks for the
+  action. The runner MUST execute these checks and record results only when cleanup verification is
+  enabled for the action under the effective operator intent and policy/config gates.
 
-Each check:
+- If cleanup verification is enabled and checks are executed, the runner MUST write a per-action
+  artifact:
 
-- `check_id` (string)
-- `type` (string: `command`, `file_absent`, `process_absent`, `registry_absent`, `service_state`)
-- `target` (optional object; type-specific)
-- `severity` (optional string; `info`, `warn`, `error`, default `error`)
+  - `runner/actions/<action_id>/cleanup_verification.json`
+
+- The criteria results MUST reference this artifact by `cleanup.results_ref`.
+
+- If cleanup verification is disabled for the action by operator intent or policy/config, the runner
+  MUST NOT execute checks and MUST NOT write `cleanup_verification.json` for the action.
 
 #### Check type: file_absent (minimum semantics)
 
@@ -794,31 +857,38 @@ MVP guidance:
 
 ## Evaluation outputs
 
-`criteria/results.jsonl` is JSON Lines; each line represents the evaluation for one executed action.
-
-Minimum fields:
+Minimum fields for `criteria/results.jsonl` (v0.1; one JSON object per action):
 
 - `run_id`
-- `scenario_id`
-- `action_id` (format is versioned; see data contracts)
-- `template_id` (v0.2+; stable procedure identity of the action template)
-- `action_key`
-- `criteria_ref` (object) containing the selection provenance (field names aligned to ground truth):
-  - `criteria_pack_id` (string)
-  - `criteria_pack_version` (string)
-  - `criteria_entry_id` (string|null; equals the selected criteria entry's `entry_id`)
-  - `engine_test_id` (string) echo of action join key
-- `status` (`pass`, `fail`, `skipped`)
-- `reason_code` (string, REQUIRED when `status = "skipped"`; omitted otherwise)
-- `signals` (array)
-  - `signal_id`
-  - `status` (`pass`, `fail`, `skipped`)
-  - `matched_count` (int)
-  - `sample_event_ids` (optional array of `metadata.event_id`)
-- `cleanup` (object)
-  - `invoked` (bool)
-  - `verification_status` (`pass`, `fail`, `indeterminate`, `skipped`, `not_applicable`)
-  - `results_ref` (optional path under `runner/`)
+- `scenario_id` (optional, if scenario is present)
+- `action_id` (required)
+- `template_id` (optional; v0.2+ only; stable procedure identity of action template)
+- `action_key` (required; stable action join key)
+- `criteria_ref` object (required; selection provenance)
+- `status` (`pass` | `fail` | `skipped`)
+- `reason_code` (required when `status=skipped`; omitted otherwise)
+- `signals[]` array:
+  - MUST be an empty array (`[]`) when `status=skipped`.
+  - Otherwise: one element per expected signal with `signal_id`, `status`, `matched_count`,
+    `sample_event_ids[]`.
+  - `signals[]` MUST be ordered by `signal_id` ascending (bytewise lexicographic order, UTF-8).
+  - `sample_event_ids[]` MUST be ordered ascending (bytewise lexicographic order, UTF-8).
+- `time_window` object (resolved window applied):
+  - `start_time_utc`, `end_time_utc`, `before_seconds`, `after_seconds`
+- `cleanup` object (optional; surfaced from runner evidence and/or ground truth):
+  - `invoked` (`true`/`false`)
+  - `verification_status` (`success`|`failed`|`indeterminate`|`skipped`|`not_applicable`)
+  - `results_ref` (optional run-relative artifact pointer; when present, SHOULD reference
+    `runner/actions/<action_id>/cleanup_verification.json`)
+
+Optional extensions:
+
+- `extensions.criteria`:
+  - `engine`
+  - `join_keys` (echoed for audit)
+  - `error`: { `error_code`, `message` }
+  - `drift`: { ... }
+  - `selection`: { ... } (optional; helpful debugging context)
 
 Note: pack snapshot hashes (for example `manifest_sha256` and `criteria_sha256`) are not version
 pins. They MUST be recorded separately (for example in `criteria/manifest.json`) and referenced as
@@ -881,11 +951,10 @@ execution outcome, not an evaluated verdict.
 
 **Verdicts**:
 
-- `pass`: the check predicate is satisfied.
-- `fail`: the predicate is violated.
-- `indeterminate`: the predicate could not be evaluated with confidence (unsupported OS, missing
-  permissions, missing tooling, timeout, probe error, or parse error).
-- `skipped`: check was not executed (policy/config gating)
+- Implementations MUST evaluate checks to a tri-state verdict: `pass`, `fail`, or `indeterminate`.
+- Implementations MAY additionally emit `skipped` when an individual check is not executed under an
+  effective policy gate (for example, a per-check allowlist/denylist decision) while cleanup
+  verification overall is enabled and `cleanup_verification.json` is produced for the action.
 
 **Indeterminate is not success**:
 
@@ -1102,12 +1171,17 @@ Verdict rules:
 
 ## References
 
-- [Data contracts spec](025_data_contracts.md)
-- [ADR-0002 "Event Identity and Provenance"](../adr/ADR-0002-event-identity-and-provenance.md)
-- [Telemetry pipeline spec](040_telemetry_pipeline.md)
+- [Data contracts](025_data_contracts.md)
+- [ADR-0001: Version and contract pinning in manifests](../adr/ADR-0001-version-and-contract-pinning.md)
+- [ADR-0002: Event identity and provenance](../adr/ADR-0002-event-identity-and-provenance.md)
+- [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
+- [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
+- [Telemetry pipeline](040_telemetry_pipeline.md)
+- [Configuration reference](120_config_reference.md)
 
 ## Changelog
 
-| Date | Change                                       |
-| ---- | -------------------------------------------- |
-| TBD  | Style guide migration (no technical changes) |
+| Date      | Change                                       |
+| --------- | -------------------------------------------- |
+| 1/19/2026 | update                                       |
+| TBD       | Style guide migration (no technical changes) |

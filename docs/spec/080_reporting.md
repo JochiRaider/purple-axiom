@@ -42,10 +42,30 @@ This document does NOT cover:
 - Gap taxonomy definitions (see [Scoring metrics](070_scoring_metrics.md))
 - Stage outcome semantics (see [ADR-0005](ADR-0005-stage-outcomes-and-failure-classification.md))
 
+## Conventions
+
+This specification follows the metric naming and rounding conventions defined in
+[Scoring metrics](070_scoring_metrics.md) (Metric surface, normative).
+
+Units (normative):
+
+- Values suffixed `_pct` or `_rate` in machine-readable outputs are unitless fractions in the range
+  `[0.0, 1.0]`. Human-readable percent displays MUST be rendered as `value * 100`.
+- Values suffixed `_seconds` are measured in seconds.
+- Values suffixed `_ms` are measured in milliseconds.
+
+Determinism defaults (normative):
+
+- Unless otherwise specified, arrays in reporting outputs MUST be emitted in a deterministic order
+  and MUST NOT depend on input iteration order.
+- String ordering MUST use UTF-8 byte order with no locale collation.
+
 ## Run artifact bundle
 
 Each run produces a deterministic artifact bundle under `runs/<run_id>/`. The reporting stage
 consumes upstream artifacts and emits outputs to `report/`.
+
+AFTER
 
 ### Required artifacts (v0.1)
 
@@ -55,38 +75,50 @@ The following artifacts MUST be present for a run to be considered reportable:
 | ---------------------------------- | ------------- | ---------------------------------------------- |
 | `manifest.json`                    | orchestrator  | Run-level provenance, status, and version pins |
 | `ground_truth.jsonl`               | runner        | Executed actions timeline                      |
+| `logs/telemetry_validation.json`   | telemetry     | Telemetry validation outcomes (when enabled)   |
 | `scoring/summary.json`             | scoring       | Primary metrics rollup for CI and trending     |
 | `normalized/mapping_coverage.json` | normalization | OCSF field coverage by class                   |
 | `bridge/coverage.json`             | detection     | Sigma-to-OCSF bridge quality metrics           |
 | `criteria/manifest.json`           | validation    | Criteria pack snapshot metadata (when enabled) |
+| `criteria/criteria.jsonl`          | validation    | Criteria pack snapshot contents (when enabled) |
 | `criteria/results.jsonl`           | validation    | Per-action criteria outcomes (when enabled)    |
 | `detections/detections.jsonl`      | detection     | Rule hits with matched event references        |
 | `logs/health.json`                 | orchestrator  | Stage outcomes for run status derivation       |
 
 ### Optional artifacts
 
-| Path                                       | Source stage  | Purpose                                        |
-| ------------------------------------------ | ------------- | ---------------------------------------------- |
-| `runner/`                                  | runner        | Per-action transcripts and cleanup evidence    |
-| `runner/principal_context.json`            | runner        | Redaction-safe principal context summary       |
-| `logs/cache_provenance.json`               | orchestrator  | Cache hit/miss provenance (when enabled)       |
-| `plan/expanded_graph.json`                 | runner        | Compiled plan graph (v0.2+)                    |
-| `plan/expansion_manifest.json`             | runner        | Matrix expansion manifest (v0.2+)              |
-| `normalized/ocsf_events.*`                 | normalization | Full normalized event store (JSONL or Parquet) |
-| `bridge/mapping_pack_snapshot.json`        | detection     | Bridge inputs snapshot for reproducibility     |
-| `bridge/compiled_plans/`                   | detection     | Per-rule compilation outputs                   |
-| `normalized/mapping_profile_snapshot.json` | normalization | Mapping profile snapshot for drift detection   |
-| `security/checksums.txt`                   | signing       | SHA-256 checksums for long-term artifacts      |
-| `security/signature.ed25519`               | signing       | Ed25519 signature over checksums               |
+| Path                                       | Source stage  | Purpose                                               |
+| ------------------------------------------ | ------------- | ----------------------------------------------------- |
+| `runner/`                                  | runner        | Per-action transcripts and cleanup evidence           |
+| `runner/principal_context.json`            | runner        | Redaction-safe principal context summary              |
+| `inputs/baseline_run_ref.json`             | reporting     | Resolved regression baseline reference (when enabled) |
+| `inputs/baseline/manifest.json`            | reporting     | Baseline manifest snapshot (when enabled)             |
+| `logs/cache_provenance.json`               | orchestrator  | Cache hit/miss provenance (when enabled)              |
+| `plan/expanded_graph.json`                 | runner        | Compiled plan graph (v0.2+)                           |
+| `plan/expansion_manifest.json`             | runner        | Matrix expansion manifest (v0.2+)                     |
+| `normalized/ocsf_events.*`                 | normalization | Full normalized event store (JSONL or Parquet)        |
+| `bridge/mapping_pack_snapshot.json`        | detection     | Bridge inputs snapshot for reproducibility            |
+| `bridge/compiled_plans/`                   | detection     | Per-rule compilation outputs                          |
+| `normalized/mapping_profile_snapshot.json` | normalization | Mapping profile snapshot for drift detection          |
+| `security/checksums.txt`                   | signing       | SHA-256 checksums for long-term artifacts             |
+| `security/signature.ed25519`               | signing       | Ed25519 signature over checksums                      |
 
-## Required JSON outputs (v0.1)
+## Required reporting outputs (v0.1)
 
-The reporting stage MUST produce the following machine-readable outputs:
+The reporting stage MUST produce the following outputs:
 
-| File                     | Purpose                                    | Schema reference                             |
-| ------------------------ | ------------------------------------------ | -------------------------------------------- |
-| `report/report.json`     | Consolidated report for external tooling   | [report schema](#report-json-schema)         |
-| `report/thresholds.json` | Threshold evaluation results for CI gating | [thresholds schema](#thresholds-json-schema) |
+| File                     | Purpose                                                  | Schema reference                             |
+| ------------------------ | -------------------------------------------------------- | -------------------------------------------- |
+| `report/report.json`     | Consolidated report for external tooling                 | [report schema](#report-json-schema)         |
+| `report/thresholds.json` | Threshold evaluation results for CI gating               | [thresholds schema](#thresholds-json-schema) |
+| `report/report.html`     | Human-readable report for operator review (when enabled) | [HTML structure](#html-report-structure)     |
+
+Notes:
+
+- When `reporting.emit_html=false`, `report/report.html` MUST NOT be emitted.
+- `report/report.json` and `report/thresholds.json` are contracted required artifacts for v0.1
+  reportable runs; if an implementation supports `reporting.emit_json`, it MUST be `true` for any
+  run intended to be reportable.
 
 The reporting stage MUST NOT modify upstream artifacts. It reads from `scoring/summary.json`,
 `bridge/coverage.json`, `normalized/mapping_coverage.json`, and other inputs, then emits derived
@@ -96,18 +128,32 @@ outputs to `report/`.
 
 These artifacts are produced by upstream stages and referenced in the report:
 
-| File                               | Purpose                           | Schema reference                                                    |
-| ---------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `manifest.json`                    | Run-level provenance and outcomes | [manifest schema](manifest_schema.json)                             |
-| `scoring/summary.json`             | Operator-facing metrics rollup    | [summary schema](summary_schema.json)                               |
-| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality      | [bridge coverage schema](bridge_coverage_schema.json)               |
-| `normalized/mapping_coverage.json` | OCSF normalization coverage       | [mapping coverage schema](mapping_coverage_schema.json)             |
-| `criteria/manifest.json`           | Criteria pack snapshot metadata   | [criteria pack manifest schema](criteria_pack_manifest_schema.json) |
+| File                               | Purpose                                  | Schema reference                                                    |
+| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| `manifest.json`                    | Run-level provenance and outcomes        | [manifest schema](manifest_schema.json)                             |
+| `ground_truth.jsonl`               | Executed actions timeline                | [Scenarios](030_scenarios.md)                                       |
+| `logs/telemetry_validation.json`   | Telemetry validation outcomes            | [Telemetry pipeline](040_telemetry_pipeline.md)                     |
+| `scoring/summary.json`             | Operator-facing metrics rollup           | [summary schema](summary_schema.json)                               |
+| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality             | [bridge coverage schema](bridge_coverage_schema.json)               |
+| `normalized/mapping_coverage.json` | OCSF normalization coverage              | [mapping coverage schema](mapping_coverage_schema.json)             |
+| `criteria/manifest.json`           | Criteria pack snapshot metadata          | [criteria pack manifest schema](criteria_pack_manifest_schema.json) |
+| `criteria/criteria.jsonl`          | Criteria pack snapshot contents          | [Validation criteria](035_validation_criteria.md)                   |
+| `criteria/results.jsonl`           | Per-action criteria outcomes             | [Validation criteria](035_validation_criteria.md)                   |
+| `detections/detections.jsonl`      | Rule hits with matched event references  | [Detection (Sigma)](060_detection_sigma.md)                         |
+| `logs/health.json`                 | Stage outcomes for run status derivation | [ADR-0005](ADR-0005-stage-outcomes-and-failure-classification.md)   |
 
 ## Run status summary
 
 The report MUST prominently display run status and the reasons for any degradation. Run status is
-derived from stage outcomes per [ADR-0005](ADR-0005-stage-outcomes-and-failure-classification.md).
+derived from stage outcomes per [ADR-0005](ADR-0005-stage-outcomes-and-failure-classification.md),
+plus any configured quality gates evaluated by the reporting stage (thresholds and regression).
+
+Normative coupling:
+
+- `report/thresholds.json.status_recommendation` is the authoritative CI-facing status.
+- `report/report.json.status` MUST equal `report/thresholds.json.status_recommendation`.
+- `report/report.json.status_reasons[]` MUST include the stable degradation reason codes that
+  explain why the final status is not `success`.
 
 ### Status definitions
 
@@ -122,21 +168,26 @@ derived from stage outcomes per [ADR-0005](ADR-0005-stage-outcomes-and-failure-c
 When status is `partial` or `failed`, the report MUST enumerate the contributing factors. Common
 degradation reasons include:
 
-| Reason code                          | Gate type     | Description                                                |
-| ------------------------------------ | ------------- | ---------------------------------------------------------- |
-| `tier1_coverage_below_threshold`     | Quality gate  | Tier 1 field coverage < configured threshold (default 80%) |
-| `tier1_coverage_indeterminate`       | Quality gate  | No in-scope events to compute coverage                     |
-| `technique_coverage_below_threshold` | Quality gate  | Technique coverage < configured threshold (default 75%)    |
-| `latency_above_threshold`            | Quality gate  | Detection latency p95 > configured threshold               |
-| `gap_rate_exceeded`                  | Quality gate  | One or more gap category rates exceeded budget             |
-| `stage_failed_closed`                | Stage outcome | A required stage failed with `fail_closed` mode            |
-| `regression_alert`                   | Quality gate  | Regression delta exceeded configured threshold(s)          |
-| `cleanup_verification_failed`        | Validation    | Cleanup checks failed; run may be tainted                  |
-| `revert_failed`                      | Runner        | One or more actions failed during lifecycle `revert`       |
-| `teardown_failed`                    | Runner        | One or more actions failed during lifecycle `teardown`     |
-| `unsupported_platform`               | Runner        | One or more actions skipped due to platform requirements   |
-| `insufficient_privileges`            | Runner        | One or more actions skipped due to privilege requirements  |
-| `missing_tool`                       | Runner        | One or more actions skipped due to tool/capability gates   |
+| Reason code                          | Gate type     | Description                                                    |
+| ------------------------------------ | ------------- | -------------------------------------------------------------- |
+| `stage_failed_closed`                | Stage outcome | A required stage failed with `fail_mode=fail_closed`           |
+| `artifact_missing`                   | Orchestrator  | One or more required artifacts absent                          |
+| `technique_coverage_below_threshold` | Quality gate  | Technique coverage < configured threshold                      |
+| `tier1_coverage_below_threshold`     | Quality gate  | Tier 1 field coverage < configured threshold (default 80%)     |
+| `tier1_coverage_indeterminate`       | Quality gate  | No in-scope events to compute coverage                         |
+| `latency_above_threshold`            | Quality gate  | Detection latency p95 > configured threshold (default 300s)    |
+| `gap_rate_exceeded`                  | Quality gate  | Gap category rate exceeds thresholds                           |
+| `regression_alert`                   | Quality gate  | Significant regression detected vs baseline                    |
+| `baseline_missing`                   | Quality gate  | Regression enabled but baseline run could not be resolved/read |
+| `baseline_incompatible`              | Quality gate  | Regression baseline and candidate not comparable               |
+| `regression_compare_failed`          | Quality gate  | Regression comparison errored; results indeterminate           |
+| `cleanup_verification_failed`        | Validation    | Cleanup verification failures above threshold (future gate)    |
+| `criteria_misconfigured_rate`        | Validation    | Criteria misconfigured rate above threshold (optional gate)    |
+
+Determinism (normative):
+
+- `report/report.json.status_reasons[]` MUST contain unique reason codes and MUST be emitted sorted
+  ascending (UTF-8 byte order, no locale).
 
 ## Human-readable report sections
 
@@ -147,14 +198,16 @@ The HTML report MUST include the following sections. JSON equivalents SHOULD be 
 
 **Summary**: High-level run outcome for operator triage.
 
-Required content:
+The report MUST include:
 
-- Run status (`success`, `partial`, `failed`) with visual indicator
-- Scenario ID, version, and technique count
-- Execution window (start/end timestamps, duration)
-- Target asset summary (count by OS, roles)
-- Top-line coverage percentage
-- Status degradation reasons (if not `success`)
+- Run name, timestamp, and overall status
+- Top-line technique coverage (`coverage_pct` rendered as a percentage)
+- EPS (events/sec), total events
+- Total actions executed, succeeded, failed
+- Criteria summary: unmet, met, misconfigured, unavailable counts
+- Synthetic correlation marker summary (if enabled)
+- Regression summary (if enabled)
+- Link to raw artifacts (if published)
 
 ### Execution context
 
@@ -207,7 +260,7 @@ JSON equivalent (recommended):
 
 **Summary**: Operator-visible action execution health, separated by lifecycle phase.
 
-Required content:
+The report MUST include::
 
 - Idempotence distribution over executed actions:
   - counts for `idempotent | non_idempotent | unknown`
@@ -272,19 +325,19 @@ JSON equivalent (recommended):
 
 **Summary**: Detection coverage relative to executed techniques.
 
-Required content:
+The report MUST include:
 
-- `techniques_executed`: count of unique techniques in ground truth
-- `techniques_covered`: count with at least one detection
-- `coverage_pct`: `techniques_covered / techniques_executed * 100`
-- Per-technique breakdown table with columns: technique ID, executed (bool), covered (bool),
-  detection count, first detection latency (ms)
+- Total executed techniques (`techniques_executed`)
+- Total covered techniques (`techniques_covered`)
+- Coverage fraction (`coverage_pct`: `techniques_covered / techniques_executed`, unitless in
+  `[0.0, 1.0]`)
+- Per-technique breakdown table (technique_id, detection count, first detection latency (seconds))
 
 ### Latency distribution
 
 **Summary**: Time from action execution to first detection.
 
-Required content:
+The report MUST include:
 
 - Percentile distribution: p50, p90, p95, max (in milliseconds)
 - Histogram or distribution visualization (HTML only)
@@ -294,7 +347,7 @@ Required content:
 
 **Summary**: Quality of detection matches.
 
-Required content:
+The report MUST include:
 
 - Fidelity tier counts from `scoring/summary.json`:
   - `exact`: detection matched expected event with high confidence
@@ -373,25 +426,21 @@ Minimum evidence refs by measurement layer (normative):
 
 - telemetry:
   - MUST include `logs/health.json`.
-  - SHOULD include telemetry validation artifacts under `telemetry/` when present.
+  - SHOULD include `logs/telemetry_validation.json` when present.
 - normalization:
   - MUST include `normalized/mapping_coverage.json`.
-- detection:
+- bridge:
   - MUST include `bridge/coverage.json`.
-  - SHOULD include `detections/detections.jsonl`.
-- scoring:
-  - MUST include `scoring/summary.json`.
+- criteria:
+  - MUST include `criteria/results.jsonl` when criteria validation is enabled.
+- runner_cleanup:
+  - MUST include `runner/cleanup_verification.jsonl` when cleanup verification is enabled.
 
-Conditional minimums by gap category (normative):
+Conditional minimums:
 
-- `missing_telemetry`:
-  - MUST include `logs/health.json`.
-  - SHOULD include the most directly causal telemetry validation artifact(s) when present.
 - `criteria_unavailable`, `criteria_misconfigured`:
-  - When criteria validation is enabled, MUST include `criteria/manifest.json` and
-    `criteria/results.jsonl`.
-- `cleanup_verification_failed`:
-  - MUST include runner cleanup verification evidence under `runner/` when present.
+  - When criteria validation is enabled, MUST include `criteria/manifest.json`,
+    `criteria/criteria.jsonl`, and `criteria/results.jsonl`.
 
 Deterministic ordering (normative):
 
@@ -559,21 +608,33 @@ Required content:
 
 **Summary**: Component versions for reproducibility.
 
+The report MUST include a version inventory section with:
+
 Required content (from `manifest.versions`):
 
-- `purple_axiom`
+- `purple_axiom` (pipeline core)
 - `ocsf_version`
 - `otel_collector_version`
 - `normalizer_version`
 - `sigma_compiler_version`
 - `pipeline_version`
+- `scenario_id`
+- `scenario_version`
+- `rule_set_id`
 - `rule_set_version`
 
-Additional provenance:
+Conditional pins (from `manifest.versions`, when enabled):
 
-- Mapping pack version (from `bridge/coverage.json` → `mapping_pack_ref`)
-- Criteria pack version (from `criteria/manifest.json`)
-- Range config SHA-256 (from `manifest.inputs.range_yaml_sha256`)
+- `mapping_pack_id`
+- `mapping_pack_version`
+- `criteria_pack_id`
+- `criteria_pack_version`
+
+Additional provenance (when present):
+
+- Mapping pack ref (from `bridge/coverage.json` → `mapping_pack_ref`)
+- Criteria pack manifest (from `criteria/manifest.json`)
+- Range config sha (from `manifest.inputs.range_yaml_sha256`)
 
 ## Regression analysis
 
@@ -898,20 +959,27 @@ Deterministic ordering (normative):
 
 ## Trend tracking
 
-Trending enables longitudinal analysis across runs. Downstream dashboards and exporters MUST use the
-stable trending dimensions defined here.
+AFTER Trending enables longitudinal analysis across runs. Downstream dashboards and exporters MUST
+use the stable trending dimensions defined here.
 
 ### Trending keys (normative)
 
-| Key                                         | Source                                      | Requirement |
-| ------------------------------------------- | ------------------------------------------- | ----------- |
-| `scenario_id`                               | `manifest.scenario.scenario_id`             | REQUIRED    |
-| `scenario_version`                          | `manifest.scenario.scenario_version`        | SHOULD      |
-| `rule_set_version`                          | `manifest.versions.rule_set_version`        | REQUIRED    |
-| `pipeline_version`                          | `manifest.versions.pipeline_version`        | REQUIRED    |
-| `extensions.bridge.mapping_pack_version`    | `bridge/coverage.json` → `mapping_pack_ref` | RECOMMENDED |
-| `versions.ocsf_version`                     | `manifest.versions.ocsf_version`            | RECOMMENDED |
-| `extensions.criteria.criteria_pack_version` | `criteria/manifest.json`                    | RECOMMENDED |
+Exporters MUST use the following trending keys (dimensions) as join keys for trend series. These are
+the pinned version fields from `manifest.versions` (see
+[ADR-0001](ADR-0001-project-naming-and-versioning.md)):
+
+| Key                              | Source                                    | Requirement                                       |
+| -------------------------------- | ----------------------------------------- | ------------------------------------------------- |
+| `versions.scenario_id`           | `manifest.versions.scenario_id`           | REQUIRED                                          |
+| `versions.scenario_version`      | `manifest.versions.scenario_version`      | SHOULD                                            |
+| `versions.rule_set_id`           | `manifest.versions.rule_set_id`           | REQUIRED (when rule evaluation is enabled)        |
+| `versions.rule_set_version`      | `manifest.versions.rule_set_version`      | REQUIRED (when rule evaluation is enabled)        |
+| `versions.pipeline_version`      | `manifest.versions.pipeline_version`      | REQUIRED                                          |
+| `versions.mapping_pack_id`       | `manifest.versions.mapping_pack_id`       | RECOMMENDED (when bridge is enabled)              |
+| `versions.mapping_pack_version`  | `manifest.versions.mapping_pack_version`  | RECOMMENDED (when bridge is enabled)              |
+| `versions.ocsf_version`          | `manifest.versions.ocsf_version`          | RECOMMENDED                                       |
+| `versions.criteria_pack_id`      | `manifest.versions.criteria_pack_id`      | RECOMMENDED (when criteria validation is enabled) |
+| `versions.criteria_pack_version` | `manifest.versions.criteria_pack_version` | RECOMMENDED (when criteria validation is enabled) |
 
 ### Non-trending keys
 
@@ -926,16 +994,19 @@ Implementations MAY maintain a history table for trend queries. Recommended sche
 CREATE TABLE run_trends (
   scenario_id TEXT NOT NULL,
   scenario_version TEXT,
+  rule_set_id TEXT NOT NULL,
   rule_set_version TEXT NOT NULL,
   pipeline_version TEXT NOT NULL,
+  mapping_pack_id TEXT,
   mapping_pack_version TEXT,
   ocsf_version TEXT,
+  criteria_pack_id TEXT,
   criteria_pack_version TEXT,
   run_id TEXT NOT NULL,
   started_at_utc TIMESTAMP NOT NULL,
-  coverage_pct REAL,
-  latency_p95_ms INTEGER,
-  tier1_coverage_pct REAL,
+  technique_coverage_rate REAL,
+  detection_latency_p95_seconds REAL,
+  tier1_field_coverage_pct REAL,
   status TEXT,
   PRIMARY KEY (run_id)
 );
@@ -945,13 +1016,21 @@ CREATE TABLE run_trends (
 
 Exporters SHOULD emit alerts when:
 
-- Coverage drops > 5 percentage points vs trailing 5-run average
-- Latency p95 increases > 50% vs trailing 5-run average
+- Technique coverage drops > 0.05 (5 percentage points) vs trailing 5-run average
+- Detection latency p95 increases > 50% vs trailing 5-run average
 - New gap categories appear that were not present in prior runs
 
 ## Threshold evaluation output
 
 The reporting stage MUST emit `report/thresholds.json` for CI integration.
+
+Determinism and units (normative):
+
+- `gates[]` MUST be sorted by `gate_id` (UTF-8 byte order, no locale).
+- Gate thresholds and actuals are interpreted by `gate_id`:
+  - All `*_rate` and `*_coverage` gates use unitless fractions in `[0.0, 1.0]`.
+  - `max_allowed_latency_seconds` uses seconds.
+- `status_recommendation` MUST be one of `success`, `partial`, or `failed`.
 
 ### Thresholds JSON schema
 
@@ -1031,7 +1110,7 @@ The `report/report.json` output MUST conform to the following structure:
     "scenario_version": "<string>",
     "techniques_executed": 10,
     "techniques_covered": 8,
-    "coverage_pct": 80.0,
+    "coverage_pct": 0.80,
     "duration_seconds": 300,
     "target_count": 2
   },

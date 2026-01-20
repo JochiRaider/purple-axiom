@@ -83,14 +83,15 @@ If `pack_version` is not provided (non-recommended):
 1. Parse candidate versions as SemVer.
 1. Select the highest SemVer version.
 1. If no candidates parse as SemVer, fail closed (do not guess lexicographically).
-1. If the same `(pack_id, pack_version)` appears in multiple search paths, fail closed unless they
-   are byte-identical as proven by matching `criteria_sha256` and `manifest_sha256`.
+1. If the same `(pack_id, pack_version)` appears in multiple search paths, the runner MUST fail
+   closed unless the packs are identical as proven by matching `criteria_sha256` and
+   `manifest_sha256` in the pack manifests. If present, `criteria.pack_sha256` MUST also match.
 
 The resolved `(pack_id, pack_version)` MUST be recorded in run provenance (manifest and report).
 
-Note: `criteria_sha256` and `manifest_sha256` are snapshot content hashes and MUST NOT be used as a
-substitute for the version pins (`manifest.versions.criteria_pack_id` and
-`manifest.versions.criteria_pack_version`).
+Note: Note: `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` are content
+fingerprints and MUST NOT be used as a substitute for the version pins
+(`manifest.versions.criteria_pack_id` and `manifest.versions.criteria_pack_version`).
 
 ### Recommended source control practice (non-normative)
 
@@ -111,9 +112,12 @@ The run manifest MUST pin the criteria pack identity using version pins under `m
 - `manifest.versions.criteria_pack_id`
 - `manifest.versions.criteria_pack_version`
 
-Pack snapshot content hashes (for example `manifest_sha256` and `criteria_sha256`) MUST be recorded
-separately from version pins (for example in `runs/<run_id>/criteria/manifest.json`) and MUST NOT be
-used as a substitute for the version pins.
+The criteria pack content hashes MUST be present in the snapped pack manifest
+(`runs/<run_id>/criteria/manifest.json`) and MUST NOT be used as a substitute for the version pins:
+
+- `manifest_sha256`
+- `criteria_sha256`
+- `criteria.pack_sha256`
 
 ## Drift detection (execution definitions vs criteria expectations)
 
@@ -152,6 +156,10 @@ Examples for `source_ref`:
 
 Deterministic tree hash basis (normative):
 
+- `source_tree_sha256`: deterministic tree hash of the upstream execution-definition tree used when
+  authoring the criteria pack. This MUST be computed using the deterministic algorithm below when
+  feasible. If this field is missing (for example due to fail-open policy), drift detection MUST
+  treat the drift status as `unknown`.
 - `source_tree_sha256` MUST be computed as:
   - Build `tree_basis_v1` with `v`, `engine`, and `files[]`.
   - `files[]` is a sorted array of `{ path, sha256 }`.
@@ -355,28 +363,30 @@ Expected `source_tree_sha256` for this basis (using `canonical_json_bytes` as de
 
 #### Runner provenance (run time)
 
-- The runner MUST record execution-definition provenance for the engine being used, using the same
-  structure (`engine`, `source_ref`, `source_tree_sha256`) in run provenance (manifest `extensions`
-  or equivalent run metadata).
+The runner MUST record execution-definition provenance for each engine used by the run in the run
+manifest under `extensions.runner.execution_definitions.upstreams[]`:
 
-Rationale: this allows drift detection without requiring the evaluator to locate and parse upstream
-repos at evaluation time.
+- `engine`: must match the pack manifest's upstream engine
+- `source_ref`: exact git SHA/tag/version or artifact digest used
+- `source_tree_sha256`: tree hash of the execution definitions used (MAY be omitted if unavailable)
 
-Regression comparability requirement (normative):
+If the runner cannot compute `source_tree_sha256`, it MUST follow `validation.evaluation.fail_mode`
+(see below) and the evaluator MUST set drift status to `unknown`.
 
-- For regression runs, criteria evaluation results MUST be treated as comparable only when the
-  following are pinned and recorded in run outputs:
+### Regression comparability requirement (normative)
 
-  - Criteria pack identity pins (version pins):
+For regression comparisons across runs:
 
-    - `manifest.versions.criteria_pack_id`
-    - `manifest.versions.criteria_pack_version`
+- The criteria pack identity pins (`pack_id`, `pack_version`) MUST match.
 
-  - Criteria pack snapshot content hashes (separate from version pins):
+- The criteria pack content fingerprints MUST match:
 
-    - Snapshot hashes for the selected pack manifest and criteria content (for example
-      `manifest_sha256` and `criteria_sha256`) as recorded in the run bundle snapshot
-      (`runs/<run_id>/criteria/manifest.json` or an equivalent deterministic location).
+  - `manifest_sha256`
+  - `criteria_sha256`
+  - `criteria.pack_sha256`
+
+- The upstream execution-definition provenance MUST match (per-engine `source_ref` and
+  `source_tree_sha256`).
 
 - If the criteria pack identity pins or snapshot hashes are missing from run outputs, consumers MUST
   treat criteria evaluation results as not comparable for regression deltas.
@@ -453,18 +463,38 @@ Minimum join keys:
 - `technique_id` (ATT&CK)
 - `engine_test_id` (Atomic GUID, Caldera ability ID, or equivalent canonical ID)
 
-Optional selectors refine specificity:
+Optional `selectors` allow more specific matching within a pack. Selector evaluation is performed
+against a resolved selector context derived from run configuration (and optionally action metadata):
 
-- `selectors.os` (`windows`, `linux`, `macos`, `bsd`, `other`)
-- `selectors.roles` (match-any)
-- `selectors.executor` (`powershell`, `cmd`, `bash`, and similar)
+- `selectors.os`: OS family (e.g., `windows`, `linux`, `macos`). If present, MUST match the resolved
+  selector context `os`.
+- `selectors.roles`: An array of strings (e.g., `["dc","workstation"]`). If present, at least one
+  role MUST match the resolved selector context `roles[]`.
+- `selectors.executor`: Executor or runner type (e.g., `atomic-red-team`, `caldera-agent`). If
+  present, MUST match the resolved selector context `executor`.
+
+The selector context MUST start from `validation.criteria_pack.entry_selectors` in config. If a
+context dimension is missing, selector satisfaction MUST evaluate to not satisfied for entries that
+require that dimension.
+
+Selectors are evaluated after join keys match and before tie-breaking.
 
 Deterministic selection:
 
-1. Filter entries that match (engine, technique_id, engine_test_id).
-1. Among matches, prefer entries with the greatest selector specificity (most selector keys present
-   and satisfied).
-1. Break ties by `entry_id` lexical sort (normative order defined below).
+1. If the ground truth action includes a pinned `criteria_ref.criteria_entry_id`, the evaluator MUST
+   select that exact criteria entry (by `entry_id`) from the selected pack, and MUST verify the join
+   keys match. If the entry is missing or join keys do not match, the evaluator MUST treat this as
+   `criteria_misconfigured`.
+1. Otherwise, collect candidate entries where `engine`, `technique_id`, and `engine_test_id` all
+   match.
+1. Filter candidates by selector satisfaction (using the resolved selector context):
+   - If an entry has no selectors, it is always eligible.
+   - If an entry has selectors, it is eligible only if all specified selector dimensions are
+     satisfied.
+1. If multiple eligible candidates remain, prefer entries with the greatest selector specificity,
+   measured as the count of recognized selector keys present on the entry (from
+   `{os, roles, executor}`).
+1. If still tied, choose the candidate with the lexicographically smallest `entry_id` (see below).
 
 If no entry matches, criteria evaluation emits `criteria_unavailable` for the action.
 
@@ -473,10 +503,8 @@ No-match behavior (normative):
 - The evaluator MUST emit a `criteria/results.jsonl` row for the action with:
   - `status: "skipped"`
   - `reason_code: "criteria_unavailable"`
-- `criteria_ref` MUST include the selected pack identity (`pack_id`, `pack_version`).
-  - `criteria_ref.pack_id` MUST equal `manifest.versions.criteria_pack_id`.
-  - `criteria_ref.pack_version` MUST equal `manifest.versions.criteria_pack_version`.
-  - `criteria_ref.entry_id` MUST be omitted or set to JSON null.
+- `criteria_ref` MUST include selected pack identity (`criteria_pack_id`, `criteria_pack_version`),
+  and `criteria_entry_id` MUST be omitted or set to JSON `null`.
 - `signals` MUST be an empty array.
 
 ### Tie-breaking order for entry_id (normative)
@@ -511,7 +539,7 @@ locations in `criteria/results.jsonl`:
 
 - **No matching entry**: when no criteria entry matches an executed action, the evaluator MUST emit
   `status = "skipped"`, `reason_code = "criteria_unavailable"`, `signals = []`, and MUST omit
-  `criteria_ref.entry_id` or set it to JSON null.
+  `criteria_ref.criteria_entry_id` or set it to JSON null.
 - **Invalid predicate or unsupported operator**: when a selected criteria entry cannot be evaluated
   due to pack misconfiguration, the evaluator MUST emit `status = "skipped"` and
   `reason_code = "criteria_misconfigured"` and MUST record a stable error token under
@@ -531,8 +559,8 @@ locations in `criteria/results.jsonl`:
 - `engine_test_id` (string)
 - `selectors` (optional object)
 - `time_window` (optional object)
-  - `before_seconds` (optional, default 5)
-  - `after_seconds` (optional, default 120)
+  - `before_seconds` (int, optional; defaults to `validation.evaluation.time_window_before_seconds`)
+  - `after_seconds` (int, optional; defaults to `validation.evaluation.time_window_after_seconds`)
 - `expected_signals` (required array)
 - `cleanup_verification` (optional object)
 
@@ -552,7 +580,8 @@ Each expected signal defines a predicate over normalized OCSF events.
       - `case_sensitive` (optional bool, default true; applies to string comparisons only)
 - `min_count` (optional int, default 1)
 - `max_count` (optional int)
-- `within_seconds` (optional int; defaults to the entry time window)
+- `within_seconds` (int, optional): if present, overrides the effective `after_seconds` for this
+  signal only; the effective after-window for the signal becomes `within_seconds`.
 
 Notes:
 
@@ -595,6 +624,48 @@ Type rules (minimum, normative):
   object, the operator MUST evaluate to false.
 - For `contains`, both the resolved value and expected `value` MUST be strings; otherwise the
   operator MUST evaluate to false.
+
+#### Signal evaluation semantics (deterministic)
+
+For evaluation, the evaluator MUST:
+
+- Anchor all windows on the ground truth action timestamp (`timestamp_utc`) converted to epoch
+  milliseconds.
+- Evaluate candidate events against normalized OCSF event time (`time`, epoch milliseconds).
+
+Effective windowing:
+
+- Compute `before_seconds` from `entry.time_window.before_seconds` if present, else from config
+  `validation.evaluation.time_window_before_seconds`.
+- For each signal, compute the effective after-window:
+  - If `signal.within_seconds` is present: use it.
+  - Else use `entry.time_window.after_seconds` if present, else config
+    `validation.evaluation.time_window_after_seconds`.
+
+A normalized event is eligible for a signal only if:
+
+- `event.class_uid == signal.class_uid`, and
+- `event.time` is within `[t0 - before_ms, t0 + after_ms]` (inclusive), and
+- all constraints evaluate to true.
+
+Counts and verdicts:
+
+- `matched_count` MUST be the total number of matching events for the signal.
+- The signal `status` MUST be:
+  - `pass` if `matched_count >= min_count` AND (if `max_count` is present)
+    `matched_count <= max_count`
+  - `fail` otherwise
+- The action `status` MUST be:
+  - `pass` if all signal statuses are `pass`
+  - `fail` if any signal status is `fail`
+
+Sampling:
+
+- `sample_event_ids` MUST contain up to `validation.evaluation.max_sample_event_ids` event IDs from
+  matching events.
+- The sample MUST be deterministic: sort matching events by `metadata.event_id` ascending and take
+  the first N. Events missing `metadata.event_id` MUST still count toward `matched_count` but MUST
+  be omitted from `sample_event_ids`.
 
 Case sensitivity:
 
@@ -692,13 +763,18 @@ Deterministic stabilization window (optional, recommended):
 
 Required evidence recording (normative):
 
-- The runner MUST write a per-action `runner/actions/<action_id>/cleanup_verification.json` that
-  includes, per check:
+- If cleanup verification is executed, the runner MUST write a per-action
+  `runner/actions/<action_id>/cleanup_verification.json` that includes, per check:
   - `check_id`, `type`, `target` (echoed), `status` (`pass`, `fail`, `indeterminate`, `skipped`)
   - `reason_code` (string; required for all statuses)
   - `attempts` (int), `elapsed_ms` (int)
   - `observed_error` (string or int) when `status = indeterminate` (OS-native error code or errno)
   - `observed_kind` (optional string) when `status = fail` (implementation-defined, but stable)
+- If cleanup verification is disabled by policy/config, the runner MUST NOT write this file.
+
+When the file is written, it MUST include the check list, per-check results, timestamps, and any
+captured outputs necessary to debug failures. It MUST be stable for audit and MUST be referenced by
+`cleanup.results_ref` in the criteria results.
 
 Minimum conformance fixtures (normative intent):
 
@@ -727,12 +803,11 @@ Minimum fields:
 - `action_id` (format is versioned; see data contracts)
 - `template_id` (v0.2+; stable procedure identity of the action template)
 - `action_key`
-- `criteria_ref` (object)
-  - `pack_id` (string)
-    - MUST equal `manifest.versions.criteria_pack_id` for the run.
-  - `pack_version` (string)
-    - MUST equal `manifest.versions.criteria_pack_version` for the run.
-  - `entry_id` (string, OPTIONAL; omitted or JSON null when `reason_code = "criteria_unavailable"`)
+- `criteria_ref` (object) containing the selection provenance (field names aligned to ground truth):
+  - `criteria_pack_id` (string)
+  - `criteria_pack_version` (string)
+  - `criteria_entry_id` (string|null; equals the selected criteria entry's `entry_id`)
+  - `engine_test_id` (string) echo of action join key
 - `status` (`pass`, `fail`, `skipped`)
 - `reason_code` (string, REQUIRED when `status = "skipped"`; omitted otherwise)
 - `signals` (array)
@@ -765,6 +840,7 @@ Failure classification and reason codes (normative):
     - `schema_invalid`
     - `drift_detected`
     - `drift_unknown`
+    - `criteria_ref_invalid`
 - When criteria drift is detected or treated as detected (fail-closed), the evaluator MUST set
   `reason_code = "criteria_misconfigured"` and MUST record drift details under
   `extensions.criteria.drift` as specified above.
@@ -809,11 +885,12 @@ execution outcome, not an evaluated verdict.
 - `fail`: the predicate is violated.
 - `indeterminate`: the predicate could not be evaluated with confidence (unsupported OS, missing
   permissions, missing tooling, timeout, probe error, or parse error).
+- `skipped`: check was not executed (policy/config gating)
 
 **Indeterminate is not success**:
 
 - Cleanup verification gating MUST treat `indeterminate` as a gate-fail by default.
-- The tri-state verdict is still recorded to support diagnostics and deterministic reporting.
+- The four-state verdict is still recorded to support diagnostics and deterministic reporting.
 
 **Reason codes**: Each check result MUST include a stable `reason_code` (even for pass) from the
 following minimal set:
@@ -830,10 +907,11 @@ following minimal set:
 - `parse_error` (indeterminate; output not interpretable deterministically)
 - `ambiguous_match` (indeterminate; multiple targets match but check expects exactly one)
 - `unstable_observation` (indeterminate; observation flaps across probes)
+- `disabled_by_policy` (skipped; check not run by policy)
 
 **Skipped requires reason_code**: If a check result status is `skipped`, it MUST include
 `reason_code`, and `reason_code` MUST be one of `unsupported_platform`, `insufficient_privileges`,
-or `exec_error`.
+`disabled_by_policy`, or `exec_error`.
 
 Unless a check type defines a more specific mapping, absence checks MUST use `absent` (pass) and
 `present` (fail). State checks MUST use `ok` (pass) and `state_mismatch` (fail).

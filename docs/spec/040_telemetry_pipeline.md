@@ -149,6 +149,9 @@ Network egress enforcement check (required when outbound egress is denied):
 - If the probe succeeds while outbound egress is denied, telemetry validation MUST fail closed as an
   egress policy violation (see the operability and stage outcome specifications for reason codes and
   required evidence fields).
+- The validator MUST record deterministic probe evidence in
+  `runs/<run_id>/logs/telemetry_validation.json` under `network_egress_policy` (see
+  [Practical validation harness](#practical-validation-harness-required)).
 
 ### Manifest independence and publisher metadata failures
 
@@ -590,14 +593,29 @@ Recommended additional fields (operator UX and regression tracking):
   - `exporter_queue_drops_observed` (bool)
   - `exporter_send_failures_observed` (bool)
 
-Recommended additional fields (raw-mode canary triage):
+Recommended additional fields (Windows Event Log raw-mode canary triage):
 
-- `raw_mode_canary` (object, OPTIONAL)
+- `windows_eventlog_raw_mode` (object, OPTIONAL; REQUIRED for Windows assets)
   - `performed` (bool)
   - `observed` (bool)
-  - `observed_at` (object, OPTIONAL)
+  - `canary_observed_at` (object, OPTIONAL)
+    - `asset_id` (string)
+    - `channel` (string)
     - `path` (string; run-relative POSIX-style path)
     - `event_id` (string, OPTIONAL; `metadata.event_id` when resolvable)
+
+Recommended additional fields (network egress policy enforcement):
+
+- `network_egress_policy` (object, OPTIONAL; REQUIRED when effective outbound policy is denied)
+  - `asset_id` (string)
+  - `effective_allow_outbound` (bool)
+  - `canary` (object)
+    - `address` (string; literal IP address)
+    - `port` (int)
+    - `timeout_ms` (int)
+  - `probe_observed` (object)
+    - `outcome` (one of `blocked | reachable | error`)
+    - `error_code` (string, OPTIONAL; ASCII `lower_snake_case` when present)
 
 Recommended additional fields (checkpointing diagnostics):
 

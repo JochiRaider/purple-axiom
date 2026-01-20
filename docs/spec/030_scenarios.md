@@ -28,12 +28,17 @@ available.
 
 v0.1 support (normative):
 
-- The v0.1 runner MUST support **Atomic Test Plan** scenarios.
-- v0.1 runs MUST be single-scenario (exactly one `scenario_id` per run bundle). Multi-scenario plans
-  and manifests are reserved for a future release.
-- **Caldera Operation**, **Mixed Plan**, and **Matrix Plan** are reserved for a future release; if
-  encountered, the v0.1 runner MUST fail before execution with a clear error (and a stable
-  `reason_code`: `plan_type_reserved`).
+- The v0.1 runner MUST support `plan.type: "atomic"` only.
+- If any other `plan.type` is encountered in v0.1, the runner MUST fail closed before execution with
+  `reason_code="plan_type_reserved"`.
+
+Plan types (evolution path):
+
+- `atomic` (v0.1): single action, single target.
+- `matrix` (reserved): combinatorial expansion over axes (targets, input variants, techniques).
+- `sequence` (reserved): ordered action list with explicit dependency semantics.
+- `campaign` (reserved): DAG/graph of named fragments; Caldera-style operations map here.
+- `adaptive` (reserved): runtime branching based on observed results.
 
 1. Caldera operation (reserved; not supported in v0.1)
    - One or more adversary profiles or abilities
@@ -54,14 +59,9 @@ v0.1 support (normative):
 
 ## Execution model (runner requirements)
 
-Purple Axiom treats scenario execution as a staged lifecycle per action:
-
-1. **Resolve** inputs (explicit, repeatable parameter resolution)
-1. **Evaluate** and (optionally) satisfy prerequisites (Atomic `dependencies`)
-1. **Execute** (capture stdout/stderr + executor metadata)
-1. **Cleanup** (invoke cleanup command when applicable)
-1. **Cleanup verification** (verify post-conditions; "cleanup ran" is not sufficient)
-1. **State reconciliation** (optional; detect drift between recorded effects and observed state)
+Purple Axiom treats scenario execution as the per-action lifecycle defined below (`prepare`,
+`execute`, `revert`, `teardown`), with optional per-action state reconciliation controlled by
+`plan.reconciliation`.
 
 ### Action lifecycle
 
@@ -90,6 +90,8 @@ Cleanup policy (scenario input, normative):
     - Rationale: `plan.cleanup = false` is an explicit operator request to retain post-action
       effects and/or prerequisites for debugging, and MUST NOT trigger destructive cleanup
       behaviors.
+- `revert.phase_outcome` MUST be `skipped` with `reason_code="cleanup_suppressed"`.
+- `teardown.phase_outcome` MUST be `skipped` with `reason_code="cleanup_suppressed"`.
 
 Prerequisite scope (per-action vs shared, normative):
 
@@ -113,22 +115,43 @@ Allowed transitions (finite-state machine, normative):
 - `revert` MUST NOT be attempted unless `execute` was attempted.
 - When `plan.cleanup = true`, `teardown` SHOULD be attempted even if `execute` or `revert` failed,
   but MUST record its outcome.
+- When a lifecycle phase is `skipped` or `failed`, the phase record MUST include a stable
+  `reason_code` (see data contracts).
 
 Recording requirements (normative):
 
-- Ground truth MUST record the action `idempotence` declaration.
-- Ground truth MUST record, for each phase, `started_at_utc`, `ended_at_utc`, and `phase_outcome`
-  (`success | failed | skipped`).
+Ground truth MUST record (minimum):
+
+- `run_id`, `scenario_id`, `scenario_version`, `action_id`, `action_key`.
+- `timestamp_utc`:
+  - MUST be an ISO-8601 UTC timestamp string, and
+  - when `lifecycle` is present, MUST equal `lifecycle.phases[0].started_at_utc`.
+- `engine`, `engine_test_id`, `technique_id`, `target_asset_id`.
+- `parameters.*` including `parameters.resolved_inputs_sha256` (string; `sha256:<hex>` form).
+- `idempotence`.
+- `lifecycle.phases[]`:
+  - MUST include exactly these phases in order: `prepare`, `execute`, `revert`, `teardown`.
+  - Each phase MUST include `phase_outcome`.
+  - If `phase_outcome` is `failed` or `skipped`, the phase MUST include `reason_code`.
+- `evidence_refs[]` (when external evidence artifacts exist) using deterministic, stable artifact
+  references.
 
 The runner MUST persist:
 
 - Ground truth timeline entries (contracted).
-- Runner evidence artifacts (stdout/stderr transcripts, executor metadata, cleanup verification
-  results).
 - For `engine = "atomic"` actions, the runner MUST implement the integration contract defined in the
   [Atomic Red Team executor integration spec](032_atomic_red_team_executor_integration.md)
   (deterministic YAML parsing, input resolution, prerequisites handling, transcript capture, cleanup
   invocation, and cleanup verification).
+- Runner evidence artifacts under `runner/` MUST include, at minimum (see data contracts “Runner
+  evidence”): Per-action (under `runner/actions/<action_id>/`):
+  - `stdout.txt`, `stderr.txt`
+  - `executor.json`
+  - `requirements_evaluation.json` (when requirements evaluation is performed)
+  - `side_effect_ledger.json` (append-only)
+  - `cleanup_verification.json` (when cleanup verification is enabled)
+  - `state_reconciliation_report.json` (when state reconciliation is enabled) Per-run:
+  - `runner/principal_context.json`
 
 ### State reconciliation policy (per action)
 
@@ -143,17 +166,21 @@ Scenario inputs (normative):
   - `none`: do not perform reconciliation.
   - `observe_only`: perform read-only probes and emit reconciliation reports.
   - `repair`: request destructive reconciliation (reserved; not supported in v0.1).
-- If a scenario requests `repair` in v0.1, the runner MUST fail closed before attempting repair
-  behavior.
+
+v0.1 repair handling (normative):
+
+- `repair` is reserved in v0.1. Implementations MUST NOT mutate targets as part of reconciliation.
+- If a scenario requests `policy=repair` but repair is not enabled/supported, the runner MUST:
+  - perform reconciliation probes in observe-only mode, and
+  - record the blocked intent deterministically in the reconciliation report (per-item `reason_code`
+    SHOULD be `repair_blocked` for affected items), and
+  - surface drift via reconciliation outputs (do not downgrade/omit drift because repair was
+    blocked).
 
 Optional scope control (normative; when reconciliation is enabled):
 
-- Actions MAY constrain which reconciliation item sources are eligible for reporting via
-  `reconciliation.sources`, with allowed values:
-  - `cleanup_verification`
-  - `side_effect_ledger`
-- If omitted, the runner MUST treat the effective default as `sources=[cleanup_verification]`, and
-  MUST ignore `cleanup_verification` when the corresponding evidence artifact is absent.
+- Default sources are `sources=[cleanup_verification, side_effect_ledger]` (in that order).
+- Scenarios MAY constrain sources via `plan.reconciliation.sources` (when present).
 
 ### Technique requirements (permissions and environment assumptions)
 
@@ -188,10 +215,10 @@ egress from target assets.
 
 Effective outbound policy (normative):
 
-- The effective outbound allow decision MUST be the logical AND of:
-  - `scenario.safety.allow_network`, and
-  - `security.network.allow_outbound` from `range.yaml` (see the configuration reference).
-- If either value is `false`, outbound egress MUST be treated as denied for the run.
+- The runner MUST compute:
+  `effective_allow_outbound = scenario.safety.allow_network AND security.network.allow_outbound`.
+- If `effective_allow_outbound` is false, outbound egress MUST be denied by default (enforced at the
+  lab boundary); runner-side controls are defense-in-depth only.
 
 Enforcement responsibility (normative):
 
@@ -220,23 +247,21 @@ Each executed action MUST include two identifiers:
     (`pa_aid_v1_<32hex>`).
 - `action_key` (stable across runs): used as the deterministic join key for regression comparisons.
 
-`action_key` MUST be computed from `action_key_basis_v1` (see the
-[data contracts spec](025_data_contracts.md)) canonicalized using `canonical_json_bytes(...)` as
-defined by RFC 8785 (JCS).
+`action_key` MUST be computed as:
 
-- `engine` (`atomic` | `caldera` | `custom`)
+`action_key = sha256_hex(canonical_json_bytes(action_key_basis_v1))`
 
+Where `canonical_json_bytes` is RFC 8785 JCS canonical JSON encoded as UTF-8 bytes.
+
+`action_key_basis_v1` (minimum fields) MUST include:
+
+- `v`: `1`
+- `engine`: `"atomic"`
 - `technique_id`
-
-- `engine_test_id` (Atomic test GUID / Caldera ability id / equivalent canonical id)
-
-- `parameters.resolved_inputs_sha256` (hash of resolved inputs; not the raw inputs)
-
-- `target_asset_id` (stable Purple Axiom logical asset id; see the
-  [lab providers spec](015_lab_providers.md))
-
-- `parameters.resolved_inputs_sha256` MUST include the effective `plan.execution.principal_alias`
-  (explicit or default), in addition to merged requirements and merged input args.
+- `engine_test_id`
+- `target_asset_id`
+- `resolved_inputs_sha256`: equal to `parameters.resolved_inputs_sha256` (string; `sha256:<hex>`
+  form)
 
 Action requirements and identity (normative):
 
@@ -273,49 +298,12 @@ Expected telemetry is externalized into criteria packs (see the
 
 ## Scenario identity
 
-**scenario_id**: stable identifier (human chosen)
+- `scenario_id`: stable identifier (string).
+- `scenario_version`: MUST be a SemVer 2.0.0 string (e.g., `0.1.0`).
+- `run_id`: MUST be an RFC 4122 UUID (string).
 
-**scenario_version**: semver or date-based
-
-**run_id**: unique per execution
-
-## Safety controls
-
-The `safety` object constrains how a scenario may be executed in a lab. Safety controls are
-normative run constraints and MUST NOT be treated as advisory hints.
-
-### allow_network
-
-`safety.allow_network` controls whether the run is permitted to have **outbound network egress**
-from scenario target assets.
-
-Definitions (normative):
-
-- **Outbound egress** means network connections from scenario target assets to destinations outside
-  the lab's internal control plane (for example the public Internet, upstream corporate networks, or
-  any non-lab routed networks).
-- `allow_network` does not prohibit lab-internal traffic required for Purple Axiom to function (for
-  example telemetry export to an in-lab collector). Lab-internal allowlists are provider and
-  deployment specific.
-
-Effective policy (normative):
-
-- The effective outbound policy MUST be the logical AND of:
-  - `scenario.safety.allow_network`, and
-  - `security.network.allow_outbound` from `range.yaml` (see the configuration reference).
-- If either value is `false`, outbound egress MUST be treated as **denied** for the run.
-
-Enforcement responsibility (normative):
-
-- The **Lab Provider** is responsible for enforcement of outbound egress posture for scenario target
-  assets. When effective outbound policy is **denied**, the provider MUST enforce an egress-deny
-  posture using lab-level controls (for example VLAN segmentation, virtual switch policy, lab
-  firewall rules, hypervisor security groups, or equivalent).
-- Enforcement MUST NOT rely on scenario payload compliance. A test that ignores the flag MUST still
-  be prevented from establishing outbound egress by the lab posture.
-- The **Runner MUST NOT** be the primary enforcement mechanism for `allow_network`. The runner MAY
-  apply defense-in-depth measures (for example host firewall tightening) when available, but the run
-  MUST remain safe even if runner-side controls are bypassed or unavailable.
+Rationale: scenario versions must support ordered compatibility semantics; run identifiers must be
+globally unique and format-validated.
 
 ## Target selection (seed)
 
@@ -352,7 +340,7 @@ See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for the plan execution m
 
 ## Ground truth timeline schema (seed)
 
-- `timestamp_utc`
+- `timestamp_utc` MUST equal `lifecycle.phases[0].started_at_utc` when lifecycle is present.
 - `run_id`, `scenario_id`, `scenario_version`
 - `target_asset_id`
   - `target_asset_id` MUST be a stable Purple Axiom logical id (matching `lab.assets[].asset_id` in
@@ -361,7 +349,9 @@ See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for the plan execution m
   - `hostname` (optional)
   - `ip` (optional)
   - `provider_asset_ref` (optional): provider-native identifier
-- `action_type` (`caldera_ability` | `atomic_test` | `custom`)
+- `engine`: string (v0.1: `"atomic"`).
+- `criteria_ref`: optional string (links to criteria packs).
+- `expected_telemetry_hints`: optional array (non-normative hints for operators).
 - `technique_id` (ATT&CK)
 - `command_summary` (redacted-safe summary)
   - When `security.redaction.enabled: true`, `command_summary` MUST be produced under the effective
@@ -375,17 +365,10 @@ See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for the plan execution m
   - MUST be deterministic given the same tokenized command input and the same effective policy.
   - SHOULD be accompanied by policy provenance in `extensions` (policy id/version/sha256) so drift
     is explainable.
-- `parameters` (seed)
-  - `input_args_redacted` (optional)
-  - `input_args_sha256` (optional)
-- `expected_telemetry` (channels / event types)
+- `parameters.resolved_inputs_sha256`: string; `sha256:<hex>` form.
 - `idempotence` (`idempotent | non_idempotent | unknown`)
-- `lifecycle` (seed)
-  - `phases` (array; in phase order)
-    - `phase` (`prepare | execute | revert | teardown`)
-    - `phase_outcome` (`success | failed | skipped`)
-    - `started_at_utc`
-    - `ended_at_utc`
+- `lifecycle.phases[]` MUST include `prepare`, `execute`, `revert`, `teardown` (in order).
+  - `reason_code` is required when `phase_outcome` is `failed` or `skipped`.
 
 ### Principal selection (non-secret) (normative)
 
@@ -418,7 +401,11 @@ safety:
   allow_network: false
   allow_persistence: false
 targets:
-  - selector: { role: "endpoint", os: "windows" }
+  - selector:
+      roles: ["endpoint"]
+      os: ["windows"]
+safety:
+  allow_network: false
 plan:
   type: "atomic"
   technique_id: "T1059.001"
@@ -443,7 +430,7 @@ Ground truth is emitted as JSONL, one action per line.
 ```json
 {
   "timestamp_utc": "2026-01-03T12:00:00Z",
-  "run_id": "run-2026-01-03-001",
+  "run_id": "<uuid>",  (RFC 4122 UUID)
   "scenario_id": "scn-2026-01-001",
   "scenario_version": "0.1.0",
   "action_id": "s1",
@@ -469,7 +456,7 @@ Ground truth is emitted as JSONL, one action per line.
       "command": "whoami"
     },
     "input_args_sha256": "sha256hex...",
-    "resolved_inputs_sha256": "sha256hex..."
+    "resolved_inputs_sha256": "sha256:<hex>"
   },
   "criteria_ref": {
     "criteria_pack_id": "default",
@@ -522,7 +509,7 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
 ```json
 {
   "timestamp_utc": "2026-01-03T12:00:00Z",
-  "run_id": "run-2026-01-03-001",
+  "run_id": "<uuid>",  (RFC 4122 UUID)
   "scenario_id": "scn-2026-01-001",
   "scenario_version": "0.1.0",
   "action_id": "pa_aid_v1_4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d",
@@ -538,7 +525,7 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
     }
   },
   "parameters": {
-    "resolved_inputs_sha256": "sha256hex..."
+    "resolved_inputs_sha256": "sha256:<hex>"
   },
   "idempotence": "unknown",
   "lifecycle": {
@@ -555,6 +542,12 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
         "started_at_utc": "2026-01-03T12:00:02Z",
         "ended_at_utc": "2026-01-03T12:00:05Z"
       },
+      {
+        "phase": "revert",
+        "phase_outcome": "success",
+        "started_at_utc": "2026-01-03T12:00:02Z",
+        "ended_at_utc": "2026-01-03T12:00:02Z"
+      },      
       {
         "phase": "teardown",
         "phase_outcome": "success",
@@ -586,7 +579,8 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
 
 ## Changelog
 
-| Date       | Change                                             |
-| ---------- | -------------------------------------------------- |
-| 2026-01-13 | Define allow_network enforcement + validation hook |
-| TBD        | Style guide migration (no technical changes)       |
+| Date      | Change                                                                                               |
+| --------- | ---------------------------------------------------------------------------------------------------- |
+| 1/19/2026 | align scenario types with plan execution model; align ground truth seed/examples with data contracts |
+| 1/13/2026 | Define allow_network enforcement + validation hook                                                   |
+| 1/10/2026 | Style guide migration (no technical changes)                                                         |

@@ -34,14 +34,17 @@ Each major stage exposes a minimal health signal:
 The run manifest reflects the overall outcome (`success`, `partial`, `failed`) and includes
 stage-level failure reasons.
 
-## Inventory snapshot (required when provider != manual)
+## Inventory snapshot (required)
 
-- Each run SHOULD write `runs/<run_id>/logs/lab_inventory_snapshot.json` as the canonical resolved
+- Each run MUST write `runs/<run_id>/logs/lab_inventory_snapshot.json` as the canonical resolved
   inventory used for that run.
-- The manifest SHOULD include:
-  - provider type
-  - snapshot hash (sha256)
-  - resolved asset list (or a pointer to the snapshot)
+  - This requirement applies to `lab.provider: manual` as well.
+- The manifest MUST include, at minimum:
+  - provider type (`lab.provider`)
+  - snapshot hash (sha256; `lab.inventory_snapshot_sha256`)
+  - either:
+    - the resolved asset list, or
+    - a run-relative pointer to `logs/lab_inventory_snapshot.json`
 
 ## Collector observability (required)
 
@@ -86,15 +89,15 @@ Planning baseline targets (initial defaults; operators SHOULD replace with measu
 their lab). Empirical measurement methodology and guidance for replacing these defaults is defined
 in [R-04 EPS baseline quantification](../research/R-04_EPS_baseline_quantification.md):
 
-| Asset role                | Telemetry profile                                               | Sustained EPS target | Burst EPS target (p95 1m) | Collector CPU target (p95) | Collector RSS target (p95) | Raw write estimate (MB/s)† |
-| ------------------------- | --------------------------------------------------------------- | -------------------: | ------------------------: | -------------------------: | -------------------------: | -------------------------: |
-| Windows endpoint          | Windows Event Log (Application + Security + Sysmon)             |                   50 |                       150 |             ≤ 5% of 1 vCPU |                   ≤ 350 MB |                    0.1–0.9 |
-| Windows domain controller | Windows Event Log (Application + Security + Directory Services) |                  300 |                      1000 |            ≤ 10% of 1 vCPU |                   ≤ 500 MB |                    0.6–6.0 |
-| Linux server              | auditd + osquery (evented + scheduled)                          |                  100 |                       300 |             ≤ 5% of 1 vCPU |                   ≤ 250 MB |                    0.2–1.8 |
+| Asset role                | Telemetry profile                                               | Sustained EPS target | Burst EPS target (p95 1m) | Collector CPU target (p95) | Collector RSS target (p95) | Raw write estimate (MiB/s)† |
+| ------------------------- | --------------------------------------------------------------- | -------------------: | ------------------------: | -------------------------: | -------------------------: | --------------------------: |
+| Windows endpoint          | Windows Event Log (Application + Security + Sysmon)             |                   50 |                       150 |             ≤ 5% of 1 vCPU |                  ≤ 350 MiB |                     0.1–0.9 |
+| Windows domain controller | Windows Event Log (Application + Security + Directory Services) |                  300 |                      1000 |            ≤ 10% of 1 vCPU |                  ≤ 700 MiB |                     0.6–6.0 |
+| Linux server              | auditd + osquery (evented + scheduled)                          |                  100 |                       300 |             ≤ 5% of 1 vCPU |                  ≤ 512 MiB |                     0.2–1.8 |
 
-† Raw write estimate assumes 2–6 KB average serialized event payload per record and is intended only
-for order-of-magnitude disk sizing. Implementations MUST measure and report observed raw bytes per
-second during validation.
+† Raw write estimate assumes 2–6 KiB average serialized event payload per record and is intended
+only for order-of-magnitude disk sizing. Implementations MUST measure and report observed raw bytes
+per second during validation.
 
 #### EPS baseline artifact (recommended)
 
@@ -161,13 +164,31 @@ Practices:
 ## Checkpointing and dedupe observability (normative)
 
 To support debugging and CI verification, implementations MUST emit the following counters/gauges
-per run (at minimum into `runs/<run_id>/logs/` and optionally into metrics backends):
+per run (at minimum into `runs/<run_id>/logs/counters.json` and optionally into metrics backends):
 
 - `telemetry_checkpoints_written_total`
 - `telemetry_checkpoint_loss_total`
 - `telemetry_checkpoint_corruption_total`
 - `dedupe_duplicates_dropped_total`
 - `dedupe_conflicts_total`
+
+### Counter artifact format (normative)
+
+`runs/<run_id>/logs/counters.json` MUST be a JSON object with:
+
+- `schema_version` (string; MUST be `pa:counters:v1`)
+- `run_id` (string)
+- `counters` (object; map of counter name → u64)
+- `gauges` (optional object; map of gauge name → number)
+
+Determinism requirements:
+
+- The emitted JSON serialization MUST sort `counters` keys by UTF-8 byte order (no locale).
+- When present, the emitted JSON serialization MUST sort `gauges` keys by UTF-8 byte order (no
+  locale).
+
+Unless explicitly stated otherwise, all per-run counters and gauges required by this document MUST
+be emitted into this file.
 
 Implementations SHOULD also record:
 
@@ -443,6 +464,34 @@ the same steady-state window used to compute sustained EPS.
 This section defines the fail semantics for the "footprint within configured budgets at target event
 rate" gate and provides deterministic run outcome mapping when budgets are exceeded.
 
+#### Deterministic disk measurement rules (normative)
+
+`raw_bytes_written_total` and `normalized_bytes_written_total` MUST be computed deterministically as
+the sum of logical file sizes (bytes) of all regular files under the run-relative directories listed
+below, measured at the time `health.json` is emitted for the run.
+
+Directory sets:
+
+- Raw total (`raw_bytes_written_total`):
+  - `raw_parquet/` (required)
+  - `raw/` (optional; only when raw preservation is enabled)
+- Normalized total (`normalized_bytes_written_total`):
+  - `normalized/` (required)
+
+Rules:
+
+- Implementations MUST use the OS logical file size API (for example, POSIX `stat().st_size`) and
+  MUST NOT use allocated block counts.
+- Enumeration MUST be recursive.
+- Symlinks MUST NOT be followed. If a symlink is encountered in any measured directory, disk
+  measurement MUST fail closed with `reason_code=disk_metrics_missing`.
+- If a required directory does not exist at measurement time, disk measurement MUST fail closed with
+  `reason_code=disk_metrics_missing`.
+- If an optional directory does not exist at measurement time, it MUST contribute `0` bytes.
+
+Implementations SHOULD record (at minimum) the measured directory set and the computed totals in
+`runs/<run_id>/logs/telemetry_validation.json` to make sizing regressions reviewable.
+
 #### Inputs (normative)
 
 Configured targets (per validated asset):
@@ -495,14 +544,19 @@ Defaults (v0.1):
 
 - CPU tolerance: `max(1.0 percentage point, 10% of cpu_target_p95_pct)`
 - RSS tolerance: `max(64 MiB, 10% of rss_target_p95_bytes)`
-- Disk tolerance (per budget): `max(64 MiB, ceil(0.01 * budget_bytes))`
+- Disk tolerance (per budget):
+  `disk_tolerance(budget_bytes) = max(64 MiB, ceil(0.01 * budget_bytes))`
   - `64 MiB` MUST be interpreted as `67108864` bytes.
   - `ceil()` MUST be applied after multiplication and MUST produce an integer number of bytes.
+  - `disk_tolerance(...)` MUST be computed independently for `max_raw_bytes_per_run` and
+    `max_normalized_bytes_per_run`.
 
 A budget is considered exceeded when:
 
 - `cpu_pct_p95 > cpu_target_p95_pct + cpu_tolerance`
 - `rss_bytes_p95 > rss_target_p95_bytes + rss_tolerance`
+- `raw_bytes_written_total > max_raw_bytes_per_run + disk_tolerance(max_raw_bytes_per_run)`
+- `normalized_bytes_written_total > max_normalized_bytes_per_run + disk_tolerance(max_normalized_bytes_per_run)`
 
 #### Health accounting and outcomes (normative)
 
@@ -566,7 +620,13 @@ When `operability.health.emit_health_files=true`, the pipeline MUST write
 
 Determinism requirements:
 
-- `stages[]` MUST be sorted by `stage` using UTF-8 byte order (no locale).
+- `stages[]` MUST be ordered deterministically using the canonical pipeline stage order:
+  `lab_provider`, `runner`, `telemetry`, `normalization`, `validation`, `detection`, `scoring`,
+  `reporting`, `signing`.
+  - Substage entries of the form `<stage>.<substage>` MUST appear immediately after their parent
+    stage entry.
+  - Within the substage group for a given parent stage, entries MUST be sorted by full `stage`
+    string using UTF-8 byte order (no locale).
 - `health.json.status` MUST equal `manifest.status` for the same run.
 
 ## Process exit codes (normative, v0.1)
@@ -593,14 +653,14 @@ This prevents "rule debugging" when the root cause is missing telemetry.
 When run limits are configured (see `operability.run_limits` in the
 [configuration reference](120_config_reference.md)), the pipeline MUST behave as follows:
 
-| Limit             | Exceeded behavior                      | Run status          | Exit code      | Accounting required                                                                                                                                                                            |
-| ----------------- | -------------------------------------- | ------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `max_run_minutes` | Hard-fail, stop immediately            | `failed`            | `20`           | Record `reason_code=run_timeout` in `logs/health.json` and include a `limits_exceeded[]` entry in `manifest.extensions.operability`.                                                           |
-| `max_disk_gb`     | Stop gracefully and finalize artifacts | `partial` (default) | `10` (default) | Record `reason_code=disk_limit_exceeded` with the truncation timestamp and disk watermark in `logs/health.json`, and include a `limits_exceeded[]` entry in `manifest.extensions.operability`. |
-| `max_memory_mb`   | Hard-fail (OOM is fatal)               | `failed`            | `20`           | Record `reason_code=memory_limit_exceeded` (or `oom_killed`) in `logs/health.json`.                                                                                                            |
+| Limit             | Exceeded behavior                      | Run status          | Exit code      | Accounting required                                                                                                                                                                          |
+| ----------------- | -------------------------------------- | ------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `max_run_minutes` | Hard-fail, stop immediately            | `failed`            | `20`           | Record `reason_code=run_timeout` in `logs/health.json` and append an entry to `manifest.extensions.operability.limits_exceeded[]`.                                                           |
+| `max_disk_gb`     | Stop gracefully and finalize artifacts | `partial` (default) | `10` (default) | Record `reason_code=disk_limit_exceeded` with the truncation timestamp and disk watermark in `logs/health.json`, and append an entry to `manifest.extensions.operability.limits_exceeded[]`. |
+| `max_memory_mb`   | Hard-fail (OOM is fatal)               | `failed`            | `20`           | Record `reason_code=memory_limit_exceeded` (or `oom_killed`) in `logs/health.json` and append an entry to `manifest.extensions.operability.limits_exceeded[]`.                               |
 
 The pipeline MUST record run-limit enforcement outcomes under `health.json` stage
-`stage: "operability.run_limits"`.
+`stage: "validation.run_limits"`.
 
 Disk limit configurability (normative):
 
@@ -618,6 +678,8 @@ Disk enforcement during telemetry validation is defined in:
 MUST NOT be treated as equivalent to the per-run sizing budgets.
 
 Minimum accounting fields (normative):
+
+Each entry in `manifest.extensions.operability.limits_exceeded[]` MUST include:
 
 - `limit` (one of `max_run_minutes|max_disk_gb|max_memory_mb`)
 - `configured` (numeric)

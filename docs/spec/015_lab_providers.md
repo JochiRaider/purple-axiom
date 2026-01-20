@@ -60,52 +60,75 @@ The inventory snapshot artifact (`lab_inventory_snapshot.json`) MUST be a JSON o
 
 Each `assets[]` element MUST conform to the canonical asset shape defined by this spec:
 
-- `asset_id` (string, required)
-- `os` (string, required)
-- `role` (string, required)
-- `hostname` (string, optional)
-- `ip` (string, optional)
+- `asset_id` (string, required): stable Purple Axiom logical asset id.
+- `os` (string, required): MUST be one of `windows | linux | macos | bsd | appliance | other`.
+  - Values MUST be lowercase ASCII.
+- `role` (string, optional): when present, MUST be one of
+  `endpoint | server | domain_controller | network | sensor | other`.
+  - Values MUST be lowercase ASCII.
+  - When omitted, downstream stages MUST treat the role as `other` for defaults and reporting.
+- `hostname` (string, optional): inventory host identifier or DNS hostname.
+- `ip` (string, optional): management IP address literal (no port).
 - `tags` (array of strings, optional)
+- `vars` (object, optional): allowlisted connection hints:
+  - allowed keys: `ansible_host`, `ansible_port`, `ansible_connection`, `ansible_user`,
+    `ansible_shell_type`
+  - `ansible_port`, when present, MUST be an integer in the range `1..65535`
 - `provider_asset_ref` (string, optional)
 
 Deterministic canonicalization (normative):
 
 - `assets[]` MUST be sorted by `asset_id` using bytewise UTF-8 lexical ordering.
 - If present, `tags[]` MUST be de-duplicated and sorted using bytewise UTF-8 lexical ordering.
-- If present, `ip` MUST be a syntactically valid IP address and MUST be serialized in canonical
-  textual form (IPv4 dotted-decimal; IPv6 lowercase compressed). Invalid IP strings MUST cause the
-  provider stage to fail closed.
+  - Each tag MUST be a non-empty string and MUST NOT contain leading or trailing ASCII whitespace.
+- If present, `vars` MUST be reduced to the allowlist above and MUST NOT contain secrets (see
+  "Canonical intermediate model").
+- If present, `ip` MUST be a syntactically valid IP address literal and MUST be serialized in
+  canonical textual form:
+  - IPv4: dotted-decimal with no leading zeros.
+  - IPv6: RFC 5952 canonical form (lowercase hex, shortest form, `::` compression).
+  - Bracketed addresses (`[::1]`), zone identifiers (`fe80::1%eth0`), and `host:port` strings MUST
+    be rejected.
+  - Invalid `ip` strings MUST cause the provider stage to fail closed.
 
-Hashing (normative):
+Hashing and encoding (normative):
 
-- `inventory_snapshot_sha256` MUST be computed as `sha256(canonical_json_bytes(snapshot))` and
-  recorded in the manifest.
-- Canonical JSON bytes MUST use RFC 8785 (JCS) canonicalization.
+- The published `lab_inventory_snapshot.json` bytes MUST equal `canonical_json_bytes(snapshot)` as
+  defined in the data contracts specification (RFC 8785 / JCS; UTF-8; no BOM; no trailing newline).
+- `lab.inventory_snapshot_sha256` MUST be computed as `sha256(file_bytes)` over the published
+  snapshot bytes and recorded in the run manifest as the authoritative inventory hash for downstream
+  stages.
 
 Contract validation:
 
-- The published `lab_inventory_snapshot.json` SHOULD be validated against a JSON Schema contract at
-  `docs/contracts/lab_inventory_snapshot.schema.json` (TODO: define).
+- The published snapshot MUST be validated at the publish gate using the local contract registry
+  (`docs/contracts/contract_registry.json`) as defined in the data contracts specification.
+- TODO (repo): add a JSON Schema contract for this artifact and register it in the contract registry
+  (recommended contract id: `lab_inventory_snapshot_v1`; recommended schema file:
+  `docs/contracts/lab_inventory_snapshot.schema.json`).
 - Regardless of schema availability, implementations MUST validate the invariants above as a publish
   gate before atomically publishing the snapshot into the run bundle.
 
 Retention semantics:
 
-- The inventory snapshot is a reproducibility-critical, contract-backed run artifact. Even though
-  the recommended path is under `runs/<run_id>/logs/`, it MUST be retained for the full retention
-  period of the run bundle and MUST be referenced by the run manifest as the authoritative inventory
-  input for downstream stages.
+- The inventory snapshot is a reproducibility-critical, contract-backed run artifact.
+- Even though the recommended path is under `runs/<run_id>/logs/`, implementations MUST retain it
+  for the full retention period of the run bundle and MUST NOT treat it as prunable debug logging.
+- The run manifest MUST reference the snapshot path and hash as the authoritative inventory input
+  for downstream stages.
 
 ### Canonical asset shape
 
 Regardless of provider, assets are normalized to:
 
 - `asset_id` (stable, Purple Axiom logical ID)
-- `os`
-- `role`
-- optional `hostname`
-- optional `ip`
-- optional `tags`
+- `os` (required; one of `windows | linux | macos | bsd | appliance | other`)
+- `role` (optional; one of `endpoint | server | domain_controller | network | sensor | other`)
+  - When omitted, downstream stages MUST treat the role as `other`.
+- optional `hostname` (inventory/DNS host identifier)
+- optional `ip` (management IP address literal)
+- optional `tags` (set-like array; de-duplicated + sorted in snapshots)
+- optional `vars` (allowlisted connection hints; see "Canonical intermediate model")
 - optional `provider_asset_ref` (provider-native ID, when meaningful)
 
 ### Asset identity and reassignment
@@ -128,34 +151,38 @@ Normative requirements:
   - the provider maintains an explicit, persisted mapping from provider-native identifiers to stable
     `asset_id` values.
 - If a provider cannot produce stable `asset_id` values for the resolved targets, it MUST fail
-  closed at run start and MUST NOT emit `ground_truth.jsonl` because cross-run joins would be
-  non-deterministic.
+  closed at run start (stage `lab_provider`) so downstream stages do not execute under a
+  non-deterministic target namespace.
 
 Reassignment semantics:
 
 - If an operator reuses an existing `asset_id` to refer to a materially different host profile, this
-  is treated as a range configuration change. The resulting `inventory_snapshot_sha256` SHOULD be
-  expected to change, and downstream regression comparisons that join on `target_asset_id` will no
-  longer be semantically comparable unless explicitly opted into by the operator (future config
+  is treated as a range configuration change. The resulting `lab.inventory_snapshot_sha256` SHOULD
+  be expected to change, and downstream regression comparisons that join on `target_asset_id` will
+  no longer be semantically comparable unless explicitly opted into by the operator (future config
   surface).
 
 ## Provider contract
 
 At run start, a provider implementation MUST:
 
-1. Resolve inventory into canonical `lab.assets`.
-1. Write `lab_inventory_snapshot.json` into a staging location under the run bundle.
+1. Resolve inventory into canonical `lab.assets` (including any provider enrichment fields allowed
+   by this spec).
+1. Materialize `lab_inventory_snapshot.json` as the canonical run-scoped inventory artifact.
+1. Write the snapshot into a staging location under the run bundle.
 1. Validate the snapshot invariants and any available schema contract as a publish gate.
 1. Atomically publish the snapshot to its final run bundle location.
-1. Compute `inventory_snapshot_sha256` over the published snapshot.
-1. Record provider identity, snapshot path, and the snapshot hash in the manifest.
+1. Compute `lab.inventory_snapshot_sha256` over the published snapshot bytes.
+1. Record provider identity, `inventory_source_ref` (when applicable), snapshot path, and the
+   snapshot hash in the manifest.
 
 Provider implementations MAY be:
 
 - file-based (consume exported inventory)
 - API-based (query provider)
 
-All implementations MUST still write a deterministic snapshot for the run.
+All implementations (including `lab.provider: manual`) MUST still validate inputs and publish a
+deterministic snapshot for the run.
 
 ### Publish and validation gate
 
@@ -164,8 +191,10 @@ The lab provider stage MUST follow the staging and atomic publish semantics defi
 requirements in `025_data_contracts.md`:
 
 - Staging location MUST be under `runs/<run_id>/.staging/lab_provider/`.
-- The stage MUST validate the snapshot (schema where applicable, plus invariants in this spec)
-  before publishing.
+- The stage MUST validate the snapshot (schema where available via the contract registry, plus
+  invariants in this spec) before publishing.
+  - On contract validation failure, the stage MUST emit a deterministic contract validation report
+    at `runs/<run_id>/logs/contract_validation/lab_provider.json`.
 - The stage MUST publish by atomic rename into the final run bundle location.
 - On any fail-closed error, the stage MUST NOT partially populate the final snapshot path.
 
@@ -192,7 +221,7 @@ Non-fatal connectivity degradations MUST be recorded only as a substage
 - `reason_code="connectivity_check_error"`
 
 Connectivity checks are optional for v0.1. When implemented, they MUST NOT affect
-`inventory_snapshot_sha256` and MUST NOT modify the published inventory snapshot.
+`lab.inventory_snapshot_sha256` and MUST NOT modify the published inventory snapshot.
 
 ### API-based provider determinism requirements
 
@@ -209,11 +238,20 @@ API-based providers are permitted, but they MUST preserve run reproducibility:
 
 Recommended minimal keys (see [Configuration reference](120_config_reference.md)):
 
-- `lab.provider`
-- `lab.inventory.path`
-- `lab.inventory.format`
-- `lab.inventory.refresh`
-- `lab.inventory.snapshot_to_run_bundle`
+- `lab.provider` (required): `manual | ludus | terraform | other`
+- `lab.assets` (required): stable target list; provider resolution enriches these entries.
+- `lab.inventory.path` (required when `lab.provider != manual`): provider-exported inventory
+  artifact.
+- `lab.inventory.format` (required when `lab.provider != manual`):
+  `json | ansible_yaml | ansible_ini`
+- `lab.inventory.refresh` (optional; enum `never | on_run_start`):
+  - `on_run_start`: the provider MAY query/refresh inventory (when API-backed) and MUST resolve and
+    snapshot inventory at run start.
+  - `never`: the provider MUST NOT query provider APIs or mutate inventory sources; it MUST use the
+    existing artifact at `lab.inventory.path` and still snapshot deterministically.
+- `lab.inventory.snapshot_to_run_bundle` (default `true`):
+  - v0.1: MUST be `true`. If set `false`, the configuration MUST be rejected during config
+    validation because downstream stages require the snapshot artifact for correctness.
 
 ## Inventory artifact formats and adapter rules
 
@@ -232,29 +270,45 @@ The inventory adapter output MUST be a JSON object with:
 
 Each `hosts[]` element MUST be an object with:
 
-- `name` (string, required): inventory host identifier.
-- `ip` (string, optional): resolved management IP.
+- `name` (string, required): inventory host identifier (opaque string; case-sensitive).
+- `ip` (string, optional): management IP address literal (no port).
 - `groups` (array of strings, optional): unique group names.
 - `vars` (object, optional): allowlisted, non-secret connection metadata.
 
-Allowlisted `vars` keys (all others MUST be ignored and MUST NOT affect resolution or hashing):
+Allowlisted `vars` keys (all others MUST be ignored and MUST NOT affect resolution, hashing, or the
+published snapshot):
 
-- `ansible_host`
-- `ansible_port`
-- `ansible_connection`
-- `ansible_user`
-- `ansible_shell_type`
+- `ansible_host` (string): connection host (IP literal or hostname).
+- `ansible_port` (int): connection port in range 1..65535.
+- `ansible_connection` (string)
+- `ansible_user` (string)
+- `ansible_shell_type` (string)
 
-Secret suppression:
+Type normalization (normative):
+
+- If `ansible_port` is provided as a string of ASCII digits, the adapter MUST parse it and store it
+  as an integer. Any non-integer or out-of-range value MUST fail closed with
+  `reason_code="invalid_inventory_format"`.
+- Adapters MUST NOT attempt DNS resolution to derive `ip`. If `ansible_host` is an IP literal, the
+  adapter MAY copy it into `ip` (after canonicalization); otherwise `ip` MUST remain unset unless
+  the source inventory provides an IP literal via an implementation-defined, contract-backed
+  extension.
+
+Secret suppression (normative):
 
 - Any `vars` key matching `(?i)(pass|password|token|secret|private|key)` MUST be dropped.
 - If the adapter cannot determine whether a value is secret, it MUST drop the key.
+- Adapters MUST NOT log raw inventory `vars{}` values. Logs MUST be redacted/summarized (for
+  example, by reporting only allowlisted key names and hashes).
 
-Canonicalization:
+Canonicalization (normative):
 
 - `hosts[]` MUST be sorted by `name` using bytewise UTF-8 lexical ordering.
 - For each host, `groups[]` MUST be de-duplicated and sorted using bytewise UTF-8 lexical ordering.
-- `vars` MUST be reduced to the allowlist and then key-sorted for canonical JSON hashing.
+- If present, `ip` MUST be a syntactically valid IP literal and MUST be serialized in canonical form
+  (IPv4 dotted-decimal; IPv6 RFC 5952). Invalid `ip` strings MUST cause a fail-closed error.
+- `vars` MUST be reduced to the allowlist, normalized as above, and then key-sorted for canonical
+  JSON hashing.
 
 ### Input format: `json`
 
@@ -299,7 +353,10 @@ Adapter extraction rules:
    - all hostnames referenced by any group `hosts[]`
 1. For each host:
    - `vars` is derived from `_meta.hostvars[host]` (if present) reduced to the allowlist.
-   - `ip` MUST be set to `vars.ansible_host` when present.
+   - If `vars.ansible_host` is present and is an IP literal, the adapter MUST set `ip` to that value
+     after canonical IP serialization.
+   - If `vars.ansible_host` is present and is not an IP literal (for example, it is a DNS hostname),
+     the adapter MUST NOT populate `ip` from it.
 1. Group membership:
    - A host is a member of group `G` if it appears in `G.hosts[]` or is reachable through
      `G.children[]` traversal.
@@ -343,9 +400,15 @@ When `lab.provider != manual`, resolution MUST:
    - Implementations MUST NOT apply locale-dependent casefolding.
    - Operators SHOULD normalize host identifiers to lowercase ASCII when using DNS hostnames.
 1. The match MUST be exact and MUST yield exactly one host. Otherwise, fail closed.
-1. Enrichment:
+1. Enrichment (deterministic, non-destructive):
+   - If `lab.assets[].hostname` is unset, the resolved snapshot MUST set `hostname` to the matched
+     inventory host `name`.
    - If `lab.assets[].ip` is unset and the matched inventory host has `ip`, the resolved snapshot
      MUST set `ip`.
+   - If `lab.assets[].vars` is unset, the resolved snapshot MUST set `vars` to the matched inventory
+     host `vars` (after allowlist + normalization + secret suppression).
+   - If `lab.assets[].vars` is set, the provider MUST merge only missing allowlisted keys from the
+     matched inventory host `vars` and MUST NOT override keys already specified by the operator.
    - Provider-native identifiers MAY be recorded in the snapshot as `provider_asset_ref`, but MUST
      NOT be required for deterministic joining.
 
@@ -354,10 +417,14 @@ When `lab.provider != manual`, resolution MUST:
 Implementations MUST include fixtures that demonstrate deterministic adapter behavior:
 
 - One inventory fixture per supported format (`json`, `ansible_yaml`, `ansible_ini`) representing
-  the same host set.
+  the same logical host set (including groups and allowlisted `vars`).
+- The fixtures MUST include at least:
+  - one host with `ansible_port` expressed as a string in INI and as an integer in YAML/JSON,
+    proving type normalization,
+  - one host with an IPv6 management IP, proving canonical IPv6 serialization.
 - A golden `lab_inventory_snapshot.json` produced from those fixtures.
-- A golden `inventory_snapshot_sha256` computed over
-  `canonical_json_bytes(lab_inventory_snapshot.json)`.
+- A golden `lab.inventory_snapshot_sha256` computed over the published snapshot bytes
+  (`canonical_json_bytes(lab_inventory_snapshot.json)`).
 
 ## Ludus
 
@@ -400,8 +467,17 @@ Recommended approach:
 ## Security requirements
 
 - Provider credentials are secrets and MUST be referenced, not embedded.
-- Inventory snapshots MUST NOT contain secrets (no passwords, tokens, private keys).
-- Provider operations that mutate infrastructure MUST be explicitly enabled and logged.
+- Inventory sources and snapshots MUST NOT contain secrets (no passwords, tokens, private keys).
+  - Providers/adapters MUST apply allowlists and secret suppression to any propagated `vars` fields.
+- Providers/adapters MUST treat inventory inputs as sensitive and MUST NOT log raw inventory content
+  (including Terraform output wrappers). Logs MUST contain only redacted summaries and hashes.
+- Default posture MUST be inventory resolution only. Provisioning, mutation, or teardown actions
+  MUST be explicitly enabled and logged.
+- Outbound egress posture enforcement:
+  - The effective outbound policy is
+    `scenario.safety.allow_network AND security.network.allow_outbound`.
+  - When the effective outbound policy is deny, enforcement MUST be performed at the lab boundary by
+    the lab provider or equivalent lab controls (the runner is not sufficient).
 
 ## References
 
@@ -412,7 +488,8 @@ Recommended approach:
 
 ## Changelog
 
-| Date       | Change                                                        |
-| ---------- | ------------------------------------------------------------- |
-| 2026-01-14 | Align outcomes, publish gates, and snapshot determinism rules |
-| 2026-01-12 | Formatting update                                             |
+| Date       | Change                                                                                       |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| 2026-01-19 | Add `vars` to inventory snapshot; align enums + hashing/encoding; clarify publish + security |
+| 2026-01-14 | Align outcomes, publish gates, and snapshot determinism rules                                |
+| 2026-01-12 | Formatting update                                                                            |

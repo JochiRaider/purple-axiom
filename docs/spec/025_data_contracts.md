@@ -15,9 +15,26 @@ invariants that cannot be expressed in JSON Schema alone.
 
 ## Overview
 
+## Overview
+
 This spec defines the artifact schemas, run bundle layout, and cross-artifact invariants that make
 runs reproducible and comparable. It covers the normative requirements for manifest status, ground
 truth identity, normalized event envelopes, and optional signing.
+
+### Document boundaries and ownership
+
+This specification is authoritative for:
+
+- contract registry semantics and registry-backed validation (schemas under `docs/contracts/`)
+- run bundle layout and deterministic artifact paths under `runs/<run_id>/`
+- cross-artifact invariants required for joins, reproducibility, and CI validation
+- shared shapes referenced by multiple stage specs (for example, `evidence_refs[]`)
+- optional signing artifact formats and selection rules (when signing is enabled)
+
+This specification is not the primary home for stage implementation behavior beyond what is needed
+to make artifact contracts testable. Detailed stage behavior, feature flags, and failure mapping
+MUST live in the owning stage spec (for example, telemetry, normalization, detection, reporting),
+with this document referenced as needed.
 
 ## Goals
 
@@ -124,8 +141,28 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/bridge_compiled_plan.schema.json`
 - `docs/contracts/bridge_coverage.schema.json`
 
-Each schema includes a `contract_version` constant. The contract version is bumped only when the
-contract meaningfully changes (new required fields, semantics changes, or validation tightening).
+See **Contract version constant (normative)** above for the required `contract_version` constant and
+bump rules.
+
+### Contract lifecycle workflow (normative)
+
+When introducing a new contract-backed artifact or changing an existing contract:
+
+1. Update `docs/contracts/contract_registry.json`:
+   - add or update the `contracts[]` entry (`contract_id`, `schema_path`, `contract_version`)
+   - add or update the `bindings[]` entry that maps the run-relative `artifact_glob` to the
+     `contract_id`
+1. Add or update the schema under `docs/contracts/`:
+   - `$schema` MUST be Draft 2020-12
+   - the schema MUST include the `contract_version` constant referenced by the registry
+1. Update the producing stage (or orchestrator, as applicable) to enforce publish-gate validation:
+   - validate in staging before atomic publish
+   - fail per configured `fail_mode` and record a stable `reason_code` on failure
+1. If the change introduces or modifies a cross-artifact invariant, update this document (and the
+   invariant checker) in the same change.
+1. Add or update CI fixtures:
+   - at least one valid instance fixture, and
+   - at least one invalid instance fixture that exercises the new or tightened constraint.
 
 ## Validation engine and publish gates
 
@@ -351,20 +388,13 @@ The manifest is the authoritative index for what exists in the bundle and which 
 
 ### Evidence references (shared shape)
 
-Some artifacts include evidence pointers used to justify outcomes, classifications, or operator
-conclusions. Evidence pointers MUST be deterministic to support regression testing and stable
-triage.
+This section defines the canonical `evidence_refs[]` entry shape used across run artifacts to point
+to supporting evidence deterministically (for example, in reporting outputs). Any artifact that
+emits `evidence_refs[]` MUST follow this shape and the selector grammar below.
 
-Evidence refs appear most prominently in the report JSON (see the reporting spec), but the same
-requirements apply wherever evidence pointers are used. This section is authoritative for evidence
-ref shape and selector grammar; other docs MUST reference it and MUST NOT redefine the format.
-
-Other docs MUST NOT restate the evidence ref field list (for example as "recommended for JSON").
-Instead, they MUST reference this section.
-
-Other docs MAY include non-normative examples that include evidence refs, but those examples MUST
-use the field names, selector prefix forms, and deterministic ordering rules defined in this
-section.
+Other specs MUST reference this section and MUST NOT redefine the `evidence_refs[]` field set or
+selector prefixes. Examples in other specs MAY include evidence refs, but MUST use the exact field
+names, prefix forms, and ordering rules defined here.
 
 Minimum evidence ref fields (normative):
 
@@ -1162,14 +1192,10 @@ Normative requirements:
 
 Validation:
 
-- `executor.json`, `side_effect_ledger.json`, `cleanup_verification.json`, and
-  `state_reconciliation_report.json` SHOULD be schema validated when present. validated when
-  present.
-
-Fix:
-
-- Remove duplicate wording and treat publish-gate contract validation as required for these
-  artifacts when they are produced and contract-backed (see Validation engine and publish gates).
+- When produced and contract-backed, `executor.json`, `side_effect_ledger.json`,
+  `cleanup_verification.json`, and `state_reconciliation_report.json` MUST be contract-validated at
+  the runner publish gate before being published into their final `runner/actions/<action_id>/`
+  locations (see `## Validation engine and publish gates`).
 
 ##### Principal context (runner-level evidence, schema-backed)
 
@@ -1259,10 +1285,10 @@ Purpose:
 
 When present:
 
-- `raw_parquet/pcap/manifest.json` MUST validate against `pcap_manifest.schema.json` and MUST
-  enumerate the capture files written under `raw_parquet/pcap/`.
-- `raw_parquet/netflow/manifest.json` MUST validate against `netflow_manifest.schema.json` and MUST
-  enumerate the flow log files written under `raw_parquet/netflow/`.
+- `raw/pcap/manifest.json` MUST validate against `pcap_manifest.schema.json` and MUST enumerate the
+  capture files written under `raw/pcap/`.
+- `raw/netflow/manifest.json` MUST validate against `netflow_manifest.schema.json` and MUST
+  enumerate the flow log files written under `raw/netflow/`.
 
 Absence semantics:
 
@@ -1744,6 +1770,18 @@ Compatibility expectations:
 - The pipeline must be able to read at least the previous minor contract version for one release
   window.
 - Report generators must accept older run bundles and emit a clear warning when fields are missing.
+
+### Spec breakup guidance (non-normative)
+
+This document is intentionally a single hub for cross-artifact invariants and shared shapes. To keep
+it maintainable:
+
+- Stage-specific behavior SHOULD live in the owning stage spec.
+- This spec SHOULD retain only the minimum behavior and invariants required to make artifact
+  contracts reproducible, diffable, and CI-validatable.
+
+When a section becomes stage-specific or begins duplicating another spec or ADR, prefer to move the
+detailed behavior to the owning document and leave a short summary and link here.
 
 ## Extensions and vendor fields
 

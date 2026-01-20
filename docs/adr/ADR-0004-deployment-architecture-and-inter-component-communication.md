@@ -10,10 +10,10 @@ category: adr
 ## Context
 
 Purple Axiom v0.1 specifies a staged pipeline (lab provider, runner, telemetry, normalization,
-criteria evaluation, detection, scoring, reporting) and a local-first "run bundle" rooted at
-`runs/<run_id>/`. The specs already define:
+validation, detection, scoring, reporting, signing (when enabled)) and a local-first "run bundle"
+rooted at `runs/<run_id>/`. The specs already define:
 
-- a canonical OpenTelemetry Collector topology (agent tier, optional gateway tier)
+- a canonical OpenTelemetry Collector topology (required agent tier, optional gateway tier)
 - run bundle layout and storage tiers
 - deterministic writing rules for artifacts and datasets
 
@@ -40,19 +40,25 @@ and **file-based stage coordination**.
 - The orchestrator SHOULD execute the core pipeline stages **in a single process** for v0.1
   (monolith implementation), even if some steps invoke external binaries (executors, collectors,
   packagers).
+- The orchestrator MUST acquire an exclusive run lock before creating or mutating a run bundle.
+  - The orchestrator MUST create `runs/.locks/` if absent.
+  - Lock primitive (normative): atomic creation of `runs/.locks/<run_id>.lock` (reserved for
+    lockfiles; not part of any run bundle).
+  - Failure to acquire the run lock MUST be treated as `lock_acquisition_failed` (see ADR-0005).
 
 Non-goal (v0.1): a required long-running daemon or scheduler control plane.
 
 #### Telemetry plane (OpenTelemetry Collector tiers)
 
 - Telemetry collection MUST follow the canonical OTel model:
-  - **Agent tier (preferred):** Collector on each endpoint to read OS sources (for example, Windows
-    Event Log with `raw: true`).
+  - **Agent tier (required):** Collector on each endpoint to read OS sources (Windows Event Log with
+    `raw: true`, Sysmon, Linux auditd, syslog, osquery results).
   - **Gateway tier (optional):** A collector service that receives OTLP from agents and applies
     buffering/fan-out.
 - OTLP MAY be used between Collector tiers (agent to gateway, gateway to sinks).
-- OTLP MUST NOT be required as a coordination mechanism between Purple Axiom's core stages (runner,
-  normalizer, evaluator, scorer, reporting). Core-stage coordination is file-based.
+- OTLP MUST NOT be required as a coordination mechanism between Purple Axiom's core stages
+  (`lab_provider`, `runner`, `normalization`, `validation`, `detection`, `scoring`, `reporting`,
+  `signing`). Core-stage coordination is file-based.
 
 #### Run bundle (coordination and evidence plane)
 
@@ -61,6 +67,11 @@ Non-goal (v0.1): a required long-running daemon or scheduler control plane.
   root.
 - The manifest (`runs/<run_id>/manifest.json`) MUST remain the authoritative index of what exists
   and which versions/config hashes were used.
+- `inputs/**` (when present) contains run-scoped operator inputs and baseline references (when
+  regression is enabled). All stages MUST treat `inputs/**` as read-only.
+- When environment configuration is enabled, the runner MUST record the configuration boundary as
+  additive substage `runner.environment_config` and MUST emit deterministic operability evidence
+  under `runs/<run_id>/logs/**`.
 
 #### Optional packaging (Docker Compose)
 
@@ -83,8 +94,8 @@ Core stages MUST use one of the following mechanisms, in priority order:
 1. **Local process invocation** (optional implementation detail).
 1. **OTLP within the telemetry plane only** (allowed for collectors, not for stage coordination).
 
-Core stages MUST NOT require service-to-service RPC between runner, normalizer, evaluator,
-detection, scoring, and reporting in v0.1.
+Core stages MUST NOT require service-to-service RPC between `lab_provider`, `runner`,
+`normalization`, `validation`, `detection`, `scoring`, `reporting`, and `signing` in v0.1.
 
 #### Stable stage identifiers
 
@@ -102,7 +113,8 @@ pipeline:
 - `signing` (when enabled)
 
 Substages MAY be expressed as dotted identifiers (for example, `lab_provider.connectivity`,
-`telemetry.windows_eventlog.raw_mode`) provided they remain stable and are only additive.
+`runner.environment_config`, `telemetry.windows_eventlog.raw_mode`, `reporting.regression_compare`)
+provided they remain stable and are only additive.
 
 ### Stage IO boundaries (normative)
 
@@ -112,17 +124,21 @@ observable contract is the filesystem.
 
 Minimum v0.1 IO boundaries:
 
-| Stage           | Minimum inputs                                                        | Minimum outputs (published paths)                                                              |
-| --------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `lab_provider`  | configuration (run config, provider inputs)                           | inventory snapshot artifact referenced by manifest                                             |
-| `runner`        | inventory snapshot, scenario plan                                     | `ground_truth.jsonl`, `runner/**` evidence                                                     |
-| `telemetry`     | inventory snapshot, time window derived from runner                   | `raw_parquet/**` and optional `raw/**` evidence, `logs/telemetry_validation.json` when enabled |
-| `normalization` | `raw_parquet/**`, mapping profiles                                    | `normalized/**` (OCSF store), `normalized/mapping_coverage.json`                               |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot         | `criteria/**` results and cleanup verification outputs                                         |
-| `detection`     | `normalized/**`, bridge artifacts, sigma packs                        | `bridge/**`, `detections/detections.jsonl`                                                     |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**` | `scoring/summary.json` and optional supporting tables                                          |
-| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, manifest                | `report/**` (HTML and any supplemental report artifacts)                                       |
-| `signing`       | finalized manifest, selected artifacts                                | `security/**` signature metadata                                                               |
+| Stage           | Minimum inputs                                                                                | Minimum outputs (published paths)                                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `lab_provider`  | run configuration, provider inputs                                                            | inventory snapshot artifact (referenced by manifest)                                                                                    |
+| `runner`        | inventory snapshot, scenario plan                                                             | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; \[v0.2+: `plan/**`\]                                                    |
+| `telemetry`     | inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)       | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)                  |
+| `normalization` | `raw_parquet/**`, mapping profiles                                                            | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                         |
+| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                 | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                           |
+| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                        | `bridge/**`, `detections/detections.jsonl`                                                                                              |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                         | `scoring/summary.json`                                                                                                                  |
+| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, manifest, `inputs/**` (when regression enabled) | `report/**` (MUST include `report/report.json` and `report/thresholds.json`; HTML and other supplemental artifacts MAY also be emitted) |
+| `signing`       | finalized manifest, selected artifacts                                                        | `security/**` (checksums, signature, public key)                                                                                        |
+
+Note: This table defines the minimum published paths for v0.1 stage boundaries. Stages MAY emit
+additional artifacts, but MUST NOT weaken determinism guarantees or change the meaning of the paths
+listed above.
 
 Note: This ADR does not redefine the detailed contracts or schemas for these artifacts. It
 constrains deployment and inter-stage communication such that existing and future contracts remain
@@ -142,13 +158,16 @@ To preserve determinism and avoid partial reads:
 For any stage that writes a directory or multi-file artifact set:
 
 1. The stage MUST write outputs into a staging location under the run bundle:
-   - `runs/<run_id>/.staging/<stage_id>/...`
-1. The stage MUST validate required contracts for the outputs it intends to publish (schema
-   validation where applicable).
+   - `runs/<run_id>/.staging/<stage_id>/`
+1. The stage MUST validate required contracts for the outputs it intends to publish (presence +
+   schema validation where applicable).
+1. On contract validation failure, the stage MUST emit a deterministic contract validation report
+   at:
+   - `runs/<run_id>/logs/contract_validation/<stage_id>.json`
 1. Contract validation behavior (dialect, `$ref` restrictions, deterministic error reporting) is
-   defined in `docs/spec/025_data_contracts.md` see Validation engine and publish gates.
-1. The stage MUST publish outputs by an atomic rename from staging into the final location under
-   `runs/<run_id>/`.
+   defined in `../spec/025_data_contracts.md` (Validation engine and publish gates).
+1. The stage MUST publish outputs by an atomic rename/move from staging into the final location
+   under `runs/<run_id>/`.
 1. If the stage fails before publish, it MUST NOT create or partially populate the final output
    directory.
 
@@ -158,8 +177,9 @@ A stage MUST be considered complete only when:
 
 - its stage outcome has been recorded in the manifest (and in `logs/health.json` when enabled), and
 - its outputs are either:
-  - published (for `success` and `warn_and_skip` outcomes), or
-  - absent (for `fail_closed` outcomes).
+  - published (when `status="success"`, or when `status="failed"` with `fail_mode="warn_and_skip"`),
+    or
+  - absent (when `status="skipped"`, or when `status="failed"` with `fail_mode="fail_closed"`).
 
 Stage outcome recording and failure classification are defined in the
 [stage outcomes ADR](ADR-0005-stage-outcomes-and-failure-classification.md).
@@ -183,27 +203,30 @@ The following sequence is normative at the level of stage ordering and artifact 
 ```text
 Orchestrator (one-shot, run host)
   |
-  |-- acquire run lock (exclusive writer)
+  |-- acquire run lock (exclusive writer; runs/.locks/<run_id>.lock)
   |-- create runs/<run_id>/ (staging allowed)
   |-- write initial manifest skeleton (run metadata, config hashes)
   |
   |-- [lab_provider] resolve inventory snapshot -> publish inventory artifact -> record stage outcome
   |
-  |-- [runner] execute scenario actions -> write ground_truth.jsonl + runner/** -> record stage outcome
+  |-- [runner.environment_config] (optional) record environment configuration boundary -> logs/** -> record substage outcome
   |
-  |-- [telemetry] ensure collection window captured + validate canaries -> publish raw_parquet/** and logs/telemetry_validation.json -> record stage outcome
+  |-- [runner] execute scenario actions -> write ground_truth.jsonl + runner/actions/<action_id>/** -> record stage outcome
   |
-  |-- [normalization] map raw_parquet/** -> normalized/** + mapping_coverage.json -> record stage outcome
+  |-- [telemetry] ensure collection window captured + validate canaries -> publish raw_parquet/** (and raw/** when enabled) + logs/telemetry_validation.json -> record stage outcome
   |
-  |-- [validation] evaluate criteria packs + cleanup verification -> criteria/** -> record stage outcome
+  |-- [normalization] map raw_parquet/** -> publish normalized/** + normalized/mapping_coverage.json + normalized/mapping_profile_snapshot.json -> record stage outcome
   |
-  |-- [detection] compile/evaluate sigma via bridge -> bridge/** + detections/** -> record stage outcome
+  |-- [validation] snapshot criteria pack + evaluate criteria -> publish criteria/manifest.json + criteria/criteria.jsonl + criteria/results.jsonl -> record stage outcome
   |
-  |-- [scoring] join ground truth, criteria, detections -> scoring/summary.json -> record stage outcome
+  |-- [detection] compile/evaluate sigma via bridge -> publish bridge/** + detections/detections.jsonl -> record stage outcome
   |
-  |-- [reporting] generate report/** -> record stage outcome
+  |-- [scoring] join ground truth, criteria, detections -> publish scoring/summary.json -> record stage outcome
   |
-  |-- [signing] (optional) sign artifacts -> security/** -> record stage outcome
+  |-- [reporting] (optional regression) materialize inputs/baseline/** -> publish report/report.json + report/thresholds.json (and optional HTML) 
+  |   -> record stage outcome
+  |
+  |-- [signing] (optional) sign artifacts -> publish security/** -> record stage outcome
   |
   |-- finalize manifest.status and seal manifest.json
   |-- release run lock

@@ -129,6 +129,7 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/ocsf_event_envelope.schema.json`
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
+- `docs/contracts/telemetry_baseline_profile.schema.json`
 - `docs/contracts/telemetry_validation.schema.json`
 - `docs/contracts/duckdb_conformance_report.schema.json`
 - `docs/contracts/pcap_manifest.schema.json`
@@ -311,6 +312,8 @@ Minimum publish-gate coverage (v0.1):
   - `ground_truth.jsonl`
   - `runs/<run_id>/inputs/baseline_run_ref.json` when regression is enabled
   - `runs/<run_id>/inputs/baseline/manifest.json` when produced (regression baseline snapshot form)
+  - `runs/<run_id>/inputs/telemetry_baseline_profile.json` when
+    `telemetry.baseline_profile.enabled=true`
   - `runner/**` artifacts that have contracts (for example, executor evidence, side-effect ledger,
     cleanup verification)
   - `runs/<run_id>/runner/principal_context.json`
@@ -345,6 +348,7 @@ JSON Schema. They do not replace publish-gate contract validation.
 v0.1 baseline canaries (non-exhaustive; see operability and telemetry specs for full details):
 
 - **Agent liveness (push-only DOA detection):** `telemetry.agent.liveness`
+- **Telemetry baseline profile gate:** `telemetry.baseline_profile`
 - **Windows raw-mode canary:** `telemetry.windows_eventlog.raw_mode`
 - **Checkpointing and replay validation:** `telemetry.checkpointing.storage_integrity`
 - **Resource budget enforcement:** `telemetry.resource_budgets`
@@ -363,6 +367,8 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
   - `inputs/baseline_run_ref.json` (required when regression is enabled; regression baseline pointer
     form)
   - `inputs/baseline/manifest.json` (optional; regression baseline snapshot form)
+  - `inputs/telemetry_baseline_profile.json` (optional; REQUIRED when telemetry baseline profile
+    gate is enabled)
 - `plan/` (v0.2+; compiled plan graph and expansion manifests)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw_parquet/` (raw telemetry datasets, long-term; see storage formats)

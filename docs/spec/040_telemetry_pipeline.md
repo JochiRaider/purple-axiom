@@ -563,6 +563,40 @@ checklist.
 - Verify collector self-telemetry is present within the configured startup grace so "no events" can
   be distinguished from agent startup failure (dead on arrival).
 
+### Telemetry baseline profile gate (required when enabled)
+
+To reduce lab drift and "quiet failure" modes where expected telemetry sources silently stop
+producing data, telemetry validation MAY be parameterized by a contract-backed baseline profile.
+
+When `telemetry.baseline_profile.enabled=true`:
+
+1. The telemetry stage MUST snapshot the configured baseline profile
+   (`telemetry.baseline_profile.profile_path`) into the run bundle at
+   `runs/<run_id>/inputs/telemetry_baseline_profile.json`.
+1. The snapshot MUST validate against `telemetry_baseline_profile.schema.json` (contract id:
+   `telemetry_baseline_profile`).
+1. For each expected asset, the validator MUST select the highest-priority matching `profiles[]`
+   entry (highest `priority`, then `profile_id` bytewise ascending) and verify all
+   `required_signals[]` meet their `min_count` within the validation window.
+   - A profile matches an asset when all specified `selector` fields match the asset record in
+     `lab_inventory_snapshot.json`:
+     - `asset_ids`: contains `asset_id`
+     - `os`: equals asset `os`
+     - `role`: equals asset `role`
+     - `tags_all`: all present in asset `tags`
+     - `tags_any`: at least one present in asset `tags`
+   - If no profiles match an asset, the gate MUST fail with `reason_code=baseline_profile_not_met`.
+   - For `source_type=windows_eventlog`, signal matching MUST use `<System>` fields extracted from
+     raw XML (`Channel`, optional `Provider/@Name`, optional `EventID`).
+   - For `source_type=osquery`, signal matching MUST use NDJSON fields (`name`, optional `action`).
+1. Failure semantics (all fail-closed):
+   - Missing/unreadable profile: `reason_code=baseline_profile_missing`
+   - Contract/schema invalid: `reason_code=baseline_profile_invalid`
+   - Requirements not met: `reason_code=baseline_profile_not_met`
+1. The validator MUST emit `health.json.stages[]` with `stage="telemetry.baseline_profile"` and MUST
+   record per-asset evidence in `runs/<run_id>/logs/telemetry_validation.json` under
+   `baseline_profile`.
+
 ### Determinism
 
 1. Restart the collector mid-stream; confirm no schema changes and that downstream `event_id`
@@ -660,6 +694,22 @@ Recommended additional fields (agent liveness / dead-on-arrival triage):
     - `first_seen` (string; RFC 3339 UTC, OPTIONAL when `observed=false`)
     - `last_seen` (string; RFC 3339 UTC, OPTIONAL when `observed=false`)
     - `evidence_path` (string; run-relative POSIX-style path)
+
+Recommended additional fields (telemetry baseline profile gate):
+
+- `baseline_profile` (object, OPTIONAL; REQUIRED when `telemetry.baseline_profile.enabled=true`)
+  - `profile_path` (string; run-relative POSIX-style path)
+  - `profile_sha256` (string; `sha256:<hex>`)
+  - `assets` (array of objects; sorted by `asset_id` ascending)
+    - `asset_id` (string)
+    - `matched_profile_id` (string)
+    - `signals` (array of objects; sorted by `signal_id` ascending)
+      - `signal_id` (string)
+      - `source_type` (string; `windows_eventlog | osquery`)
+      - `match` (object; echo of the profile match predicate)
+      - `min_count` (int)
+      - `observed_count` (int)
+      - `passed` (bool)
 
 Recommended additional fields (checkpointing diagnostics):
 

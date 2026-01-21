@@ -349,6 +349,19 @@ Common keys:
       - Ordered allowlist of metric names that qualify as a heartbeat. If none are observed for an
         expected asset within the startup grace, telemetry validation MUST fail closed with
         `reason_code=agent_heartbeat_missing` (see operability and stage outcome specifications).
+- `baseline_profile` (optional)
+  - `enabled` (optional, default: false)
+    - When `true`, telemetry validation MUST enforce the telemetry baseline profile gate (see
+      `040_telemetry_pipeline.md`) and MUST emit a health stage outcome
+      `stage="telemetry.baseline_profile"`.
+  - `profile_path` (required when enabled): path to a telemetry baseline profile JSON file.
+    - If the profile is missing or unreadable, telemetry MUST fail closed with
+      `reason_code=baseline_profile_missing`.
+    - If contract validation fails, telemetry MUST fail closed with
+      `reason_code=baseline_profile_invalid`.
+    - The implementation MUST snapshot the effective profile bytes into
+      `runs/<run_id>/inputs/telemetry_baseline_profile.json` and use the snapshotted bytes for
+      evaluation and hashing.
 - `sources` (optional)
   - Additional non-OTel sources (example: `osquery`, `pcap`, `netflow`)
   - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not

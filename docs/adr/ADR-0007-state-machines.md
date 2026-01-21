@@ -68,7 +68,7 @@ Purple Axiom specifications MAY use state machine notation in two distinct ways:
    - Normative state machines MUST use the template in this ADR.
    - Normative state machines MUST include conformance tests as required by this ADR.
 
-2. **Representational state machines (non-normative)**
+1. **Representational state machines (non-normative)**
 
    These are diagrams or simplified lists used to explain an existing flow. They MUST NOT introduce
    new lifecycle requirements.
@@ -97,7 +97,8 @@ artifacts) rather than introducing a new “state store”.
 If a normative state machine requires a new persisted artifact (for authoritative state and/or
 required observability), the owning spec MUST:
 
-- declare the artifact path as part of the run bundle IO boundary for the owning stage/component, and
+- declare the artifact path as part of the run bundle IO boundary for the owning stage/component,
+  and
 - define schema and validation requirements for the artifact using the project’s contract workflow.
 
 ### Where state machines fit
@@ -150,13 +151,13 @@ The table below summarizes typical artifact anchors by machine scope. This table
 each spec that defines a machine MUST still declare its authoritative representation using the
 template in this ADR.
 
-| Machine scope               | Typical authoritative artifacts                                                                                                                                          | Typical terminal outcome record                                                                                                  |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| Run                         | Run lock (`runs/.locks/<run_id>.lock`), `manifest.json`, and `logs/health.json` (when enabled)                                                                            | `manifest.status` (derived), plus stage outcomes in `manifest.json` (and mirrored in `logs/health.json` when enabled)          |
-| Stage                       | Stage outcome entry in `manifest.json` (and `logs/health.json.stages[]` when enabled), plus publish-gate output artifacts per the stage’s IO boundary table              | Stage `status/fail_mode/reason_code` in `manifest.json` (and in `logs/health.json` when enabled), which feeds `manifest.status` |
-| Action                      | `runner/actions/<action_id>/side_effect_ledger.json` (ordered entries), per-action evidence artifacts, `ground_truth.jsonl` (timeline)                                   | Per-action outcomes recorded in contracted artifacts (ground truth and/or runner evidence)                                      |
-| Plan node                   | Ground truth timeline and/or a plan execution journal artifact (when present)                                                                                            | Node terminal status recorded in the chosen journal/ground truth form                                                            |
-| Reliability/safety canaries | Dotted stage outcomes in `manifest.json` (and `logs/health.json` when enabled), plus deterministic evidence artifacts (for example `logs/telemetry_validation.json`)      | Dotted stage outcomes that feed the parent stage and run status                                                                  |
+| Machine scope               | Typical authoritative artifacts                                                                                                                                      | Typical terminal outcome record                                                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Run                         | Run lock (`runs/.locks/<run_id>.lock`), `manifest.json`, and `logs/health.json` (when enabled)                                                                       | `manifest.status` (derived), plus stage outcomes in `manifest.json` (and mirrored in `logs/health.json` when enabled)           |
+| Stage                       | Stage outcome entry in `manifest.json` (and `logs/health.json.stages[]` when enabled), plus publish-gate output artifacts per the stage’s IO boundary table          | Stage `status/fail_mode/reason_code` in `manifest.json` (and in `logs/health.json` when enabled), which feeds `manifest.status` |
+| Action                      | `runner/actions/<action_id>/side_effect_ledger.json` (ordered entries), per-action evidence artifacts, `ground_truth.jsonl` (timeline)                               | Per-action outcomes recorded in contracted artifacts (ground truth and/or runner evidence)                                      |
+| Plan node                   | Ground truth timeline and/or a plan execution journal artifact (when present)                                                                                        | Node terminal status recorded in the chosen journal/ground truth form                                                           |
+| Reliability/safety canaries | Dotted stage outcomes in `manifest.json` (and `logs/health.json` when enabled), plus deterministic evidence artifacts (for example `logs/telemetry_validation.json`) | Dotted stage outcomes that feed the parent stage and run status                                                                 |
 
 ### Requirements for state machines in specs
 
@@ -181,24 +182,27 @@ When a spec defines a state machine using the template below:
      publish-gate boundaries and outcome artifacts. In particular, stage terminal state SHOULD be
      derivable from:
      - the recorded stage outcome, and
-     - the presence/absence of the stage’s published outputs as defined by ADR-0004 completion semantics
-       and the stage’s IO boundary table.
-   - Specs MUST define deterministic handling for inconsistent artifact states (for example, published
-  outputs present but no recorded terminal outcome), and SHOULD fail closed by default.
-  - When the inconsistency implies a missing required artifact, specs SHOULD prefer `reason_code =
-    input_missing`.
-  - When the inconsistency implies partial publish, unreadable artifacts, or storage corruption, specs
-    SHOULD prefer `reason_code = storage_io_error`.
+     - the presence/absence of the stage’s published outputs as defined by ADR-0004 completion
+       semantics and the stage’s IO boundary table.
+   - Specs MUST define deterministic handling for inconsistent artifact states (for example,
+     published outputs present but no recorded terminal outcome), and SHOULD fail closed by default.
+
+- When the inconsistency implies a missing required artifact, specs SHOULD prefer
+  `reason_code = input_missing`.
+- When the inconsistency implies partial publish, unreadable artifacts, or storage corruption, specs
+  SHOULD prefer `reason_code = storage_io_error`.
 
 1. **Observability is not optional**
 
    - Each state MUST declare at least one observable signal (artifact presence/content, log line
      pattern, counter, stage outcome).
+
    - Each transition MUST declare its observable signals, including failure modes.
 
-     Note: `logs/health.json` is a stage outcome surface (stage outcomes only) and MUST NOT be treated as a
-     generic per-transition event log. Transition-level evidence SHOULD be captured via deterministic
-     counters, structured logs, and/or dedicated evidence artifacts as defined by the owning spec.
+     Note: `logs/health.json` is a stage outcome surface (stage outcomes only) and MUST NOT be
+     treated as a generic per-transition event log. Transition-level evidence SHOULD be captured via
+     deterministic counters, structured logs, and/or dedicated evidence artifacts as defined by the
+     owning spec.
 
 1. **Alignment with outcome semantics**
 
@@ -261,7 +265,8 @@ For executor implementations specifically:
 - The executor SHOULD treat the per-action lifecycle phases as a state machine and enforce allowed
   transitions (for example, preventing re-execution of non-idempotent actions without successful
   revert), with outcomes surfaced via ground truth and runner stage/substage outcomes.
-  - For action lifecycle enforcement, implementations SHOULD reuse the existing observability surfaces:
+  - For action lifecycle enforcement, implementations SHOULD reuse the existing observability
+    surfaces:
     - `runner.lifecycle_enforcement` substage semantics (when `health.json` is enabled), including
       `reason_code` values such as `invalid_lifecycle_transition` and `unsafe_rerun_blocked` (see
       ADR-0005 and the executor integration specs).
@@ -339,10 +344,9 @@ State requirements (normative):
 - States MUST be stable within the declared version.
 - Terminal states MUST be explicitly identified.
 
-| State     | Kind                                | Description | Invariants | Observable signals |
-| --------- | ----------------------------------- | ----------- | ---------- | ------------------ |
+| State     | Kind                                    | Description | Invariants | Observable signals |
+| --------- | --------------------------------------- | ----------- | ---------- | ------------------ |
 | `<state>` | `initial` / `intermediate` / `terminal` | <text>      | <text>     | <text>             |
-
 
 #### Transition rules
 
@@ -485,6 +489,6 @@ Non-blocking follow-ups enabled by this ADR:
 
 ## Changelog
 
-| Date       | Change         |
-| ---------- | -------------- |
+| Date       | Change  |
+| ---------- | ------- |
 | 2026-01-20 | Updated |

@@ -383,6 +383,19 @@ Additional normative checks:
     `runs/<run_id>/logs/telemetry_validation.json` under `agent_liveness`.
 - The validator MUST emit a `health.json.stages[]` entry with
   `stage: "telemetry.windows_eventlog.raw_mode"`.
+- When `telemetry.baseline_profile.enabled=true`, the validator MUST emit a `health.json.stages[]`
+  entry with `stage: "telemetry.baseline_profile"`.
+  - The validator MUST evaluate the contract-backed baseline profile snapshot at
+    `runs/<run_id>/inputs/telemetry_baseline_profile.json` (see `040_telemetry_pipeline.md`).
+  - If the profile is missing or unreadable, the stage MUST be `status=failed`,
+    `fail_mode=fail_closed`, `reason_code=baseline_profile_missing`.
+  - If the profile fails contract validation, the stage MUST be `status=failed`,
+    `fail_mode=fail_closed`, `reason_code=baseline_profile_invalid`.
+  - If one or more required baseline signals are not observed for one or more assets in the
+    validation window, the stage MUST be `status=failed`, `fail_mode=fail_closed`,
+    `reason_code=baseline_profile_not_met`.
+  - The validator MUST record per-asset baseline profile evidence in
+    `runs/<run_id>/logs/telemetry_validation.json` under `baseline_profile`.
 - When collector checkpoint corruption prevents the collector from starting, the validator MUST emit
   a `health.json.stages[]` entry with `stage: "telemetry.checkpointing.storage_integrity"` and
   `reason_code=checkpoint_store_corrupt`.

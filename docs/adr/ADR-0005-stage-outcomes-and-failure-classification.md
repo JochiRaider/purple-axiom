@@ -452,6 +452,9 @@ Minimum artifacts when enabled: `raw_parquet/**`, `manifest.json`
 | ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
 | `required_source_missing`       | FATAL    | Required telemetry source is not installed or configured (for example Sysmon).                         |
 | `source_not_implemented`        | FATAL    | Source is enabled but not implemented in v0.1 (for example pcap placeholder).                          |
+| `baseline_profile_missing`      | FATAL    | Telemetry baseline profile gate enabled but profile is missing or unreadable.                          |
+| `baseline_profile_invalid`      | FATAL    | Telemetry baseline profile is present but fails contract validation.                                   |
+| `baseline_profile_not_met`      | FATAL    | Telemetry baseline profile requirements not met for one or more assets.                                |
 | `collector_startup_failed`      | FATAL    | Collector cannot start (config parse error, binding failure).                                          |
 | `checkpoint_store_corrupt`      | FATAL    | Checkpoint/offset store corruption prevents reliable ingestion or collector startup.                   |
 | `checkpoint_corruption_fatal`   | FATAL    | Legacy alias for `checkpoint_store_corrupt`; SHOULD NOT be emitted in new runs.                        |
@@ -471,6 +474,21 @@ Minimum artifacts when enabled: `raw_parquet/**`, `manifest.json`
 - If telemetry stage `fail_mode=fail_closed` (default), `raw_xml_unavailable` is FATAL.
 - If telemetry stage `fail_mode=warn_and_skip`, affected records MUST be skipped and counted; stage
   MAY complete as NON-FATAL degraded with a warning entry and stable counters.
+
+#### Telemetry baseline profile gate (substage: `telemetry.baseline_profile`)
+
+When `telemetry.baseline_profile.enabled=true`, the telemetry validator MUST evaluate the
+contract-backed baseline profile snapshot at `runs/<run_id>/inputs/telemetry_baseline_profile.json`
+(see `040_telemetry_pipeline.md`) and record a substage outcome in `logs/health.json`.
+
+If this substage fails, the telemetry stage MUST fail closed. The telemetry stage MAY use the same
+`reason_code` as the substage outcome.
+
+`reason_code` for this substage MUST be constrained to:
+
+- `baseline_profile_missing`
+- `baseline_profile_invalid`
+- \`baseline_profile_not_met
 
 #### Windows raw-mode canary (substage: `telemetry.windows_eventlog.raw_mode`)
 

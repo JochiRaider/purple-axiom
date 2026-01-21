@@ -341,4 +341,4 @@ Minimum conformance checks (normative):
 | ---------- | --------------------------------------------------------- |
 | 2026-01-12 | Formatting update                                         |
 | 2026-01-13 | Expand ADR into a complete naming and versioning contract |
-| 2026-01-18 | update |
+| 2026-01-18 | update                                                    |

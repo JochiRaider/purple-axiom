@@ -60,11 +60,22 @@ Linux event identity basis tests use auditd/journald/syslog fixture vectors cove
 
 ### Redaction
 
-Redaction tests validate policy fixture vectors including argv redaction, regex redaction,
-truncation determinism, and post-checks.
-
-Redaction posture tests validate that `security.redaction.enabled=false` MUST produce deterministic
-placeholders or quarantine-only outputs and MUST label the run as unredacted in metadata.
+- Redaction policy test vectors validate deterministic truncation, placeholder emission, and
+  post-check secret detection.
+- Disabled redaction posture fixtures validate deterministic handling:
+  - `withhold_from_long_term`: standard locations contain deterministic placeholders; unredacted
+    evidence is not persisted in the run bundle (except volatile logs as permitted by
+    operability/debug policies); manifest/report labeled unredacted.
+  - `quarantine_unredacted`: placeholders remain in standard locations and unredacted evidence is
+    persisted only under the configured quarantine directory; quarantine outputs are excluded from
+    default packaging/export; manifest/report labeled unredacted.
+- Placeholder determinism fixtures (required):
+  - Golden fixtures for both JSON and text placeholders that assert byte-for-byte stable
+    serialization (JSON uses RFC 8785 canonical JSON), and required field emission (`reason_code`
+    always present; `sha256` present only when allowed).
+  - Vectors that explicitly validate `sha256` omission for secret-containing / post-check matches,
+    and inclusion when the effective redaction policy permits it.
+- Required: byte-for-byte determinism of placeholders and truncation output.
 
 ### Normalization and mapping
 
@@ -797,7 +808,7 @@ The fixture set MUST include at least:
   - Provide a minimal run bundle containing a file with a timestamped filename located inside a
     contracted directory (for example, under `runs/<run_id>/runner/` or another contracted subtree).
   - Assert contract validation fails closed and emits
-    `runs/<run_id>/logs/contract_validation_report.json`.
+    `runs/<run_id>/logs/contract_validation/runner.json`.
   - Assert the contract validation report contains an error with:
     - `artifact_relpath` matching the offending path
     - `error_code = "timestamped_filename_disallowed"` (stable reason code for this class of

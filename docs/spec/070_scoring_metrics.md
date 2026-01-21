@@ -52,7 +52,7 @@ Run status is a small set of operator-facing classifications:
   failures on required artifacts, or an earlier stage that prevents evaluation).
 - `partial`: artifacts are mechanically usable, but one or more quality gates did not meet minimum
   thresholds or were indeterminate (including Tier 1 normalization coverage).
-- `ok`: artifacts are mechanically usable and minimum quality gates are met.
+- `success`: artifacts are mechanically usable and minimum quality gates are met.
 
 Tier 1 coverage is explicitly a quality gate. Missing Tier 1 fields in individual events do not, by
 themselves, cause schema conformance failure.

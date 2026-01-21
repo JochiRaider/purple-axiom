@@ -104,9 +104,49 @@ Operators must choose one of the following strategies per host:
 1. **File-only**: Tail `/var/log/*` files via `filelog`. Do not use the `journald` receiver for
    overlapping content.
 
-1. **Explicit dedupe**: If both are enabled, the normalizer must deduplicate by `metadata.event_id`
-   and the run must record `telemetry.unix.dedupe_strategy` in the manifest. This strategy is
-   discouraged for v0.1 due to complexity.
+1. **Explicit overlap dedupe (discouraged; implementation-defined)**: If both journald ingestion
+   (`_TRANSPORT=syslog`) and syslog file tailing are enabled for overlapping syslog content, the
+   dataset is expected to contain semantic duplicates. Implementations MUST NOT attempt to remove
+   these duplicates by comparing `metadata.event_id` (Tier 1 cursor-based IDs and Tier 2
+   artifact-cursor IDs will differ by design).
+
+   If an implementation supports an overlap dedupe mode, it MUST be explicitly enabled and MUST be
+   recorded in the run manifest as `telemetry.unix.dedupe_strategy`. For v0.1, the only allowed
+   overlap dedupe strategy token is `unix_syslog_fingerprint_v1`, defined as:
+
+   - Compute `fingerprint_basis_v1`:
+
+     ```json
+     {
+       "v": 1,
+       "t": "<event_time_epoch_seconds>",
+       "host": "<origin.host>",
+       "app": "<app>",
+       "pid": "<pid_or_null>",
+       "facility": "<facility_or_null>",
+       "severity": "<severity_or_null>",
+       "message": "<message>"
+     }
+     ```
+
+   - `event_time_epoch_seconds` MUST be computed as `floor(event_time_epoch_ms / 1000)` using the
+     event timestamp after syslog parsing and time normalization.
+
+   - Serialize `fingerprint_basis_v1` using RFC 8785 canonical JSON (UTF-8 bytes).
+
+   - Compute `fingerprint = sha256_hex(canonical_bytes)`.
+
+   Dedupe rule (deterministic):
+
+   - For events with the same `(host, fingerprint)` in a run, keep exactly one record:
+     1. Prefer the record that has `origin.journald_cursor` present (journald-origin).
+     1. Otherwise, prefer the record with the lexicographically smallest `stream.cursor` (bytewise
+        UTF-8).
+     1. Otherwise, prefer the record with the lexicographically smallest `metadata.event_id`.
+
+   **Caveat**: This strategy can drop legitimate repeated messages that are byte-identical within
+   the same second. It SHOULD remain disabled unless duplication materially harms the run’s
+   usability.
 
 The pipeline must not silently ingest both sources without explicit operator acknowledgment.
 
@@ -177,8 +217,8 @@ extensions:
 
 #### Required tagging
 
-The collector or downstream normalizer must be able to set `metadata.source_type` based on journal
-transport. Recommended values:
+The collector or downstream normalizer MUST set `metadata.source_type` based on the journal
+`_TRANSPORT` value using the following mapping:
 
 | Journal `_TRANSPORT` | `metadata.source_type` |
 | -------------------- | ---------------------- |
@@ -188,13 +228,16 @@ transport. Recommended values:
 | `kernel`             | `linux_journald`       |
 | `audit`              | `linux_auditd`         |
 
+This mapping MUST remain consistent with "Normalization to OCSF" → "Source type assignment".
+
 ### Identity basis (Tier 1)
 
-journald provides a stable per-entry cursor suitable for Tier 1 identity. Per ADR-0002:
+journald provides a stable per-entry cursor suitable for Tier 1 identity across all journal
+transports. Per ADR-0002:
 
 ```json
 {
-  "source_type": "linux_journald",
+  "source_type": "<metadata.source_type>",
   "origin.host": "<emitting_host>",
   "origin.journald_cursor": "<__CURSOR_value>"
 }
@@ -202,10 +245,12 @@ journald provides a stable per-entry cursor suitable for Tier 1 identity. Per AD
 
 Rules:
 
-- `origin.journald_cursor` must be the exact cursor string from the journal entry.
-- The cursor must not be parsed or modified.
-- When journald is collected as a stream, the pipeline should checkpoint the cursor under
-  `runs/<run_id>/logs/telemetry_checkpoints/`.
+- `source_type` MUST equal the effective `metadata.source_type` assigned for the entry (see
+  "Required tagging" above).
+- `origin.journald_cursor` MUST be the exact cursor string from the journal entry.
+- The cursor MUST NOT be parsed or modified.
+- Cursor/state persistence MUST be implemented via the receiver `storage` extension (see "Cursor
+  persistence (required)"); implementations MUST NOT invent a separate cursor store.
 
 ## Syslog file ingestion
 
@@ -258,7 +303,10 @@ Linux systems rotate logs via `logrotate`, producing files with numeric suffixes
 
 - The `include` pattern should cover both the active file and recent rotated segments when catch-up
   after restart is required.
-- If rotated segments are gzip-compressed, configure `compression: gzip` for those patterns.
+- If gzip-compressed rotated segments are ingested, they SHOULD be handled by a separate `filelog`
+  receiver instance configured with `compression: gzip` and `include` globs matching `*.gz`
+  (compression is configured per receiver; mixed plain + gzip patterns in one receiver are not
+  portable).
 - Recompress-overwrite rotation modes are NOT supported; compressed files must be append-only or
   created atomically.
 - If rotated segments age out before being read, this must be recorded as a telemetry gap.
@@ -282,6 +330,17 @@ operators:
     from: attributes.host
     to: resource["host.name"]
 ```
+
+RFC 3164 timestamp determinism requirements:
+
+- RFC 3164 timestamps omit year and timezone. Implementations MUST apply a deterministic year
+  inference rule and a deterministic timezone assumption (do not rely on collector process-local
+  defaults when the collector is containerized or runs off-host).
+- v0.1 recommended year inference rule (deterministic): interpret the parsed month/day/time in the
+  emitting host’s assumed timezone; choose the year such that the resulting timestamp is the closest
+  timestamp at or before the run window end time (prevents year-rollover misparses).
+- The chosen timezone + year inference rules MUST be documented in implementation notes and SHOULD
+  be recorded in normalization provenance for debuggability.
 
 ### Identity basis (Tier 2)
 
@@ -396,10 +455,13 @@ receivers:
 
 Advantages:
 
-- Tier 1 identity via journald cursor.
-- journald may pre-correlate related audit records into a single journal entry (implementation
-  dependent; verify on target systems).
+- Tier 1 cursor-based identity for each raw audit record via journald cursor.
 - Unified checkpoint model with other journald sources.
+
+**Correlation requirement (still required)**: Even when ingesting audit records via journald,
+implementations MUST correlate multiple records that share the same
+`msg=audit(<epoch>.<fractional>:<serial>)` identifier into a single logical audit event before OCSF
+mapping (see "Audit subsystem overview").
 
 #### Path 2: Direct audit.log tailing (advanced)
 
@@ -495,7 +557,7 @@ When Unix log ingestion is enabled, the pipeline must stage source-native logs u
 ```text
 runs/<run_id>/raw/
 ├── journald/
-│   └── journal_export.jsonl      # Exported journal entries (JSONL)
+│   └── journal_export.jsonl      # Exported journal entries (JSONL); each line MUST include __CURSOR and _TRANSPORT
 ├── syslog/
 │   ├── syslog                    # Copied /var/log/syslog (Debian)
 │   ├── messages                  # Copied /var/log/messages (RHEL)
@@ -506,7 +568,8 @@ runs/<run_id>/raw/
 
 Notes:
 
-- Staged files are evidence-tier representations for reproducibility.
+- Staged files are evidence-tier representations for reproducibility and MUST follow the effective
+  redaction posture (redacted-safe, withheld, or quarantined) under the project redaction policy.
 - The pipeline may convert staged text to Parquet under `raw_parquet/`.
 - Rotation and truncation during the run window should be handled by staging complete files or by
   recording the byte range captured.
@@ -634,9 +697,14 @@ Add fixtures under `tests/fixtures/unix_logs/` (recommended convention):
 
 CI must assert:
 
-- **Cursor persistence**: journald receiver resumes from checkpoint after restart without replay
-  (given stable storage).
-- **Offset persistence**: filelog receiver resumes from checkpoint after restart.
+- **Cursor persistence**: journald receiver resumes using persisted checkpoint state after restart
+  (no reset to the beginning). At-least-once replay is permitted; any duplicate records MUST be
+  removed deterministically downstream (typically by `metadata.event_id` equality when the same
+  cursor is re-read).
+- **Offset persistence**: filelog receiver resumes using persisted offsets after restart (no reset
+  to the beginning). At-least-once replay is permitted; any duplicate records MUST be removed
+  deterministically downstream (typically by `metadata.event_id` equality when the same cursor is
+  re-read).
 - **Audit correlation**: Multi-record audit events with the same message ID produce a single
   normalized OCSF event (not multiple fragmented events).
 - **Identity determinism**: Re-normalizing the same fixture produces byte-identical

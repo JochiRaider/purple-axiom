@@ -42,10 +42,26 @@ Scenario safety interaction (normative):
 - The effective outbound policy is the logical AND of `scenario.safety.allow_network` and
   `security.network.allow_outbound` (see the [configuration reference](120_config_reference.md)).
 
+## Definitions
+
+- **standard long-term artifact locations**: Default-exported run-bundle paths (Tier 1 evidence +
+  Tier 2 analytics), excluding `runs/<run_id>/logs/**` (volatile logs) and the quarantine directory.
+- **quarantine directory**: `runs/<run_id>/<security.redaction.unredacted_dir>` used only when
+  unredacted evidence storage is explicitly permitted (default: `runs/<run_id>/unredacted/`).
+- **volatile logs**: Operator-local diagnostics excluded from default export/checksums (for example
+  process stdout/stderr and `runs/<run_id>/logs/**`).
+- **redacted-safe**: Satisfies the effective redaction policy and post-checks (see
+  [ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md)).
+- **evidence-tier artifact**: Tier 1 evidence artifacts governed by redaction/withhold/quarantine
+  rules (see [Storage formats](045_storage_formats.md)).
+
 ## Core principles
 
 - Local-first, isolated lab by default.
-- No outbound calls except explicitly allowed (package updates, required vendor endpoints).
+- No outbound calls except explicitly allowed (provisioning-time package updates, required vendor
+  endpoints).
+  - v0.1: "package updates" refers only to lab provisioning-time OS/toolchain maintenance. The
+    runner MUST NOT self-update or install/upgrade pipeline dependencies during a run.
 - Least privilege and explicit trust boundaries between components.
 - Deterministic and auditable behavior.
 
@@ -92,10 +108,27 @@ Windows-specific requirements:
 - The normalizer MUST NOT perform network enrichment by default.
 - Any enrichment MUST be explicitly enabled and MUST be recorded in provenance.
 
-### Evaluator boundary
+### Evaluator boundary (criteria, detection)
 
-- Rule execution MUST NOT allow arbitrary code execution.
-- Sigma translation and query execution MUST be sandboxed and read-only.
+Evaluators process untrusted rule content (Sigma, criteria packs). They MUST be sandboxed and MUST
+NOT execute arbitrary code from rule packs.
+
+Evaluator sandbox contract (minimal, testable; normative v0.1):
+
+- Rule packs MUST be treated as data. Parsers MUST NOT execute embedded templates, macros, or code.
+- The evaluator MUST NOT invoke a shell for rule processing. Any subprocess invocation (for example
+  a Sigma compiler or query backend client) MUST use an argv array (no shell expansion) and MUST
+  apply bounded timeouts and output size limits.
+- Network egress MUST be denied by default for evaluator execution. If rule retrieval is required,
+  it MUST occur in a separate, explicitly-enabled fetch step and the retrieved content MUST be
+  pinned (versioned) and hashed before evaluation.
+- File system access MUST be constrained:
+  - read-only: the run bundle inputs required for evaluation and the pinned rule pack directory
+  - write-only: evaluator outputs under the run bundle (for example `criteria/` or `detection/`)
+- Sandbox violations MUST be treated as deterministic failures (fail closed).
+
+Evaluators SHOULD not require network access. If network access is required for rule retrieval, it
+MUST be explicitly enabled and logged, and rule content MUST be pinned and hashed.
 
 ## Safe defaults
 
@@ -150,6 +183,13 @@ The pipeline MUST support a configurable redaction policy for:
 The redaction policy format and the definition of “redacted-safe” are specified in
 [ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md).
 
+### Binary evidence retention
+
+Binary artifacts (EVTX, PCAP, sidecar blobs, decoded payload extracts) are not redacted in-place by
+the text redaction pipeline. When binary evidence is retained, implementations MUST follow
+[ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md) "Binary retention requirements",
+including explicit manifest labeling and export confirmation prompts.
+
 ### Enablement
 
 Redaction application MUST be controlled by config `security.redaction.enabled`.
@@ -157,164 +197,246 @@ Redaction application MUST be controlled by config `security.redaction.enabled`.
 - When `true`, artifacts promoted to long-term storage MUST be redacted-safe.
 - When `false`, the run MUST be explicitly labeled as unredacted in the run manifest and reports.
 
+Config key map (normative):
+
+| Key                                                    | Type    | Default                   | Meaning                                                                                                            |
+| ------------------------------------------------------ | ------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `security.redaction.enabled`                           | boolean | `true`                    | Global gate for applying redaction + redacted-safe promotion into standard long-term locations.                    |
+| `security.redaction.disabled_behavior`                 | enum    | `withhold_from_long_term` | Determines handling when `security.redaction.enabled=false`: `withhold_from_long_term` or `quarantine_unredacted`. |
+| `security.redaction.allow_unredacted_evidence_storage` | boolean | `false`                   | Explicit permission gate required to persist any unredacted evidence in the quarantine directory.                  |
+| `security.redaction.unredacted_dir`                    | string  | `unredacted/`             | Quarantine directory relative to the run bundle root; MUST be excluded from default packaging/export.              |
+
 ### Disabled posture semantics
 
 When `security.redaction.enabled: false`, the pipeline MUST NOT silently store unredacted evidence
 in the standard long-term artifact locations.
 
-The pipeline MUST choose one of the following deterministic behaviors (config-controlled):
+The pipeline MUST apply one of the following deterministic behaviors, controlled by
+`security.redaction.disabled_behavior`:
 
-- Withhold-from-long-term (default): write deterministic placeholders in standard locations.
-- Quarantine-unredacted: write unredacted evidence only to a quarantined location that is excluded
-  from default packaging/export.
+- `withhold_from_long_term` (default):
+  - Unredacted evidence MUST NOT be persisted in the run bundle (except volatile logs as permitted
+    by operability/debug policies).
+  - The pipeline MUST write deterministic placeholders in standard artifact locations.
+- `quarantine_unredacted`:
+  - This behavior MUST be refused (fail closed) unless
+    `security.redaction.allow_unredacted_evidence_storage: true`.
+  - The pipeline MUST write deterministic placeholders in standard artifact locations.
+  - Unredacted evidence MUST be written only under the quarantine directory
+    `runs/<run_id>/<security.redaction.unredacted_dir>` (default: `runs/<run_id>/unredacted/`),
+    which MUST be excluded from default packaging/export.
 
-Redaction MUST be logged and surfaced in reports. Hashes SHOULD be retained for integrity and
-deduplication when fields are truncated or withheld.
+Redaction handling MUST be logged and surfaced in reports, including the affected artifact relative
+path and handling (`withheld` or `quarantined`).
+
+### Placeholder artifacts
+
+When an artifact is withheld or quarantined under this spec, implementations MUST still emit a
+placeholder at the standard artifact path so downstream tooling can rely on stable paths and
+schemas.
+
+Schema-aware placeholder pattern (normative):
+
+- For contract-backed JSON artifacts (`*.json`):
+  - The placeholder MUST be valid JSON and MUST validate against the artifact schema.
+  - Schemas MUST allow an optional top-level `placeholder` object with the shape defined below.
+  - When `placeholder` is present, the artifact MUST NOT include unredacted sensitive content
+    elsewhere in the object; any required non-placeholder fields MUST use safe sentinel values only.
+- For text artifacts (`*.txt`):
+  - The placeholder MUST be UTF-8 text consisting only of the single-line record defined below
+    (ending with `\n`).
+
+Required placeholder fields (normative):
+
+- `reason_code` is REQUIRED and MUST be a stable `lower_snake_case` token.
+- `sha256` is REQUIRED when permitted by the effective redaction policy for the underlying content
+  class; it MUST be omitted when not permitted.
+
+Placeholder JSON object (normative, `pa.placeholder.v1`):
+
+- `placeholder.placeholder_version` MUST be `pa.placeholder.v1`
+- `placeholder.handling` MUST be `withheld` or `quarantined`
+- `placeholder.reason_code` MUST be present
+- `placeholder.sha256` MAY be present only when permitted; format MUST be
+  `sha256:<64 lowercase hex>`
+
+Placeholder text line format (normative, `pa.placeholder.v1`):
+
+`PA_PLACEHOLDER_V1 handling=<withheld|quarantined> reason_code=<lower_snake_case> [sha256=sha256:<64hex>]`
+
+Hash inclusion rule (normative):
+
+- `sha256` MUST be omitted when the effective redaction policy treats the underlying content as
+  secret-containing or otherwise hash-sensitive (for example, post-check secret matches).
+- `sha256` SHOULD be included when permitted to support integrity/deduplication.
+
+Determinism requirements (normative):
+
+- Placeholder serialization MUST be byte-for-byte deterministic given the same inputs.
+- JSON placeholders MUST be serialized using RFC 8785 canonical JSON (UTF-8) to ensure stable bytes.
+- Placeholders MUST NOT include timestamps, hostnames, absolute paths, or environment-specific
+  values.
+
+Quarantine mapping (normative):
+
+- When `handling=quarantined`, the unredacted bytes MUST be written under
+  `runs/<run_id>/<security.redaction.unredacted_dir>/` preserving the standard relative path (for
+  example, `unredacted/runner/actions/<action_id>/requirements_evaluation.json`).
 
 ### Runner transcripts
 
 Executor stdout/stderr transcripts captured under `runner/` are evidence-tier artifacts and MUST be
 subject to the same redaction policy as raw telemetry.
 
-If transcripts cannot be safely redacted, they MUST be withheld. Implementations MUST record a
-placeholder file and a hash of the withheld content in volatile logs.
+If transcripts cannot be made redacted-safe deterministically, they MUST be handled as `withheld` or
+`quarantined` per the effective redaction posture. Implementations MUST write a placeholder
+transcript file in the standard location conforming to "Placeholder artifacts" (including
+`reason_code`, and `sha256` only when allowed by policy).
 
 ### Requirements evaluation
 
-The per-action requirements evaluation artifact
-(`runner/actions/<action_id>/requirements_evaluation.json`) is an evidence-tier artifact and MUST be
-treated as sensitive by default.
-
-Rationale: requirements evaluation may reveal over-specific environment details (example: exact tool
-versions, binary paths, OS build strings, installed capability inventory) that are not necessary for
-most reports and may increase sharing risk.
+Requirements evaluation may reveal tool paths, package versions, privilege context, and other
+sensitive details.
 
 Normative requirements:
 
-- The pipeline MUST apply the effective redaction policy to requirements evaluation contents before
-  writing the artifact to standard run bundle locations.
-- The artifact MUST redact secrets (tokens, passwords, private keys, bearer credentials) and other
-  redaction policy matches deterministically.
-- If the pipeline determines that the requirements evaluation content cannot be made redacted-safe
-  deterministically (example: it contains over-specific environment details that must be withheld),
-  it MUST NOT store that content in standard long-term artifact locations.
-  - Implementations MAY quarantine the unredacted content under the run's configured quarantine
-    directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by configuration.
-  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
-    placeholder at `runner/actions/<action_id>/requirements_evaluation.json`.
-- When requirements evaluation content is quarantined or withheld, the run manifest and reports MUST
-  disclose the affected artifact relative path and the applied handling (withheld or quarantined).
+- Requirements evaluation output MUST NOT include unredacted requirement details in run-scoped
+  long-term artifacts. If redaction is disabled or cannot be applied deterministically, the runner
+  MUST omit sensitive details or store them only in the configured quarantine directory.
+- The redacted requirements evidence MUST be stored at
+  `runner/actions/<action_id>/requirements_evaluation.json`.
+- If the pipeline determines that `requirements_evaluation` content cannot be made redacted-safe
+  deterministically (for example, non-redactable tool strings):
+  - The pipeline MUST NOT store that content in the standard long-term artifact locations.
+  - Implementations MAY write the unredacted content under the run's configured quarantine directory
+    when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
+  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
+    bundle).
+  - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
+    artifact at `runner/actions/<action_id>/requirements_evaluation.json` conforming to "Placeholder
+    artifacts" (including required `reason_code`, and `sha256` when allowed).
+- When `requirements_evaluation` content is quarantined or withheld, the run manifest and reports
+  MUST disclose the affected artifact relative path and the applied handling (`withheld` or
+  `quarantined`).
 
 ### Resolved inputs evidence
 
-The per-action resolved inputs evidence artifact
-(`runner/actions/<action_id>/resolved_inputs_redacted.json`) is an evidence-tier artifact and MUST
-be treated as sensitive by default.
-
-Rationale: while redacted-safe, resolved inputs may still contain environment-specific details
-(example: file paths, hostnames, usernames) that are not necessary for most shared reports and may
-increase sharing risk.
+Resolved inputs evidence may include sensitive command fragments, paths, or environment-derived
+values. This artifact is intended as evidence-tier support, not user-facing detail.
 
 Normative requirements:
 
-- The pipeline MUST apply the effective redaction policy to resolved inputs evidence contents before
-  writing the artifact to standard run bundle locations.
-- The artifact MUST NOT contain plaintext secrets or credential material.
-- If the pipeline determines that resolved inputs evidence cannot be made redacted-safe
-  deterministically, it MUST NOT store that content in standard long-term artifact locations.
-  - Implementations MAY quarantine the unredacted content under the run's configured quarantine
-    directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by configuration.
-  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
-    placeholder at `runner/actions/<action_id>/resolved_inputs_redacted.json`.
+- Resolved inputs evidence MUST be written at
+  `runner/actions/<action_id>/resolved_inputs_redacted.json`.
+
+- It MUST be redacted-safe before promotion to standard long-term artifact locations.
+
+- If the pipeline determines that `resolved_inputs_redacted` content cannot be made redacted-safe
+  deterministically:
+
+  - The pipeline MUST NOT store that content in the standard long-term artifact locations.
+  - Implementations MAY write the unredacted content under the run's configured quarantine directory
+    when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
+  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
+    bundle).
+  - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
+    artifact at `runner/actions/<action_id>/resolved_inputs_redacted.json` conforming to
+    "Placeholder artifacts" (including required `reason_code`, and `sha256` when allowed).
+
 - When resolved inputs evidence content is quarantined or withheld, the run manifest and reports
-  MUST disclose the affected artifact relative path and the applied handling (withheld or
-  quarantined).
+  MUST disclose the affected artifact relative path and the applied handling (`withheld` or
+  `quarantined`).
+
 - Report rendering (default-safe): reports MUST NOT render resolved input values from
   `resolved_inputs_redacted.json` unless a future explicit debug-only gate is added. Reports MAY
   render `parameters.resolved_inputs_sha256` and an evidence reference for operator triage.
 
 ### Principal context
 
-The per-run principal context artifact (`runner/principal_context.json`) is an evidence-tier
-artifact and MUST be treated as sensitive by default.
-
-Rationale: principal context may reveal environment identity details (example: account naming,
-domain membership, role session semantics) that are not necessary for most shared reports and may
-increase sharing risk.
+Principal identity evidence is sensitive and must avoid leaking usernames/SIDs/session identifiers
+unless explicitly allowed and redacted-safe.
 
 Normative requirements:
 
-- The pipeline MUST apply the effective redaction policy to principal context contents before
-  writing the artifact to standard run bundle locations.
-- Principal context MUST NOT contain secrets (credentials, tokens, private keys, session material).
-- Identity artifacts (including any identity probe summaries/fingerprints recorded in
-  `principal_context.json`) MUST be redaction-safe by construction:
-  - Implementations MUST store only a redaction-safe summary suitable for disclosure under the
-    effective redaction policy, and/or a hash-derived fingerprint computed from that summary.
-  - Implementations MUST NOT store raw secret-like material or raw session credentials. If a raw
-    identifier would increase sensitivity (example: usernames, SIDs, emails, access key IDs, role
-    session names), implementations SHOULD prefer hash-derived fingerprints or `kind=unknown`
-    attribution rather than emitting the raw identifier.
-- If the pipeline determines that principal context cannot be made redacted-safe deterministically,
-  it MUST NOT store that content in standard long-term artifact locations.
-  - Implementations MAY quarantine the unredacted content under the run's configured quarantine
-    directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by configuration.
-  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
-    placeholder at `runner/principal_context.json`.
-- When principal context content is quarantined or withheld, the run manifest and reports MUST
-  disclose the affected artifact relative path and the applied handling (withheld or quarantined).
+- The principal context output MUST be stored at `runner/principal_context.json`.
+- Raw principal identifiers (usernames, SIDs, tokens) MUST NOT appear in long-term artifacts unless
+  explicitly allowed by the redaction policy.
+- The artifact MAY include:
+  - Stable typed identifiers (for example, `kind: "user"` and a stable `principal_id` that is a hash
+    or synthetic identifier)
+  - An `action_principal_map[]` keyed by `action_id` and stable ids
+  - A `redacted_fingerprint` field that is explicitly designated as safe by the redaction policy.
+- If the pipeline determines the principal context cannot be made redacted-safe:
+  - The pipeline MUST NOT store that content in the standard long-term artifact locations.
+  - Implementations MAY write the unredacted content under the run's configured quarantine directory
+    when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
+  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
+    bundle).
+  - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
+    artifact at `runner/principal_context.json` conforming to "Placeholder artifacts" (including
+    required `reason_code`, and `sha256` when allowed).
+- When principal context is quarantined or withheld, the run manifest and reports MUST disclose the
+  affected artifact relative path and the applied handling (`withheld` or `quarantined`).
 
 ### Side-effect ledger
 
-The per-action side-effect ledger (`runner/actions/<action_id>/side_effect_ledger.json`) is an
-evidence-tier artifact and MUST be treated as sensitive by default.
+Side-effect tracking may include filesystem paths, environment-derived details, or cleanup
+operations that contain sensitive artifacts.
 
 Normative requirements:
 
-- The pipeline MUST apply the effective redaction policy to ledger contents before writing the
-  ledger to standard run bundle locations.
-- The ledger MUST redact secrets (tokens, passwords, private keys, bearer credentials) and other
-  redaction policy matches deterministically.
-- If the pipeline determines that the ledger contains raw credential material that cannot be made
-  redacted-safe deterministically, it MUST NOT store that ledger content in standard long-term
-  artifact locations.
-  - Implementations MAY quarantine the unredacted ledger content under the run's configured
-    quarantine directory (default: `runs/<run_id>/unredacted/`) when quarantining is allowed by
-    configuration.
-  - Otherwise, implementations MUST withhold the unredacted content and write a deterministic
-    placeholder at `runner/actions/<action_id>/side_effect_ledger.json`.
-- When ledger content is quarantined or withheld, the run manifest and reports MUST disclose the
-  affected artifact relative path and the applied handling (withheld or quarantined).
+- The side-effect ledger MUST be stored at `runner/side_effects.json`.
+- Side-effect entries MUST avoid storing raw secrets. If a side-effect involves secret material, the
+  entry MUST record `reason_code` only, and MAY include a redacted-safe `sha256` only when allowed
+  by the effective redaction policy.
+- If the pipeline determines the side-effect ledger cannot be made redacted-safe:
+  - The pipeline MUST NOT store that content in the standard long-term artifact locations.
+  - Implementations MAY write the unredacted content under the run's configured quarantine directory
+    when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
+  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
+    bundle).
+  - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
+    artifact at `runner/side_effects.json` conforming to "Placeholder artifacts" (including required
+    `reason_code`, and `sha256` when allowed).
+- If the ledger contains raw credential material, it MUST be withheld or quarantined (never stored
+  in standard long-term artifact locations).
+- When side-effect ledger is quarantined or withheld, the run manifest and reports MUST disclose the
+  affected artifact relative path and the applied handling (`withheld` or `quarantined`).
 
 ### State reconciliation
 
 State reconciliation compares recorded action effects (side-effect ledger and cleanup verification)
 against observed environment state to detect drift.
 
-Guardrails (normative):
+Guardrails:
 
-- Default posture MUST be observe-only. Reconciliation probes MUST be read-only and MUST NOT mutate
-  target assets.
-- Destructive reconciliation (repair) MUST be disabled by default.
-  - v0.1: repair is out of scope; implementations MUST NOT attempt destructive repair actions as
-    part of reconciliation.
-- If a scenario requests a reconciliation policy of `repair` (see the scenario model), the runner
-  MUST refuse to run reconciliation in repair mode unless an explicit global configuration gate is
-  enabled. The gate MUST be defined in the configuration reference before repair is supported.
-- Allowlist constraints (for any future repair-capable mode):
-  - A repair attempt MUST be limited to an explicit allowlist of reconciliation items derived from
-    the run bundle (for example by `check_id` and/or `ledger_seq`).
-  - Repair MUST NOT discover or enumerate targets beyond what is explicitly recorded in the
-    side-effect ledger and/or cleanup verification results for that action.
-  - Repair MUST be scoped to the action's resolved `target_asset_id` (cross-asset mutation is
-    prohibited).
-- Fail-closed semantics:
-  - If the runner cannot prove a deterministic, bounded, and allowlisted repair plan for an item, it
-    MUST NOT attempt repair and MUST fail closed for reconciliation (record
-    `runner.state_reconciliation` as failed with `reason_code=reconcile_failed`).
-  - When reconciliation fails closed, the runner MUST still write a reconciliation report with
-    `status=unknown` or `status=skipped` items, and MUST include a stable `reason_code` per item
-    explaining the refusal.
+- Default posture MUST be observe-only:
+  - Observe-only mode MAY check for leftover artifacts and compare to expected cleanup actions.
+  - Observe-only mode MUST NOT delete or mutate artifacts on the system.
+- Destructive reconciliation (“repair”) MUST be disabled by default.
+- v0.1: repair is out of scope. Implementations MUST NOT attempt destructive repair actions as part
+  of reconciliation.
+- If the scenario requests reconciliation policy of `repair`:
+  - v0.1 behavior MUST be observe-only (checks still execute).
+  - The runner MUST NOT "skip everything" solely due to the request; instead, any per-check repair
+    intent MUST be blocked and recorded deterministically as `status: "skipped"` with
+    `reason_code: "repair_blocked"` in the reconciliation report for that check.
+  - The overall `runner.state_reconciliation` outcome SHOULD reflect the observe-only execution
+    result (for example `success` if checks ran; `warn`/`failed` only for actual observe-only
+    failures or safety violations).
+- Any allowed repair mode (v0.2+ only) MUST:
+  - Be constrained to a strict allowlist of safe operations (delete known temp files, stop known
+    services).
+  - Produce a deterministic plan before executing.
+  - Record a before/after evidence set.
+  - Fail closed if the plan cannot be proven safe.
+
+Failure handling:
+
+- If reconciliation observes unexpected residue, it MUST report it deterministically and SHOULD set
+  the `runner.state_reconciliation` outcome to `warn` unless the residue implies safety violation.
+- If a repair mode is enabled (v0.2+) and repair cannot be performed deterministically, the runner
+  MUST NOT attempt repair and MUST fail closed with `reason_code=reconcile_failed`.
 
 ### Cache provenance
 

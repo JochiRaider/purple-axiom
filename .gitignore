@@ -40,7 +40,7 @@ Thumbs.db
 
 # Logs
 #*.log
-logs/
+#logs/
 
 # Data
 data/
@@ -61,7 +61,7 @@ secrets/
 ExecPlan.md
 
 # Telemetry
-telemetry/
+# telemetry/
 events/
 
 # Docker

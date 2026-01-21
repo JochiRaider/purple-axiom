@@ -1,0 +1,53 @@
+{
+  "contract_version": "0.1.0",
+  "profile_id": "windows_endpoint_v0_1",
+  "profile_version": "0.1.0",
+  "description": "Minimal Windows endpoint telemetry baseline for validation runs.",
+  "profiles": [
+    {
+      "profile_id": "windows_endpoint_default",
+      "priority": 100,
+      "selector": {
+        "os": "windows",
+        "role": "endpoint"
+      },
+      "required_signals": [
+        {
+          "signal_id": "win_app_any",
+          "source_type": "windows_eventlog",
+          "min_count": 1,
+          "match": {
+            "channel": "Application"
+          }
+        },
+        {
+          "signal_id": "win_sec_any",
+          "source_type": "windows_eventlog",
+          "min_count": 1,
+          "match": {
+            "channel": "Security"
+          }
+        },
+        {
+          "signal_id": "win_sys_any",
+          "source_type": "windows_eventlog",
+          "min_count": 1,
+          "match": {
+            "channel": "System"
+          }
+        },
+        {
+          "signal_id": "sysmon_proc_create",
+          "source_type": "windows_eventlog",
+          "min_count": 1,
+          "match": {
+            "channel": "Microsoft-Windows-Sysmon/Operational",
+            "provider": "Microsoft-Windows-Sysmon",
+            "event_id": 1
+          }
+        }
+      ]
+    }
+  ]
+}
+

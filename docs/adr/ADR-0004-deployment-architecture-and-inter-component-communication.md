@@ -209,7 +209,7 @@ Orchestrator (one-shot, run host)
   |
   |-- [lab_provider] resolve inventory snapshot -> publish inventory artifact -> record stage outcome
   |
-  |-- [runner.environment_config] (optional) record environment configuration boundary -> logs/** -> record substage outcome
+  |-- [runner.environment_config] (optional) preflight/readiness gate: validate resources + config invariants + required collectors/log sources -> logs/** -> record substage outcome
   |
   |-- [runner] execute scenario actions -> write ground_truth.jsonl + runner/actions/<action_id>/** -> record stage outcome
   |

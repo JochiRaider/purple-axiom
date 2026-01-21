@@ -213,24 +213,28 @@ Over time, the target is to reduce fallback rate by expanding normalized fields.
 
 Non-executable `reason_code` values (normative, v0.1):
 
+These values MUST be recorded in compiled plan files under `non_executable_reason.reason_code`.
+
 Routing and mapping:
 
-- `unrouted_logsource` (no router entry for the rule `logsource`)
-- `unmapped_field` (Sigma field cannot be resolved to an OCSF path or backend expression)
-- `raw_fallback_disabled` (an unmapped field was encountered and `raw.*` fallback was not permitted)
-- `ambiguous_field_alias` (alias resolution is not uniquely determined for the routed scope)
+- `unrouted_logsource`: Sigma `logsource` matches no router entry.
+- `unmapped_field`: Sigma field has no alias mapping.
+- `raw_fallback_disabled`: Rule requires `raw.*` but fallback disabled.
+- `ambiguous_field_alias`: Alias resolution ambiguous for routed scope.
 
 Expression support:
 
-- `unsupported_operator` (Sigma operator cannot be represented in the selected backend)
-- `unsupported_modifier` (Sigma modifier cannot be represented in the selected backend)
-- `unsupported_value_type` (value type is unsupported for the operator and field expression)
-- `unsupported_regex` (regex use is unsupported or disallowed by backend policy)
+- `unsupported_operator`: Operator not in supported subset.
+- `unsupported_modifier`: Modifier cannot be expressed (cidr, base64, windash, etc.).
+- `unsupported_value_type`: Value type incompatible with operator.
+- `unsupported_regex`: Regex use is unsupported or disallowed by backend policy.
+- `unsupported_correlation`: Correlation / multi-event semantics are out of scope for v0.1.
+- `unsupported_aggregation`: Aggregation semantics are out of scope for v0.1.
 
 Backend execution:
 
-- `backend_compile_error` (backend failed to compile a valid executable plan)
-- `backend_eval_error` (backend failed during evaluation)
+- `backend_compile_error`: Backend compiler error.
+- `backend_eval_error`: Backend runtime evaluation error.
 
 ## 3) Evaluator backend adapter
 
@@ -297,8 +301,8 @@ routing) and [test strategy CI: integration tests](100_test_strategy_ci.md#integ
   - If the backend is `duckdb_sql`, the compiled plan MUST also record:
     - `backend.settings.threads` (integer)
     - `backend.settings.timezone` (string; MUST be `UTC` unless explicitly configured)
-- **Explained failure modes**: non-executable rules MUST include a stable, machine-readable
-  `reason_code` and a human-readable explanation.
+- **Explained failure modes**: non-executable compiled plans MUST include a stable, machine-readable
+  `non_executable_reason.reason_code` and a human-readable explanation in `non_executable_reason`.
 
 ### Backend adapter contract (normative, v0.1)
 
@@ -317,7 +321,8 @@ the evaluator backend adapter. It is authoritative for:
      `bridge/compiled_plans/<rule_id>.plan.json` (see “Bridge artifacts in the run bundle”).
    - A compiled plan MUST either:
      - be executable (contains backend-specific executable content), or
-     - be explicitly non-executable (contains `reason_code` and an explanation).
+     - be explicitly non-executable (contains `non_executable_reason` with a stable `reason_code`
+       and a human-readable explanation).
 
 1. Fail-closed semantics:
 
@@ -496,17 +501,21 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
 
 #### Non-executable classification mapping (normative)
 
-The adapter MUST select the most specific applicable reason:
+Failure reporting: when a rule cannot be compiled, the adapter MUST record a Non-executable compiled
+plan entry with a stable `non_executable_reason.reason_code` and deterministic explanation string.
+At a minimum, the following mappings MUST apply:
 
-- No router match for `logsource` -> `unrouted_logsource`
-- Alias resolution missing -> `unmapped_field` (or `raw_fallback_disabled` when applicable)
-- Alias resolution ambiguous -> `ambiguous_field_alias`
-- Operator not in supported subset -> `unsupported_operator`
-- Modifier not in supported subset -> `unsupported_modifier`
-- Regex encountered (v0.1 default) -> `unsupported_regex`
-- Value type incompatible with operator -> `unsupported_value_type`
-- Backend compilation exception -> `backend_compile_error`
-- Backend execution exception -> `backend_eval_error`
+- Unknown logsource -> unrouted_logsource
+- Unmapped Sigma field (no alias + fallback disabled) -> unmapped_field
+- Raw fallback required but disabled -> raw_fallback_disabled
+- Unsupported modifier -> unsupported_modifier
+- Unsupported operator -> unsupported_operator
+- Unsupported value type -> unsupported_value_type
+- Regex rejected by backend policy (for example non-RE2 constructs) -> unsupported_regex
+- Correlation / multi-event semantics encountered -> unsupported_correlation
+- Aggregation semantics encountered -> unsupported_aggregation
+- Backend compiler exception -> backend_compile_error
+- Backend evaluation error -> backend_eval_error
 
 ## Bridge artifacts in the run bundle
 
@@ -555,9 +564,10 @@ Detection instances SHOULD include bridge metadata in `extensions.bridge`:
 - `mapping_pack_version`
 - `backend`
 - `compiled_at_utc`
-- `fallback_used`
-- `unmapped_sigma_fields` (when applicable)
-- `non_executable_reason` (when applicable)
+- `fallback_used` (boolean)
+- `ignored_modifiers` (array of strings)
+- `unmapped_sigma_fields` (array of strings)
+- `non_executable_reason` (object) when \`executable=false
 
 Also store the original Sigma logsource under `extensions.sigma.logsource` (verbatim) when
 available.

@@ -42,7 +42,7 @@ Conformance requirements (v0.1):
 
 - Every run MUST record the effective `ocsf_version` used for normalization in run provenance.
   - Minimum: `normalized/mapping_profile_snapshot.json.ocsf_version`.
-  - RECOMMENDED: also record in `manifest.json` (see the
+  - RECOMMENDED: also record in `manifest.json` as `normalization.ocsf_version` (see the
     [data contracts spec](025_data_contracts.md) recommended manifest additions).
 - When Sigma-to-OCSF Bridge artifacts are present, the bridge mapping pack MUST declare the same
   `ocsf_version` as the normalizer output for that run. A mismatch MUST be treated as an
@@ -76,17 +76,22 @@ Required steps for changing the pinned OCSF version (normative):
 ## Mapping strategy (industry-aligned)
 
 - Preserve source fidelity:
-  - retain original or raw payload (or a redacted-safe representation) for audit and forensics
+  - retain original or raw payload (or a redacted-safe representation / reference) for audit and
+    forensics, subject to `normalization.raw_preservation` and the
+    [redaction policy ADR](../adr/ADR-0003-redaction-policy.md)
   - route unmapped fields into an explicit `raw` object so nothing is silently dropped
+    - `raw` is a Purple Axiom extension (Tier R) and is not required to be OCSF-conformant
+    - values placed under `raw` MUST be redaction-safe for standard long-term artifact locations
     - `unmapped` MAY be used for derived fields that could not be mapped after routing, but `raw` is
       the canonical location for retaining the source payload
-- preserve the synthetic correlation marker in the normalized envelope even when the base event is
+- Preserve the synthetic correlation marker in the normalized envelope even when the base event is
   unmapped:
-  - if the source record carries a synthetic correlation marker, the normalizer MUST copy it into
-    `metadata.synthetic_correlation_marker` on the emitted OCSF envelope
+  - if the source record carries `metadata.extensions.purple_axiom.synthetic_correlation_marker`,
+    the normalizer MUST preserve it verbatim at the same path on the emitted envelope
+  - the synthetic correlation marker MUST NOT be used as part of `metadata.event_id` computation
   - if the record is otherwise unrouted/unmapped, the normalizer MUST still emit a minimal OCSF
-    envelope record (see "Required envelope for normalized events") and retain the original payload
-    under `raw` (marker-bearing records MUST NOT be dropped as "unmapped noise")
+    envelope record (see "Required envelope (Purple Axiom contract)") and retain the payload per the
+    source-fidelity rules above (marker-bearing records MUST NOT be dropped as "unmapped noise")
   - for marker-bearing records where no OCSF `class_uid` can be assigned from routing/mapping, the
     normalizer MUST NOT guess a `class_uid`; it MUST set `class_uid = 0` (reserved "unmapped") and
     MUST count the record as unmapped in `normalized/mapping_coverage.json`
@@ -99,14 +104,32 @@ Required steps for changing the pinned OCSF version (normative):
 
 ## Required envelope (Purple Axiom contract)
 
-- `time` (UTC)
+The minimum envelope requirements for normalized events are defined in the
+[data contracts spec](025_data_contracts.md) and the Tier 0 core field tier definition in the
+[OCSF field tiers spec](055_ocsf_field_tiers.md). The following fields MUST be present on every
+normalized event (keys MAY be null only where explicitly noted).
+
+- `time` (ms since epoch, UTC)
 - `class_uid`
+- `metadata.uid` (MUST equal `metadata.event_id`)
 - `metadata.event_id` (stable, deterministic)
 - `metadata.run_id`
 - `metadata.scenario_id`
 - `metadata.collector_version`
 - `metadata.normalizer_version`
 - `metadata.source_type`
+- `metadata.source_event_id` (source-native upstream ID when meaningful; else null)
+- `metadata.identity_tier` (1 | 2 | 3; see the
+  [event identity ADR](../adr/ADR-0002-event-identity-and-provenance.md))
+
+Optional envelope extensions (v0.1):
+
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string)
+
+Vendor-field rule (normative):
+
+- New project-owned envelope extension fields MUST be added under `metadata.extensions.purple_axiom`
+  (not as new `metadata.*` siblings).
 
 ## Osquery normalization (v0.1)
 
@@ -120,12 +143,20 @@ be driven by the osquery scheduled query name:
   - `process_events` -> Process Activity (`class_uid: 1007`)
   - `file_events` -> File System Activity (`class_uid: 1001`)
   - `socket_events` -> Network Activity (`class_uid: 4001`)
+- v0.1 envelope conventions (osquery):
+  - `metadata.identity_tier = 3`
+  - `metadata.source_event_id = null`
+  - `metadata.time_precision = "s"`
 
 Unrouted behavior:
 
 - The normalizer MUST NOT guess a `class_uid` for an unknown `query_name`.
 - Unknown `query_name` rows MUST be preserved in `raw/` and MUST be counted in
   `normalized/mapping_coverage.json` as unrouted or unmapped.
+- If an unknown `query_name` row carries
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker`, the normalizer MUST still emit a
+  minimal normalized event record with `class_uid = 0` and the required envelope fields per
+  "Required envelope (Purple Axiom contract)".
 
 Implementation details and conformance fixtures are specified in the
 [osquery integration spec](042_osquery_integration.md).
@@ -138,6 +169,25 @@ When normalization is enabled and produces an OCSF event store, the normalizer M
   fixtures)
 - `normalized/mapping_profile_snapshot.json` (required)
 - `normalized/mapping_coverage.json` (required)
+
+### Deduplication and replay
+
+Normalization and storage MUST be idempotent with respect to `metadata.event_id` (dedupe key).
+
+Normative requirements (v0.1):
+
+- Deduplication MUST be enforced for the normalized event store within a single run bundle.
+- Deduplication MUST be based on `metadata.event_id`.
+- When `normalization.dedupe.enabled=true`, the normalizer MUST persist a durable dedupe index under
+  `logs/dedupe_index/` (run-relative; configurable via `normalization.dedupe.index_dir`).
+- On restart for the same `run_id`, if the dedupe index is missing or corrupt but the normalized
+  store already contains rows, the normalizer MUST rebuild the dedupe index by scanning
+  `metadata.event_id` from the existing normalized store before appending any new rows.
+- Dedupe conflict handling MUST be deterministic. If two non-identical instances share the same
+  `metadata.event_id`, the normalizer MUST treat this as a data-quality signal and MUST select the
+  canonical instance deterministically (see the
+  [event identity ADR](../adr/ADR-0002-event-identity-and-provenance.md) for the canonical selection
+  rule).
 
 Regression comparable normalization metric inputs (normative):
 
@@ -160,11 +210,24 @@ Purpose:
 Requirements (normative):
 
 - MUST validate against `mapping_profile_snapshot.schema.json`.
-- MUST record the pinned `ocsf_version` and a `mapping_profile_sha256` (hash over mapping material).
-- `mapping_profile_sha256` MUST be computed over stable mapping inputs and MUST NOT include
-  run-specific fields.
-- MUST include per-source-type mapping material hashes, so changes are detectable without parsing
-  large raw datasets.
+- MUST record the pinned `ocsf_version`.
+- MUST include `mapping_profile_id`, `mapping_profile_version`, and `mapping_profile_sha256`.
+- MUST include per-source mapping material hashes as `source_profiles[].mapping_material_sha256`.
+
+Hashing (normative):
+
+- `mapping_material_sha256` MUST be SHA-256 over the canonical JSON serialization of the embedded
+  `mapping_material` object (or, if only `mapping_files[]` are provided, over the canonical JSON
+  list of `{path,sha256}` entries).
+- `mapping_profile_sha256` MUST be SHA-256 over a canonical JSON object containing only stable
+  inputs:
+  - `ocsf_version`
+  - `mapping_profile_id`
+  - `mapping_profile_version`
+  - `source_profiles[]` projected to `{source_type, profile, mapping_material_sha256}`
+- The hash basis MUST NOT include run-specific fields (`run_id`, `scenario_id`, `generated_at_utc`).
+- `source_profiles[]` MUST be deterministically ordered (sort by `source_type` ascending, UTF-8 byte
+  order, no locale).
 
 ### Mapping coverage
 
@@ -190,17 +253,18 @@ Deterministic computation rules (normative):
 - Any per-source arrays or maps emitted by `normalized/mapping_coverage.json` that are used for
   regression comparisons MUST be deterministically ordered:
   - Sort by `source_type` ascending (UTF-8 byte order, no locale).
-- Any rates or percentages emitted in comparable metric surfaces MUST be rounded to 4 decimal places
-  using round-half-up semantics.
+- Any rates, ratios, or `_pct` metrics emitted in comparable metric surfaces MUST be rounded to 4
+  decimal places using round-half-up semantics.
 
 Regression comparable normalization metrics (normative):
 
 At minimum, normalization MUST expose the following comparable metrics for regression analysis:
 
-- Tier 1 field coverage percent (overall), derived from `normalized/mapping_coverage.json` and
-  computed over the in-scope normalized events as defined in the OCSF field tiers spec.
-- Per-source Tier 1 field coverage percent, keyed by `metadata.source_type` values and derived from
-  `normalized/mapping_coverage.json`.
+- `tier1_field_coverage_pct` (overall; unitless fraction in `[0.0, 1.0]`), derived from
+  `normalized/mapping_coverage.json` and computed over the in-scope normalized events as defined in
+  the OCSF field tiers spec.
+- Per-source `tier1_field_coverage_pct` (same units), keyed by `metadata.source_type` values and
+  derived from `normalized/mapping_coverage.json`.
 
 These comparable metrics MUST be attributable to a specific mapping profile via
 `mapping_profile_sha256` so mapping drift can be distinguished from telemetry drift
@@ -227,13 +291,19 @@ deterministically.
 
 ## Validation strategy
 
-- Tier 1 (CI gate): validate against Purple Axiom envelope contract + invariants.
+- Tier 0 (CI gate): validate normalized events against the Purple Axiom envelope contract
+  (`ocsf_event_envelope.schema.json`) and required invariants (stable identity, required fields, and
+  deterministic time representation).
+- Tier 1 (CI gate): compute Tier 1 field coverage from `normalized/mapping_coverage.json` per the
+  OCSF field tiers spec and enforce configured regression gates.
 - Tier 2 (deep validation): validate selected classes or sources against pinned OCSF schema
   artifacts.
 - Tier 3 (storage): enforce Parquet schema + partitioning + deterministic ordering for long-term
   storage.
+- Tier R (CI gate): enforce redaction-safe raw retention policy for any material placed under
+  `raw.*` in normalized events.
 - Regression fixture (normative):
-  - Add a fixture where normalized events exist but Tier 1 coverage declines.
+  - Add a fixture where normalized events exist but Tier 1 field coverage declines.
   - Expected: classification is normalization layer, with `evidence_refs[]` including
     `normalized/mapping_coverage.json`.
   - Fixture design MUST drive a deterministic change in Tier 1 coverage by adjusting normalized
@@ -272,6 +342,7 @@ deterministically.
 
 ## Changelog
 
-| Date | Change                                       |
-| ---- | -------------------------------------------- |
-| TBD  | Style guide migration (no technical changes) |
+| Date      | Change                                       |
+| --------- | -------------------------------------------- |
+| 1/20/2026 | feature updates                              |
+| TBD       | Style guide migration (no technical changes) |

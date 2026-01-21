@@ -115,22 +115,26 @@ Sigma evaluation is a two-stage process.
 
 A rule is classified as **non-executable** when the bridge cannot produce a valid backend plan.
 Non-executable rules are recorded in `bridge/compiled_plans/<rule_id>.plan.json` with
-`executable: false` and a stable `reason_code`.
+`executable: false` and a stable `non_executable_reason.reason_code`.
+
+The `non_executable_reason` object MUST also include a human-readable explanation.
 
 ### Reason codes (normative)
 
-| Reason code              | Category      | Description                                               |
-| ------------------------ | ------------- | --------------------------------------------------------- |
-| `unrouted_logsource`     | Routing       | Sigma `logsource` matches no router entry                 |
-| `unmapped_field`         | Field alias   | Sigma field has no alias mapping                          |
-| `raw_fallback_disabled`  | Field alias   | Rule requires `raw.*` but fallback is disabled            |
-| `ambiguous_field_alias`  | Field alias   | Alias resolution is ambiguous for the routed scope        |
-| `unsupported_modifier`   | Sigma feature | Modifier cannot be expressed in the backend               |
-| `unsupported_operator`   | Sigma feature | Operator not in supported subset                          |
-| `unsupported_regex`      | Sigma feature | Regex uses PCRE-only constructs (v0.1 default for `\|re`) |
-| `unsupported_value_type` | Sigma feature | Value type incompatible with operator                     |
-| `backend_compile_error`  | Backend       | Backend compilation failed                                |
-| `backend_eval_error`     | Backend       | Backend evaluation failed at runtime                      |
+| Reason code               | Category      | Description                                                                            |
+| ------------------------- | ------------- | -------------------------------------------------------------------------------------- |
+| `unrouted_logsource`      | Routing       | Sigma `logsource` matches no router entry                                              |
+| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                       |
+| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                         |
+| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                     |
+| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                            |
+| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                       |
+| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (RE2-only in v0.1 for `\|re`) |
+| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                  |
+| `unsupported_correlation` | Sigma feature | Correlation rules are out of scope for v0.1                                            |
+| `unsupported_aggregation` | Sigma feature | Aggregation semantics are out of scope for v0.1 (default backend: `duckdb_sql`)        |
+| `backend_compile_error`   | Backend       | Backend compilation failed                                                             |
+| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                   |
 
 Non-executable rules do not produce detection instances but are included in bridge coverage
 reporting and contribute to gap classification.
@@ -141,13 +145,14 @@ semantics.
 #### Gap category mapping for non-executable rules (normative):
 
 When a rule is marked non-executable, the detection/scoring pipeline MUST classify downstream gaps
-using the scoring taxonomy. The minimum required mapping is:
+using the scoring taxonomy. The minimum required mapping (from compiled plan
+`non_executable_reason.reason_code`) is:
 
-| Reason code group                                                                             | Gap category         |
-| --------------------------------------------------------------------------------------------- | -------------------- |
-| `unrouted_logsource`, `unmapped_field`, `raw_fallback_disabled`, `ambiguous_field_alias`      | `bridge_gap_mapping` |
-| `unsupported_modifier`, `unsupported_operator`, `unsupported_regex`, `unsupported_value_type` | `bridge_gap_feature` |
-| `backend_compile_error`, `backend_eval_error`                                                 | `bridge_gap_other`   |
+| Reason code group                                                                                                                                   | Gap category         |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `unrouted_logsource`, `unmapped_field`, `raw_fallback_disabled`, `ambiguous_field_alias`                                                            | `bridge_gap_mapping` |
+| `unsupported_modifier`, `unsupported_operator`, `unsupported_regex`, `unsupported_value_type`, `unsupported_correlation`, `unsupported_aggregation` | `bridge_gap_feature` |
+| `backend_compile_error`, `backend_eval_error`                                                                                                       | `bridge_gap_other`   |
 
 ### Fail-closed behavior
 
@@ -320,7 +325,7 @@ Detection instances MUST validate against
 
 | Field               | Type   | Description                                      |
 | ------------------- | ------ | ------------------------------------------------ |
-| `rule_id`           | string | Sigma rule UUID                                  |
+| `rule_id`           | string | Sigma rule identifier (typically a UUID)         |
 | `rule_title`        | string | Sigma rule title                                 |
 | `rule_source`       | string | Always `"sigma"` for Sigma-originated detections |
 | `run_id`            | string | Run identifier                                   |
@@ -372,12 +377,14 @@ the normative taxonomy defined in [Scoring metrics](070_scoring_metrics.md).
 
 Detection-related gap categories:f
 
-| Category             | Description                                                   |
-| -------------------- | ------------------------------------------------------------- |
-| `bridge_gap_mapping` | OCSF fields exist but bridge lacks aliases or router entries  |
-| `bridge_gap_feature` | Rule requires unsupported Sigma features (correlation, regex) |
-| `bridge_gap_other`   | Bridge failure not otherwise classified                       |
-| `rule_logic_gap`     | Fields present, rule executable, but rule did not fire        |
+Detection-related gap categories:
+
+| Category             | Description                                                                |
+| -------------------- | -------------------------------------------------------------------------- |
+| `bridge_gap_mapping` | OCSF fields exist but bridge lacks aliases or router entries               |
+| `bridge_gap_feature` | Rule requires unsupported Sigma features (correlation, aggregation, regex) |
+| `bridge_gap_other`   | Bridge failure not otherwise classified                                    |
+| `rule_logic_gap`     | Fields present, rule executable, but rule did not fire                     |
 
 Evidence pointer requirements (normative intent):
 
@@ -403,7 +410,7 @@ Sigma correlation rules (multi-event sequences, temporal conditions, aggregation
 are **out of scope for v0.1**.
 
 Rules containing `correlation` blocks MUST be marked non-executable with
-`reason_code: "unsupported_correlation"`.
+`non_executable_reason.reason_code: "unsupported_correlation"`.
 
 ### Aggregation functions
 
@@ -411,7 +418,7 @@ Sigma aggregation keywords (`count`, `sum`, `avg`, `min`, `max`, `near`) are **o
 v0.1** unless the backend explicitly supports them.
 
 The DuckDB backend (`duckdb_sql`) does not support aggregation in v0.1. Rules requiring aggregation
-MUST be marked non-executable with `reason_code: "unsupported_aggregation"`.
+MUST be marked non-executable with `non_executable_reason.reason_code: "unsupported_aggregation"`.
 
 ### Timeframe modifiers
 

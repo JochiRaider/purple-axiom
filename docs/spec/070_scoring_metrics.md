@@ -17,7 +17,13 @@ for v0.1 while keeping evaluation deterministic and auditable.
 - Action instance: a run-scoped execution instance (`action_id`).
   - v0.1: legacy `s<positive_integer>`.
   - v0.2+: deterministic `pa_aid_v1_<32hex>` (see data contracts).
-- Detection: a rule hit mapped to `run_id` + `technique_id`
+- Detection: a rule hit recorded in `detections/detections.jsonl` as a detection instance.
+  - Required identifiers: `run_id`, `rule_id`.
+  - Required time bounds: `first_seen_utc`, `last_seen_utc`.
+  - Required evidence linkage: `matched_event_ids` (OCSF `metadata.event_id` values).
+  - `technique_ids` SHOULD be present when the rule provides ATT&CK tags; technique coverage joins
+    MUST ignore detections without any technique ids (see
+    [Detection Rules (Sigma)](060_detection_sigma.md)).
 
 ### Normalization coverage gate (Tier 1 Core Common)
 
@@ -31,18 +37,24 @@ run as schema-invalid.
 The pipeline **MUST** compute:
 
 - `tier1_field_coverage_pct` as defined in the
-  [OCSF field tiers specification](055_ocsf_field_tiers.md)
+  [OCSF field tiers specification](055_ocsf_field_tiers.md).
+  - Unit: unitless fraction in `[0.0, 1.0]` (despite `_pct`, it is not `0-100`).
 - `tier1_field_coverage_state` in `{ ok, below_threshold, indeterminate_no_events }`
-- `tier1_field_coverage_threshold_pct` (default `0.80`)
+- `tier1_field_coverage_threshold_pct` (unitless fraction in `[0.0, 1.0]`), derived from
+  `scoring.thresholds.min_tier1_field_coverage` (default `0.80`).
 
 #### Gate rule
 
-Let `T = tier1_field_coverage_threshold_pct` (default 0.80).
+Let `T = tier1_field_coverage_threshold_pct` (default `0.80`).
 
-- If `tier1_field_coverage_pct` is `null` with state `indeterminate_no_events`, then run status
-  **MUST** be `partial`.
+- If `tier1_field_coverage_state = indeterminate_no_events`, then run status **MUST** be `partial`.
 - Else if `tier1_field_coverage_pct < T`, then run status **MUST** be `partial`.
 - Else, this gate does not downgrade the run.
+
+Invariant:
+
+- `tier1_field_coverage_pct` MUST be `null` if and only if
+  `tier1_field_coverage_state = indeterminate_no_events`.
 
 #### Interaction with run status
 
@@ -62,6 +74,38 @@ themselves, cause schema conformance failure.
 CI conformance gates **MUST** fail the pipeline for `failed`. CI policies **SHOULD** surface
 `partial` prominently (for example, as a failing check in strict mode, or as a warning in default
 mode), since it changes operator expectations and the interpretability of scoring pivots.
+
+## Metric surface (normative)
+
+This section defines naming, units, denominators, and determinism requirements for metrics emitted
+by the scoring stage and consumed by reporting and regression.
+
+### Naming and units
+
+- Metric identifiers (`metric_id`) MUST be stable strings.
+- Any metric id suffixed with `_pct` or `_rate` MUST be a unitless fraction in `[0.0, 1.0]`.
+  - Producers MUST NOT emit `0-100` percentage values in machine-readable artifacts.
+- `*_seconds` metrics MUST be durations in seconds.
+
+### Denominators
+
+Unless otherwise specified, the scoring stage MUST compute and emit these denominators in
+`scoring/summary.json`:
+
+- `executed_actions_total`: count of action instances whose `lifecycle.execute.phase_outcome` is not
+  `"skipped"` in `ground_truth.jsonl`.
+- `executed_techniques_total`: count of distinct `technique_id` values across the executed actions.
+
+When a denominator is zero, any derived `rate` metric that would divide by that denominator MUST be
+emitted as `null` with `indeterminate_reason="not_applicable"`.
+
+### Deterministic ordering
+
+Unless a contract states otherwise, any arrays emitted in `scoring/summary.json` MUST be
+deterministically ordered. Sorting MUST use UTF-8 byte order with no locale collation.
+
+Note: Canonical rounding for regression comparables and deltas is defined in "Deterministic
+comparison semantics (normative)".
 
 ## Primary metrics (seed)
 
@@ -123,32 +167,28 @@ metrics suitable for deterministic cross-run diffs.
 Definitions:
 
 - "baseline": a prior run selected for comparison.
-- "current": the run being evaluated.
-- "comparable metric": a metric with stable identifier, type, and unit that can be diffed between
-  baseline and current.
+- "candidate": the run being evaluated.
+- "comparable metric": a metric with stable identifier, kind, and unit that can be diffed between
+  baseline and candidate.
 
 Normative requirements:
 
-- Comparable metrics MUST be derived from `scoring/summary.json` only.
+- The comparable metric surface for a run MUST be fully materialized in `scoring/summary.json`.
+  Reporting and regression computations MUST read comparable metric values from
+  `scoring/summary.json` and MUST NOT recompute them from upstream artifacts.
 - Comparable metrics MUST be emitted deterministically (stable rounding and stable ordering).
-- If a comparable metric cannot be computed, it MUST be recorded as `null` and accompanied by a
-  deterministic `indeterminate_reason` token.
+- If a comparable metric cannot be computed for a run, it MUST be recorded as `null` and accompanied
+  by a deterministic `indeterminate_reason` token.
 - Implementations MUST NOT omit a metric from the comparable metric surface due to configuration
   (for example, disabled gap categories). Instead, the metric MUST be present with value `null` and
   `indeterminate_reason="excluded_by_config"`.
 
-Indeterminate reasons (normative):
+Indeterminate reasons for per-run metric values (normative):
 
 - `not_applicable`: the metric does not apply to the run (feature disabled, pack not enabled, or no
   eligible denominator).
 - `excluded_by_config`: the metric is part of the comparable surface but is suppressed by explicit
   configuration; emitted as `null` to preserve stable metric identifiers for regression.
-- `taxonomy_mismatch`: the metric depends on a configured gap taxonomy (for example, inclusion or
-  aggregation over a selected set), and baseline/current runs used different effective taxonomy
-  selections; emitted as `null` to preserve stable metric identifiers and deterministic regression
-  semantics.
-- `incomparable_pins`: regression delta computation is not permitted because baseline/current runs
-  are not comparable (see Deterministic comparison semantics below).
 
 Scoring summary metadata (recommended):
 
@@ -171,18 +211,28 @@ configurations.
     `scoring.gap_taxonomy` exclusions).
 
 - If an implementation represents per-gap-category values as a table (rather than distinct
-  `metric_id` values), the table MUST be a stable row set:
+  `metric_id` values), the table MUST be a stable row set with exactly one row per canonical
+  `gap_category` token, in the following canonical order (v0.1, closed set):
 
-  - One row per canonical `gap_category` token in the v0.1 taxonomy (see "Primary metrics (seed)" →
-    "Pipeline health"), in that canonical order.
-  - Each row MUST include: `gap_category`, `value` (number or null), and `indeterminate_reason`
-    (string or null).
+  1. `missing_telemetry`
+  1. `criteria_unavailable`
+  1. `criteria_misconfigured`
+  1. `normalization_gap`
+  1. `bridge_gap_mapping`
+  1. `bridge_gap_feature`
+  1. `bridge_gap_other`
+  1. `rule_logic_gap`
+  1. `cleanup_verification_failed`
+
+  Each row MUST include: `gap_category`, `value` (number or null), and `indeterminate_reason`
+  (string or null).
 
 Effective taxonomy recording (normative):
 
 - `scoring/summary.json` MUST record the effective gap taxonomy used for any metrics that aggregate
   "over categories" (for example, totals computed over a configured subset).
-  - Required: `meta.effective_gap_taxonomy` as an ordered list of included `gap_category` tokens.
+  - Required: `meta.effective_gap_taxonomy` as an ordered list of included `gap_category` tokens in
+    the canonical order defined above.
   - Optional: `meta.effective_gap_taxonomy_sha256` as SHA-256 over the RFC 8785 canonical JSON
     encoding of `meta.effective_gap_taxonomy` (UTF-8). The value MUST be a lowercase hex string.
 
@@ -205,7 +255,8 @@ Example (non-normative): stable emission for excluded categories
       "bridge_gap_mapping",
       "bridge_gap_feature",
       "bridge_gap_other",
-      "rule_logic_gap"
+      "rule_logic_gap",
+      "cleanup_verification_failed"
     ],
     "effective_gap_taxonomy_sha256": "<hex>"
   },
@@ -219,6 +270,41 @@ Example (non-normative): stable emission for excluded categories
       "gap_category": "criteria_unavailable",
       "value": null,
       "indeterminate_reason": "excluded_by_config"
+    },
+    {
+      "gap_category": "criteria_misconfigured",
+      "value": null,
+      "indeterminate_reason": "excluded_by_config"
+    },
+    {
+      "gap_category": "normalization_gap",
+      "value": 0.0125,
+      "indeterminate_reason": null
+    },
+    {
+      "gap_category": "bridge_gap_mapping",
+      "value": 0.0833,
+      "indeterminate_reason": null
+    },
+    {
+      "gap_category": "bridge_gap_feature",
+      "value": 0.2500,
+      "indeterminate_reason": null
+    },
+    {
+      "gap_category": "bridge_gap_other",
+      "value": 0.0000,
+      "indeterminate_reason": null
+    },
+    {
+      "gap_category": "rule_logic_gap",
+      "value": 0.1875,
+      "indeterminate_reason": null
+    },
+    {
+      "gap_category": "cleanup_verification_failed",
+      "value": 0.0000,
+      "indeterminate_reason": null
     }
   ]
 }
@@ -265,23 +351,41 @@ Regression delta computation MUST be deterministic and reproducible across platf
 
 Comparability prerequisites (normative):
 
-- Regression deltas MUST be computed only when reporting-level comparability checks pass.
+- Regression deltas MUST be computed only when reporting-level comparability checks are not
+  indeterminate.
+
   - Implementations MUST treat `report/report.json.regression.comparability.status="indeterminate"`
-    as not comparable.
-- When runs are not comparable (comparability is indeterminate):
-  - Implementations MUST NOT emit a computed numeric delta for any comparable metric.
-  - Implementations SHOULD emit one delta row per `metric_id` in the comparable surface with
-    `delta=null` and `indeterminate_reason="incomparable_pins"`.
-  - Implementations MAY alternatively emit an empty delta table, but MUST do so deterministically
-    and MUST NOT interpret the absence of a row as `delta=0`.
+    as not comparable (no deltas computed).
+  - Implementations MAY compute deltas when `comparability.status` is `comparable` or `warning`.
+
+- When runs are not comparable (`comparability.status="indeterminate"`):
+
+  - Implementations MUST NOT emit computed numeric deltas for any comparable metric.
+  - The regression delta surface MUST emit an empty `deltas[]` array (`[]`) deterministically.
+  - Implementations MUST NOT interpret the absence of delta rows as `delta=0`.
+
+Delta entry indeterminate reasons (normative):
+
+- When `comparability.status` is `comparable` or `warning`, a delta entry MAY still be
+  indeterminate. In that case, the delta surface MUST use only the following `indeterminate_reason`
+  tokens:
+  - `not_applicable`
+  - `excluded_by_config`
+  - `taxonomy_mismatch`
+
+Per-metric indeterminate rules (normative):
+
+- If a metric is `not_applicable` in either baseline or candidate (i.e., `value=null` with
+  `indeterminate_reason="not_applicable"`), the delta entry MUST be indeterminate with
+  `indeterminate_reason="not_applicable"`.
 - When a metric is excluded by configuration:
-  - If the metric is excluded in both baseline and current runs, `delta` MUST be `null` with
+  - If the metric is excluded in both baseline and candidate runs, `delta` MUST be `null` with
     `indeterminate_reason="excluded_by_config"`.
-  - If the metric is excluded in exactly one of baseline or current runs, `delta` MUST be `null`
+  - If the metric is excluded in exactly one of baseline or candidate runs, `delta` MUST be `null`
     with `indeterminate_reason="taxonomy_mismatch"`.
 - When a metric’s definition depends on the effective included set (for example, aggregates computed
-  over `meta.effective_gap_taxonomy`), and baseline/current `meta.effective_gap_taxonomy` values are
-  not identical, `delta` MUST be `null` with `indeterminate_reason="taxonomy_mismatch"`.
+  over `meta.effective_gap_taxonomy`), and baseline/candidate `meta.effective_gap_taxonomy` values
+  are not identical, `delta` MUST be `null` with `indeterminate_reason="taxonomy_mismatch"`.
 
 Canonical rounding:
 
@@ -291,7 +395,7 @@ Canonical rounding:
 
 Delta rules:
 
-- Delta MUST be computed as `current_value - baseline_value` after canonical rounding.
+- Delta MUST be computed as `candidate_value - baseline_value` after canonical rounding.
 - For `count`, delta MUST be an integer difference.
 - For `rate` and `duration_seconds`, delta MUST be the rounded numeric difference.
 
@@ -305,22 +409,23 @@ Default tolerances (v0.1):
 
 Stable ordering:
 
-- Any regression delta table MUST be sorted by `metric_id` ascending (ASCII byte order).
+- Any Any regression delta table MUST be sorted by `metric_id` ascending (UTF-8 byte order, no
+  locale).
 
 ### Verification hooks (regression comparability)
 
 CI MUST include fixtures that validate regression delta determinism under comparability failures:
 
 - Pins differ but scoring metrics are otherwise valid:
-  - Setup: baseline and current runs produce valid `scoring/summary.json`, but at least one required
-    `manifest.versions.*` pin differs (for example, `mapping_pack_version`).
-  - Expected: regression deltas MUST be indeterminate and MUST use
-    `indeterminate_reason="incomparable_pins"` (or the implementation’s documented deterministic
-    alternate shape, such as an empty delta table).
+  - Setup: baseline and candidate runs produce valid `scoring/summary.json`, but at least one
+    required `manifest.versions.*` pin differs (for example, `mapping_pack_version`).
+  - Expected: `report/report.json.regression.comparability.status` MUST be `indeterminate` and
+    `report/report.json.regression.deltas[]` MUST be an empty array (`[]`).
 - Excluded category does not cause omission instability:
-  - Setup: a gap category metric is excluded by configuration in both baseline and current.
-  - Expected: the comparable metric identifier MUST remain present in the delta surface, and delta
-    MUST be indeterminate with `indeterminate_reason="excluded_by_config"` (not silently omitted).
+  - Setup: a gap category metric is excluded by configuration in both baseline and candidate.
+  - Expected: the comparable `metric_id` MUST remain present in the delta surface when
+    `comparability.status` is `comparable` or `warning`, and the delta entry MUST be indeterminate
+    with `indeterminate_reason="excluded_by_config"` (not silently omitted).
 
 ## Methodology inspiration
 
@@ -334,20 +439,23 @@ gating and score computation.
 
 ### Reason code to gap category mapping (normative)
 
-The scoring stage MUST map compiled plan `reason_code` values to gap categories as follows:
+The scoring stage MUST map compiled plan `non_executable_reason.reason_code` values to gap
+categories as follows:
 
-| `reason_code` (from compiled plan) | Gap Category         | Notes                                                                                           |
-| ---------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
-| `unmapped_field`                   | `bridge_gap_mapping` | Field alias missing in mapping pack                                                             |
-| `unroutable_logsource`             | `bridge_gap_mapping` | No router entry for Sigma logsource                                                             |
-| `raw_fallback_disabled`            | `bridge_gap_mapping` | Rule needs raw.\* but policy disallows                                                          |
-| `ambiguous_field_alias`            | `bridge_gap_mapping` | Multiple conflicting aliases                                                                    |
-| `unsupported_regex`                | `bridge_gap_feature` | Regex pattern or options rejected by policy (RE2-only; PCRE-only constructs are Non-executable) |
-| `unsupported_modifier`             | `bridge_gap_feature` | Modifier (base64, windash, etc.) not supported                                                  |
-| `unsupported_operator`             | `bridge_gap_feature` | Operator semantics not implementable                                                            |
-| `unsupported_value_type`           | `bridge_gap_feature` | Value type incompatible with operator                                                           |
-| `backend_compile_error`            | `bridge_gap_other`   | Unexpected compilation failure                                                                  |
-| `backend_eval_error`               | `bridge_gap_other`   | Runtime evaluation failure                                                                      |
+| `non_executable_reason.reason_code` (from compiled plan) | Gap Category         | Notes                                                                                           |
+| -------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
+| `unmapped_field`                                         | `bridge_gap_mapping` | Field alias missing in mapping pack                                                             |
+| `unrouted_logsource`                                     | `bridge_gap_mapping` | No router entry for Sigma logsource                                                             |
+| `raw_fallback_disabled`                                  | `bridge_gap_mapping` | Rule needs raw.\* but policy disallows                                                          |
+| `ambiguous_field_alias`                                  | `bridge_gap_mapping` | Multiple conflicting aliases                                                                    |
+| `unsupported_modifier`                                   | `bridge_gap_feature` | Modifier (base64, windash, etc.) not supported                                                  |
+| `unsupported_operator`                                   | `bridge_gap_feature` | Operator semantics not implementable                                                            |
+| `unsupported_value_type`                                 | `bridge_gap_feature` | Value type incompatible with operator                                                           |
+| `unsupported_regex`                                      | `bridge_gap_feature` | Regex pattern or options rejected by policy (RE2-only; PCRE-only constructs are Non-executable) |
+| `unsupported_correlation`                                | `bridge_gap_feature` | Correlation / multi-event semantics out of scope                                                |
+| `unsupported_aggregation`                                | `bridge_gap_feature` | Aggregation semantics out of scope                                                              |
+| `backend_compile_error`                                  | `bridge_gap_other`   | Unexpected compilation failure                                                                  |
+| `backend_eval_error`                                     | `bridge_gap_other`   | Runtime evaluation failure                                                                      |
 
 Unknown reason codes MUST be classified as `bridge_gap_other` and SHOULD trigger a warning log.
 
@@ -396,7 +504,8 @@ Minimum evidence pointer set by measurement layer (normative):
 
 - telemetry:
   - MUST include `logs/health.json`.
-  - SHOULD include telemetry validation artifacts under `telemetry/` when present.
+  - SHOULD include `logs/telemetry_validation.json` when telemetry validation is enabled and the
+    artifact is present.
 - normalization:
   - MUST include `normalized/mapping_coverage.json`.
 - detection:
@@ -432,7 +541,7 @@ scoring:
     # Normalization quality gate (already defined above)
     min_tier1_field_coverage: 0.80
 
-   # Gap budgets (rates in [0.0, 1.0])
+    # Gap budgets (rates in [0.0, 1.0])
     max_missing_telemetry_rate: 0.10
     max_normalization_gap_rate: 0.05
 
@@ -473,11 +582,13 @@ Golden regression fixture (normative):
 
 - [OCSF field tiers specification](055_ocsf_field_tiers.md)
 - [Sigma to OCSF bridge specification](065_sigma_to_ocsf_bridge.md)
+- [Detection rules (Sigma) specification](060_detection_sigma.md)
 - [Test strategy CI specification](100_test_strategy_ci.md)
 
 ## Changelog
 
 | Date       | Change                                                       |
 | ---------- | ------------------------------------------------------------ |
+| 2026-01-21 | Consistency fixes: status naming, regression delta semantics |
 | 2026-01-18 | Regression comparable surface and measurement-layer contract |
 | 2026-01-12 | Formatting update                                            |

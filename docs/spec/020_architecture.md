@@ -131,7 +131,7 @@ Verb definitions (v0.1):
     [ADR-0004: Deployment architecture and inter-component communication][adr-0004]).
   - Intent: perform a complete run and produce a complete run bundle.
   - When environment configuration is enabled, the orchestrator MUST record an additive `runner`
-    substage `runner.environment_config` before any action enters the `execute` lifecycle phase.
+    substage `runner.environment_config` before any action enters the `prepare` lifecycle phase.
   - When regression comparison is enabled, `simulate` MUST treat any pre-existing artifacts under
     `inputs/**` as read-only. See "Run bundle (coordination plane)" for baseline reference
     materialization semantics.
@@ -414,6 +414,12 @@ Environment configuration boundary (normative, v0.1):
   [operability specification][operability-spec]).
 - Environment configuration is distinct from per-action requirements evaluation in `prepare`. It
   MUST NOT change the semantics of per-action lifecycle outcomes.
+
+Preflight / Readiness Gate:
+
+- Run before scenario execution.
+- Validate resources + config invariants + required collectors/log sources.
+- Emit a health substage outcome for quick triage.
 
 Responsibilities:
 

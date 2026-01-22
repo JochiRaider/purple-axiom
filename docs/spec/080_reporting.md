@@ -201,6 +201,7 @@ The HTML report MUST include the following sections. JSON equivalents SHOULD be 
 The report MUST include:
 
 - Run name, timestamp, and overall status
+- Scenario posture (`baseline` vs `assumed_compromise`)
 - Top-line technique coverage (`coverage_pct` rendered as a percentage)
 - EPS (events/sec), total events
 - Total actions executed, succeeded, failed
@@ -1115,6 +1116,9 @@ The `report/report.json` output MUST conform to the following structure:
   "executive_summary": {
     "scenario_id": "<string>",
     "scenario_version": "<string>",
+    "scenario_posture": {
+      "mode": "baseline | assumed_compromise"
+    },    
     "techniques_executed": 10,
     "techniques_covered": 8,
     "coverage_pct": 0.80,

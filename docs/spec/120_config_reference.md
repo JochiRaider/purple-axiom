@@ -418,12 +418,36 @@ Additional Purple Axiom staging policy (applies during raw Parquet writing and o
 extraction):
 
 - `payload_limits` (optional)
+  - Staging-time size limits applied during raw Parquet writing and optional sidecar extraction (see
+    `040_telemetry_pipeline.md` and `045_storage_formats.md`).
   - `max_event_xml_bytes` (optional, default: 1048576)
+    - Maximum UTF-8 byte length for inlining Windows Event Log `event_xml` in
+      `raw_parquet/windows_eventlog/`.
+    - When the payload exceeds this limit, the writer MUST truncate deterministically and MUST write
+      the full payload to a deterministically addressed sidecar blob when sidecar retention is
+      enabled (see `045_storage_formats.md` “Raw payload sizing and sidecars” and “Sidecar blob
+      store”).
   - `max_field_chars` (optional, default: 262144)
+    - Maximum character length for any single promoted string field at staging time (deterministic
+      truncation bound).
   - `max_binary_bytes` (optional, default: 262144)
+    - Maximum decoded byte length for extracted binary payloads written to sidecar (oversize decoded
+      payloads must not be externalized; record a deterministic summary instead).
   - `sidecar` (optional)
     - `enabled` (optional, default: true)
-    - `dir` (optional, default: `${telemetry.payload_limits.sidecar.dir}/${metadata.event_id}/`)
+      - When `true`, oversize payloads MUST be externalized using the deterministic sidecar
+        addressing scheme defined by `045_storage_formats.md` (event-specific directory +
+        `field_path_hash`).
+      - When `false`, implementations MUST NOT emit a truncated payload representation that violates
+        the raw Windows Event Log overflow constraints in `045_storage_formats.md`. Concretely:
+        implementations MUST either (a) avoid truncation by configuration, or (b) fail closed on
+        overflow.
+    - `dir` (optional, default: `raw/evidence/blobs/wineventlog/`)
+      - Relative directory under the run bundle root used as the sidecar prefix.
+      - Sidecar objects MUST be addressed deterministically beneath this prefix using:
+        - `event_id_dir` (filesystem-safe directory derived from `metadata.event_id`), and
+        - `field_path_hash` (filename stem), as defined by `045_storage_formats.md` “Sidecar blob
+          store”.
 - `native_container_exports` (optional)
   - v0.1 policy (normative):
     - The pipeline MUST NOT require native container exports. Pipeline correctness MUST NOT depend

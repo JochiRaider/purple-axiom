@@ -114,6 +114,10 @@ unredacted into plan artifacts; see `ADR-0003-redaction-policy.md` and `025_data
   - `action_key` (stable across runs; join key for regression)
 - **Plan**: A user-facing specification that selects templates and declares expansion and execution
   semantics.
+- **Scenario posture**: A run-level planning context that captures the assumed compromise state at
+  run start (for example `baseline` vs `assumed_compromise`). Posture is declared in scenario YAML
+  (`posture.mode`) and MUST be recorded in compiled plan artifacts (`scenario_posture.mode`) for
+  auditability and regression grouping. Posture MUST NOT embed secrets.
 - **Plan graph**: The compiled internal representation (nodes + edges) that the runner executes.
 - **Expansion coordinate**: A structured coordinate attached to a node that records which expanded
   dimensions produced the node (for example target and variable axes). In this document the field is
@@ -242,6 +246,7 @@ The compiler MUST materialize a run-scoped view of all plan inputs required for 
 as:
 
 - the scenario plan document (as provided),
+- the effective scenario posture (`posture.mode`; default: `baseline`),
 - the inventory snapshot and any selector results,
 - execution definition sources (Atomic/Caldera/custom),
 - any optional index packs.
@@ -519,6 +524,8 @@ plan_graph:
   run_id: "<run_id>"
   scenario_id: "<scenario_id>"
   scenario_version: "<scenario_version>"
+  scenario_posture:
+    mode: "baseline" # baseline | assumed_compromise  
   generated_at_utc: "2026-01-15T20:12:00Z"
   plan_type: "matrix" # or "atomic", "sequence", "campaign", "adaptive" (reserved)
 

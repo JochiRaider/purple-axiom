@@ -27,6 +27,51 @@ to `runs/<run_id>/`).
 - Scenarios should target assets via stable selectors (`asset_ids`, `tags`, `roles`), then the
   provider resolves those selectors to concrete hosts for the run.
 
+## Operational posture
+
+Scenarios MAY declare a **posture** that describes the assumed compromise state of the environment
+and attacker foothold at the start of the run. Posture is a planning input (v0.2+) and a reporting
+dimension; it is intentionally distinct from:
+
+- `safety`: safety constraints and lab enforcement controls, and
+- `plan.execution.principal_alias`: the non-secret alias the runner uses to select an execution
+  principal for the action(s).
+
+### `posture`
+
+Minimal shape:
+
+- `posture.mode` (string enum; optional; default: `baseline`)
+
+Allowed values (closed set):
+
+- `baseline`: Assume no prior attacker foothold. Plans MAY include techniques representing initial
+  compromise and post-compromise activity.
+- `assumed_compromise`: Assume an attacker foothold already exists at run start. Plans SHOULD focus
+  on post-compromise techniques (credential access, discovery, lateral movement, persistence) and
+  MUST NOT rely on pre-compromise assumptions unless explicitly modeled by the plan.
+
+Normative requirements:
+
+- If `posture` is omitted, the runner MUST treat the effective posture as `baseline`.
+- If `posture.mode` is present and is not one of the allowed values above, the runner MUST fail
+  closed before execution with `reason_code="invalid_posture_mode"`.
+- `posture` MUST be non-secret. It MUST NOT include credentials, tokens, usernames, hostnames, IPs,
+  or any other sensitive identifiers.
+- Changing `posture.mode` changes scenario semantics. Scenario authors MUST bump `scenario_version`
+  when changing posture.
+
+Reserved (v0.1):
+
+- Additional keys under `posture` are reserved for future versions and MUST NOT be relied on until
+  they are specified and schema-backed.
+
+Provenance (normative):
+
+- The runner MUST record the effective posture in the run manifest (`manifest.scenario.posture`).
+- When the plan execution model is enabled (v0.2+), the compiler MUST also record the effective
+  posture in `plan/expanded_graph.json` (`scenario_posture` at the graph root).
+
 ## Scenario types
 
 v0.1 support (normative):
@@ -544,6 +589,8 @@ scenario_id: "scn-2026-01-001"
 scenario_version: "0.1.0"
 name: "Atomic T1059.001 Powershell"
 description: "Basic PowerShell execution and related telemetry"
+posture:
+  mode: "assumed_compromise"
 safety:
   allow_network: false
 targets:
@@ -706,6 +753,8 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
 
 - Scenarios define what to execute while lab providers resolve concrete targets.
 - v0.1 supports atomic test plans and treats other scenario types as reserved.
+- Scenario posture is expressed via `posture.mode` and is recorded in run provenance for planning
+  and reporting.
 - Action identity is derived from `action_key_basis_v1` using RFC 8785 canonicalization.
 - Target selection must be deterministic when selectors match multiple assets.
 

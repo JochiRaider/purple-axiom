@@ -581,6 +581,12 @@ Key semantics:
 
 - `scenario.scenario_id` is the stable scenario identifier for the run.
 
+- `scenario.posture` records the effective scenario posture declared by the scenario input.
+
+  - `mode` (string enum; default: `baseline`): `baseline | assumed_compromise`
+  - Producers MUST treat posture as non-secret and MUST NOT record credentials, tokens, usernames,
+    hostnames, IPs, or other sensitive identifiers in posture fields.
+
 - v0.1 run bundles MUST be single-scenario. Multi-scenario manifests are reserved for a future
   release.
 
@@ -1613,6 +1619,12 @@ Required invariants:
    - `ground_truth.scenario_id` for every line
    - `normalized.metadata.scenario_id` for every event
    - `summary.scenario_id`
+1. Scenario posture (v0.2+ when implemented):
+   - If `manifest.scenario.posture` is present, `manifest.scenario.posture.mode` MUST be one of:
+     `baseline | assumed_compromise`.
+   - When `plan/expanded_graph.json` is present and includes `scenario_posture`, implementations
+     MUST enforce that `plan/expanded_graph.json.scenario_posture.mode` equals
+     `manifest.scenario.posture.mode`.
 1. Scenario cardinality (v0.1):
    - The set of distinct scenario IDs observed in `ground_truth.scenario_id` across all lines MUST
      contain exactly one value.

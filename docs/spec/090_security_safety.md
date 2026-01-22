@@ -486,4 +486,5 @@ Normative requirements:
 
 | Date       | Change            |
 | ---------- | ----------------- |
+| 2026-01-20 | update            |
 | 2026-01-12 | Formatting update |

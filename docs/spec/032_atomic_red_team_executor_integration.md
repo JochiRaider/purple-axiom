@@ -29,11 +29,16 @@ cross-run comparability.
 This document is additive and MUST be read alongside:
 
 - [Data contracts spec](025_data_contracts.md) for hashing, `parameters.resolved_inputs_sha256`, run
-  bundle layout, and command integrity fields
-- [Scenario model spec](030_scenarios.md) for stable `action_key` basis and Atomic Test Plan
-  scenarios
-- [Validation criteria spec](035_validation_criteria.md) for cleanup verification semantics and
-  reason codes
+  bundle layout, runner evidence artifact semantics, and ground-truth evidence pointer requirements
+- [Scenario model spec](030_scenarios.md) for stable `action_key` basis, lifecycle phase semantics,
+  and Atomic Test Plan scenarios
+- [Validation criteria spec](035_validation_criteria.md) for cleanup verification semantics
+- [Storage formats spec](045_storage_formats.md) for run bundle layout and artifact naming
+  conventions
+- [Configuration reference](120_config_reference.md) for `runner.atomic.*` feature gates and
+  defaults
+- [State machines ADR](../adr/ADR-0007-state-machines.md) for lifecycle state machine integration
+  and recovery semantics
 - [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md) for deterministic redaction
   requirements
 
@@ -47,7 +52,7 @@ the runner MUST map Atomic semantics to lifecycle phases as follows:
 
 | Atomic semantic                                         | Lifecycle phase | Notes                                                                                      |
 | ------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------ |
-| Dependency evaluation (`check_prereq_command`)          | `prepare`       | Warm-up checks are `prepare` even when no changes are made.                                |
+| Dependency evaluation (`prereq_command`)                | `prepare`       | prereqs transcript + executor evidence prereqs block                                       |
 | Dependency fetch (`get_prereq_command`)                 | `prepare`       | Any prerequisite materialization is recorded as `prepare`.                                 |
 | Primary command invocation (`executor.command`)         | `execute`       | The detonation attempt.                                                                    |
 | Cleanup command invocation (`executor.cleanup_command`) | `revert`        | Undo detonation side-effects to enable a safe re-run.                                      |
@@ -71,21 +76,45 @@ Idempotence (normative):
 
 ## Runner-enforced lifecycle guards (normative)
 
-The runner MUST enforce the lifecycle transition rules defined in the scenario model and the
-ground-truth lifecycle semantics defined in the data contracts spec.
+The runner MUST enforce the lifecycle order and phase applicability constraints defined in the
+scenario model spec. Ground truth lifecycle records MUST include the phase order:
 
-Minimum guard set (normative):
+`prepare -> execute -> revert -> teardown`
 
-- Invalid transitions MUST be blocked deterministically:
-  - The runner MUST NOT attempt `revert` (Atomic cleanup command invocation) unless an `execute`
-    phase was attempted for the same action instance in the current run.
-    - When `revert` would otherwise be attempted (for example, because cleanup invocation is
-      enabled), the runner MUST instead record a `revert` phase record with
-      `phase_outcome="skipped"` and `reason_code="invalid_lifecycle_transition"`, and MUST NOT
-      invoke `executor.cleanup_command`.
-  - The runner MUST NOT attempt `teardown` work that depends on artifacts that were not produced.
-    - If cleanup behavior is suppressed (see below), the runner MUST record `teardown` as
-      `phase_outcome="skipped"` with `reason_code="cleanup_suppressed"`.
+and phases that are not attempted MUST be recorded as `phase_outcome=skipped` with a stable
+`reason_code`.
+
+Guard conditions (normative):
+
+1. Cleanup suppression (policy, not an error)
+
+- If effective `plan.cleanup=false`, the runner MUST NOT attempt `revert` or cleanup-dependent
+  `teardown` work for the action.
+- Ground truth MUST record `revert.phase_outcome=skipped` and `teardown.phase_outcome=skipped` with
+  `reason_code=cleanup_suppressed`.
+
+2. Prior-phase blocked (normal lifecycle short-circuit, not an error)
+
+- If `execute` was not attempted for an action instance (for example: requirements caused `prepare`
+  to be skipped, or `execute` was skipped/failed before invocation), the runner MUST NOT attempt
+  `revert`.
+- In this case, if cleanup is otherwise enabled, ground truth MUST record
+  `revert.phase_outcome=skipped` with `reason_code=prior_phase_blocked`.
+
+3. Invalid lifecycle transition (true violation)
+
+- The runner MUST reserve `reason_code=invalid_lifecycle_transition` for explicit/forced lifecycle
+  transition requests that violate the allowed transitions (e.g., external resume/orchestrator
+  asking to run `revert` for an action instance that has no `execute` attempt record and is not
+  explainable by `prior_phase_blocked` or `cleanup_suppressed` semantics).
+
+Rerun safety:
+
+- If a run is restarted and an action is detected as already executed but not reverted, the runner
+  MUST:
+  - block unsafe reruns if `runner.atomic.rerun.block_if_not_reverted=true` and emit
+    `reason_code = unsafe_rerun_blocked`
+  - otherwise, mark action as already executed and proceed to cleanup if allowed
 
 Re-run safety refusal (normative):
 
@@ -146,45 +175,59 @@ identity-bearing materials.
 
 ## Contracted runner artifacts
 
-Run-level runner evidence is stored under:
-
-- `runs/<run_id>/runner/`
-
-The runner MUST write the following run-level artifacts:
-
-- `principal_context.json` (required; typed principal identity context for the run)
-
-Per-action evidence is stored under:
+The normative list of contracted runner evidence artifacts for `engine="atomic"` actions is defined
+in [Contracted runner artifacts (normative)](#contracted-runner-artifacts-normative).
 
 Action id semantics (normative):
 
-- v0.1: `action_id` MUST be the legacy ordinal identifier `s<positive_integer>` (example: `s1`).
+- `action_id` is a run-scoped correlation key. It MUST be unique within the run and MUST NOT be used
+  for cross-run comparisons.
+- v0.1 (single-action atomic plans): implementations MUST emit legacy ordinal identifiers of the
+  form `s<positive_integer>` (example: `s1`).
+- v0.2+ (plan execution model): `action_id` MUST use the deterministic action instance id format
+  defined in the data contracts spec (example shape: `pa_aid_v1_<32hex>`).
 
-- v0.2+: `action_id` MUST be the deterministic action instance id defined in the
-  [data contracts spec](025_data_contracts.md) and MUST match `pa_aid_v1_<32hex>`.
+## Contracted runner artifacts (normative)
 
-- `runs/<run_id>/runner/actions/<action_id>/`
+Runner evidence is stored under:
 
-The following files are RECOMMENDED by the [storage formats spec](045_storage_formats.md) and are
-REQUIRED by this contract when the corresponding feature is enabled:
+- Run-scoped runner evidence:
 
-- `stdout.txt` (required when execution is attempted)
-- `stderr.txt` (required when execution is attempted)
-- `executor.json` (required for all attempted executions and cleanup runs)
-- `side_effect_ledger.json` (required; append-only side-effect ledger for recovery)
-- `prereqs_stdout.txt` (required when prerequisites are evaluated)
-- `prereqs_stderr.txt` (required when prerequisites are evaluated)
-- `attire.json` (required when Invoke-AtomicRedTeam structured logging is enabled, see below)
-- `atomic_test_extracted.json` (required when Atomic template snapshotting is enabled, see
-  [Atomic template snapshot](#atomic-template-snapshot))
-- `atomic_test_source.yaml` (optional; see [Atomic template snapshot](#atomic-template-snapshot))
-- `cleanup_stdout.txt` (required when cleanup is invoked)
-- `cleanup_stderr.txt` (required when cleanup is invoked)
+  - `runs/<run_id>/runner/principal_context.json` (required)
+
+- Action-scoped runner evidence:
+
+  - `runs/<run_id>/runner/actions/<action_id>/`
+
+The following per-action files are RECOMMENDED by the storage formats spec and are REQUIRED by this
+contract for `engine="atomic"` actions. Items marked "when ..." are feature-gated as noted:
+
+- `executor.json` (required; execution metadata)
+- `stdout.txt` and `stderr.txt` (required; process output transcripts)
+- `cleanup_stdout.txt` and `cleanup_stderr.txt` (required when cleanup is invoked)
+- `atomic_test_extracted.json` (required when `runner.atomic.template_snapshot.mode != off`)
+- `atomic_test_source.yaml` (required when `runner.atomic.template_snapshot.mode = source`)
+  - YAML bytes used for selection (post-fetch), written as UTF-8 (no BOM) with LF newlines
+    (deterministically normalized).
+- `resolved_inputs_redacted.json` (required; may be a deterministic placeholder when content is
+  withheld or quarantined)
+  - Redaction-safe resolved inputs object as defined in the data contracts spec.
+  - MUST include `resolved_inputs_redacted` and `resolved_inputs_sha256` when content is present.
+- `requirements_evaluation.json` (required when requirements evaluation is performed)
+  - Summary MUST be copied into ground truth (see
+    [Requirements evaluation](#requirements-evaluation)).
+- `prereqs_stdout.txt` and `prereqs_stderr.txt` (required when prerequisite commands are executed)
+- `side_effect_ledger.json` (required; append-only)
 - `cleanup_verification.json` (required when cleanup verification is enabled)
-- `state_reconciliation_report.json` (required when state reconciliation is enabled)
+- `state_reconciliation_report.json` (required when reconciliation is enabled)
+- `attire.json` (required)
+  - Structured execution record from ATTiRe / Attire-ExecutionLogger.
+- `attire_import_report.json` (required when `attire.json` is imported)
 
-The runner MUST also emit ground truth timeline entries as specified in the
-[data contracts spec](025_data_contracts.md).
+All contract-backed JSON evidence artifacts under `runner/actions/<action_id>/` MUST include the
+runner evidence JSON header pattern (`contract_version`, `run_id`, `action_id`, `action_key`,
+`generated_at_utc`) and MUST validate against their corresponding schemas per the data contracts
+spec.
 
 ### Synthetic correlation marker emission (optional; when enabled)
 
@@ -392,15 +435,19 @@ Normalized command-bearing fields (when present) MUST preserve list order exactl
 - If list, preserve list order exactly.
 - Empty strings MUST be rejected (fail closed with reason code `empty_command`).
 
-### Supported platform gate
+### Supported platform gate (normative)
 
-If `supported_platforms` is present, the runner MUST evaluate it against the target asset OS family
-as resolved from the run-scoped inventory snapshot (see
-[Inventory snapshot consumption](#inventory-snapshot-consumption)).
+If `supported_platforms` is present in Atomic YAML, the runner MUST treat it as a platform
+requirement input to requirements evaluation.
 
-- If the action's target platform is not supported, the runner MUST emit `skipped` with reason code
-  `unsupported_platform`.
-- The runner MUST NOT attempt execution on unsupported platforms.
+If the target OS family (from the run-scoped inventory snapshot) is not included in
+`supported_platforms`, the runner MUST:
+
+- record the unmet platform requirement in both:
+  - `requirements_evaluation.json`, and
+  - the action’s `requirements` object in `ground_truth.jsonl` (per data contracts spec)
+- set the action `prepare` phase `phase_outcome=skipped` with `reason_code=unsupported_platform`
+- MUST NOT attempt prerequisites evaluation or `execute` for the action
 
 ### Action requirements (permissions and environment assumptions)
 
@@ -465,6 +512,18 @@ For identity-bearing materials, the effective requirements object MUST be canoni
 
 #### Identity embedding into resolved inputs (normative)
 
+Principal alias embedding (normative):
+
+- The runner MUST include the effective principal alias used for the action in the identity-bearing
+  resolved inputs map prior to redaction and hashing by adding a reserved top-level key:
+  - `__pa_principal_alias_v1`: <effective principal alias string>
+- This injection MUST occur even when the effective requirements object is empty.
+- The effective principal alias is selected per the scenario model:
+  - v0.1: `plan.execution.principal_alias` (or the runner default when absent)
+  - v0.2+: `actions[].execution.principal_alias` (or the runner default when absent)
+
+Requirements embedding (normative):
+
 When the effective requirements object is non-empty, the runner MUST include it in the
 identity-bearing resolved inputs map prior to redaction and hashing by adding a reserved top-level
 key:
@@ -473,8 +532,9 @@ key:
 
 Reserved key collision handling:
 
-- If the precedence-merged input map contains a key named `__pa_action_requirements_v1`, the runner
-  MUST fail closed with reason code `reserved_input_key_collision`.
+- If the scenario input map already includes the reserved key `__pa_principal_alias_v1` or
+  `__pa_action_requirements_v1`, the runner MUST fail closed with
+  `reason_code=reserved_input_key_collision`.
 
 ## Target resolution and remote execution
 
@@ -489,19 +549,21 @@ inventory snapshot produced by the lab provider stage (see the
 
 Source of truth (v0.1):
 
-- `runs/<run_id>/logs/lab_inventory_snapshot.json`
+- Source of truth for target resolution is `runs/<run_id>/logs/lab_inventory_snapshot.json` (see
+  architecture spec and lab provider spec).
 
-Resolution rules (normative):
+Resolution rules:
 
-1. Parse `lab_inventory_snapshot.json` as JSON.
-1. Locate the target asset in `lab.assets[]` where `asset_id == target_asset_id`.
-   - If no match exists, the runner MUST fail closed with reason code `target_asset_not_found`.
-   - If multiple matches exist, the runner MUST fail closed with reason code
-     `target_asset_id_not_unique`.
-1. Determine `connection_address`:
-   - If `ip` is present and non-empty, use `ip`.
-   - Else if `hostname` is present and non-empty, use `hostname`.
-   - Else the runner MUST fail closed with reason code `target_connection_address_missing`.
+- Locate the target asset in the inventory snapshot `assets[]` where `asset_id == target_asset_id`.
+- The runner MUST use `asset.os` (lowercased) as the target OS family input for supported-platform
+  checks and requirements evaluation.
+- If `asset.ip` is present and non-empty, set `connection_address = asset.ip`.
+- Else if `asset.hostname` is present and non-empty, set `connection_address = asset.hostname`.
+- Else fail closed with `reason_code = target_connection_address_missing`.
+
+The runner SHOULD populate `resolved_target.hostname`, `resolved_target.ip`, and
+`resolved_target.provider_asset_ref` in `ground_truth.jsonl` from the inventory snapshot per
+scenario model spec.
 
 Determinism requirements:
 
@@ -510,12 +572,6 @@ Determinism requirements:
   at execution time.
 - `connection_address` is evidence-only and MUST NOT contribute to `action_key` or identity-bearing
   hashes.
-
-Ground truth enrichment:
-
-- The runner SHOULD populate `resolved_target.hostname`, `resolved_target.ip`, and
-  `resolved_target.provider_asset_ref` in `ground_truth.jsonl` from the inventory snapshot per the
-  [scenario model spec](030_scenarios.md).
 
 ### Invoke-AtomicRedTeam remote mapping
 
@@ -608,31 +664,42 @@ as evidence (see [Executor evidence file](#executor-evidence-file)).
 
 ### Resolved inputs hash
 
-For `engine = "atomic"` actions, `parameters.resolved_inputs_sha256` MUST be computed as specified
-in the [data contracts spec](025_data_contracts.md):
+Goal: stable `action_key` identity and downstream joins.
 
-- `sha256_hex(canonical_json_bytes(resolved_inputs_redacted_canonical))`
+`parameters.resolved_inputs_sha256` MUST be computed as specified in the data contracts spec:
+
+- `"sha256:" + sha256_hex(canonical_json_bytes(resolved_inputs_redacted_canonical))`
 
 Where `resolved_inputs_redacted_canonical` is the resolved input map after:
 
-- precedence merge (see [Input resolution precedence](#input-resolution-precedence))
-- fixed-point resolution (see [Resolved input fixed point](#resolved-input-fixed-point))
-- environment-dependent path canonicalization to `$ATOMICS_ROOT` (see
-  [Canonicalization of environment-dependent Atomics paths](#canonicalization-of-environment-dependent-atomics-paths))
-- effective requirements embedding under `__pa_action_requirements_v1` (see
-  [Action requirements (permissions and environment assumptions)](#action-requirements-permissions-and-environment-assumptions))
-- redaction (see [Redaction for hashing](#redaction-for-hashing))
+- Default resolution
+- Runner-supplied overrides
+- Principal alias embedding (reserved key injection)
+- Requirements embedding (reserved key injection, when non-empty)
+- Deterministic redaction
+- Canonical JSON serialization (RFC 8785)
 
-This hash MUST be computable without executing the Atomic test.
+Redaction for hashing:
 
-Optional resolved inputs evidence artifact (schema-backed):
+- Before hashing resolved_inputs, the runner MUST apply deterministic redaction to the resolved
+  inputs object per [ADR-0003](../adr/ADR-0003-redaction-policy.md).
+- Plaintext secrets MUST NOT be stored. Secrets in resolved_inputs MUST be redacted
+  deterministically or replaced with deterministic references.
+- When redaction is enabled, the runner MUST record the redaction policy version and a
+  redaction_summary object into `executor.json` (see
+  [Redaction status in executor.json](#redaction-status-in-executorjson)).
 
-- When the runner emits a resolved inputs evidence artifact, it MUST write:
-  - `runs/<run_id>/runner/actions/<action_id>/resolved_inputs_redacted.json`
-- The artifact MUST be redaction-safe and MUST include:
-  - `resolved_inputs_redacted`: the exact `resolved_inputs_redacted_canonical` object used as the
-    hash basis above
-  - `resolved_inputs_sha256`: the corresponding `sha256:<hex>` value
+Resolved inputs evidence artifact (schema-backed; required):
+
+The runner MUST write a `resolved_inputs_redacted.json` artifact for each `engine="atomic"` action.
+When resolved inputs content can be made redaction-safe deterministically, the artifact MUST
+include:
+
+- `resolved_inputs_redacted`: object (the redacted canonical object used for hashing)
+- `resolved_inputs_sha256`: string (`sha256:<hex>` form) corresponding to
+  `parameters.resolved_inputs_sha256`
+
+Otherwise, the runner MUST still write this file as a deterministic placeholder artifact.
 
 ### Redaction for hashing
 
@@ -785,28 +852,67 @@ set `runner.dependencies.allow_runtime_self_update=true` as part of runner confi
 - The runner MUST record the rejection as a failed stage outcome per ADR-0005.
 - The runner SHOULD use a stable reason code. RECOMMENDED: `disallowed_runtime_self_update`.
 
-### Requirements evaluation (prepare)
+### Requirements evaluation (prepare) (normative)
 
 Before running any prerequisites commands, the runner MUST evaluate the effective requirements
-object for the action (see
-[Action requirements (permissions and environment assumptions)](#action-requirements-permissions-and-environment-assumptions))
-using only read-only probes.
+object for the action using only read-only probes.
 
-- If platform requirements are not satisfied, the runner MUST emit `skipped` with reason code
-  `unsupported_platform`.
-- If privilege requirements are not satisfied, the runner MUST emit `skipped` with reason code
-  `insufficient_privileges`.
-- If tool requirements are not satisfied, the runner MUST emit `skipped` with reason code
-  `missing_tool`.
+Config policy:
 
-When a requirement cannot be evaluated deterministically (example: probe tool not available), the
-runner MUST treat the requirement as unsatisfied unless a configuration gate explicitly allows
-warn-only behavior (defined in the configuration reference).
+- `runner.atomic.requirements.fail_mode`:
+  - `fail_closed` (default): unknown requirement checks MUST be treated as unsatisfied for gating.
+  - `warn_and_skip`: unknown requirement checks MUST remain `unknown` in evidence, but the action
+    MUST still be skipped with `reason_code=requirement_unknown`.
 
-Observability (normative):
+Evidence requirements (v0.1):
 
-- The runner MUST record the effective requirements object and per-check outcomes in
-  machine-readable action evidence (contracted in the [data contracts spec](025_data_contracts.md)).
+- The runner MUST write a schema-backed requirements evaluation artifact to:
+  - `runs/<run_id>/runner/actions/<action_id>/requirements_evaluation.json`
+- The runner MUST copy `requirements.declared`, `requirements.evaluation`, and
+  `requirements.results[]` into the corresponding `ground_truth.jsonl` row (per the data contracts
+  spec).
+- When `requirements_evaluation.json` is produced, the runner MUST attach
+  `evidence.requirements_evaluation_ref` to the `prepare` phase record in ground truth (per the data
+  contracts spec).
+
+Minimum checks:
+
+- Platform check: target asset OS family (from inventory snapshot `assets[].os`) is one of
+  `requirements.platform.os` (and, when present, satisfies Atomic `supported_platforms`).
+- Tool check: each required tool is present on target (or on runner if local execution).
+- Privilege check: principal satisfies requested privilege level (admin/root/sudo).
+- Unknown: If any requirement cannot be evaluated deterministically, mark that check as `unknown`.
+
+Determinism requirements:
+
+- `requirements.declared` MUST be canonicalized:
+  - arrays MUST be lowercased, de-duplicated, and sorted lexicographically
+  - empty arrays MUST be omitted
+- `requirements.results[]` MUST be ordered deterministically by the tuple `(kind, key)` using UTF-8
+  byte order (no locale).
+
+Evaluation semantics:
+
+- `requirements.evaluation = satisfied` iff all checks are `satisfied`.
+- `requirements.evaluation = unsatisfied` if any check is `unsatisfied`, OR if any check is
+  `unknown` and `runner.atomic.requirements.fail_mode=fail_closed`.
+- `requirements.evaluation = unknown` only when at least one check is `unknown`, no check is
+  `unsatisfied`, and `runner.atomic.requirements.fail_mode=warn_and_skip`.
+
+Ground-truth gating:
+
+- If `requirements.evaluation != satisfied`, the runner MUST set the `prepare` phase
+  `phase_outcome=skipped` and MUST NOT attempt `execute`.
+
+Reason code mapping (minimum; deterministic):
+
+- Determine the action-level `prepare.reason_code` by selecting the first requirement result (after
+  deterministic ordering) whose `status != satisfied`:
+  - If `status=unknown`, use `reason_code=requirement_unknown`.
+  - Else map `kind` to a reason code:
+    - `platform` -> `unsupported_platform`
+    - `privilege` -> `insufficient_privileges`
+    - `tool` -> `missing_tool`
 
 ### Responsibility model (normative)
 
@@ -820,21 +926,30 @@ Observability (normative):
 
 ### Prerequisites policy
 
-The runner MUST expose a deterministic prerequisites policy. For v0.1, the policy is defined by:
+The runner MUST support the following prerequisite evaluation modes for Atomic dependencies:
 
-- `runner.atomic.prereqs.mode` (string enum)
+- `runner.atomic.prereqs.mode`:
+  - `check_only`: run prerequisite checks, never install
+  - `check_then_get`: run checks, if missing then run get commands
+  - `get_only`: run get commands, then run checks if present
 
-Allowed values:
+Default: `check_only` (safe by default).
 
-- `skip`: do not check or fetch prerequisites; proceed directly to execution
-- `check_only`: check prerequisites; if missing, do not execute
-- `check_then_get`: check prerequisites; if missing, attempt `get_prereq_command` then re-check
-- `get_only`: attempt `get_prereq_command` then check
+Per dependency evaluation order:
 
-Default (v0.1): `check_only`
+- Sort dependencies by their index order in Atomic YAML.
+- For each dependency:
+  - If `prereq_command` exists, run it and capture stdout/stderr.
+  - If `get_prereq_command` exists and mode allows get, run it only if prereq check fails.
 
-Any mode that executes `get_prereq_command` (`check_then_get` or `get_only`) MUST be explicitly
-enabled by configuration.
+Failure behavior:
+
+- If any dependency check fails and mode does not allow "get", treat prerequisites as unsatisfied
+  and skip execution with `reason_code = prereq_unsatisfied`.
+- If any `get_prereq_command` fails (non-zero exit or cannot execute), fail closed with
+  `reason_code = prereq_get_failed`.
+- If prerequisite commands cannot be run deterministically (interactive prompt), fail closed with
+  `reason_code = interactive_prompt_blocked`.
 
 Determinism requirements:
 
@@ -861,7 +976,8 @@ The runner MUST treat `get_prereq_command` execution as a target-mutating side e
 
 ### Prerequisites execution algorithm (normative)
 
-When `dependencies` are present and `runner.atomic.prereqs.mode != skip`, the runner MUST perform:
+When prerequisites are evaluated (When `dependencies` are present and the runner performs prereq
+check/get per `runner.atomic.prereqs.mode`):
 
 1. For each dependency `d` in `dependencies[]` (in order):
    1. Execute the normalized `d.prereq_command` after placeholder substitution.
@@ -887,8 +1003,7 @@ Failure classification (normative):
 
 ### Prerequisites logs and evidence artifacts
 
-When prerequisites are evaluated (`dependencies` present and `runner.atomic.prereqs.mode != skip`),
-the runner MUST write:
+When prerequisites are evaluated (`dependencies` present), the runner MUST write:
 
 - `runs/<run_id>/runner/actions/<action_id>/prereqs_stdout.txt`
 - `runs/<run_id>/runner/actions/<action_id>/prereqs_stderr.txt`
@@ -946,21 +1061,28 @@ Normalization requirement:
 
 ### Stdout and stderr transcript files
 
-For each attempted execution, the runner MUST store:
+Transcript capture is controlled by:
 
-- `stdout.txt`
-- `stderr.txt`
+- `runner.atomic.capture_transcripts` (boolean)
 
-For each invoked cleanup, the runner MUST store:
+When `runner.atomic.capture_transcripts = true`, the runner MUST capture transcripts for:
 
-- `cleanup_stdout.txt`
-- `cleanup_stderr.txt`
+- prerequisites evaluation (check/get)
+- execution
+- cleanup invocation
 
-For each prerequisites evaluation (see
-[Prerequisites and dependencies](#prerequisites-and-dependencies)), the runner MUST store:
+Transcript files MUST be stored per-action:
 
-- `prereqs_stdout.txt`
-- `prereqs_stderr.txt`
+- `stdout.txt` and `stderr.txt` for execution
+- `prereqs_stdout.txt` and `prereqs_stderr.txt` for prerequisites
+- `cleanup_stdout.txt` and `cleanup_stderr.txt` for cleanup invocation
+
+When transcript artifacts exist, the runner MUST attach the corresponding ground-truth evidence
+pointers per the data contracts spec (example: `evidence.stdout_ref`, `evidence.stderr_ref`,
+`evidence.cleanup_stdout_ref`, `evidence.cleanup_stderr_ref`).
+
+When `runner.atomic.capture_transcripts = false`, the runner MUST NOT write transcript files into
+the run bundle.
 
 Encoding and newline requirements (deterministic):
 
@@ -976,15 +1098,52 @@ Capture semantics:
 - Invalid UTF-8 sequences MUST be handled deterministically (example: decode with replacement using
   U+FFFD).
 
+### Terminal session recording (asciinema) (optional)
+
+Purpose: Provide a human-playable terminal session view for debugging and documentation without
+serving as mechanical evidence for scoring or test evaluation.
+
+Enablement:
+
+- Controlled by config `runner.atomic.capture_terminal_recordings` (default: `false`).
+
+Storage requirement (when enabled):
+
+- For each attempted execution, the runner MUST store:
+  - `terminal.cast` at `runs/<run_id>/runner/actions/<action_id>/terminal.cast`
+
+Format and encoding (normative):
+
+- The recording MUST be an asciinema cast file (v2).
+- The file MUST be UTF-8 without BOM and MUST use LF (`\n`) line endings.
+- The recording SHOULD capture the combined terminal stream as observed by the executor (stdout and
+  stderr interleaved, when available).
+
+Redaction and disabled behavior (normative):
+
+- The recording is treated as evidence-tier text and MUST follow the effective redaction policy (see
+  [ADR-0003: Redaction policy](../adr/ADR-0003-redaction-policy.md)).
+- When `security.redaction.enabled: true`, the runner MUST redact string content while preserving
+  asciinema cast structure (JSON value per line). Only string values are transformed.
+- When `security.redaction.enabled: false`, the runner MUST NOT write unredacted recordings to the
+  standard long-term path above; it MUST follow the project’s disabled behavior (withhold by
+  default, or quarantine only with explicit opt-in).
+
+Fail-closed and placeholders (normative):
+
+- If the recording cannot be made redacted-safe, it MUST be withheld/quarantined and replaced at the
+  standard path with a deterministic placeholder cast file (see
+  [Placeholder artifacts](090_security_safety.md#placeholder-artifacts)).
+
 ### Redaction of transcripts
 
 When `security.redaction.enabled: true` (or equivalent), the runner MUST apply the effective
 redaction policy to transcripts before writing them.
 
-- The run bundle MUST be redacted-safe by default.
-- If redaction fails (example: cannot apply policy deterministically), the runner MUST fail closed
-  for the affected action and MUST withhold the transcript artifacts (see the
-  [redaction policy ADR](../adr/ADR-0003-redaction-policy.md) for fail-closed behavior).
+- If redaction policy is enabled, transcripts MUST be redacted deterministically before being
+  persisted to run bundle storage.
+- If redaction fails, the runner MUST fail closed with `reason_code = redaction_failed` and MUST
+  withhold transcript artifacts from the published bundle.
 
 ### Executor evidence file
 
@@ -992,11 +1151,20 @@ For each attempted execution, the runner MUST write:
 
 - `runs/<run_id>/runner/actions/<action_id>/executor.json`
 
+This file MUST capture enough information to support deterministic replay and audit trails without
+exposing secrets.
+
+This artifact is contract-backed and therefore MUST:
+
+- validate against `docs/contracts/runner_executor_evidence.schema.json`, and
+- include the runner evidence JSON header pattern (`contract_version`, `run_id`, `action_id`,
+  `action_key`, `generated_at_utc`) per the data contracts spec.
+
 Minimum required fields (v0.1):
 
 - `executor` (string, normalized executor name)
-- `pwsh_version` (string, exact)
-- `invoke_atomicredteam_version` (string, exact)
+- `pwsh_version` (string or null; required when executor is PowerShell)
+- `invoke_atomicredteam_version` (string or null)
 - `started_at_utc` (RFC 3339 timestamp)
 - `ended_at_utc` (RFC 3339 timestamp)
 - `duration_ms` (integer)
@@ -1023,21 +1191,41 @@ This file is evidence, not identity.
 
 ## Cleanup invocation and verification
 
-### Cleanup invocation strategy
+### Cleanup invocation strategy (revert) (normative)
 
-Effective cleanup gating (normative):
+Atomic tests may define a cleanup command. Cleanup execution is controlled by:
 
-- `plan.cleanup` MUST be treated as an operator-intent gate for all cleanup behaviors.
-- When effective `plan.cleanup = false`:
-  - The runner MUST NOT invoke cleanup (`Invoke-AtomicTest -Cleanup`).
-  - The runner MUST NOT attempt cleanup verification checks and MUST NOT write
-    `cleanup_verification.json` for the action.
-  - `executor.json` MUST record `cleanup.invoke_attempted=false` and
-    `cleanup.skip_reason=disabled_by_scenario`.
-- When effective `plan.cleanup = true` but `runner.atomic.cleanup.invoke = false`:
-  - The runner MUST NOT invoke cleanup.
-  - `executor.json` MUST record `cleanup.invoke_attempted=false` and
-    `cleanup.skip_reason=disabled_by_policy`.
+- plan-level cleanup: `plan.cleanup` (boolean)
+- runner config: `runner.atomic.cleanup.invoke` (boolean)
+- presence of cleanup command in Atomic YAML
+
+Rules:
+
+- If `plan.cleanup = false` OR `runner.atomic.cleanup.invoke = false`, the runner MUST:
+
+  - skip cleanup command invocation
+  - record `revert` phase as skipped with `reason_code = cleanup_suppressed`
+  - record `teardown` phase as skipped with `reason_code = cleanup_suppressed`
+  - MUST NOT emit `cleanup_verification.json` for the action
+
+- If cleanup is enabled and a cleanup command is present, the runner MUST:
+
+  - attempt cleanup once after `execute` completes (even if `execute` failed after partial activity)
+  - when `runner.atomic.capture_transcripts = true`, capture cleanup stdout/stderr to:
+    - `runs/<run_id>/runner/actions/<action_id>/cleanup_stdout.txt`
+    - `runs/<run_id>/runner/actions/<action_id>/cleanup_stderr.txt`
+  - attach ground-truth evidence pointers on the `revert` phase record (per data contracts spec):
+    - `evidence.executor_ref`
+    - `evidence.cleanup_stdout_ref` and `evidence.cleanup_stderr_ref` (when transcripts exist)
+  - emit executor.json fields for cleanup command variants + digests
+  - append cleanup side-effects to side-effect ledger
+
+- If cleanup is enabled but cleanup command is missing, the runner MUST fail closed with
+  `reason_code = cleanup_command_missing`.
+
+- If `execute` was not attempted, the runner MUST NOT attempt cleanup and MUST record `revert` as
+  `phase_outcome=skipped` with `reason_code = prior_phase_blocked` (not
+  `invalid_lifecycle_transition`).
 
 When `runner.atomic.cleanup.invoke: true`:
 
@@ -1126,10 +1314,6 @@ This appendix does not require import mode for v0.1. When not enabled, `attire.j
 only by the reference executor as specified in
 [Structured execution record (ATTiRe)](#structured-execution-record-attire).
 
-- When effective `plan.cleanup = false`, ground truth MUST record `revert.phase_outcome=skipped` and
-  `teardown.phase_outcome=skipped` and MUST NOT reference `cleanup_verification.json` for the
-  action. Suppression MUST be recorded in `executor.json` as specified above.
-
 ## Failure modes and stage outcomes
 
 Failures in this contract MUST be observable in:
@@ -1164,6 +1348,11 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 - `missing_tool`
 - `insufficient_privileges`
 - `unsupported_platform`
+- `unsafe_rerun_blocked`
+- `invalid_lifecycle_transition`
+- `prior_phase_blocked`
+- `cleanup_suppressed`
+- `empty_command`
 
 ## Verification hooks
 

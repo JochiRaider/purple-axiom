@@ -18,21 +18,44 @@ requirements focus on:
 - reproducibility (same inputs yield comparable outputs)
 - failure classification (collector issue vs mapping gap vs detection logic gap)
 
+## Conformance and registry alignment (normative)
+
+- Stage identifiers (`health.json.stages[].stage`) and stage ordering MUST follow the canonical
+  stage and substage registry in ADR-0005.
+- Stable `reason_code` tokens MUST be drawn from the same registry. If this document introduces a
+  new `reason_code`, ADR-0005 MUST be updated in the same change set.
+- State machine behaviors (for example: runner lifecycle enforcement and runner state
+  reconciliation) SHOULD follow ADR-0007:
+  - `logs/health.json` is a stage-outcome surface and MUST NOT be treated as a per-transition event
+    log.
+  - When per-transition evidence is required for debugging or CI, implementations SHOULD surface it
+    via deterministic counters and/or schema-backed evidence artifacts referenced from the manifest.
+
 ## Service health model
 
-Each major stage exposes a minimal health signal:
+Each major pipeline stage exposes a minimal health signal and MUST record a stage outcome in the run
+manifest. When health files are enabled, the same stage outcomes MUST also be reflected in
+`runs/<run_id>/logs/health.json`.
 
-- **Lab Provider**: inventory resolution success, snapshot hash, resolved asset count, drift
-  detection (optional).
-- **Runner**: scenario execution status, per-action outcomes, cleanup status, state reconciliation
-  (optional).
-- **Telemetry (collector)**: receiver health, export success, queue depth, dropped counts.
-- **Normalizer**: input read completeness, parse errors, mapping coverage.
-- **Evaluator**: rule load success, compilation failures, match counts.
-- **Scoring**: join completeness, latency distributions.
+Minimum per-stage health signals (non-exhaustive):
+
+- **Lab Provider (`lab_provider`)**: inventory resolution success, snapshot hash, resolved asset
+  count, drift detection (optional).
+- **Runner (`runner`)**: scenario execution status, per-action outcomes, cleanup status, lifecycle
+  enforcement outcome (when enabled), state reconciliation outcome (when enabled).
+- **Telemetry (`telemetry`)**: receiver health, export success, queue depth/drops, checkpoint
+  integrity outcome, telemetry validation canary outcomes.
+- **Normalization (`normalization`)**: input read completeness, parse errors, mapping coverage.
+- **Validation (`validation`)**: criteria pack load success, evaluation coverage, run-limit
+  enforcement outcome.
+- **Detection (`detection`)**: rule load success, compilation failures, match counts.
+- **Scoring (`scoring`)**: join completeness, latency distributions.
+- **Reporting (`reporting`)**: report generation status, evidence linkage checks, regression
+  comparability (when enabled).
+- **Signing (`signing`)**: bundle signature generation status and verification (when enabled).
 
 The run manifest reflects the overall outcome (`success`, `partial`, `failed`) and includes
-stage-level failure reasons.
+stage-level outcomes and stable `reason_code` tokens used to explain failures and degradations.
 
 ## Inventory snapshot (required)
 
@@ -48,20 +71,28 @@ stage-level failure reasons.
 
 ## Collector observability (required)
 
-The OpenTelemetry Collector should expose internal telemetry to support debugging and capacity
-planning:
+The OpenTelemetry Collector MUST expose internal telemetry to support debugging and capacity
+planning.
+
+Minimum required endpoints (v0.1):
 
 - health endpoint (health check extension)
-- metrics endpoint (Prometheus, or OTLP metrics to a local backend)
-- optional pprof/zpages for profiling in the lab
+- metrics endpoint (Prometheus scrape endpoint, or OTLP metrics to a local backend that is captured
+  as run evidence)
 
-Minimum collector metrics to track:
+Optional lab-only endpoints:
+
+- pprof/zpages for profiling
+
+Minimum collector metrics to track (as time series, per receiver/exporter where applicable):
 
 - received log records per receiver
 - exporter send successes/failures
-- queue size and queue drops
+- exporter queue size and queue drops
 - memory limiter activation events
 - processor dropped spans/logs (if any)
+- `otelcol_process_cpu_seconds` (for CPU budget evaluation)
+- `otelcol_process_memory_rss` (for memory budget evaluation)
 
 ## Resource budgets
 
@@ -222,29 +253,29 @@ Rules:
     produced, the counters in that feature group MUST be omitted.
   - If the feature is enabled for the run, the counters in that feature group MUST be present. If no
     qualifying events occurred, the counters MUST be present with value `0`.
-  - If a counter is explicitly marked optional (for example, `cache_bypassed_total`),
+  - If a counter is explicitly marked optional (for example, `cache_provenance_bypassed_total`),
     implementations MAY omit it even when the feature is enabled; consumers MUST treat omission as
     value `0`.
 
 ### Additional stable counters (principal context, cache provenance, dependency immutability) (normative)
 
 In addition to the checkpointing and dedupe counters above, implementations MUST emit the following
-stable per-run counters (u64) when the corresponding feature is enabled and the corresponding
-schema-backed artifact is produced.
+stable per-run counters (u64) when the corresponding feature is enabled. Where a feature produces a
+schema-backed artifact, the counters are conditional on that artifact being produced.
 
 Principal context (when `runs/<run_id>/runner/principal_context.json` is produced):
 
-- `runner_principal_context_principals_total`
-- `runner_principal_context_actions_mapped_total`
+- `runner_principal_context_total`
+- `runner_principal_context_known_total`
 - `runner_principal_context_unknown_total`
 
 Cache provenance (when `runs/<run_id>/logs/cache_provenance.json` is produced):
 
-- `cache_hits_total`
-- `cache_misses_total`
-- `cache_bypassed_total` (optional; recommended)
+- `cache_provenance_hit_total`
+- `cache_provenance_miss_total`
+- `cache_provenance_bypassed_total` (optional; recommended)
 
-Dependency mutation blocked:
+Dependency mutation blocked (when dependency immutability enforcement is enabled):
 
 - `runner_dependency_mutation_blocked_total`
 
@@ -252,19 +283,21 @@ Dependency mutation blocked:
 
 Principal context:
 
-- `runner_principal_context_principals_total` MUST equal the number of entries in
+- `runner_principal_context_total` MUST equal the number of entries in
   `principal_context.principals[]`.
-- `runner_principal_context_actions_mapped_total` MUST equal the number of entries in
-  `principal_context.action_principal_map[]` (one row per `action_id` mapped).
 - `runner_principal_context_unknown_total` MUST equal the number of entries in
-  `principal_context.action_principal_map[]` whose referenced principal has `kind=unknown`.
+  `principal_context.principals[]` with `kind=unknown`.
+- `runner_principal_context_known_total` MUST equal the number of entries in
+  `principal_context.principals[]` whose `kind != unknown`.
 
 Cache provenance:
 
-- `cache_hits_total` MUST equal the number of `cache_provenance.entries[]` with `result=hit`.
-- `cache_misses_total` MUST equal the number of `cache_provenance.entries[]` with `result=miss`.
-- `cache_bypassed_total` (when emitted) MUST equal the number of `cache_provenance.entries[]` with
-  `result=bypassed`.
+- `cache_provenance_hit_total` MUST equal the number of `cache_provenance.entries[]` with
+  `result=hit`.
+- `cache_provenance_miss_total` MUST equal the number of `cache_provenance.entries[]` with
+  `result=miss`.
+- `cache_provenance_bypassed_total` (when emitted) MUST equal the number of
+  `cache_provenance.entries[]` with `result=bypassed`.
 
 Dependency mutation blocked:
 
@@ -282,24 +315,35 @@ When state reconciliation is enabled, implementations MUST emit both:
 
    Tuple alignment (normative):
 
-   - `runner.state_reconciliation.fail_mode` MUST equal the effective runner stage `fail_mode` for
-     the run (do not invent an independent substage policy).
-   - When drift is detected or reconciliation fails deterministically, the implementation MUST
-     record `runner.state_reconciliation.status="failed"` (this is a taint/degradation signal; see
-     ADR-0005).
-   - When no drift is detected and reconciliation completes deterministically, the implementation
-     MUST record `runner.state_reconciliation.status="success"` and MUST omit `reason_code`.
+   - The emitted `runner.state_reconciliation` substage `fail_mode` MUST be policy-controlled via
+     the runner stage `fail_mode` (see ADR-0005).
 
-   Reason-code constraints (normative):
+   Required substage semantics (v0.1):
 
-   - When this substage is recorded as `status="failed"`, `reason_code` MUST be one of:
-     - `drift_detected`
-     - `reconcile_failed`
+   - status is `failed` with `reason_code=reconcile_failed` when one or more actions' reconciliation
+     cannot be completed deterministically.
+   - otherwise, status is `failed` with `reason_code=drift_detected` when drift is detected for one
+     or more actions.
+   - otherwise, status is `success` (and MUST omit `reason_code`).
 
-   Deterministic selection (normative):
+   Deterministic reason selection (normative):
 
-   - If both conditions occur in a run, `reason_code` MUST be `reconcile_failed` (reconciliation
-     failure takes precedence over drift detection).
+   - If any action's reconciliation cannot be completed deterministically, the substage
+     `reason_code` MUST be `reconcile_failed`.
+   - Else if any drift is detected, the substage `reason_code` MUST be `drift_detected`.
+   - Else, the substage MUST be `status=success` and MUST omit `reason_code`.
+
+   Default run status mapping (normative):
+
+   - If the runner stage `fail_mode=fail_closed`, the run MUST be marked `failed` when this substage
+     is recorded as `status=failed`.
+   - If the runner stage `fail_mode=warn_and_skip`, the run MAY be marked `partial` when this
+     substage is recorded as `status=failed`.
+
+   Reason codes (stable tokens, v0.1):
+
+   - `drift_detected`
+   - `reconcile_failed`
 
 1. Stable per-run counters (at minimum into `runs/<run_id>/logs/` and optionally into a metrics
    backend):
@@ -343,32 +387,47 @@ When the runner enforces lifecycle transition guards and rerun-safety rules, it 
 
    - `stage: "runner.lifecycle_enforcement"`
 
-   Reason-code constraints (normative):
+   Required semantics (v0.1):
 
-   - When this substage is recorded as `status="failed"`, `reason_code` MUST be one of:
-     - `invalid_lifecycle_transition`
-     - `unsafe_rerun_blocked`
+   - status is `success` if no invalid transitions or unsafe re-runs were attempted.
+   - status is `failed` with `fail_mode=warn_and_skip` if unsafe behavior was blocked but the run
+     can proceed safely.
+   - status is `failed` with `fail_mode=fail_closed` only when the configured policy requires abort.
 
-   Deterministic selection (normative):
+   Reason codes (stable tokens, v0.1):
 
-   - If both conditions occur in a run, `reason_code` MUST be `unsafe_rerun_blocked`.
+   - `invalid_lifecycle_transition`
+   - `unsafe_rerun_blocked`
 
-1. Stable per-run counters:
+   Deterministic reason selection:
 
-- `runner_invalid_lifecycle_transition_total` (u64): incremented when an invalid lifecycle
-  transition is detected and blocked (no executor attempt is made).
-- `runner_unsafe_rerun_blocked_total` (u64): incremented when a non-idempotent action re-execution
-  is refused because no successful `revert` has occurred since the last `execute`.
+   - If any unsafe reruns occurred (even if invalid transitions also occurred):
+     `unsafe_rerun_blocked`
+   - Else (only invalid transitions occurred): `invalid_lifecycle_transition`
+
+1. Stable per-run counters (at minimum into `runs/<run_id>/logs/counters.json` and optionally into a
+   metrics backend):
+
+   - `runner_invalid_lifecycle_transition_total` (u64): count of invalid transitions attempted and
+     blocked.
+   - `runner_unsafe_rerun_blocked_total` (u64): count of unsafe reruns attempted and blocked.
 
 ## Telemetry validation (gating)
 
-A telemetry stage is only considered "validated" for an asset when a validation run produces:
+A telemetry stage is only considered "validated" for an asset when a validation run produces the
+required raw telemetry for the enabled sources on that asset. For Windows assets with Windows Event
+Log collection enabled, this includes:
 
 - raw Windows Event Log events captured in raw/unrendered mode
   - verified by a runtime canary:
     - captured XML begins with `<Event`
-    - captured XML MUST NOT contain `<RenderingInfo>`
-    - see the [telemetry pipeline specification](040_telemetry_pipeline.md) §2
+    - the `<System>` stanza includes:
+      - `<Channel>` (correct channel)
+      - `<Provider Name="...">` (optional requirement, when provider pinned)
+      - `<EventID>` (optional requirement, when pinned)
+  - canary should be observed at a deterministic path such as:
+    - `runs/<run_id>/raw/<asset_id>/windows_eventlog/<channel>/...` (implementation-defined file
+      name, but stable)
 
 Additional normative checks:
 
@@ -461,11 +520,10 @@ Additional normative checks:
     - `health.json` stage: `telemetry.disk.preflight`
     - `status=failed`, `fail_mode=fail_closed`, `reason_code=disk_free_space_insufficient`
     - run status: `failed`
-  - If any required value cannot be computed, the run MUST fail closed with stable reason codes:
-    - `reason_code=disk_metrics_missing` when free bytes cannot be computed (missing path,
-      permissions, unsupported platform API, etc.)
-    - `reason_code=resource_budgets_unconfigured` when `max_raw_bytes_per_run` and/or
-      `max_normalized_bytes_per_run` are unset/unknown
+  - If any required value cannot be computed deterministically (including missing paths/permissions,
+    unsupported platform API, or unknown/unset disk budget inputs), the run MUST fail closed with
+    stable reason code:
+    - `reason_code=disk_metrics_missing`
   - The validator MUST record `free_bytes_at_runs_root`, `required_free_bytes`, and the three inputs
     used to compute it in `telemetry_validation.json` for deterministic debugging.
 - stable parsing of required identity fields (channel, provider, record id)
@@ -486,51 +544,14 @@ the same steady-state window used to compute sustained EPS.
 This section defines the fail semantics for the "footprint within configured budgets at target event
 rate" gate and provides deterministic run outcome mapping when budgets are exceeded.
 
-#### Deterministic disk measurement rules (normative)
-
-`raw_bytes_written_total` and `normalized_bytes_written_total` MUST be computed deterministically as
-the sum of logical file sizes (bytes) of all regular files under the run-relative directories listed
-below, measured at the time `health.json` is emitted for the run.
-
-Directory sets:
-
-- Raw total (`raw_bytes_written_total`):
-  - `raw_parquet/` (required)
-  - `raw/` (optional; only when raw preservation is enabled)
-- Normalized total (`normalized_bytes_written_total`):
-  - `normalized/` (required)
-
-Rules:
-
-- Implementations MUST use the OS logical file size API (for example, POSIX `stat().st_size`) and
-  MUST NOT use allocated block counts.
-- Enumeration MUST be recursive.
-- Symlinks MUST NOT be followed. If a symlink is encountered in any measured directory, disk
-  measurement MUST fail closed with `reason_code=disk_metrics_missing`.
-- If a required directory does not exist at measurement time, disk measurement MUST fail closed with
-  `reason_code=disk_metrics_missing`.
-- If an optional directory does not exist at measurement time, it MUST contribute `0` bytes.
-
-Implementations SHOULD record (at minimum) the measured directory set and the computed totals in
-`runs/<run_id>/logs/telemetry_validation.json` to make sizing regressions reviewable.
-
 #### Inputs (normative)
 
 Configured targets (per validated asset):
 
-- `cpu_target_p95_pct` (number): CPU utilization target at p95, expressed as percent of **1 vCPU**
-  (single-core equivalent).
-  - CPU percent MUST be computed as: `cpu_pct = rate(otelcol_process_cpu_seconds[1m]) * 100`.
-- `rss_target_p95_bytes` (integer): RSS target at p95 in bytes, derived from
-  `otelcol_process_memory_rss`.
-
-Configured targets (per run):
-
-- `max_raw_bytes_per_run` (integer): maximum allowed raw retention bytes for the run.
-- `max_normalized_bytes_per_run` (integer): maximum allowed normalized store bytes for the run.
-
-If either disk budget is unset/unknown, the validator MUST fail closed with
-`reason_code=resource_budgets_unconfigured`.
+- `cpu_target_p95_pct` (number): maximum allowed p95 CPU percent for the steady-state window.
+  - CPU percent MUST be computed as:
+    - `cpu_pct = rate(otelcol_process_cpu_seconds[1m]) * 100`
+- `rss_target_p95_bytes` (integer): maximum allowed p95 RSS bytes for the steady-state window.
 
 Target resolution (v0.1):
 
@@ -544,19 +565,23 @@ Required measurements (per asset):
 
 - A 10-minute steady-state window where `sustained_eps_observed >= sustained_eps_target`.
 - `cpu_pct_p95` and `rss_bytes_p95` computed over that same window.
+- queue-pressure evidence over that same window (drops/limiter activations as defined below).
 
 If the required measurements cannot be computed (missing collector self-telemetry, missing EPS
 series, or the sustained EPS target was not met), the validator MUST fail closed with
 `reason_code=resource_metrics_missing` or `reason_code=eps_target_not_met`.
 
-Required measurements (per run):
+#### Queue pressure evaluation (normative)
 
-- `raw_bytes_written_total` and `normalized_bytes_written_total`, computed deterministically as
-  specified in "Deterministic disk measurement rules (normative)".
-- These totals MUST be computed at the time the validator emits `health.json` for the run.
+Queue pressure is considered present when any of the following are observed during the steady-state
+window:
 
-If the disk totals cannot be computed (missing paths, permissions, IO error during enumeration,
-etc.), the validator MUST fail closed with `reason_code=disk_metrics_missing`.
+- exporter queue drops > 0
+- processor dropped logs/spans > 0
+- memory limiter activation events > 0
+
+Queue pressure detection MUST be deterministic: any non-zero value for any of the above signals
+within the window is sufficient to treat queue pressure as present.
 
 #### Tolerance and evaluation (normative)
 
@@ -566,19 +591,12 @@ Defaults (v0.1):
 
 - CPU tolerance: `max(1.0 percentage point, 10% of cpu_target_p95_pct)`
 - RSS tolerance: `max(64 MiB, 10% of rss_target_p95_bytes)`
-- Disk tolerance (per budget):
-  `disk_tolerance(budget_bytes) = max(64 MiB, ceil(0.01 * budget_bytes))`
-  - `64 MiB` MUST be interpreted as `67108864` bytes.
-  - `ceil()` MUST be applied after multiplication and MUST produce an integer number of bytes.
-  - `disk_tolerance(...)` MUST be computed independently for `max_raw_bytes_per_run` and
-    `max_normalized_bytes_per_run`.
 
 A budget is considered exceeded when:
 
 - `cpu_pct_p95 > cpu_target_p95_pct + cpu_tolerance`
 - `rss_bytes_p95 > rss_target_p95_bytes + rss_tolerance`
-- `raw_bytes_written_total > max_raw_bytes_per_run + disk_tolerance(max_raw_bytes_per_run)`
-- `normalized_bytes_written_total > max_normalized_bytes_per_run + disk_tolerance(max_normalized_bytes_per_run)`
+- queue pressure is present (as defined in "Queue pressure evaluation (normative)")
 
 #### Health accounting and outcomes (normative)
 
@@ -594,36 +612,45 @@ Outcome mapping (quality gate semantics):
 Reason codes (stable tokens):
 
 - `resource_budget_cpu_exceeded`
-- `resource_budget_rss_exceeded`
-- `resource_budget_disk_exceeded` (exactly one of raw/normalized disk budgets exceeded)
-- `resource_budget_disk_multiple_exceeded` (both raw and normalized disk budgets exceeded)
-- `resource_budget_multiple_exceeded` (two or more budgets exceeded, except "disk-only" case above)
+- `resource_budget_memory_exceeded`
+- `resource_budget_queue_pressure`
 - `resource_budgets_unconfigured` (fail-closed)
 - `resource_metrics_missing` (fail-closed)
-- `disk_metrics_missing` (fail-closed)
 - `eps_target_not_met` (fail-closed)
 
 Reason code selection (normative):
 
-Let `exceeded` be the set of exceeded budget dimensions across: `cpu`, `rss`, `raw_disk`,
-`normalized_disk`.
+Let `exceeded` be the set of exceeded budget dimensions across: `cpu`, `memory`, `queue_pressure`.
 
 - If `exceeded` is empty, `status=success`.
-- If `exceeded` contains only `cpu`, use `resource_budget_cpu_exceeded`.
-- If `exceeded` contains only `rss`, use `resource_budget_rss_exceeded`.
-- If `exceeded` contains exactly one of `raw_disk` or `normalized_disk`, use
-  `resource_budget_disk_exceeded`.
-- If `exceeded` is exactly `{raw_disk, normalized_disk}`, use
-  `resource_budget_disk_multiple_exceeded`.
-- Otherwise (any other combination of 2+ exceeded dimensions), use
-  `resource_budget_multiple_exceeded`.
+- If `exceeded` contains `queue_pressure`, use `resource_budget_queue_pressure`.
+- Else if `exceeded` contains `memory`, use `resource_budget_memory_exceeded`.
+- Else (only `cpu` remains), use `resource_budget_cpu_exceeded`.
 
-The validator SHOULD record the observed p95 values, targets, tolerances, and the window definition
-in `runs/<run_id>/logs/telemetry_validation.json` to make regressions reviewable.
+The validator SHOULD record the observed p95 values, targets, tolerances, the window definition, and
+queue pressure evidence in `runs/<run_id>/logs/telemetry_validation.json` to make regressions
+reviewable.
 
 The validator MUST write `runs/<run_id>/logs/telemetry_validation.json`, conforming to the
 [telemetry validation schema](../contracts/telemetry_validation.schema.json); the manifest SHOULD
 include a pointer to it.
+
+#### Deterministic disk accounting (recommended; non-gating)
+
+The validator SHOULD compute `raw_bytes_written_total` and `normalized_bytes_written_total`
+deterministically (for reporting and capacity planning), but these totals MUST NOT affect run status
+in v0.1.
+
+If computed, they SHOULD be recorded in `runs/<run_id>/logs/telemetry_validation.json`.
+
+Deterministic disk measurement rules (recommended):
+
+- Use OS-reported logical file sizes (not allocated blocks).
+- Enumeration MUST be recursive.
+- Symlinks MUST NOT be followed.
+- If a required directory cannot be read/enumerated deterministically, the implementation SHOULD
+  omit the totals and record a structured measurement error in `telemetry_validation.json` (and
+  continue).
 
 ## Health files (normative, v0.1)
 
@@ -675,14 +702,26 @@ This prevents "rule debugging" when the root cause is missing telemetry.
 When run limits are configured (see `operability.run_limits` in the
 [configuration reference](120_config_reference.md)), the pipeline MUST behave as follows:
 
-| Limit             | Exceeded behavior                      | Run status          | Exit code      | Accounting required                                                                                                                                                                          |
-| ----------------- | -------------------------------------- | ------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `max_run_minutes` | Hard-fail, stop immediately            | `failed`            | `20`           | Record `reason_code=run_timeout` in `logs/health.json` and append an entry to `manifest.extensions.operability.limits_exceeded[]`.                                                           |
-| `max_disk_gb`     | Stop gracefully and finalize artifacts | `partial` (default) | `10` (default) | Record `reason_code=disk_limit_exceeded` with the truncation timestamp and disk watermark in `logs/health.json`, and append an entry to `manifest.extensions.operability.limits_exceeded[]`. |
-| `max_memory_mb`   | Hard-fail (OOM is fatal)               | `failed`            | `20`           | Record `reason_code=memory_limit_exceeded` (or `oom_killed`) in `logs/health.json` and append an entry to `manifest.extensions.operability.limits_exceeded[]`.                               |
+| Limit             | Exceeded behavior                                               | Run status impact     | Exit code    | Accounting required                            |
+| ----------------- | --------------------------------------------------------------- | --------------------- | ------------ | ---------------------------------------------- |
+| `max_run_minutes` | stop pipeline, mark `failed`                                    | `failed`              | `20`         | `validation.run_limits: run_timeout`           |
+| `max_disk_gb`     | stop pipeline, mark `partial` (default) or `failed` (hard mode) | `partial` or `failed` | `10` or `20` | `validation.run_limits: disk_limit_exceeded`   |
+| `max_memory_mb`   | stop pipeline, mark `failed`                                    | `failed`              | `20`         | `validation.run_limits: memory_limit_exceeded` |
 
-The pipeline MUST record run-limit enforcement outcomes under `health.json` stage
-`stage: "validation.run_limits"`.
+Additionally, when the pipeline process is killed by the OS OOM killer, the pipeline (or supervising
+orchestrator) MUST record `validation.run_limits: oom_killed`, mark the run `failed`, and use exit
+code `20`.
+
+Fail mode mapping (normative):
+
+- For `max_run_minutes` and `max_memory_mb`, `validation.run_limits.fail_mode` MUST be
+  `fail_closed`.
+- For `max_disk_gb`, `validation.run_limits.fail_mode` MUST be:
+  - `warn_and_skip` when disk limit behavior is default (graceful stop → `partial`), and
+  - `fail_closed` when disk limit behavior is configured as hard-fail (stop → `failed`).
+
+The pipeline MUST record run-limit enforcement outcomes in `logs/health.json` (stage:
+`validation.run_limits`) and in `manifest.json` stage outcomes.
 
 Disk limit configurability (normative):
 
@@ -694,7 +733,11 @@ Disk limit configurability (normative):
 Disk enforcement during telemetry validation is defined in:
 
 - "Telemetry validation (gating)" (disk capacity preflight; fail closed), and
-- "Resource budget quality gate (validation)" (disk budget quality gate; warn-and-skip / partial).
+- "Resource budget quality gate (validation)" (collector CPU/memory/queue pressure gate;
+  warn-and-skip / partial).
+
+Disk exhaustion prevention during any stage is enforced by `operability.run_limits.max_disk_gb`
+(run-limit stop behavior).
 
 `operability.run_limits.max_disk_gb` is a separate runtime safeguard (stop/truncate behavior) and
 MUST NOT be treated as equivalent to the per-run sizing budgets.
@@ -721,6 +764,7 @@ Each entry in `manifest.extensions.operability.limits_exceeded[]` MUST include:
 
 | Date       | Change                                                        |
 | ---------- | ------------------------------------------------------------- |
+| 2026-01-21 | update                                                        |
 | 2026-01-13 | Add EPS baseline link and eps_baseline.json artifact contract |
 | 2026-01-13 | Add network egress canary to telemetry validation gating      |
 | 2026-01-12 | Formatting update                                             |

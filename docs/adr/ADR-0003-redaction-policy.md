@@ -58,6 +58,7 @@ This policy applies to:
 - runner stdout/stderr transcripts (`runner/actions/<action_id>/stdout.txt`, `stderr.txt`)
 - runner prerequisite transcripts (`runner/actions/<action_id>/prereqs_stdout.txt`,
   `prereqs_stderr.txt`)
+- terminal session recordings (`runner/actions/<action_id>/terminal.cast`) (when enabled)
 - `ground_truth.command_summary` field
 - redacted input argument objects stored in artifacts
   (`runner/actions/<action_id>/resolved_inputs_redacted.json`)
@@ -592,13 +593,10 @@ pattern, as this may indicate unnecessary redundancy or a copy-paste error.
 When content is withheld (fail-closed), the pipeline MUST:
 
 - write a deterministic placeholder file or value
-
-  - Text placeholder: `<WITHHELD_BY_REDACTION_POLICY policy_id=... policy_version=...>`
-
+  - Text placeholder: the single-line `pa.placeholder.v1` record (see
+    [Placeholder artifacts](../spec/090_security_safety.md#placeholder-artifacts)).
 - record a failure reason (machine-readable) in Tier 0 logs
-
 - record that withholding occurred and which artifacts were affected
-
   - The run manifest SHOULD include this information
 
 ## Provenance requirements
@@ -638,6 +636,7 @@ CI MUST include fixture-based tests that validate:
 - post-check fail-closed behavior
 - passthrough pattern precedence
 - structured artifact redaction
+- asciinema cast redaction (v2 `.cast`; JSON value per line)
 
 Recommended fixture layout:
 

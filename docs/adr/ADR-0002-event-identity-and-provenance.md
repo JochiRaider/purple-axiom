@@ -62,12 +62,13 @@ The `identity_basis` is a minimal set of source-derived fields. It MUST exclude 
 pipeline-specific values:
 
 - MUST NOT include: `run_id`, `scenario_id`, `collector_version`, `normalizer_version`,
-  `metadata.synthetic_correlation_marker`, ingest/observed timestamps, file offsets, collector
-  hostnames, or any execution metadata.
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker`, ingest/observed timestamps, file
+  offsets, collector hostnames, or any execution metadata.
 
-Rationale: `metadata.synthetic_correlation_marker` is intentionally per-run/per-action correlation
-metadata. Including it in `identity_basis` would make `metadata.event_id` vary across runs and
-reprocessing, breaking stable joins and deterministic deduplication.
+Rationale: `metadata.extensions.purple_axiom.synthetic_correlation_marker` is intentionally
+per-run/per-action correlation metadata. Including it in `identity_basis` would make
+`metadata.event_id` vary across runs and reprocessing, breaking stable joins and deterministic
+deduplication.
 
 Identity basis selection is tiered:
 

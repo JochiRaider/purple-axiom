@@ -78,9 +78,10 @@ Upstream receiver/operator documentation defines the following behavior:
 - `suppress_rendering_info: true` avoids rendered or enriched rendering info collection, improving
   determinism (at the cost of leaving some values unresolved).
 
-Note on versioning: OpenTelemetry Collector release notes state that `v0.143.0` and `v0.143.1`
-artifacts are equivalent; Purple Axiom treats the receiver semantics above as authoritative for the
-`otelcol-contrib` v0.143.1 distribution.
+Note on versioning: Purple Axiom pins OpenTelemetry Collector Contrib to `otelcol-contrib` v0.143.1
+(see `SUPPORTED_VERSIONS.md`). The receiver semantics above are validated against that pinned
+distribution; upgrading the collector version MUST be treated as a telemetry contract change and
+MUST re-run the raw-mode canary and determinism tests in this spec.
 
 #### Reference collector config (raw Windows Event Log receiver)
 
@@ -132,53 +133,83 @@ and asserting:
 - If `attributes["log.record.original"]` is present, it MUST satisfy the same `<Event` prefix and
   `<RenderingInfo>` absence checks as `body`.
 
+Telemetry validation MUST emit a dotted substage outcome:
+
+- `stage="telemetry.windows_eventlog.raw_mode"`.
+
+Failure classification for `telemetry.windows_eventlog.raw_mode` (fail closed):
+
+- If the canary is not observed or raw XML is unavailable for the canary payload, the substage MUST
+  fail closed with `reason_code=winlog_raw_missing`.
+- If `<RenderingInfo>` is present in the canary payload, the substage MUST fail closed with
+  `reason_code=winlog_rendering_detected`.
+
 A reference canary is:
 
 - `eventcreate /L APPLICATION /T INFORMATION /ID 9001 /SO EventCreate /D "PurpleAxiom raw-mode canary"`
 
 Network egress enforcement check (required when outbound egress is denied):
 
-- When effective outbound policy is denied (see `scenario.safety.allow_network` and
-  `security.network.allow_outbound`), telemetry validation MUST attempt a TCP connect probe from the
-  target asset to the configured `security.network.egress_canary` endpoint.
+- The validator MUST compute `effective_allow_outbound` as the logical AND of:
+  - `scenario.safety.allow_network`, and
+  - `security.network.allow_outbound`.
+- When `effective_allow_outbound=false` and `security.network.egress_canary.required_on_deny=true`,
+  telemetry validation MUST attempt a TCP connect probe from the target asset to the configured
+  `security.network.egress_canary` endpoint.
+  - When `effective_allow_outbound=false` and
+    `security.network.egress_canary.required_on_deny=false`, the probe is best-effort; failure to
+    run MUST NOT, by itself, fail telemetry validation.
 - `security.network.egress_canary.address` MUST be a literal IP address (no DNS) and MUST refer to a
   provider-controlled sentinel that is reachable when outbound egress is allowed and unreachable
   when outbound egress is denied.
 - The probe MUST use a bounded timeout (default 2000 ms unless configured) and MUST be evaluated
   only by connect success/failure (no HTTP semantics).
-- If the probe succeeds while outbound egress is denied, telemetry validation MUST fail closed as an
-  egress policy violation (see the operability and stage outcome specifications for reason codes and
-  required evidence fields).
-- The validator MUST record deterministic probe evidence in
-  `runs/<run_id>/logs/telemetry_validation.json` under `network_egress_policy` (see
-  [Practical validation harness](#practical-validation-harness-required)).
+
+Telemetry validation MUST emit a dotted substage outcome:
+
+- `stage="telemetry.network.egress_policy"`.
+
+Failure classification for `telemetry.network.egress_policy` (fail closed when the canary is
+enabled):
+
+- If the egress canary is enabled but missing/unconfigured, the substage MUST fail closed with
+  `reason_code=egress_canary_unconfigured`.
+- If the probe cannot be executed (local error running probe), the substage MUST fail closed with
+  `reason_code=egress_probe_unavailable`.
+- If the probe succeeds while `effective_allow_outbound=false`, the substage MUST fail closed with
+  `reason_code=egress_violation`.
+
+The validator MUST record deterministic probe evidence in
+`runs/<run_id>/logs/telemetry_validation.json` under `network_egress_policy` (see
+[Practical validation harness](#practical-validation-harness-required)).
 
 #### Agent liveness (dead-on-arrival) canary (required for push-only OTLP)
 
-In a push-only OTLP architecture, "no scenario telemetry observed" is ambiguous: the agent may be
-healthy but idle, or it may have failed before exporting any records. Purple Axiom MUST disambiguate
-these cases without introducing orchestrator->agent RPC by requiring an OS-neutral agent liveness
-signal derived from collector self-telemetry.
+In the push-only OTLP architecture, the absence of events can mean "no activity" or "the agent never
+started." A minimal liveness canary is required.
 
 Normative requirements:
 
 - For every asset with `telemetry.otel.enabled=true`, the effective collector deployment MUST export
-  collector self-telemetry (at minimum process metrics) upstream during the run telemetry window.
+  collector self-telemetry upstream during the run telemetry window.
   - The RECOMMENDED implementation is:
-    1. Enable the collector's Prometheus metrics endpoint (internal telemetry).
+    1. Enable the collector's internal telemetry (Prometheus metrics endpoint).
     1. Scrape it with a Prometheus receiver.
-    1. Export the scraped metrics via OTLP to the run host / gateway.
-- Telemetry validation MUST treat the presence of collector self-telemetry for an asset as the
-  authoritative "agent alive" heartbeat.
+    1. Export the scraped metrics via OTLP.
+- Collector self-telemetry MUST be attributable to a unique `asset_id` using the same asset identity
+  mechanism used for telemetry logs ingestion (for example: a per-asset OTLP endpoint, mTLS identity
+  mapping, or stable OTel resource attributes joined against `logs/lab_inventory_snapshot.json`).
+- Telemetry validation MUST treat the presence of collector self-telemetry for an expected asset as
+  the authoritative "agent alive" heartbeat.
 - Telemetry validation MUST fail closed if no heartbeat is observed for an expected asset within
   `telemetry.otel.agent_liveness.startup_grace_seconds` from the start of the run telemetry window.
   - Default: 30 seconds.
 - Heartbeat evaluation MUST be based on the presence of one or more metric time series whose names
   match `telemetry.otel.agent_liveness.required_metric_names` (default:
   `otelcol_process_memory_rss`, `otelcol_process_cpu_seconds`).
-- If the heartbeat is missing for one or more expected assets, telemetry validation MUST record a
-  stage outcome `telemetry.agent.liveness` with `reason_code=agent_heartbeat_missing` (see
-  operability and stage outcome specifications).
+- Telemetry validation MUST emit a dotted substage outcome with `stage="telemetry.agent.liveness"`.
+  - When the heartbeat is missing for one or more expected assets, the substage MUST fail closed
+    with `reason_code=agent_heartbeat_missing`.
 - The validator MUST record deterministic liveness evidence in
   `runs/<run_id>/logs/telemetry_validation.json` under `agent_liveness` (see
   [Practical validation harness](#practical-validation-harness-required)).
@@ -246,8 +277,9 @@ Minimum required channels (Windows):
 
 Notes:
 
-- If Sysmon is not installed on a Windows target, the run MUST be treated as failed (telemetry stage
-  `fail_closed`), unless the scenario explicitly declares Sysmon as not required for that run.
+- If Sysmon is not installed on a Windows target (for example, the Sysmon channel cannot be opened
+  by the receiver), telemetry validation MUST fail closed with `reason_code=required_source_missing`
+  unless the scenario explicitly declares Sysmon as not required for that run.
 - ForwardedEvents MAY be collected when used, but is not required for v0.1.
 
 ### Output shape and assumptions
@@ -415,6 +447,11 @@ Normative requirements:
   tuning MUST be performed before the asset is considered validated.
 - Any tuning change that increases steady-state drops (`otelcol_processor_dropped_log_records`)
   SHOULD be treated as a regression unless explicitly justified by tighter resource budgets.
+- When resource budget gating is enabled for the run, telemetry validation MUST emit a dotted
+  substage outcome with `stage="telemetry.resource_budgets"` and MUST classify violations using the
+  `reason_code` values in ADR-0005 (`resource_budgets_unconfigured`, `resource_metrics_missing`,
+  `eps_target_not_met`, `resource_budget_cpu_exceeded`, `resource_budget_memory_exceeded`,
+  `resource_budget_queue_pressure`).
 
 ## Checkpointing and replay semantics (required)
 
@@ -457,7 +494,8 @@ breaking determinism goals.
    - The pipeline MUST accept replays and MUST rely on downstream dedupe keyed by
      `metadata.event_id` to prevent duplicate normalized events.
    - The pipeline MUST record checkpoint-loss and replay indicators in run-scoped logs (see
-     [Practical validation harness](#practical-validation-harness-required)).
+     [Practical validation harness](#practical-validation-harness-required)) and MUST surface
+     checkpoint loss as a NON-FATAL telemetry warning with `reason_code=checkpoint_loss`.
    - For file-tailed sources with rotation, the pipeline MUST assume that checkpoint loss can
      manifest as replay duplication or gaps if rotated segments become unreadable or are deleted
      before ingestion completes.
@@ -496,12 +534,25 @@ backend for receiver state (example: `filelog` offsets and Windows Event Log boo
 
 Normative requirements:
 
-- For validation runs, collector configs that use `file_storage` for receiver state MUST set
-  `recreate: false` unless the operator explicitly opts into automatic recovery via
-  `telemetry.otel.checkpoint_corruption.mode = "recreate_fresh"` (see the
-  [configuration reference](120_config_reference.md)).
-- If `recreate: true` is enabled, any observed recovery (fresh database creation or `.backup`
-  emission) MUST be treated as checkpoint loss and MUST be recorded as such.
+- Collector configs that use `file_storage` for receiver state MUST set `recreate: false` unless an
+  operator explicitly opts into automatic recovery via
+  `telemetry.otel.checkpoint_corruption.mode = "recreate_fresh"` (see config reference).
+- Collector configs SHOULD set `fsync: true` when supported (Linux ext4, XFS). If `fsync` is not
+  supported in the chosen file_storage implementation, the config SHOULD note this explicitly.
+- Any observed `file_storage` corruption recovery (fresh DB start) MUST be treated as checkpoint
+  loss and MUST be recorded as such with `reason_code=checkpoint_loss` (NON-FATAL).
+- Telemetry validation MUST emit a dotted substage outcome with
+  `stage="telemetry.checkpointing.storage_integrity"`.
+  - Missing checkpoint store MUST fail closed with `reason_code=checkpoint_store_corrupt` and MUST
+    record `checkpoint_store.error_code=checkpoint_store_missing` in
+    `runs/<run_id>/logs/telemetry_validation.json`.
+  - Unwritable checkpoint store MUST fail closed with `reason_code=checkpoint_store_corrupt` and
+    MUST record `checkpoint_store.error_code=checkpoint_store_unwritable` in
+    `runs/<run_id>/logs/telemetry_validation.json`.
+  - Corrupt checkpoint store that prevents reliable startup MUST fail closed with
+    `reason_code=checkpoint_store_corrupt` and MUST record
+    `checkpoint_store.error_code=checkpoint_store_corrupt` in
+    `runs/<run_id>/logs/telemetry_validation.json`.
 - Collector configs SHOULD set `fsync: true` for checkpoint stores when supported. If `fsync: false`
   is used, operators MUST treat checkpoint corruption as a credible risk and MUST document the
   performance tradeoff.
@@ -544,8 +595,8 @@ Normative requirements:
   explicit allowlist so marker-bearing events are always retained.
 - The raw store MUST preserve the marker field in the captured record (attributes/body as emitted).
   Normalization MUST preserve the marker value on the OCSF envelope field
-  `metadata.synthetic_correlation_marker` even when the base event is not mapped (see
-  [Normalization](050_normalization_ocsf.md))
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker` even when the base event is not
+  mapped (see [Normalization](050_normalization_ocsf.md))
 
 This invariant is required for regression comparisons and for classifying `missing_telemetry` when
 markers are expected but not observed. Implementations MUST NOT substitute time-window or other
@@ -556,12 +607,38 @@ heuristic correlation in place of marker propagation.
 Before the telemetry stage is treated as green, validate each Windows endpoint with a repeatable
 checklist.
 
+State machine integration (required):
+
+- Telemetry validation outcomes MUST be emitted as dotted substages in `health.json.stages[]` and as
+  stage outcomes in `manifest.json` (see ADR-0005 and the operability spec).
+- At minimum, telemetry validation MUST be able to emit the following substages when the
+  corresponding checks are enabled:
+  - `telemetry.disk.preflight`
+  - `telemetry.agent.liveness`
+  - `telemetry.windows_eventlog.raw_mode`
+  - `telemetry.network.egress_policy`
+  - `telemetry.baseline_profile`
+  - `telemetry.checkpointing.storage_integrity`
+  - `telemetry.resource_budgets`
+
 ### Correctness
 
 - Generate known events (Security 4624/4625, Sysmon 1/3, PowerShell 4104, and similar).
 - Verify they arrive in the raw store with `raw: true` payloads intact.
 - Verify collector self-telemetry is present within the configured startup grace so "no events" can
   be distinguished from agent startup failure (dead on arrival).
+
+### Disk capacity preflight (required)
+
+Before starting the run telemetry window (or before starting any process that will write run-scoped
+raw stores), telemetry validation MUST perform a disk capacity preflight consistent with the
+operability spec section "Telemetry validation (gating)":
+
+- The validator MUST emit a dotted substage outcome with `stage="telemetry.disk.preflight"`.
+- If free space cannot be determined, telemetry validation MUST fail closed with
+  `reason_code=disk_metrics_missing`.
+- If free space is insufficient for the configured raw-store budget, telemetry validation MUST fail
+  closed with `reason_code=disk_free_space_insufficient`.
 
 ### Telemetry baseline profile gate (required when enabled)
 
@@ -579,7 +656,7 @@ When `telemetry.baseline_profile.enabled=true`:
    entry (highest `priority`, then `profile_id` bytewise ascending) and verify all
    `required_signals[]` meet their `min_count` within the validation window.
    - A profile matches an asset when all specified `selector` fields match the asset record in
-     `lab_inventory_snapshot.json`:
+     `logs/lab_inventory_snapshot.json`:
      - `asset_ids`: contains `asset_id`
      - `os`: equals asset `os`
      - `role`: equals asset `role`
@@ -635,18 +712,20 @@ directly as `evidence_refs[].artifact_path` entries for telemetry-layer gaps in 
 
 Minimum required fields for `logs/telemetry_validation.json`:
 
-- `asset_id` (string)
-- `collector_restart_test` (object)
-  - `passed` (bool)
-- `checkpoint_loss_test` (object)
-  - `passed` (bool)
-  - `checkpoint_loss_observed` (bool)
-  - `replay_observed` (bool)
-  - `dedupe_preserved_uniqueness` (bool)
-- `file_tailed_continuity_test` (object, OPTIONAL; REQUIRED when any file-tailed source is enabled)
-  - `passed` (bool)
-  - `rotation_exercised` (bool)
-  - `sequence_gap_observed` (bool)
+- `assets` (array of objects; sorted by `asset_id` ascending)
+  - `asset_id` (string)
+  - `collector_restart_test` (object)
+    - `passed` (bool)
+  - `checkpoint_loss_test` (object)
+    - `passed` (bool)
+    - `checkpoint_loss_observed` (bool)
+    - `replay_observed` (bool)
+    - `dedupe_preserved_uniqueness` (bool)
+  - `file_tailed_continuity_test` (object, OPTIONAL; REQUIRED when any file-tailed source is
+    enabled)
+    - `passed` (bool)
+    - `rotation_exercised` (bool)
+    - `sequence_gap_observed` (bool)
 
 Recommended additional fields (operator UX and regression tracking):
 
@@ -672,7 +751,8 @@ Recommended additional fields (Windows Event Log raw-mode canary triage):
 
 Recommended additional fields (network egress policy enforcement):
 
-- `network_egress_policy` (object, OPTIONAL; REQUIRED when effective outbound policy is denied)
+- `network_egress_policy` (object, OPTIONAL; REQUIRED when effective outbound policy is denied and
+  the egress canary is enabled (`security.network.egress_canary.required_on_deny=true`))
   - `asset_id` (string)
   - `effective_allow_outbound` (bool)
   - `canary` (object)
@@ -716,6 +796,8 @@ Recommended additional fields (checkpointing diagnostics):
 - `checkpoint_store` (object, OPTIONAL)
   - `backend` (string; example: `file_storage`)
   - `directory` (string; stable path)
+  - `error_code` (string, OPTIONAL; REQUIRED when `telemetry.checkpointing.storage_integrity` fails;
+    one of `checkpoint_store_missing | checkpoint_store_unwritable | checkpoint_store_corrupt`)
   - `recreate_enabled` (bool)
   - `fsync_enabled` (bool, when detectable)
 - `checkpoint_corruption_test` (object, OPTIONAL)
@@ -747,13 +829,26 @@ raw Parquet writing and any optional sidecar extraction:
 ### Required behavior
 
 1. Raw event XML promotion rules (analytics tier).
-   - The raw Windows Event Log Parquet dataset MUST include `event_xml` (string, MAY be truncated),
-     `event_xml_sha256` (SHA-256 of the full UTF-8 byte sequence of the pre-truncation XML payload),
-     and `event_xml_truncated` (bool).
-   - If `event_xml` exceeds `max_event_xml_bytes`, the pipeline MUST set `event_xml_truncated=true`,
-     inline only the first `max_event_xml_bytes` bytes (UTF-8) as `event_xml`, compute and store
-     `event_xml_sha256` from the full pre-truncation payload, and optionally write the full payload
-     to sidecar.
+   - The raw Windows Event Log Parquet dataset MUST include:
+     - `event_xml` (string; raw event XML, possibly truncated)
+     - `event_xml_sha256` (string; sha256 over the full pre-truncation UTF-8 byte sequence of the
+       raw event XML payload, hex lowercase)
+     - `event_xml_truncated` (bool)
+     - `payload_overflow_bytes` (int, OPTIONAL; REQUIRED when `event_xml_truncated=true`)
+     - `payload_overflow_sha256` (string, OPTIONAL; REQUIRED when `event_xml_truncated=true`; MUST
+       equal `event_xml_sha256`)
+     - `payload_overflow_ref` (string, OPTIONAL; REQUIRED when `event_xml_truncated=true` and
+       `sidecar.enabled=true`; run-relative POSIX-style path)
+   - If `event_xml` exceeds `max_event_xml_bytes`, the pipeline MUST:
+     - set `event_xml_truncated=true`,
+     - set `payload_overflow_bytes` to the full pre-truncation UTF-8 byte length,
+     - compute `event_xml_sha256` as SHA-256 over the full pre-truncation UTF-8 bytes,
+     - set `payload_overflow_sha256` to the same value as `event_xml_sha256`,
+     - inline `event_xml` as the largest prefix of the UTF-8 byte sequence whose length is
+       `<= max_event_xml_bytes` and that is valid UTF-8 (truncate on a codepoint boundary; no
+       replacement characters), and
+     - when sidecar is enabled, write the full pre-truncation XML bytes to sidecar and set
+       `payload_overflow_ref` (when sidecar is disabled, `payload_overflow_ref` MUST be null).
 1. Binary extraction rules (optional but mechanically testable).
    - If the raw XML contains a binary-like field value (hex or base64) and its decoded length is \<=
      `max_binary_bytes`, the pipeline MAY decode it to bytes, write the decoded bytes to sidecar,
@@ -794,11 +889,17 @@ string as follows, in priority order:
    it as `raw_event_xml`.
 1. Else if `LogRecord.attributes["log.record.original"]` exists and is a string and begins with
    `<Event`, use it as `raw_event_xml` and increment `wineventlog_used_log_record_original_total`.
-1. Else treat the record as `RAW_XML_UNAVAILABLE` (see validation and gating).
+1. Else treat the record as `RAW_XML_UNAVAILABLE` (see validation and gating) and increment
+   `wineventlog_raw_unavailable_total`.
+
+If `raw_event_xml` is acquired, the pipeline MUST validate that it is well-formed XML using a strict
+XML parser with no heuristic repair. If well-formedness validation fails, treat the record as
+`RAW_XML_MALFORMED`, increment `wineventlog_raw_malformed_total`, and proceed according to the
+configured `fail_mode` (see validation and gating).
 
 The pipeline MUST NOT attempt heuristic recovery of identity fields (regex scraping, partial XML
-repair) when `RAW_XML_UNAVAILABLE` triggers, because this can introduce non-deterministic behavior
-across environments and library versions.
+repair) when `RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` triggers, because this can introduce
+non-deterministic behavior across environments and library versions.
 
 #### Missing provider manifests and rendering metadata failures
 
@@ -825,12 +926,14 @@ If the pipeline attempts to decode binary payloads from `raw_event_xml` and deco
 #### Oversize payload sidecar naming (deterministic)
 
 When `sidecar.enabled: true` and a payload overflows `max_event_xml_bytes`, the sidecar object name
-MUST be content-addressed:
+MUST be derived deterministically from `(metadata.event_id, field_path)`:
 
 - `payload_overflow_sha256` MUST be lowercase hex.
-- The sidecar filename MUST be `${payload_overflow_sha256}.xml`.
-- `payload_overflow_ref` MUST be the POSIX-style relative path
-  `${sidecar.path}/${payload_overflow_sha256}.xml` (even on Windows).
+- The `field_path` token for the full overflow payload MUST be `event_xml`.
+- `field_path_hash` MUST be SHA-256 of the UTF-8 bytes of `field_path`, encoded as lowercase hex.
+- The sidecar filename MUST be `${field_path_hash}.xml`.
+- `payload_overflow_ref` MUST be the POSIX-style run-relative path
+  `${sidecar.dir}/${metadata.event_id}/${field_path_hash}.xml` (even on Windows).
 
 If writing the sidecar object fails, the pipeline MUST:
 
@@ -868,16 +971,19 @@ Telemetry validation output MUST include the following counters (integers, deter
 - `wineventlog_sidecar_write_failed_total`
 
 Under `fail_mode: fail_closed`, any non-zero `wineventlog_raw_unavailable_total` or
-`wineventlog_raw_malformed_total` MUST fail the telemetry stage. Under `fail_mode: warn_and_skip`,
-records that trigger `RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` MUST be skipped (not written to
-`raw_parquet/windows_eventlog`) and MUST still be counted in telemetry validation output.
+`wineventlog_raw_malformed_total` MUST fail the telemetry stage with
+`reason_code=raw_xml_unavailable`. Under `fail_mode: warn_and_skip`, records that trigger
+`RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` MUST be skipped (not written to
+`raw_parquet/windows_eventlog`) and MUST still be counted in telemetry validation output; the run
+MUST record a NON-FATAL telemetry warning with `reason_code=raw_xml_unavailable`.
 
 ## Key decisions
 
 - Raw Windows Event Log XML is the canonical source for determinism and identity fields.
 - Collector checkpointing and replay are expected and handled by downstream dedupe.
 - Telemetry validation requires restart, backpressure, and payload-size tests.
-- Payload truncation and sidecar storage are deterministic and content-addressed.
+- Payload truncation and sidecar storage are deterministic and integrity-hashed (via
+  `payload_overflow_ref` and `payload_overflow_sha256`).
 
 ## References
 
@@ -890,5 +996,6 @@ records that trigger `RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` MUST be skippe
 
 | Date       | Change                                            |
 | ---------- | ------------------------------------------------- |
+| 2026-01-22 | Align reason codes; fix marker path and inventory |
 | 2026-01-13 | Add network egress canary to telemetry validation |
 | TBD        | Style guide migration (no technical changes)      |

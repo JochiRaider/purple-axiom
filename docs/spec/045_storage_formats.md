@@ -16,6 +16,9 @@ The key principle is a two-tier model:
 - Analytics tier: store a structured, columnar representation (Parquet) for evaluation, scoring, and
   reporting.
 
+Note: Tier 0 ("logs") is an operability surface and does not change the evidence vs analytics tier
+model.
+
 v0.1 policy (normative):
 
 - The pipeline MUST NOT require native container exports. Pipeline correctness (normalization,
@@ -42,22 +45,53 @@ v0.1 policy (normative):
 
 ## Storage tiers
 
+Path notation (normative):
+
+- In this document, `runs/<run_id>/...` is used as an illustrative on-disk prefix for run bundle
+  locations.
+- Any field that stores an artifact path (for example, `evidence_refs[].artifact_path`,
+  `sidecar_ref`, `payload_overflow_ref`) MUST store a run-relative POSIX path (relative to the run
+  bundle root) and MUST NOT include the `runs/<run_id>/` prefix.
+  - Example run-relative paths: `manifest.json`, `inputs/baseline_run_ref.json`,
+    `raw/evidence/blobs/wineventlog/<event_id_dir>/<field_path_hash>.xml`.
+
 ### No timestamped contracted filenames (normative)
 
 - Contracted artifacts in Tier 1 and Tier 2 locations MUST have deterministic paths.
-  - See the data contracts specification for the canonical "deterministic artifact path" rule.
+  - See the [data contracts specification](025_data_contracts.md) for the canonical "deterministic
+    artifact path" rule.
 - This rule applies equally to regression inputs and outputs (baseline references, delta reports).
 - Timestamps belong inside artifact content, not in filenames.
 - If an implementation generates timestamped scratch outputs, it MUST place them under a
   non-contracted, explicitly excluded directory, and MUST disclose the exclusion policy in
   operability docs or configuration.
 
+### Publish-gate staging directories (normative; state machine integration hook)
+
+- Stages that publish multi-file outputs MUST write those outputs under a stage-owned staging
+  directory before publish:
+  - `runs/<run_id>/.staging/<stage_id>/`
+- `.staging/**` is non-contracted scratch space:
+  - It MUST NOT be referenced by `evidence_refs[]` (or any other evidence pointer fields).
+  - It MUST NOT be relied upon for pipeline correctness after publish.
+- Stages MUST publish outputs by an atomic rename/move from `.staging/<stage_id>/` into the final
+  contracted locations under `runs/<run_id>/` (see ADR-0004 and data contracts publish-gate rules).
+- After a stage completes (success or failure), `.staging/<stage_id>/` SHOULD be absent or empty.
+  Stages SHOULD remove the staging directory on exit (best-effort). CI MAY lint for any remaining
+  `.staging/<stage_id>/**` entries as an incomplete publish-gate signal.
+
+Note (non-normative): The existence (and eventual disappearance or emptiness) of
+`.staging/<stage_id>/` provides a filesystem-observable integration point for lifecycle state
+machines (ADR-0007).
+
 ### Regression baseline reference and outputs (v0.1; optional when enabled)
 
 When regression comparison is enabled, the reporting stage MUST materialize a deterministic baseline
 reference under the candidate run bundle and MUST compute regression results as part of reporting.
 Baseline reference materialization and regression computation are owned by the reporting stage (see
-the `reporting.regression_compare` health substage in ADR-0005).
+the `reporting.regression_compare` health substage in ADR-0005). Other stages MUST treat any
+pre-existing files under `inputs/**` as read-only; the baseline reference artifacts defined below
+are write-once outputs of reporting and MUST NOT overwrite unrelated operator-provided inputs.
 
 Timing (normative):
 
@@ -66,15 +100,17 @@ Timing (normative):
   reference artifacts are atomically published with the run bundle and can be referenced by evidence
   pointers in `report/**`.
 
-Baseline reference (at least one form MUST be present; snapshot form is RECOMMENDED):
+Baseline reference (v0.1; normative):
 
-- Snapshot form (RECOMMENDED; preferred for local-first portability):
-  - `runs/<run_id>/inputs/baseline/manifest.json`
-    - A byte-for-byte copy of the baseline run's `manifest.json`.
-- Pointer form (allowed when the baseline is not copied into the run bundle):
+- Pointer form (REQUIRED when regression comparison is enabled):
   - `runs/<run_id>/inputs/baseline_run_ref.json`
-    - A pointer to the baseline run identifier or manifest path plus an expected SHA-256 for the
-      baseline `manifest.json` bytes.
+    - A deterministic record of baseline selection and baseline manifest integrity (expected SHA-256
+      for the baseline `manifest.json` bytes when readable).
+- Snapshot form (RECOMMENDED when the baseline manifest bytes are readable; preferred for
+  local-first portability):
+  - `runs/<run_id>/inputs/baseline/manifest.json`
+    - A byte-for-byte copy of the baseline run's `manifest.json` (no reformatting, no key
+      reordering).
 
 If both forms are present, they MUST be consistent (the referenced baseline manifest hash must match
 the copied snapshot hash).
@@ -89,15 +125,15 @@ Evidence references (normative):
   MUST use a run-relative path that follows the deterministic layout rules in this document.
 - Evidence paths MUST NOT be absolute paths and MUST NOT encode environment-specific prefixes.
 - Regression-related evidence pointers SHOULD commonly reference:
-  - `runs/<run_id>/inputs/baseline_run_ref.json`
-  - `runs/<run_id>/inputs/baseline/manifest.json` (when present)
+  - `inputs/baseline_run_ref.json`
+  - `inputs/baseline/manifest.json` (when present)
   - any missing or mismatched artifact paths that caused `baseline_incompatible` (for example, a
     required baseline or candidate artifact path referenced in the regression compare algorithm)
 
 Verification hook (RECOMMENDED): CI SHOULD include a storage-format lint that fails if the
 regression surface deviates from `report/report.json.regression` or uses timestamped filenames.
 
-### Tier 0: Ephemeral operational logs
+### Tier 0: Operability logs (structured) and debug logs (ephemeral)
 
 Location:
 
@@ -105,15 +141,22 @@ Location:
 
 Format:
 
-- Plain text (or structured JSON logs if preferred)
+- Plain text (for example `run.log`)
+- Structured JSON artifacts (for example health, validation summaries, and counters)
 
 Retention:
 
-- Short-lived. Not used for scoring, not considered authoritative evidence.
+- Debug text logs are short-lived and not used for scoring.
+- Structured operability artifacts under `runs/<run_id>/logs/` that participate in CI gating or
+  deterministic failure triage (for example `logs/health.json`, `logs/telemetry_validation.json`,
+  and `logs/contract_validation/**` when present) SHOULD be retained with the run bundle for as long
+  as the run bundle itself is retained.
 
 Purpose:
 
-- Human debugging and operator visibility.
+- Operator visibility and deterministic failure triage.
+- CI-facing evidence surfaces (stage outcomes, validation summaries), distinct from Tier 1 evidence
+  and Tier 2 analytics datasets.
 
 ### Tier 1: Evidence (source-native)
 
@@ -135,6 +178,7 @@ Format:
     [osquery integration specification](042_osquery_integration.md))
   - Runner transcripts and executor metadata:
     - per-action stdout/stderr transcripts
+    - terminal session recordings (asciinema `.cast`) (optional)
     - executor metadata (exit codes, durations, executor version)
     - cleanup verification results
 
@@ -161,6 +205,8 @@ Runner evidence notes:
 - Recommended per-action layout:
   - `runner/actions/<action_id>/stdout.txt`
   - `runner/actions/<action_id>/stderr.txt`
+  - `runner/actions/<action_id>/terminal.cast` (optional; asciinema terminal session recording for
+    human playback; MUST NOT be used for scoring)
   - `runner/actions/<action_id>/executor.json`
   - `runner/actions/<action_id>/resolved_inputs_redacted.json` (optional; redaction-safe resolved
     inputs basis used for `parameters.resolved_inputs_sha256`)
@@ -178,10 +224,12 @@ timestamp-variant. Timestamped scratch outputs MUST NOT be written by inventing 
 contracted artifacts. Note: see
 [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
 
-Side-effect ledger encoding and hashing (normative):
+#### Side-effect ledger encoding and hashing (normative):
 
 - `runner/actions/<action_id>/side_effect_ledger.json` is Tier 1 evidence and MUST be stored under
   the run bundle root (not under `logs/`).
+- v0.1 defines the side-effect ledger at the per-action path above; no run-level rollup ledger path
+  is contract-backed in v0.1.
 - The ledger MUST be a valid JSON document after every write (crash-safe), and MUST use:
   - UTF-8 encoding
   - LF (`\n`) line endings
@@ -221,15 +269,19 @@ Purpose:
 ### Always JSON (small, contract-driven)
 
 - `manifest.json`
-- `inputs/baseline_run_ref.json` (optional; regression runs)
-- `inputs/baseline/manifest.json` (optional; regression runs)
+- `inputs/baseline_run_ref.json` (REQUIRED when regression comparison is enabled)
+- `inputs/baseline/manifest.json` (optional; RECOMMENDED when baseline manifest bytes are readable)
+- `inputs/telemetry_baseline_profile.json` (optional; telemetry baseline profile gate)
 - `plan/expanded_graph.json` (v0.2+)
 - `plan/expansion_manifest.json` (v0.2+)
 - `plan/template_snapshot.json` (v0.2+; optional)
 - `criteria/manifest.json`
 - `scoring/summary.json`
+- `normalized/mapping_profile_snapshot.json`
 - `normalized/mapping_coverage.json`
+- `bridge/coverage.json` (optional; when detection is enabled)
 - `report/report.json`
+- `report/thresholds.json`
 
 Rationale:
 
@@ -328,9 +380,19 @@ Guideline:
 
 To support reproducible diffs and regression tests:
 
-- When writing Parquet within a run, sort rows deterministically before write:
+- For any Parquet dataset that includes both `time` and `metadata.event_id` columns (notably
+  `normalized/ocsf_events/`), writers MUST sort rows deterministically before write by:
   1. `time` ascending
   1. `metadata.event_id` ascending
+- For Parquet datasets that do not include this tuple, writers SHOULD define an equivalent
+  dataset-specific stable sort key (time-like column first, then a stable record identity column).
+- Within any contracted Parquet dataset directory, writers MUST use deterministic, non-timestamped,
+  non-random output filenames.
+  - Filenames MUST NOT include UUIDs, timestamps, random salts, or process-derived IDs.
+  - Recommended pattern: `part-0000.parquet`, `part-0001.parquet`, ... (zero-padded, monotonically
+    increasing).
+  - If partitioning is used (for example `class_uid=.../date=.../`), the deterministic filename rule
+    applies within each leaf partition directory.
 
 Notes:
 
@@ -345,20 +407,49 @@ into Parquet (oversized XML, decoded binary fields).
 When enabled:
 
 - Sidecar payloads live under Tier 1 evidence:
-  - `runs/<run_id>/raw/evidence/blobs/wineventlog/`
+  - `raw/evidence/blobs/wineventlog/`
 - Sidecar objects MUST be addressed deterministically by:
-  - `metadata.event_id` (directory)
-  - `field_path_hash` (filename stem, SHA-256 of UTF-8 field path)
+  - `event_id_dir` (directory; filesystem-safe stable identifier derived from `metadata.event_id`)
+  - `field_path_hash` (filename stem)
 
-Example:
+`event_id_dir` definition (normative):
 
-- `runs/<run_id>/raw/evidence/blobs/wineventlog/<metadata.event_id>/<field_path_hash>.bin`
-- `runs/<run_id>/raw/evidence/blobs/wineventlog/<metadata.event_id>/<field_path_hash>.xml`
+- `metadata.event_id` values are not guaranteed to be filesystem-safe (for example, `:` is not a
+  valid path character on Windows).
+- Implementations MUST derive `event_id_dir` deterministically as the suffix of `metadata.event_id`
+  after the final `:` character.
+  - Example: `pa:eid:v1:0123456789abcdef0123456789abcdef` -> `0123456789abcdef0123456789abcdef`
+- In v0.1, `event_id_dir` MUST be lowercase hex.
 
-Parquet rows MUST carry enough reference metadata to retrieve the sidecar payload:
+`field_path_hash` definition (normative):
 
-- `sidecar_ref` (string, relative path under the run bundle root)
-- `sidecar_sha256` (string)
+- Let `field_path` be the canonical field path string that identifies the logical payload field (for
+  example: `event_xml`, `raw.event_data.script_block_text`).
+- `field_path` MUST be encoded as UTF-8 with no normalization.
+- `field_path_hash = sha256_hex(UTF8(field_path))` as lowercase hex.
+
+File extensions (normative):
+
+- Writers SHOULD use a deterministic extension based on the payload encoding:
+  - `.xml` for XML
+  - `.json` for JSON
+  - `.bin` for all other binary payloads
+
+Examples:
+
+- `raw/evidence/blobs/wineventlog/<event_id_dir>/<field_path_hash>.bin`
+- `raw/evidence/blobs/wineventlog/<event_id_dir>/<field_path_hash>.xml`
+
+Reference fields (normative):
+
+- Parquet rows that externalize a payload to a sidecar object MUST carry enough reference metadata
+  to retrieve and integrity-check the sidecar payload.
+- Implementations MAY use either:
+  - generic reference fields:
+    - `sidecar_ref` (string; run-relative path under the run bundle root)
+    - `sidecar_sha256` (string; lowercase hex SHA-256 of the sidecar payload bytes), or
+  - dataset-specific reference fields with identical semantics (for example `payload_overflow_ref` /
+    `payload_overflow_sha256` in the raw Windows Event Log dataset).
 
 If redaction is disabled (`security.redaction.enabled=false`), sidecar payload retention MUST follow
 the same withhold/quarantine rules as other evidence-tier artifacts.
@@ -505,7 +596,11 @@ Minimum required columns:
 
 Provenance (required):
 
+- `metadata.uid` (string)
+  - `metadata.uid` MUST equal `metadata.event_id`.
 - `metadata.event_id` (string)
+- `metadata.identity_tier` (int32)
+  - Allowed values: `1 | 2 | 3` (see ADR-0002).
 - `metadata.run_id` (string, UUID)
   - `metadata.run_id` MUST validate as an RFC 4122 UUID (canonical hyphenated form).
 - `metadata.scenario_id` (string)
@@ -513,7 +608,8 @@ Provenance (required):
 - `metadata.normalizer_version` (string)
 - `metadata.source_type` (string)
 - `metadata.source_event_id` (string, nullable)
-- `metadata.ingest_time_utc` (timestamp or string, nullable)
+- `metadata.ingest_time_utc` (timestamp_ms_utc, nullable)
+  - When present, `metadata.ingest_time_utc` MUST be UTC.
 
 Recommended convenience columns for evaluation:
 
@@ -540,6 +636,7 @@ collector output (example: the OpenTelemetry `windowseventlog` receiver).
 
 The raw table SHOULD use stable columns. Recommended columns include:
 
+- `time` (int64, ms since epoch, UTC)
 - `channel` (string)
 - `provider` (string)
 - `event_id` (int32)
@@ -553,10 +650,21 @@ The raw table SHOULD use stable columns. Recommended columns include:
 Canonical raw payload (required):
 
 - `event_xml` (string, nullable)
+  - When present, `event_xml` MUST contain the (possibly truncated) Windows Event XML payload.
 - `event_xml_sha256` (string, required)
+  - Lowercase hex SHA-256 computed over the full (untruncated) canonical XML payload bytes (UTF-8;
+    CRLF normalized to LF).
 - `event_xml_truncated` (bool, required)
-- `payload_overflow_ref` (string, nullable; relative sidecar path when overflow is written)
-- `payload_overflow_sha256` (string, nullable)
+- `payload_overflow_ref` (string, nullable; run-relative sidecar path when overflow is written)
+- `payload_overflow_sha256` (string, nullable; lowercase hex SHA-256 of the sidecar payload bytes)
+
+Overflow constraints (normative):
+
+- If `event_xml_truncated = true`, then `payload_overflow_ref` and `payload_overflow_sha256` MUST be
+  present.
+- If `event_xml_truncated = false`, then `payload_overflow_ref` and `payload_overflow_sha256` MUST
+  be absent.
+- When present, `payload_overflow_sha256` MUST equal `event_xml_sha256`.
 
 Rendered message strings are non-authoritative:
 
@@ -568,10 +676,13 @@ Rendered message strings are non-authoritative:
 
 If the raw XML payload exceeds a configured maximum payload size:
 
-- The writer MUST truncate `event_xml`.
+- The writer MUST truncate `event_xml` (but MUST still compute `event_xml_sha256` over the full,
+  untruncated canonical payload bytes).
 - The writer MUST set `event_xml_truncated = true`.
-- The writer MUST write the full payload to a content-addressed sidecar blob and set
-  `payload_overflow_ref` and `payload_overflow_sha256`.
+- The writer MUST write the full payload to a deterministically addressed sidecar blob (see "Sidecar
+  blob store") and set `payload_overflow_ref` and `payload_overflow_sha256`.
+  - For Windows Event Log XML overflow, the canonical `field_path` for `field_path_hash` MUST be
+    `event_xml`, and the sidecar file extension SHOULD be `.xml`.
 
 ### Optional: native container export (non-default)
 
@@ -710,4 +821,5 @@ high-fidelity Windows artifacts when needed.
 
 | Date       | Change            |
 | ---------- | ----------------- |
+| 2026-01-21 | update            |
 | 2026-01-12 | Formatting update |

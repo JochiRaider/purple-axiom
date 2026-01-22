@@ -711,6 +711,7 @@ Lifecycle semantics (normative):
           `runner/actions/<action_id>/requirements_evaluation.json`)
         - `executor_ref` (example: `runner/actions/<action_id>/executor.json`)
         - `stdout_ref` / `stderr_ref` (example: `runner/actions/<action_id>/stdout.txt`)
+        - `terminal_recording_ref` (example: `runner/actions/<action_id>/terminal.cast`)
         - `cleanup_stdout_ref` / `cleanup_stderr_ref` (example:
           `runner/actions/<action_id>/cleanup_stdout.txt`)
         - `cleanup_verification_ref` (example:
@@ -728,11 +729,15 @@ Phase evidence attachment (normative; when artifacts exist):
 - If the runner attempts `execute`, the runner MUST attach:
   - `evidence.executor_ref`, and
   - `evidence.stdout_ref` and `evidence.stderr_ref` to the `execute` phase record.
+  - If `runner/actions/<action_id>/terminal.cast` is produced, the runner MUST attach
+    `evidence.terminal_recording_ref` to the `execute` phase record.
 - If the runner attempts `revert`, the runner MUST attach:
   - `evidence.executor_ref`, and
   - `evidence.cleanup_stdout_ref` and `evidence.cleanup_stderr_ref` to the `revert` phase record.
 - If `runner/actions/<action_id>/cleanup_verification.json` is produced, the runner MUST attach
   `evidence.cleanup_verification_ref` to the `teardown` phase record.
+- `runner/actions/<action_id>/terminal.cast` (optional; asciinema terminal session recording for
+  human playback; MUST NOT be used for scoring)
 - If `runner/actions/<action_id>/state_reconciliation_report.json` is produced, the runner MUST
   attach `evidence.state_reconciliation_report_ref` to the `teardown` phase record.
 

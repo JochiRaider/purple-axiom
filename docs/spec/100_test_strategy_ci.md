@@ -661,18 +661,18 @@ record the outcome as `health.json` stage `telemetry.windows_eventlog.raw_mode` 
 
 #### Windows Event Log failure modes
 
-Missing publisher/manifest metadata with raw XML present MUST NOT fail ingestion and MUST increment
-`wineventlog_rendering_metadata_missing_total`.
-
-Raw XML unavailable MUST fail telemetry stage under `fail_mode: fail_closed`. Under
-`fail_mode: warn_and_skip`, it MUST skip the record and increment
-`wineventlog_raw_unavailable_total`.
-
-Oversize raw XML MUST truncate deterministically and create a content-addressed sidecar
-`${sha256}.xml` with `payload_overflow_ref` pointing to `${sidecar.path}/${sha256}.xml`.
-
-Binary decode failure MUST NOT drop the record. It MUST emit bounded summary and increment
-`wineventlog_binary_decode_failed_total`.
+- Missing publisher/manifest metadata with raw XML present MUST NOT fail ingestion and MUST
+  increment `wineventlog_rendering_metadata_missing_total`.
+- Raw XML unavailable MUST fail telemetry stage under `fail_mode: fail_closed`. Under
+  `fail_mode: warn_and_skip`, it MUST skip the record and increment
+  `wineventlog_raw_unavailable_total`.
+- Oversize raw XML MUST truncate deterministically and create a content-addressed sidecar
+  `${sha256}.xml` with `payload_overflow_ref` pointing to
+  `${telemetry.payload_limits.sidecar.dir}/${metadata.event_id}/${field_path_hash}.xml`.
+  - where `field_path_hash = sha256("event_xml")` (lowercase hex) and the directory includes
+    `metadata.event_id`
+- Binary decode failure MUST NOT drop the record. It MUST emit bounded summary and increment
+  `wineventlog_binary_decode_failed_total`.
 
 #### Synthetic correlation marker observability
 
@@ -688,8 +688,8 @@ The fixture set under `tests/fixtures/telemetry/synthetic_marker/` MUST include 
       attempted for at least one action.
     - Captured raw telemetry includes at least one marker-bearing event for that action.
   - Expected:
-    - Normalized output includes `metadata.synthetic_correlation_marker` on the corresponding OCSF
-      envelope and preserves the value verbatim through normalization.
+    - Normalized output includes `metadata.extensions.purple_axiom.synthetic_correlation_marker` on
+      the corresponding OCSF envelope and preserves the value verbatim through normalization.
     - Reporting records the per-action marker status as observed (`yes`) in a stable per-action
       ordering (sort by `action_id` ascending).
 

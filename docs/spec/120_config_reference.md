@@ -165,6 +165,9 @@ Common keys:
         `prepare` (see `032_atomic_red_team_executor_integration.md`).
   - `capture_transcripts` (optional, default: true): persist per-test stdout/stderr under `runner/`
     evidence
+  - `capture_terminal_recordings` (optional, default: false): persist per-test terminal session
+    recordings (asciinema `.cast`) under `runner/actions/<action_id>/terminal.cast` for human
+    debugging/docs (MUST NOT be used for scoring)
   - `capture_executor_metadata` (optional, default: true): persist per-test executor.json (exit
     code, duration, timestamps)
   - `cleanup` (optional)
@@ -420,7 +423,7 @@ extraction):
   - `max_binary_bytes` (optional, default: 262144)
   - `sidecar` (optional)
     - `enabled` (optional, default: true)
-    - `dir` (optional, default: `raw/evidence/blobs/wineventlog/`)
+    - `dir` (optional, default: `${telemetry.payload_limits.sidecar.dir}/${metadata.event_id}/`)
 - `native_container_exports` (optional)
   - v0.1 policy (normative):
     - The pipeline MUST NOT require native container exports. Pipeline correctness MUST NOT depend

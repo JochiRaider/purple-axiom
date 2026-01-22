@@ -238,13 +238,24 @@ schemas.
 Schema-aware placeholder pattern (normative):
 
 - For contract-backed JSON artifacts (`*.json`):
+
   - The placeholder MUST be valid JSON and MUST validate against the artifact schema.
   - Schemas MUST allow an optional top-level `placeholder` object with the shape defined below.
   - When `placeholder` is present, the artifact MUST NOT include unredacted sensitive content
     elsewhere in the object; any required non-placeholder fields MUST use safe sentinel values only.
+
 - For text artifacts (`*.txt`):
+
   - The placeholder MUST be UTF-8 text consisting only of the single-line record defined below
     (ending with `\n`).
+
+- For asciinema cast artifacts (`*.cast`):
+
+  - The placeholder MUST be a valid asciinema cast file (v2; JSON value per line).
+  - The file MUST consist of exactly two lines (each ending with `\n`):
+    1. Header: `{"version":2,"width":80,"height":24}`
+    1. One output event: `[0.0,"o","<placeholder_line>\n"]`, where `<placeholder_line>` is the
+       placeholder text line format defined below.
 
 Required placeholder fields (normative):
 
@@ -285,13 +296,14 @@ Quarantine mapping (normative):
 
 ### Runner transcripts
 
-Executor stdout/stderr transcripts captured under `runner/` are evidence-tier artifacts and MUST be
-subject to the same redaction policy as raw telemetry.
-
-If transcripts cannot be made redacted-safe deterministically, they MUST be handled as `withheld` or
-`quarantined` per the effective redaction posture. Implementations MUST write a placeholder
-transcript file in the standard location conforming to "Placeholder artifacts" (including
-`reason_code`, and `sha256` only when allowed by policy).
+- Executor stdout/stderr transcripts captured under `runner/` are evidence-tier artifacts and MUST
+  be subject to the same redaction policy as raw telemetry.
+- Terminal session recordings (for example, `runner/actions/<action_id>/terminal.cast`) are treated
+  as transcript-like evidence-tier text and MUST follow the same redaction and placeholder rules.
+- If transcripts or terminal recordings cannot be made redacted-safe deterministically, they MUST be
+  handled as `withheld` or `quarantined` per the effective redaction posture. Implementations MUST
+  write a placeholder file in the standard location conforming to "Placeholder artifacts" (including
+  `reason_code`, and `sha256` only when allowed by policy).
 
 ### Requirements evaluation
 

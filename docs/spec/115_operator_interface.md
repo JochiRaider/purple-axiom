@@ -445,7 +445,7 @@ The UI MUST enforce **extension-based allowlisting** (no content sniffing).
 
 Allowed extensions:
 
-- `.json`, `.jsonl`, `.parquet`, `.txt`, `.html`, `.md`, `.csv`
+- `.json`, `.jsonl`, `.parquet`, `.txt`, `.html`, `.md`, `.csv`, `.cast`
 
 Denied by default:
 
@@ -457,6 +457,9 @@ Additional requirements:
 - Responses MUST include `X-Content-Type-Options: nosniff`.
 - For `.html` responses, the UI SHOULD apply a restrictive Content Security Policy suitable for
   locally generated reports (no remote fetches).
+- For `.cast` responses, the UI SHOULD serve the content as non-executable text (for example,
+  `Content-Type: application/json`) and MAY support playback via locally bundled asciinema player
+  assets (no remote fetches).
 
 ### Path traversal defense (normative)
 
@@ -786,7 +789,7 @@ ui:
 
   security:
     allow_quarantine_access: false
-    allowed_extensions: [".json", ".jsonl", ".parquet", ".txt", ".html", ".md", ".csv"]
+    allowed_extensions: [".json", ".jsonl", ".parquet", ".txt", ".html", ".md", ".csv", ".cast"]
 
   sessions:
     idle_timeout_seconds: 1200
@@ -836,6 +839,15 @@ that adopt it:
 1. **Config reference**
 
    - Add `ui.*`, `auth.*` (UI scope), and `otel_gateway.*` keys and schema constraints.
+
+1. **Terminal recording playback (asciinema)**
+
+   - Decide whether `.cast` artifacts (for example `runner/actions/<action_id>/terminal.cast`) are
+     rendered inline (player) or link-only in v0.2.
+   - If a player is included, all player assets MUST be shipped within the appliance image (no
+     remote fetches). If a dedicated asciinema service (for example `asciinema-server`) is bundled
+     (reserved), it MUST be bound to localhost and gated behind the reverse proxy and the artifact
+     allowlist/quarantine rules.
 
 ## References
 

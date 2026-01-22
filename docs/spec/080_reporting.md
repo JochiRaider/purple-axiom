@@ -279,6 +279,13 @@ The report MUST include::
     - When `runner/actions/<action_id>/resolved_inputs_redacted.json` is present, the report MUST
       treat it as sensitive and MUST NOT render resolved input values; the report SHOULD render only
       the evidence reference (artifact path) and handling.
+    - When `runner/actions/<action_id>/terminal.cast` (or the ground truth
+      `evidence.terminal_recording_ref`) is present, the report SHOULD render an evidence link
+      labeled "terminal recording". The report MAY provide inline playback in the Operator
+      Interface, but MUST treat the recording as supplemental (MUST NOT affect scoring or pass/fail
+      evaluation) and MUST surface the evidence handling. When handling is `withheld` or
+      `quarantined`, the report MUST NOT attempt to render unredacted bytes; it MAY link only to the
+      placeholder artifact.
     - The report SHOULD prefer rendering evidence links that are referenced by the ground truth
       lifecycle phase `evidence` pointers (when present), and otherwise fall back to the
       conventional runner paths.

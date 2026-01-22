@@ -75,12 +75,10 @@ identity:
     origin.provider_from: provider
     origin.record_id_from: record_id
     origin.event_id_from: event_id
-    origin.time_created_from: time_created
   prehash_normalization:
     origin.host: [trim_ascii, lowercase_ascii]
     origin.channel: [trim_ascii, lowercase_ascii]
     origin.provider: [trim_ascii, lowercase_ascii]
-    origin.time_created: [trim_ascii, parse_rfc3339_to_epoch_ms]
 
 outputs:
   # Required by contract: metadata.uid MUST equal metadata.event_id.

@@ -43,7 +43,7 @@ Defines the lab inventory and any range-scoped context required for orchestratio
 
 Common keys:
 
-- `provider` (optional, default: `manual`): `manual | ludus | terraform | other`
+- `provider` (optional, default: `manual`): `manual | ludus | terraform | vagrant | other`
 - `assets` (required)
   - `asset_id` (required, stable)
   - `os` (required): `windows | linux | macos | bsd | appliance | other`
@@ -714,6 +714,9 @@ Common keys:
 
 - `output_dir` (required): base directory for run bundles (example: `runs/`)
 - `emit_html` (default: true)
+  - When `true`, reporting MUST emit `report/report.html` per `080_reporting.md`.
+  - The HTML report MUST be self-contained and local-only: it MUST NOT reference remote assets and
+    MUST NOT rely on external `.css` or `.js` files.
 - `emit_json` (default: true)
 - `include_debug_sections` (default: false)
 - `regression` (optional)
@@ -1132,5 +1135,6 @@ CI requirements (v0.1):
 
 | Date       | Change                                                                  |
 | ---------- | ----------------------------------------------------------------------- |
+| 2026-01-22 | Add `vagrant` lab.provider; document local-only HTML report constraints |
 | 2026-01-13 | Define security.network.egress_canary for outbound isolation validation |
 | 2026-01-12 | Formatting update                                                       |

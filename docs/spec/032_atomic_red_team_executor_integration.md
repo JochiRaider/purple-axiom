@@ -246,8 +246,9 @@ When synthetic correlation marker emission is enabled (normative requirements):
 - The runner MUST attempt to emit at least one marker-bearing telemetry event per action at the
   start of `execute` (immediately before primary command invocation).
   - The emitted event MUST carry the marker value in a way that survives end-to-end ingestion and
-    normalization into the OCSF envelope field `metadata.synthetic_correlation_marker` (see the
-    telemetry pipeline and data contracts specs).
+    normalization into the OCSF envelope field
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker` (see the telemetry pipeline and
+    data contracts specs).
 - The runner MUST record the emission attempt as evidence:
   - it MUST append an `execute`-phase side-effect ledger entry describing the marker emission
     attempt before attempting emission, and

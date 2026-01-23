@@ -69,6 +69,9 @@ raise an issue to reconcile the discrepancy.
   underlying contract requires hard failure) while keeping the run mechanically reportable.
 - Run status: The canonical `(success | partial | failed)` value recorded in
   `runs/<run_id>/manifest.json.status` (derived from stage outcomes per ADR-0005).
+- `Status recommendation`: The CI-facing status computed by the reporting stage; recorded in
+  `report/thresholds.json.status_recommendation` (authoritative) and mirrored in
+  `report/report.json.status` when report JSON is emitted.
 - CI verdict: The CI job’s final recommendation `(success | partial | failed)` plus an exit-code
   mapping `(0|10|20)` for the CI job step that enforces this contract.
 - Reportable: A run with mechanically usable artifacts and the required reporting outputs for its
@@ -98,7 +101,8 @@ For a given `run_id`, CI MUST determine the verdict source in the following orde
    `runs/<run_id>/report/thresholds.json.status_recommendation`.
 1. Else, if `runs/<run_id>/manifest.json` exists and validates against its schema, CI MUST use
    `runs/<run_id>/manifest.json.status`.
-1. Else, CI MUST derive status from the orchestrator process exit code:
+1. Else, if the run bundle root `runs/<run_id>/` exists, CI MUST derive status from the orchestrator
+   process exit code:
    - `0 -> success`
    - `10 -> partial`
    - `20 -> failed`
@@ -109,8 +113,8 @@ When either `runs/<run_id>/report/thresholds.json` or `runs/<run_id>/report/repo
 CI MUST require the other report artifact to also be present and schema-valid. Any report-pair
 mismatch MUST be treated as a fail-closed pipeline contract violation.
 
-If none of the evidence artifacts exist (for example, failure before run directory creation), CI
-MUST treat the run as `failed`.
+If the run bundle root `runs/<run_id>/` does not exist (for example, failure before run directory
+creation), CI MUST treat the run as `failed`.
 
 #### Consistency checks (fail closed)
 
@@ -119,6 +123,8 @@ When the following artifacts are present, CI MUST fail closed if their status si
 - When `runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json` are present,
   `runs/<run_id>/report/thresholds.json.status_recommendation` MUST equal
   `runs/<run_id>/report/report.json.status`.
+- `report/report.json.status_reasons[]` MUST contain unique reason codes and MUST be emitted sorted
+  ascending (UTF-8 byte order, no locale) when `report/report.json` is present.
 - `runs/<run_id>/manifest.json.status` MUST equal `runs/<run_id>/logs/health.json.status` when
   health files are enabled and `runs/<run_id>/logs/health.json` is present.
 - The CI job step that enforces this contract MUST exit with `(0|10|20)` matching the derived
@@ -135,8 +141,9 @@ v0.1 allows a narrow exception where stage outcomes cannot be recorded due to op
 (for example, `lock_acquisition_failed` or `storage_io_error`). In this case,
 `runs/<run_id>/manifest.json` and/or `runs/<run_id>/logs/health.json` MAY be missing.
 
-When this exception occurs, CI MUST treat the run as `failed` using the exit code and MUST surface
-the absence of outcomes as an operational error requiring reconciliation.
+When this exception occurs, CI MUST treat the run as `failed`. The captured orchestrator exit code
+MUST be `20`; any other exit code MUST be treated as a pipeline contract violation and MUST fail
+closed. CI MUST surface the absence of outcomes as an operational error requiring reconciliation.
 
 ### Required gate catalog
 
@@ -177,27 +184,27 @@ the artifact contract path.
 
 Where enabled by v0.1 specs/config:
 
-- When `operability.health.emit_health_files=true` (default), `runs/<run_id>/logs/health.json` MUST
-  exist and conform to the health schema.
-- When telemetry validation is enabled for the run, `runs/<run_id>/logs/telemetry_validation.json`
-  MUST exist and conform to the telemetry validation schema.
+- `runs/<run_id>/logs/health.json` MUST exist and conform to schema when
+  `operability.health.emit_health_files=true` (default).
+- `runs/<run_id>/logs/telemetry_validation.json` MUST exist and conform when telemetry validation is
+  enabled (`telemetry.emit_validation=true` or config-specific).
+- `runs/<run_id>/logs/run.log` MUST exist (human-readable execution log; primary surface for
+  warn-only diagnostics).
+- `runs/<run_id>/logs/warnings.jsonl` is OPTIONAL; it may include warn-only entries for non-gating
+  anomalies.
 
-When `operability.health.emit_health_files=false`, `runs/<run_id>/logs/health.json` MAY be absent.
-In this mode, CI MUST NOT fail solely due to the missing health file, but MUST still require
-`runs/<run_id>/manifest.json` to validate and to provide the canonical `manifest.status`.
+When `operability.health.emit_health_files=false`, `logs/health.json` MAY be absent. In this mode,
+CI MUST NOT fail solely due to missing health file, but MUST still require `manifest.json` to
+validate and to provide canonical `manifest.status`, unless the
+[Allowed absence of outcomes](#allowed-absence-of-outcomes) exception applies.
 
-CI MUST treat missing required operational readiness files as a contract failure (fail closed).
+CI MUST treat missing required operational readiness files as contract failure (fail closed).
 
-Additionally, CI SHOULD retain and/or validate the required operational log surface:
+When `logs/health.json` is present, CI MUST validate ADR-0005 conformance properties that are
+critical to determinism (violations are fail-closed):
 
-- `runs/<run_id>/logs/run.log` is REQUIRED (human-readable, stable diagnostics).
-- `runs/<run_id>/logs/warnings.jsonl` is OPTIONAL (structured warnings).
-
-When `runs/<run_id>/logs/health.json` is present, CI SHOULD validate ADR-0005 conformance properties
-that are critical to determinism:
-
-- stable ordering of stages/substages, and
-- `reason_code` tokens drawn from the known registry for the relevant stage context.
+- Stage and substage arrays are emitted in stable order.
+- `reason_code` tokens are drawn from the known registry for the relevant stage context.
 
 ### Artifact retention (CI publication)
 
@@ -230,6 +237,13 @@ This state machine is an illustrative CI orchestration view only. It does not de
 runtime stage behavior; conformance is defined solely by the artifact contracts and status semantics
 in the preceding sections.
 
+Lifecycle authority references (per ADR-0007 representational requirements):
+
+- Verdict derivation: [CI decision surface](#ci-decision-surface) and ADR-0005 exit-code semantics.
+- Reporting coupling: `080_reporting.md` (thresholds status recommendation ↔ report status).
+- Health/stage outcomes: `025_data_contracts.md` and ADR-0005 (`logs/health.json` semantics).
+- Gate inventory: [Required gate catalog](#required-gate-catalog).
+
 ### State machine: CI gate lifecycle (v0.1)
 
 States (closed set):
@@ -245,7 +259,8 @@ States (closed set):
 Transitions:
 
 - `pending -> executing`: CI job starts.
-- `executing -> validating`: orchestrator exits and `runs/<run_id>/manifest.json` exists.
+- `executing -> validating`: orchestrator exits. CI begins decision-surface evaluation and gate
+  enforcement.
 - `validating -> publishing`: post-run gate evaluation completes.
 - `publishing -> completed_*`: artifacts retained/published and verdict recorded.
 - `executing -> completed_failed`: orchestrator exits without producing a conformant manifest/health
@@ -265,11 +280,48 @@ A CI pipeline is conformant iff:
 - CI verdict is derived deterministically from the decision surface.
 - Exit code mapping matches the verdict mapping.
 - Missing required artifacts are treated as fail-closed contract failures.
-- Status coupling checks are enforced when artifacts are present (thresholds \<-> report \<->
-  manifest \<-> health \<-> exit code).
+- Status coupling checks are enforced when artifacts/signals are present
+  (`thresholds.status_recommendation` \<-> `report.status`; `manifest.status` \<-> `health.status`;
+  captured orchestrator exit code \<-> derived verdict).
 - ADR-0005 CI conformance checks are enforced for stage outcome ordering and reason code validity.
 - CI artifact publication obeys the security/redaction posture (no secrets; unredacted quarantine
   excluded by default).
+
+### Conformance fixture matrix (v0.1)
+
+This matrix defines minimal file-tree fixtures (present/missing/invalid) and the expected CI exit
+code. Fixture IDs intentionally align with the required CI fixtures in `100_test_strategy_ci.md`.
+Expected exit codes follow the ADR-0005 `(0|10|20)` mapping.
+
+Legend:
+
+- `✓` = present and schema-valid
+- `✗` = missing
+- `!` = present but schema-invalid
+- `≠` = present, schema-valid, but violates a semantic invariant
+
+Unless stated otherwise, fixtures assume `operability.health.emit_health_files=true` (so
+`logs/health.json` is required when `runs/<run_id>/` exists).
+
+| Fixture ID                                        | Gate / rule exercised                                              | Minimal fixture (paths relative to `runs/<run_id>/` unless noted)                                                                                                                                                                        | Expected CI verdict | Expected CI exit code |
+| ------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------- |
+| `happy_path_success`                              | Decision surface + required couplings                              | `manifest.json` ✓ (`status=success`)<br>`logs/health.json` ✓ (`status=success`)<br>`report/thresholds.json` ✓ (`status_recommendation=success`)<br>`report/report.json` ✓ (`status=success`)<br>`logs/run.log` ✓                         | `success`           | `0`                   |
+| `happy_path_partial_threshold_degrade`            | Threshold gate degrades run status                                 | `manifest.json` ✓ (`status=partial`)<br>`logs/health.json` ✓ (`status=partial`)<br>`report/thresholds.json` ✓ (`status_recommendation=partial`)<br>`report/report.json` ✓ (`status=partial`)<br>`logs/run.log` ✓                         | `partial`           | `10`                  |
+| `happy_path_failed_required_artifact_missing`     | Artifact validation (required artifact absent)                     | `manifest.json` ✓ (`status=failed`)<br>`logs/health.json` ✓ (`status=failed`)<br>`report/thresholds.json` ✓ (`status_recommendation=failed`)<br>`report/report.json` ✓ (`status=failed`)<br>`logs/run.log` ✓<br>`scoring/summary.json` ✗ | `failed`            | `20`                  |
+| `schema_invalid_manifest`                         | Schema validation (fail closed)                                    | `manifest.json` !<br>`logs/run.log` ✓                                                                                                                                                                                                    | `failed`            | `20`                  |
+| `schema_invalid_health`                           | Schema validation (fail closed)                                    | `manifest.json` ✓ (`status=success`)<br>`logs/health.json` !<br>`logs/run.log` ✓                                                                                                                                                         | `failed`            | `20`                  |
+| `schema_invalid_thresholds`                       | Schema validation (fail closed)                                    | `report/thresholds.json` !<br>`report/report.json` ✓<br>`logs/run.log` ✓                                                                                                                                                                 | `failed`            | `20`                  |
+| `status_mismatch_report_thresholds`               | Status coupling (`thresholds` ↔ `report`)                          | `report/thresholds.json` ✓ (`status_recommendation=success`)<br>`report/report.json` ✓ (`status=partial`)<br>`logs/run.log` ✓                                                                                                            | `failed`            | `20`                  |
+| `orchestrator_exit_code_unknown`                  | Exit-code mapping (unknown => fail closed)                         | (no run bundle required)<br>Captured orchestrator exit code: `2`                                                                                                                                                                         | `failed`            | `20`                  |
+| `artifact_path_timestamped_filename_blocked`      | Deterministic artifact path enforcement                            | `runner/actions/action_20260101T123000Z.json` ✓ (timestamped filename in contracted dir)<br>`logs/contract_validation/runner.json` ✓ (includes stable error code `timestamped_filename_disallowed`)<br>`logs/run.log` ✓                  | `failed`            | `20`                  |
+| `publish_gate_incomplete_staging_dir`             | Publish-gate enforcement                                           | `.staging/<stage_id>/` ✓ (left behind after run completion)<br>`logs/run.log` ✓                                                                                                                                                          | `failed`            | `20`                  |
+| `determinism_report_result_hash_mismatch_fail`    | Determinism gates (fail closed)                                    | `artifacts/duckdb_conformance/<case>/report.json` ✓ (`result_hash_mismatch` present)                                                                                                                                                     | `failed`            | `20`                  |
+| `determinism_report_plan_hash_mismatch_warn_only` | Determinism gates (warn-only)                                      | Same as `happy_path_success` plus:<br>`artifacts/duckdb_conformance/<case>/report.json` ✓ (`plan_hash_mismatch` present)                                                                                                                 | `success`           | `0`                   |
+| `version_pins_mismatch_fail`                      | Version conformance (fail closed)                                  | `manifest.json` ✓ but `manifest.versions.*` ≠ supported pins (per `SUPPORTED_VERSIONS.md`)<br>`logs/run.log` ✓                                                                                                                           | `failed`            | `20`                  |
+| `cross_artifact_run_id_mismatch_fail`             | Cross-artifact invariants (fail closed)                            | `manifest.json` ✓ (`run_id=A`)<br>`report/report.json` ✓ (`run_id=B`) ≠<br>`logs/run.log` ✓                                                                                                                                              | `failed`            | `20`                  |
+| `telemetry_validation_missing_when_enabled`       | Operational readiness (telemetry validation required when enabled) | `manifest.json` ✓ (`status=success`)<br>`logs/health.json` ✓ (`status=success`)<br>`logs/telemetry_validation.json` ✗ (telemetry validation enabled)<br>`logs/run.log` ✓                                                                 | `failed`            | `20`                  |
+| `run_log_missing`                                 | Operational readiness (required logging surface)                   | `manifest.json` ✓<br>`logs/run.log` ✗                                                                                                                                                                                                    | `failed`            | `20`                  |
+| `report_status_reasons_unsorted_or_duplicate`     | Reporting determinism (fail closed)                                | `report/report.json` ✓ but `status_reasons[]` not sorted ascending or contains duplicates<br>`report/thresholds.json` ✓<br>`logs/run.log` ✓                                                                                              | `failed`            | `20`                  |
 
 ## References
 

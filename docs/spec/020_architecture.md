@@ -370,7 +370,8 @@ metadata, producing a deterministic snapshot for the run.
 
 Responsibilities:
 
-- Resolve target assets from an external source (manual config, Ludus export, Terraform output).
+- Resolve target assets from an external source (manual config, Ludus export, Terraform output,
+  Vagrant export).
 - Validate connectivity to resolved assets (substage: `lab_provider.connectivity`).
 - Produce `logs/lab_inventory_snapshot.json` (contract-backed inventory snapshot) recorded in the
   run bundle and referenced by the manifest.
@@ -388,6 +389,8 @@ Implementations:
 - `ludus`: Parse Ludus-generated inventory export (inventory format: `json`).
 - `terraform`: Parse Terraform output JSON (inventory format: `json`) and normalize provider wrapper
   shape when present.
+- `vagrant`: Parse Vagrant-exported inventory artifacts and map them into canonical `lab.assets`
+  (inventory format: `json` RECOMMENDED).
 
 Inventory input formats are defined by `lab.inventory.format` (supported: `json`, `ansible_yaml`,
 `ansible_ini`).
@@ -650,7 +653,7 @@ Purple Axiom is designed for extensibility at defined boundaries:
 
 | Extension type            | Examples                                              | Interface                                     |
 | ------------------------- | ----------------------------------------------------- | --------------------------------------------- |
-| Lab providers             | Manual, Ludus, Terraform, custom                      | Inventory snapshot contract                   |
+| Lab providers             | Manual, Ludus, Terraform, Vagrant, custom             | Inventory snapshot contract                   |
 | Environment configurators | Ansible, scripts, image-baked profiles, custom        | Readiness profile + deterministic operability |
 | Scenario runners          | Atomic Red Team, Caldera, custom                      | Ground truth + evidence contracts             |
 | Telemetry sources         | Windows Event Log, Sysmon, osquery, auditd, EDR, pcap | OTel receiver + raw schema                    |
@@ -714,6 +717,7 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 
 | Date       | Change                                                                        |
 | ---------- | ----------------------------------------------------------------------------- |
+| 2026-01-22 | Add Vagrant as an optional lab provider example                               |
 | 2026-01-17 | Major revision: align with ADR-0004/0005, fix IO paths, add run bundle layout |
 | 2026-01-15 | Added `scoring` and `signing` stages; aligned with ADR-0004/ADR-0005          |
 | 2026-01-14 | Added stage IO boundaries table; updated to stable stage identifiers          |

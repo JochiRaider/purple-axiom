@@ -27,6 +27,7 @@ telemetry correlation, scoring, and reporting.
   - manual (inline inventory)
   - Ludus (Proxmox-backed provisioning, consume exported inventory)
   - Terraform (cloud/local provisioning, consume exported outputs)
+  - Vagrant (local/dev ranges, consume exported inventory)
   - other (future)
 - Ensure determinism by recording a run-scoped inventory snapshot and its hash.
 - Keep secrets out of configs and artifacts (reference only).
@@ -238,7 +239,7 @@ API-based providers are permitted, but they MUST preserve run reproducibility:
 
 Recommended minimal keys (see [Configuration reference](120_config_reference.md)):
 
-- `lab.provider` (required): `manual | ludus | terraform | other`
+- `lab.provider` (required): `manual | ludus | terraform | vagrant | other`
 - `lab.assets` (required): stable target list; provider resolution enriches these entries.
 - `lab.inventory.path` (required when `lab.provider != manual`): provider-exported inventory
   artifact.
@@ -459,6 +460,35 @@ Recommended approach:
   specified in “Input format: `json`”.
 - Map the selected inventory export to the canonical `lab.assets` model.
 
+## Vagrant
+
+Vagrant is supported as an optional reference provider for local developer ranges.
+
+Recommended approach (mirrors the Terraform/Ludus model):
+
+- Treat Vagrant as an upstream provisioning tool (outside Purple Axiom).
+- Export a static inventory artifact in one of the supported `lab.inventory.format` values and feed
+  that artifact into the pipeline.
+  - For v0.1, `json` is RECOMMENDED for determinism (see “Inventory artifact formats and adapter
+    rules”).
+- Map inventory entries to canonical `lab.assets` records.
+
+Determinism and safety notes (normative where stated):
+
+- The exported inventory artifact MUST NOT contain secrets (no passwords, tokens, private keys).
+- To reduce inventory drift, management addressing SHOULD be stable (static IPs or stable DNS)
+  rather than ephemeral NAT-forwarded ports.
+- A RECOMMENDED joining strategy is:
+  - `lab.assets[].provider_asset_ref = <vagrant_machine_name>` (exact match)
+  - `lab.assets[].asset_id = slugify(<vagrant_machine_name>)` where `slugify` follows the `asset_id`
+    constraints (ID slug v1) in this spec (lowercase ASCII; replace `_` with `-`; collapse repeated
+    `-`; trim leading/trailing `-`).
+
+Reference implementation (optional):
+
+- TODO: provide a small “vagrant inventory exporter” that emits the canonical JSON inventory format
+  (including stable ordering) from a maintained machine map, so teams can stand up a range quickly.
+
 ## Manual
 
 - Inline `lab.assets` in `range.yaml`.
@@ -490,6 +520,7 @@ Recommended approach:
 
 | Date       | Change                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------- |
+| 2026-01-22 | Add optional Vagrant provider reference workflow                                             |
 | 2026-01-19 | Add `vars` to inventory snapshot; align enums + hashing/encoding; clarify publish + security |
 | 2026-01-14 | Align outcomes, publish gates, and snapshot determinism rules                                |
 | 2026-01-12 | Formatting update                                                                            |

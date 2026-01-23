@@ -606,7 +606,7 @@ Status derivation (normative):
 
 Recommended manifest additions (normative in schema when implemented):
 
-- `lab.provider` (string): `manual | ludus | terraform | other`
+- `lab.provider` (string): `manual | ludus | terraform | vagrant | other`
 - `lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot
 - `lab.assets` (array): resolved assets used by the run (or pointer to
   `logs/lab_inventory_snapshot.json`)
@@ -1901,5 +1901,5 @@ CI gates should fail closed on contract violations.
 
 | Date      | Change                                       |
 | --------- | -------------------------------------------- |
-| 1/17/2026 | update                                       |
+| 1/22/2026 | Add `vagrant` to `lab.provider` enum         |
 | 1/17/2026 | Style guide migration (no technical changes) |

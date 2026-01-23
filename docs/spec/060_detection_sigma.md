@@ -10,6 +10,7 @@ related:
   - 080_reporting.md
   - 025_data_contracts.md
   - ADR-0005-stage-outcomes-and-failure-classification.md
+  - ADR-0007-state-machines.md
 ---
 
 # Detection Rules (Sigma)
@@ -46,15 +47,24 @@ filtering and reporting:
 
 ### Configuration-driven filtering
 
+### Configuration-driven filtering
+
 Rule selection MAY be constrained via configuration (see the
-[configuration reference](120_config_reference.md)):
+[configuration reference](120_config_reference.md)).
 
-- `technique_allowlist` / `technique_denylist`: filter by ATT&CK technique ID
-- `status_allowlist`: filter by Sigma `status` (example: `[stable, test]`)
-- `level_minimum`: exclude rules below a severity threshold (example: `medium`)
+v0.1 supported selection inputs:
 
-When filters are applied, the run manifest MUST record the effective filter set, and excluded rules
-MUST NOT appear in coverage metrics.
+- `detection.sigma.rule_paths`: directories/files containing Sigma YAML.
+- `detection.sigma.rule_set_version`: pinned rule set identifier for reporting/regression joins.
+- `detection.sigma.limits.max_rules`: optional hard cap on the number of rules loaded.
+
+Reserved (v0.2+; requires config schema + reference update before use):
+
+- Filtering by ATT&CK technique id (allow/deny lists).
+- Filtering by Sigma `status` and/or `level`.
+
+When selection constraints are applied, the run manifest MUST record the effective selection inputs,
+and excluded rules MUST NOT appear in coverage metrics.
 
 ## ATT&CK technique mapping
 
@@ -83,7 +93,8 @@ Rules without valid ATT&CK tags:
 
 - Are still evaluated and may produce detection instances.
 - Are excluded from technique coverage metrics.
-- SHOULD be flagged in `bridge/coverage.json` under `rules_without_technique_mapping`.
+- SHOULD be surfaced in reporting for operator review (at minimum as a count; MAY include a list of
+  `rule_id`s).
 
 ## Rule lifecycle
 
@@ -100,16 +111,51 @@ Sigma evaluation is a two-stage process.
 
 1. **Compile (bridge-aware)**
    - Select a bridge mapping pack (router + field aliases).
-   - Route the rule: `sigma.logsource` to an OCSF class filter (and optional producer/source
-     predicates via `filters[]` OCSF filter objects).
-   - Rewrite Sigma field references to OCSF JSONPaths (or SQL column expressions).
+   - Route the rule: `logsource` to an OCSF class filter (and optional producer/source predicates
+     via `filters[]` OCSF filter objects).
+   - Rewrite Sigma field references to OCSF JSONPaths (or backend-native column expressions).
    - Produce a backend plan:
-     - Batch: SQL over Parquet (DuckDB SQL MUST be the v0.1 default when
+     - Batch: SQL over Parquet (`duckdb_sql` MUST be the v0.1 default when
        `detection.sigma.bridge.backend` is omitted).
      - Streaming: expression plan over in-memory or stream processors.
 1. **Evaluate**
    - Execute the plan over the run's OCSF event store.
    - Emit `detection_instance` rows for each match group.
+   - v0.1 constraint (no correlation/aggregation): each match group MUST correspond to exactly one
+     matched event id. The evaluator MUST emit one detection instance per matched event with:
+     - `matched_event_ids = [<event_id>]`
+     - `first_seen_utc == last_seen_utc` (event time)
+
+## State machine integration
+
+The detection stage lifecycle is a candidate for explicit state machine modeling per [ADR-0007] to
+improve determinism, observability, and testability.
+
+This section is **representational (non-normative)**. Lifecycle authority remains:
+
+- [ADR-0005: Stage outcomes and failure classification][adr-0005] (stage outcomes and reason codes)
+- [Data contracts specification][data-contracts] (required artifacts when detection is enabled)
+- [Sigma-to-OCSF Bridge specification][sigma-bridge] (per-rule compiled plans and non-executable
+  reasons)
+
+Representational stage lifecycle (v0.1):
+
+- `pending` → `running` → `published` (success path)
+- `pending` → `running` → `failed` (fatal stage failure)
+- `pending` → `skipped` (stage disabled)
+
+Representational per-rule lifecycle (v0.1; within the stage):
+
+- `loaded` → `compiled(executable=true)` → `evaluated`
+- `loaded` → `compiled(executable=false)` (non-executable; recorded in `bridge/compiled_plans/`)
+
+Observable anchors (run bundle):
+
+- Stage outcome: `manifest.json` / `logs/health.json` entry for stage `detection` (status +
+  reason_code).
+- Publish gate artifacts when enabled: `detections/detections.jsonl` and `bridge/**`.
+- Per-rule compiled plan files: `bridge/compiled_plans/<rule_id>.plan.json` (executable flag and
+  `non_executable_reason`).
 
 ## Non-executable rules
 
@@ -170,9 +216,10 @@ Each detection instance includes:
 - `first_seen_utc`, `last_seen_utc`
 - `matched_event_ids` (references `metadata.event_id` in the OCSF store)
 - `technique_ids` when available
-- Recommended: `extensions.bridge` metadata (mapping pack id/version, backend, fallback usage)
+- Recommended: `extensions.bridge` provenance (`mapping_pack_id`, `mapping_pack_version`, `backend`,
+  `compiled_at_utc`, and `fallback_used` when any `raw.*` fallback is required)
 
-Regression comparable detection metric inputs (normative):
+### Regression comparable detection metric inputs (normative):
 
 - Detection-stage comparable surfaces for regression analysis MUST be derived from deterministic run
   bundle artifacts and MUST NOT depend on host-specific paths or non-deterministic iteration order.
@@ -183,7 +230,7 @@ Regression comparable detection metric inputs (normative):
   - Detection instances from `detections/detections.jsonl` (used for coverage and attribution joins,
     and for auditability of "detections exist" vs "no detections produced").
 
-Regression comparability keys (normative):
+### Regression comparability keys (normative):
 
 - Regression comparability decisions MUST use pinned values recorded under `manifest.versions.*` as
   the authoritative source of join dimensions (ADR-0001). Implementations MUST NOT use environment-
@@ -220,16 +267,18 @@ Regression comparability keys (normative):
 
 ### Deterministic emission
 
-**Summary**: The evaluator MUST write `detections/detections.jsonl` deterministically to support
-reproducible diffs and regression tests.
-
 - When Sigma evaluation is enabled, implementations MUST emit `detections/detections.jsonl` even
   when there are zero matches (empty file). Consumers MUST treat a missing file as a contract
   failure.
+- Timestamp normalization (normative):
+  - `first_seen_utc` and `last_seen_utc` MUST be serialized as UTC RFC 3339 strings in the fixed
+    form `YYYY-MM-DDTHH:MM:SS.mmmZ` (exactly 3 fractional digits).
+  - Timestamp values MUST be derived from matched event-time, not ingest-time.
 - Each detection instance MUST sort `matched_event_ids` using bytewise UTF-8 lexical ordering
   (case-sensitive, no locale).
-- The file MUST be ordered deterministically by the following stable key tuple:
-  1. `rule_id` ascending (bytewise UTF-8 lexical ordering)
+- The file MUST be ordered deterministically by the following stable key tuple (bytewise UTF-8
+  lexical ordering for all string comparisons):
+  1. `rule_id` ascending
   1. `first_seen_utc` ascending
   1. `last_seen_utc` ascending
   1. `matched_event_ids` ascending by lexicographic comparison of the (already-sorted) string array
@@ -293,15 +342,21 @@ metrics.
 
 ### Join semantics
 
-A detection instance is **attributed** to a ground truth action when:
+A detection instance is **attributed** to a ground truth action when all of the following hold:
 
 1. The detection's `technique_ids` intersect with the action's `technique_id`.
 1. The detection's `first_seen_utc` falls within the configured time window relative to the action's
    `timestamp_utc`:
-   - Window start: `action.timestamp_utc - clock_skew_tolerance_seconds`
-   - Window end: `action.timestamp_utc + max_allowed_latency_seconds`
+   - Window start: `action.timestamp_utc - detection.join.clock_skew_tolerance_seconds`
+   - Window end: `action.timestamp_utc + scoring.thresholds.max_allowed_latency_seconds`
 1. The detection's matched events originate from the action's `target_asset_id` (when asset
    attribution is available).
+
+Note (v0.1):
+
+- Since correlation/aggregation rules are out of scope, each detection instance MUST represent
+  exactly one matched event (`matched_event_ids` length 1). This ensures `first_seen_utc`
+  corresponds to the matched event time deterministically for join and latency metrics.
 
 ### Unattributed detections
 
@@ -323,15 +378,15 @@ Detection instances MUST validate against
 
 ### Required fields
 
-| Field               | Type   | Description                                      |
-| ------------------- | ------ | ------------------------------------------------ |
-| `rule_id`           | string | Sigma rule identifier (typically a UUID)         |
-| `rule_title`        | string | Sigma rule title                                 |
-| `rule_source`       | string | Always `"sigma"` for Sigma-originated detections |
-| `run_id`            | string | Run identifier                                   |
-| `first_seen_utc`    | string | ISO 8601 timestamp of earliest matched event     |
-| `last_seen_utc`     | string | ISO 8601 timestamp of latest matched event       |
-| `matched_event_ids` | array  | Sorted array of `metadata.event_id` references   |
+| Field               | Type   | Description                                                                            |
+| ------------------- | ------ | -------------------------------------------------------------------------------------- |
+| `rule_id`           | string | Sigma rule identifier (typically a UUID)                                               |
+| `rule_title`        | string | Sigma rule title                                                                       |
+| `rule_source`       | string | Always `"sigma"` for Sigma-originated detections                                       |
+| `run_id`            | string | Run identifier                                                                         |
+| `first_seen_utc`    | string | RFC 3339 UTC timestamp in fixed form `YYYY-MM-DDTHH:MM:SS.mmmZ` (event-time)           |
+| `last_seen_utc`     | string | RFC 3339 UTC timestamp in fixed form `YYYY-MM-DDTHH:MM:SS.mmmZ` (event-time)           |
+| `matched_event_ids` | array  | Sorted array of `metadata.event_id` references (v0.1: exactly 1 event id per instance) |
 
 ### Recommended fields
 
@@ -344,7 +399,7 @@ Detection instances MUST validate against
 
 ## Rule provenance
 
-Detection instances SHOULD include rule provenance in `extensions.sigma`:
+### Detection instances SHOULD include rule provenance in `extensions.sigma`:
 
 | Field             | Type   | Description                                       |
 | ----------------- | ------ | ------------------------------------------------- |
@@ -354,13 +409,24 @@ Detection instances SHOULD include rule provenance in `extensions.sigma`:
 | `rule_sha256`     | string | SHA-256 of canonical rule content                 |
 | `rule_source_ref` | string | Origin reference (example: `sigmahq/sigma@v0.22`) |
 
-Rule provenance enables:
+### Canonical rule hashing (normative)
+
+To make rule drift detection deterministic across platforms, `extensions.sigma.rule_sha256` MUST be
+computed as:
+
+1. Read the rule file bytes as stored in the selected ruleset (`detection.sigma.rule_paths`).
+1. If the content begins with a UTF-8 BOM, remove the BOM.
+1. Normalize line endings by converting CRLF (`\r\n`) and CR (`\r`) to LF (`\n`).
+1. Compute SHA-256 over the resulting byte sequence.
+1. Serialize as `sha256:<lowercase_hex>` (64 hex chars, lowercase).
+
+### Rule provenance enables:
 
 - Attribution of community vs custom rules in reporting.
 - Regression detection when rule content changes.
 - Filtering by rule maturity in downstream dashboards.
 
-Regression comparability requirements (normative):
+### Regression comparability requirements (normative):
 
 - For runs intended to be diffable, regression-tested, or trended:
   - Detection outputs SHOULD include `extensions.sigma.rule_sha256` and
@@ -375,9 +441,7 @@ Regression comparability requirements (normative):
 When a ground truth action lacks a matching detection, the scoring stage classifies the gap using
 the normative taxonomy defined in [Scoring metrics](070_scoring_metrics.md).
 
-Detection-related gap categories:f
-
-Detection-related gap categories:
+### Detection-related gap categories:
 
 | Category             | Description                                                                |
 | -------------------- | -------------------------------------------------------------------------- |
@@ -386,7 +450,7 @@ Detection-related gap categories:
 | `bridge_gap_other`   | Bridge failure not otherwise classified                                    |
 | `rule_logic_gap`     | Fields present, rule executable, but rule did not fire                     |
 
-Evidence pointer requirements (normative intent):
+### Evidence pointer requirements (normative intent):
 
 - Detection-layer gap conclusions in reporting/scoring MUST be backed by deterministic evidence
   references.
@@ -396,7 +460,7 @@ Evidence pointer requirements (normative intent):
 - When detection is enabled, this specification requires these artifacts to exist so evidence
   references are always satisfiable.
 
-Gap classification enables prioritized remediation:
+### Gap classification enables prioritized remediation:
 
 - `bridge_gap_mapping`: addressable via mapping pack work
 - `bridge_gap_feature`: addressable via backend enhancement
@@ -422,9 +486,13 @@ MUST be marked non-executable with `non_executable_reason.reason_code: "unsuppor
 
 ### Timeframe modifiers
 
-The `timeframe` modifier is **out of scope for v0.1**. Rules specifying `timeframe` SHOULD be
-evaluated without the temporal constraint, with the limitation recorded in
-`extensions.bridge.ignored_modifiers`.
+The `timeframe` modifier is **out of scope for v0.1**.
+
+- Rules specifying `timeframe` SHOULD be evaluated without the temporal constraint.
+- When `timeframe` is ignored, the evaluator MUST record this deterministically by appending
+  `"timeframe"` to `extensions.bridge.ignored_modifiers` (sorted by UTF-8 byte order).
+- Ignoring `timeframe` MUST NOT be treated as an `unsupported_modifier` non-executable condition in
+  v0.1; it is an explicit best-effort downgrade.
 
 ## References
 
@@ -434,6 +502,7 @@ evaluated without the temporal constraint, with the limitation recorded in
 - [Data contracts specification][data-contracts]
 - [Configuration reference][config-ref]
 - [ADR-0005: Stage outcomes and failure classification][adr-0005]
+- [ADR-0007: State machines for lifecycle semantics][adr-0007]
 - [Sigma detection format documentation](https://sigmahq.io/docs/)
 - [Sigma rule repository (SigmaHQ/sigma)](https://github.com/SigmaHQ/sigma)
 - [Sigma specification repository (SigmaHQ/sigma-specification)](https://github.com/SigmaHQ/sigma-specification)
@@ -443,9 +512,11 @@ evaluated without the temporal constraint, with the limitation recorded in
 
 | Date       | Change            |
 | ---------- | ----------------- |
+| 2026-01-22 | update            |
 | 2026-01-12 | Formatting update |
 
 [adr-0005]: ADR-0005-stage-outcomes-and-failure-classification.md
+[adr-0007]: ADR-0007-state-machines.md
 [config-ref]: 120_config_reference.md
 [data-contracts]: 025_data_contracts.md
 [reporting-spec]: 080_reporting.md

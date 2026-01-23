@@ -107,15 +107,20 @@ The following artifacts MUST be present for a run to be considered reportable:
 
 The reporting stage MUST produce the following outputs:
 
-| File                     | Purpose                                                  | Schema reference                             |
-| ------------------------ | -------------------------------------------------------- | -------------------------------------------- |
-| `report/report.json`     | Consolidated report for external tooling                 | [report schema](#report-json-schema)         |
-| `report/thresholds.json` | Threshold evaluation results for CI gating               | [thresholds schema](#thresholds-json-schema) |
-| `report/report.html`     | Human-readable report for operator review (when enabled) | [HTML structure](#html-report-structure)     |
+| File                     | Purpose                                                                   | Schema reference                             |
+| ------------------------ | ------------------------------------------------------------------------- | -------------------------------------------- |
+| `report/report.json`     | Consolidated report for external tooling                                  | [report schema](#report-json-schema)         |
+| `report/thresholds.json` | Threshold evaluation results for CI gating                                | [thresholds schema](#thresholds-json-schema) |
+| `report/report.html`     | Human-readable report for operator review (when enabled)                  | [HTML structure](#html-report-structure)     |
+| `report/run_timeline.md` | Deterministic, human-readable run timeline in UTC (operator UI + exports) | - (see "Run timeline artifact")              |
 
 Notes:
 
 - When `reporting.emit_html=false`, `report/report.html` MUST NOT be emitted.
+- When `reporting.emit_html=true`, `report/report.html` MUST be self-contained and local-only: it
+  MUST NOT reference remote assets (no `http://` / `https://` URLs) and MUST NOT rely on external
+  `.css` / `.js` files. See
+  [Self-contained, local-only asset policy](#self-contained-local-only-asset-policy).
 - `report/report.json` and `report/thresholds.json` are contracted required artifacts for v0.1
   reportable runs; if an implementation supports `reporting.emit_json`, it MUST be `true` for any
   run intended to be reportable.
@@ -123,6 +128,107 @@ Notes:
 The reporting stage MUST NOT modify upstream artifacts. It reads from `scoring/summary.json`,
 `bridge/coverage.json`, `normalized/mapping_coverage.json`, and other inputs, then emits derived
 outputs to `report/`.
+
+### Run timeline artifact
+
+The reporting stage MUST emit a deterministic, human-readable run timeline artifact at:
+
+- `report/run_timeline.md`
+
+Intended uses:
+
+- Operator Interface: primary per-run chronology and drill-down starting point.
+- Exported bundles: a single file that summarizes what happened without requiring a report renderer.
+
+Source of truth (normative):
+
+- The timeline MUST be derived from:
+  - `ground_truth.jsonl` (canonical action lifecycle timeline), and
+  - `manifest.json` (run id, scenario metadata when available, and overall run status).
+- The timeline MUST NOT be derived by parsing unstructured logs.
+
+Format (normative):
+
+- The file MUST be UTF-8 (no BOM) and MUST use LF (`\n`) newlines.
+- All timestamps rendered in the file MUST be UTC and MUST be RFC3339 with a `Z` suffix.
+- Missing values MUST be rendered as `-` (single hyphen).
+
+Required structure (normative):
+
+The document MUST include, in this order:
+
+1. A top-level heading `# Run timeline`
+1. A "Run summary" section containing a Markdown table with the following keys (exact spellings):
+   - `run_id`
+   - `scenario_id`
+   - `scenario_name` (MAY be `-` when unknown)
+   - `status`
+   - `started_at_utc`
+   - `ended_at_utc`
+1. An "Action timeline" section containing a Markdown table with one row per `action_id` in
+   `ground_truth.jsonl`.
+
+Action timeline table columns (normative; exact spellings):
+
+- `order` (1-based integer)
+- `action_id`
+- `action_key`
+- `technique_id` (MAY be `-` when unknown)
+- `target_asset_id` (MAY be `-` when unknown)
+- `start_utc`
+- `end_utc`
+- `duration_ms`
+- `prepare`
+- `execute`
+- `revert`
+- `teardown`
+- `evidence`
+
+Computation rules (normative):
+
+- `start_utc` MUST equal the `prepare` phase `started_at_utc` when present; otherwise it MUST equal
+  the earliest `lifecycle.phases[].started_at_utc`.
+- `end_utc` MUST equal the final `teardown` phase `ended_at_utc` when present; otherwise it MUST
+  equal the latest `lifecycle.phases[].ended_at_utc`.
+- `duration_ms` MUST be computed as the integer milliseconds between `start_utc` and `end_utc` when
+  both are present; otherwise it MUST be `-`.
+- Phase outcome cells MUST be rendered from the ground truth `phase_outcome` values.
+  - If retries exist for `execute` and/or `revert`, the cell MUST list attempt outcomes in ascending
+    `attempt_ordinal` order using the syntax `<phase>[<n>]=<outcome>`, joined by `; `.
+- `order` MUST be derived by sorting rows by `(start_utc, action_id)` (UTF-8 byte order, no locale)
+  and then assigning 1..N in that order.
+
+Evidence links (normative):
+
+- The `evidence` cell MUST contain zero or more Markdown links to run-relative evidence artifacts,
+  in the following stable order when present:
+  1. `requirements_evaluation_ref`
+  1. `executor_ref`
+  1. `stdout_ref`
+  1. `stderr_ref`
+  1. `terminal_recording_ref` (link label MUST be `terminal recording`)
+  1. `cleanup_stdout_ref`
+  1. `cleanup_stderr_ref`
+  1. `cleanup_verification_ref`
+  1. `state_reconciliation_report_ref`
+- Evidence references MUST use the run-relative paths from `ground_truth.jsonl` `evidence.*_ref`
+  fields.
+- The timeline MUST NOT inline raw transcript content (stdout/stderr/terminal bytes); it MUST link
+  to evidence artifacts only.
+
+Evidence handling (normative):
+
+- When the reporting stage knows that an evidence artifact is `withheld` or `quarantined`, the
+  corresponding link label MUST include the handling value (example:
+  `terminal recording (withheld)`).
+- Handling vocabulary MUST match the report schema: `present | withheld | quarantined | absent`.
+
+Verification hooks:
+
+- A run is "timeline-conformant" iff `report/run_timeline.md` exists, is UTF-8, and matches the
+  required section ordering and column set.
+- CI SHOULD include a golden-fixture test that renders `report/run_timeline.md` from a fixed
+  `ground_truth.jsonl` and compares it byte-for-byte.
 
 ### Upstream artifacts (consumed, not produced)
 
@@ -1297,6 +1403,41 @@ The HTML report SHOULD follow this layout:
 - Threshold violations SHOULD be visually flagged
 - Include collapsible detail sections for large tables
 
+### Self-contained, local-only asset policy
+
+To align with the Operator Interface static file serving model (see `115_operator_interface.md`) and
+to keep the report in a “Metta-style” minimal footprint, the HTML report is intentionally
+self-contained.
+
+Normative requirements:
+
+- The HTML report MUST NOT reference remote assets.
+  - The rendered HTML MUST NOT contain absolute `http://` or `https://` URLs in any attribute value
+    (`href`, `src`, `action`, etc.).
+- The HTML report MUST NOT rely on external `.css` or `.js` files.
+  - The Operator Interface serves `.html` under a strict extension allowlist; external `.css` /
+    `.js` files are not a supported dependency.
+- All styling MUST be embedded via a `<style>` element in the document `<head>`.
+- If collapsible/interactive behavior is needed, the report SHOULD prefer native HTML elements (for
+  example, `<details>` / `<summary>`) and SHOULD avoid JavaScript entirely.
+- If JavaScript is used in a future revision, it MUST be optional (the report remains readable with
+  scripts disabled) and MUST NOT fetch remote resources.
+- Any dynamic string content rendered from run artifacts MUST be HTML-escaped.
+
+Observability:
+
+- A “no remote assets” lint can be implemented by scanning the rendered `report/report.html` for:
+  - `http://` or `https://`
+  - `<script` tags with a `src=` attribute
+  - `<link` tags with an `href=` attribute
+  - `<base` tags
+  - `<meta http-equiv="refresh"` (case-insensitive)
+
+Verification hooks:
+
+- Fixture: generate `report/report.html` from a deterministic `report/report.json` fixture and
+  assert it passes the lint above.
+
 ## CI integration
 
 ### Exit codes
@@ -1338,6 +1479,7 @@ The reporting stage MUST set exit codes aligned with
 
 | Date       | Change                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------ |
+| 2026-01-22 | Specify self-contained, local-only HTML report constraints (Metta-style minimal)           |
 | 2026-01-18 | Codify regression JSON contract and measurement-layer evidence pointers for gaps           |
 | 2026-01-13 | Major revision: added normative requirements, gap taxonomy alignment, per-source breakdown |
 | 2026-01-12 | Formatting update                                                                          |

@@ -34,27 +34,43 @@ provides a stable record identifier (`EventRecordID`) that can anchor determinis
 
 ## Decision
 
-**Summary**: Define deterministic `metadata.event_id` using tiered identity bases with RFC 8785
-canonicalization, prioritizing source-native identifiers when available.
-
 Define two identifiers:
 
-1. `metadata.event_id` (required): deterministic identity for a *source event*.
-1. `metadata.ingest_id` (optional): identity for a particular ingestion attempt (for debugging only;
-   never used for joins).
+1. `metadata.event_id` (required): deterministic identity for a *source event* (join key).
+1. `metadata.extensions.purple_axiom.ingest_id` (optional): identity for a particular ingestion
+   attempt (debug only; never used for joins). If emitted, it MUST be treated as a volatile field
+   and SHOULD be omitted from contract-backed normalized event stores unless explicitly enabled.
 
-For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id`. If an upstream consumer
-requires OCSF-only fields, `metadata.event_id` MAY be omitted provided `metadata.uid` is present and
-equal.
+For OCSF-conformant outputs, producers MUST set `metadata.uid` equal to `metadata.event_id` and MUST
+emit both fields on every normalized event. Consumers MUST NOT treat `metadata.uid` and
+`metadata.event_id` as independent identifiers.
+
+Provenance surfaces (normative):
+
+- `metadata.source_event_id` MUST be present. For Tier 1 and Tier 2, it MUST be populated with the
+  exact opaque source-native identifier (or stable cursor) that anchored identity. For Tier 3 it
+  MUST be `null`.
+- `metadata.identity_tier` MUST be present on every event and MUST be one of `1 | 2 | 3`, matching
+  the tier used to compute `metadata.event_id`.
 
 ### Event ID format
 
 `metadata.event_id` MUST be computed as:
 
 - Prefix: `pa:eid:v1:`
-- Digest: `sha256(identity_basis_canonical)` truncated to 128 bits (32 hex chars)
+- Digest:
+  - Compute `sha256(identity_basis_canonical)` over the raw canonical bytes.
+  - Take the first 16 bytes of the digest (bytes `0..15`).
+  - Hex-encode those 16 bytes as lowercase ASCII (32 hex chars).
 
 Example: `pa:eid:v1:4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d`
+
+Versioning (normative):
+
+- Any change that would alter `metadata.event_id` values for the same source records MUST bump the
+  prefix version (`pa:eid:v2:` etc.). Implementations MUST NOT silently change v1 behavior.
+- Implementations SHOULD retain the ability to compute v1 identities for legacy stored artifacts
+  while v2 (or later) is introduced.
 
 ### Identity basis (v1)
 
@@ -62,8 +78,9 @@ The `identity_basis` is a minimal set of source-derived fields. It MUST exclude 
 pipeline-specific values:
 
 - MUST NOT include: `run_id`, `scenario_id`, `collector_version`, `normalizer_version`,
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker`, ingest/observed timestamps, file
-  offsets, collector hostnames, or any execution metadata.
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker`,
+  `metadata.extensions.purple_axiom.ingest_id`, ingest/observed timestamps, file offsets, collector
+  hostnames, or any execution metadata.
 
 Rationale: `metadata.extensions.purple_axiom.synthetic_correlation_marker` is intentionally
 per-run/per-action correlation metadata. Including it in `identity_basis` would make
@@ -71,6 +88,20 @@ per-run/per-action correlation metadata. Including it in `identity_basis` would 
 deduplication.
 
 Identity basis selection is tiered:
+
+Additional rules (normative):
+
+- The normalizer MUST set `metadata.identity_tier` to the selected tier number (`1`, `2`, or `3`).
+- `identity_basis.source_type` MUST equal `metadata.source_type`.
+- `identity_basis` MUST be a JSON object. Optional fields MUST be omitted when absent (do not emit
+  `null`).
+- Identity-basis values whose semantics are identifiers or cursors (examples: `origin.record_id`,
+  `origin.journald_cursor`, `origin.flow_id`, `stream.cursor`) MUST be represented as strings in the
+  `identity_basis` object to avoid cross-language integer precision drift.
+  - Recommended encoding for numeric identifiers: base-10 ASCII digits with no separators and no
+    leading `+`.
+- Values with numeric measurement semantics (examples: ports, packet counts, byte counts) SHOULD
+  remain JSON numbers (integers) as specified by the relevant tier definition.
 
 #### Tier 1: Source-native record identity (preferred)
 
@@ -81,7 +112,7 @@ Use when the source provides a stable per-record identifier or cursor.
 - `source_type`: `windows_eventlog`
 - `origin.host`: event's source computer name (from the event payload)
 - `origin.channel`: event channel (Security/System/Application/ForwardedEvents, etc.)
-- `origin.record_id`: Windows `EventRecordID` from the event payload
+- `origin.record_id`: Windows `EventRecordID` from the event payload (base-10 string)
 - `origin.provider`: provider name and/or provider GUID (include both when available)
 - `origin.event_id`: the Windows EventID (include qualifiers/version if available)
 
@@ -93,7 +124,7 @@ Use when the source provides a stable per-record identifier or cursor.
 - `source_type`: `sysmon`
 - `origin.host`: event's source computer name (from the event payload)
 - `origin.channel`: `Microsoft-Windows-Sysmon/Operational`
-- `origin.record_id`: Windows `EventRecordID` from the event payload
+- `origin.record_id`: Windows `EventRecordID` from the event payload (base-10 string)
 - `origin.provider`: provider name and/or provider GUID (include both when available)
 - `origin.event_id`: the Sysmon EventID (include qualifiers/version if available)
 
@@ -131,18 +162,23 @@ Use only when neither Tier 1 nor Tier 2 inputs exist. Identity is a fingerprint 
 - `source_type`
 - `origin.host`
 - `stream.name`
-- `event.time_bucket` (event time truncated to the source's true precision)
+- `event.time_bucket` (string; event origin time truncated to the source's true precision; encoded
+  as `<precision>:<integer>` where `<precision>` is one of `s|ms|us|ns` and `<integer>` is the epoch
+  time in that unit)
 - `payload` (canonical stable payload fields; exclude volatile fields), or
 - `payload.fingerprint` (sha256 of canonical stable payload fields; exclude volatile fields)
 
-Tier 3 MUST record `metadata.identity_tier = 3` for auditability.
+Tier 3 MUST set `metadata.identity_tier = 3`.
 
 Tier 3 payload guidance (normative):
 
 - Implementations SHOULD prefer `payload.fingerprint` when payload size is unbounded or would
   materially increase identity basis size.
-- If `payload.fingerprint` is used, it MUST be computed as `sha256(canonical_stable_payload)` where
-  `canonical_stable_payload` is serialized using RFC 8785 (JCS) and excludes volatile fields.
+- If `payload.fingerprint` is used:
+  - It MUST be computed as `sha256(canonical_stable_payload_bytes)` where
+    `canonical_stable_payload_bytes = canonical_json_bytes(stable_payload)` and `stable_payload`
+    excludes volatile fields.
+  - The fingerprint MUST be encoded as lowercase hex of the full 32-byte digest (64 hex chars).
 - If `payload` is used, it MUST contain only stable fields and MUST be canonicalizable under RFC
   8785 (JCS).
 
@@ -255,6 +291,11 @@ byte-identical messages in the same timestamp bucket are common.
   is persisted as evidence.
 - Tier 3 fingerprinting MAY be used only when neither Tier 1 nor Tier 2 inputs exist, and SHOULD be
   treated as lower confidence in coverage/operability reporting.
+- Duplication note (normative): If overlapping syslog content is ingested from both journald and
+  file-tailed `/var/log/*` on the same host, semantic duplicates are expected. Implementations MUST
+  NOT attempt to remove these duplicates by comparing `metadata.event_id` (Tier 1 cursor-based IDs
+  and Tier 2 artifact-cursor IDs will differ by design). Any overlap-dedupe mode MUST be explicitly
+  enabled and recorded as an operator-visible telemetry policy (see Unix log ingestion spec).
 
 ##### Tier 2 identity basis (normative)
 
@@ -421,7 +462,8 @@ Fallback policy:
 
 Pre-hash normalization (Tier 1 Windows, optional but deterministic if used):
 
-- If applied, restrict to ASCII-safe transforms only:
+- If applied, restrict to ASCII-safe transforms only, and apply them to the `identity_basis` values
+  prior to RFC 8785 serialization:
   - `origin.host`, `origin.channel`, `origin.provider`: trim ASCII whitespace; lowercase ASCII.
 
 ### Timestamp handling
@@ -438,6 +480,9 @@ Rules:
 - When mapping sources with limited precision (for example: seconds), `time` MUST be represented in
   ms since epoch with sub-second components set to zero. Emit `metadata.time_precision` as one of:
   `s|ms|us|ns`.
+- For sources that require timestamp inference (example: RFC 3164 syslog without year/timezone),
+  implementations MUST apply deterministic inference rules and SHOULD record the chosen inference
+  policy in normalization provenance (for debugging/reprocessing).
 
 ### Deduplication and replay
 
@@ -448,6 +493,15 @@ transport retries, restarts, or operator-initiated reprocessing.
 
 Downstream deduplication is required. For this reason, `metadata.event_id` MUST be stable across
 replays, and dedupe MUST be based on `metadata.event_id`.
+
+Integration with stage outcomes and state machines (normative):
+
+- If `metadata.event_id` cannot be generated for a record and no configured fallback tier can be
+  applied deterministically, the normalization stage MUST fail closed with reason code
+  `event_id_generation_failed`.
+- Checkpoint loss and checkpoint corruption MUST be surfaced in the telemetry stage outcome surface
+  using stable reason codes (`checkpoint_loss`, `checkpoint_store_corrupt`) and MUST be reflected in
+  run-scoped counters/metrics.
 
 ### Deduplication scope and window (normative)
 
@@ -470,17 +524,36 @@ To make at-least-once delivery compatible with deterministic outputs:
 - If the dedupe index is missing/corrupt on restart, but the normalized store already contains rows,
   the normalizer MUST rebuild the dedupe index by scanning `metadata.event_id` from the existing
   normalized store before appending any new rows.
+- When an incoming normalized event is suppressed as an exact duplicate (equivalent after volatile
+  field removal) because its `metadata.event_id` is already present in the dedupe index, the
+  normalizer MUST increment `dedupe_duplicates_dropped_total`.
 
 ### Non-identical duplicates (normative)
 
-If two instances share the same `metadata.event_id` but are not byte-equivalent after removing
-volatile pipeline fields:
+Define `instance_without_volatile_fields` as the normalized event with the following fields removed:
+
+- `metadata.observed_time`
+- `metadata.extensions.purple_axiom.ingest_id`
+
+Define `instance_canonical_bytes = canonical_json_bytes(instance_without_volatile_fields)`.
+
+If two instances share the same `metadata.event_id` but have different `instance_canonical_bytes`:
 
 - The normalizer MUST treat this as a **dedupe conflict** (a data-quality signal).
-- The normalizer MUST select the canonical instance deterministically by choosing the instance with
-  the lowest `sha256_hex(canonical_json(instance_without_volatile_fields))`.
-- The normalizer MUST increment a `dedupe_conflicts_total` counter and record details in
-  `runs/<run_id>/logs/` (without writing sensitive payloads into long-term artifacts).
+- The normalizer MUST compute `conflict_key = sha256_hex(instance_canonical_bytes)` for each
+  instance, where `sha256_hex` is lowercase hex of the full 32-byte digest.
+- The normalizer MUST ensure that the canonical instance retained for a given `metadata.event_id` is
+  the instance with the lexicographically smallest `conflict_key` across all observed instances for
+  that `metadata.event_id`, independent of ingestion order.
+- The normalizer MUST increment `dedupe_conflicts_total` each time a non-equivalent instance is
+  observed for an existing `metadata.event_id`.
+- The normalizer MUST record minimal conflict evidence under `runs/<run_id>/logs/` (without writing
+  sensitive payloads into long-term artifacts). Minimal evidence SHOULD include:
+  - `metadata.event_id`
+  - `metadata.source_type`
+  - `metadata.source_event_id`
+  - `metadata.identity_tier`
+  - `conflict_key` of the incoming instance and the retained canonical instance
 
 ### Collector restarts and checkpoints (Windows Event Log)
 
@@ -498,6 +571,7 @@ To reduce replay volume while preserving at-least-once correctness:
   `runs/<run_id>/logs/telemetry_checkpoints/`. The default layout SHOULD be:
   - `runs/<run_id>/logs/telemetry_checkpoints/<source_type>/<asset_id>/<stream_id>.json`
 - Checkpoint updates MUST be atomic (write temp file, fsync, rename).
+- Each successful checkpoint flush MUST increment `telemetry_checkpoints_written_total`.
 - The pipeline MUST flush checkpoints at least once every `N` events or `T` seconds (configurable).
 
 File-tailed sources (optional tightening, normative):
@@ -516,8 +590,9 @@ If a checkpoint is missing at restart:
 - The pipeline MUST fall back to replaying from the start of the run window (subject to configured
   clock-skew tolerance), and MUST rely on the dedupe index to prevent duplicates in normalized
   output.
-- The pipeline MUST record that checkpoint loss occurred in run-scoped logs and summary metrics
-  (example: `telemetry_checkpoint_lost=true`, `telemetry_checkpoint_loss_total += 1`).
+- The pipeline MUST record that checkpoint loss occurred in run-scoped logs and summary metrics:
+  - increment `telemetry_checkpoint_loss_total += 1`
+  - record `replay_start_mode = "reset_missing"` (operator-visible)
 
 If a checkpoint store is corrupt at restart:
 
@@ -525,8 +600,13 @@ If a checkpoint store is corrupt at restart:
   [telemetry pipeline specification](../spec/040_telemetry_pipeline.md) "Checkpointing and replay
   semantics" and the [configuration reference](../spec/120_config_reference.md)
   `telemetry.otel.checkpoint_corruption`).
+- Any detected checkpoint store corruption or reset MUST increment
+  `telemetry_checkpoint_corruption_total`.
 - If the collector refuses to start or cannot open its checkpoint store (fail-closed), the telemetry
-  stage MUST fail closed and MUST use a stable reason code `checkpoint_store_corrupt`.
+  stage MUST fail closed and MUST use a stable reason code `checkpoint_store_corrupt`. When
+  available, implementations MUST also record an operator-actionable error code in run-scoped
+  telemetry validation evidence (example categories: missing store, unwritable store, corrupt
+  store).
 - If the storage backend automatically recovers by starting a fresh database (example: OTel
   `file_storage` with `recreate: true`), this MUST be treated as checkpoint loss. The pipeline MAY
   replay historical events and MUST rely on the dedupe index to prevent duplicates in normalized

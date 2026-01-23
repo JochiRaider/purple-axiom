@@ -7,6 +7,7 @@ tags: [architecture, pipeline, stages, orchestrator]
 related:
   - ADR-0004-deployment-architecture-and-inter-component-communication.md
   - ADR-0005-stage-outcomes-and-failure-classification.md
+  - ADR-0007-state-machines.md
   - 025_data_contracts.md
   - 031_plan_execution_model.md
   - 040_telemetry_pipeline.md
@@ -46,10 +47,17 @@ Agent navigation (non-normative):
 - For exact artifact paths, schemas, and hashing rules, use the
   [data contracts specification][data-contracts] and the
   [storage formats specification][storage-formats-spec].
-- Authority: This document is normative for stable stage identifiers, canonical stage execution
-  order, and minimum stage IO boundaries. It is descriptive elsewhere. If it disagrees with
-  [data contracts][data-contracts] or [storage formats][storage-formats-spec], those documents are
-  authoritative.
+- Authority:
+  - This document is normative for stable stage identifiers, canonical stage execution order, and
+    minimum stage IO boundaries.
+  - [ADR-0004: Deployment architecture and inter-component communication][adr-0004] is authoritative
+    for v0.1 deployment topology and inter-component communication constraints.
+  - [ADR-0005: Stage outcomes and failure classification][adr-0005] is authoritative for stage
+    outcome semantics, reason codes, and run status derivation.
+  - [Data contracts][data-contracts] and [storage formats][storage-formats-spec] are authoritative
+    for artifact schemas, publish-gate validation behavior, hashing rules, and storage layout.
+  - If this document conflicts with any of the references above, the referenced ADR/spec is
+    authoritative.
 
 ## Scope
 
@@ -111,8 +119,10 @@ Common invariants (normative, v0.1):
   run lock (atomic create of `runs/.locks/<run_id>.lock` per
   [ADR-0004: Deployment architecture and inter-component communication][adr-0004]) before creating
   or mutating any run bundle artifacts (including `manifest.json`).
-- Any verb that executes one or more stages MUST record stage outcomes in `logs/health.json` per
-  [ADR-0005: Stage outcomes and failure classification][adr-0005].
+- Any verb that executes one or more stages MUST record stage outcomes in `manifest.json` per
+  [ADR-0005: Stage outcomes and failure classification][adr-0005]. When health files are enabled
+  (`operability.health.emit_health_files=true`), it MUST also record the same ordered outcomes in
+  `logs/health.json`.
 - Any verb that writes contract-backed artifacts MUST follow the publish gate rules in this document
   (staging + validation + atomic publish).
 - Verbs MUST NOT introduce service-to-service RPC for coordination.
@@ -184,22 +194,34 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
   root.
 - The manifest (`runs/<run_id>/manifest.json`) MUST remain the authoritative index of what exists
   and which versions/config hashes were used.
-- When environment configuration is enabled, the runner MUST record the configuration boundary as
-  substage `runner.environment_config` and MUST emit deterministic operability evidence under
-  `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
+- When environment configuration is enabled, the orchestrator MUST record the configuration boundary
+  as additive substage `runner.environment_config` in the stage outcome surface (`manifest.json`,
+  and `logs/health.json` when enabled) and MUST ensure deterministic operability evidence is emitted
+  under `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
   [operability specification][operability-spec]).
 
 Regression comparison (when enabled) reads baseline reference artifacts under
 `runs/<run_id>/inputs/` and emits deltas under `runs/<run_id>/report/**`.
 
 - `inputs/` contains both operator-supplied run inputs (always read-only) and pipeline-materialized
-  baseline reference artifacts (write-once, owned by the `reporting` stage).
-- When regression comparison is enabled, the `reporting` stage MUST materialize
-  `inputs/baseline_run_ref.json` and SHOULD materialize `inputs/baseline/manifest.json` when
-  baseline resolution succeeds (see the [storage formats specification][storage-formats-spec]).
+  baseline reference artifacts.
+- The following paths are **reserved for pipeline materialization** when regression is enabled:
+  - `inputs/baseline_run_ref.json`
+  - `inputs/baseline/**` Operators MUST NOT pre-populate these reserved paths.
 - All stages MUST treat any pre-existing files under `inputs/**` as read-only.
-- The `reporting` stage MUST NOT overwrite any pre-existing `inputs/**` content; it MUST write new
-  baseline reference artifacts only via the publish gate (staging + validation + atomic publish).
+- When regression comparison is enabled, the `reporting` stage MUST ensure that
+  `inputs/baseline_run_ref.json` exists and is contract-valid before emitting regression results in
+  `report/report.json`:
+  - If `inputs/baseline_run_ref.json` already exists, `reporting` MUST treat it as read-only, MUST
+    validate it, and MUST reuse it. It MUST NOT rewrite it.
+  - If it does not exist, `reporting` MUST materialize it via the publish gate (staging + validation
+    \+ atomic publish).
+- When baseline resolution succeeds and the baseline manifest bytes are readable, the `reporting`
+  stage SHOULD materialize `inputs/baseline/manifest.json` (see the
+  [storage formats specification][storage-formats-spec]):
+  - If `inputs/baseline/manifest.json` already exists, `reporting` MUST treat it as read-only, MUST
+    validate it, and MUST reuse it. It MUST NOT rewrite it.
+  - If it does not exist, `reporting` SHOULD materialize it via the publish gate.
 
 For artifact shapes and selection rules, see the [data contracts specification][data-contracts], the
 [storage formats specification][storage-formats-spec], and the
@@ -255,7 +277,7 @@ Normative top-level entries (run-relative):
 | `scoring/`                         | Scoring summaries and metrics                                                    |
 | `report/`                          | Report outputs (required: `report/report.json`, `report/thresholds.json`)        |
 | `logs/`                            | Operability summaries and debug logs; not considered long-term storage           |
-| `logs/health.json`                 | Stage/substage outcomes and run status derivation                                |
+| `logs/health.json`                 | Stage/substage outcomes mirror (when enabled; see operability)                   |
 | `logs/telemetry_validation.json`   | Telemetry validation evidence (when validation enabled)                          |
 | `logs/lab_inventory_snapshot.json` | Inventory snapshot produced by `lab_provider` (referenced by manifest)           |
 | `logs/contract_validation/`        | Contract validation reports by stage (emitted on validation failure)             |
@@ -305,9 +327,6 @@ and failure classification.
 
 ## Stage execution order
 
-**Summary**: v0.1 stage execution order is deterministic and recorded in `logs/health.json` per
-[ADR-0005: Stage outcomes and failure classification][adr-0005].
-
 Preamble (normative, per
 [ADR-0004: Deployment architecture and inter-component communication][adr-0004]):
 
@@ -330,33 +349,78 @@ The orchestrator MUST execute stages in the following order for v0.1:
 1. `reporting`
 1. `signing` (optional; when enabled, MUST be last)
 
+Note: Telemetry collection MAY run concurrently with `runner` (collectors are typically started
+before `runner` begins and stopped after it completes). The `telemetry` stage boundary refers to the
+post-run harvest/validation/publish step that materializes `raw_parquet/**` for downstream stages.
+
 When environment configuration is enabled, the orchestrator MUST record an additive `runner`
 substage `runner.environment_config` after `lab_provider` completes and before any action enters the
-runner `execute` lifecycle phase. This substage MUST be observable via `logs/health.json`.
+runner `prepare` lifecycle phase. This substage MUST be observable via stage outcomes in
+`manifest.json` and, when health files are enabled, via `logs/health.json`.
+
+## Lifecycle state machine integrations (v0.1; guidance)
+
+This architecture describes lifecycles that are naturally stateful (run execution, per-stage
+publish, per-action execution). Implementations SHOULD model these lifecycles as explicit
+finite-state machines (FSMs) when doing so improves determinism, resume safety, and testability.
+
+Reference: [ADR-0007: State machines for lifecycle semantics][adr-0007] defines the required FSM
+template and conformance expectations when a spec introduces normative lifecycle machines.
+
+Recommended integration points (non-normative in v0.1):
+
+1. **Orchestrator run lifecycle**
+
+   - Authority: [ADR-0004] and [ADR-0005].
+   - Canonical artifact anchors: run lock (`runs/.locks/<run_id>.lock`), `manifest.json`, and
+     `logs/health.json` (when enabled).
+
+1. **Stage publish gate lifecycle**
+
+   - Authority: [ADR-0004] and the publish gate rules in this document.
+   - Canonical artifact anchors: `runs/<run_id>/.staging/<stage_id>/`, the stage’s published output
+     paths, and the recorded stage outcome.
+
+1. **Runner action lifecycle**
+
+   - Authority: [scenario model][scenarios-spec] (prepare → execute → revert → teardown) and runner
+     integration specs.
+   - Canonical artifact anchors: `ground_truth.jsonl` plus per-action runner evidence under
+     `runner/actions/<action_id>/` (especially `side_effect_ledger.json`).
+
+1. **Telemetry reliability and validation canaries**
+
+   - Authority: [telemetry pipeline specification][telemetry-spec] and [ADR-0005] (outcome
+     recording).
+   - Canonical artifact anchors: `logs/telemetry_validation.json` and `raw_parquet/**`.
+
+If a future revision of this document introduces a conformance-critical state machine definition, it
+MUST use the template and conformance test requirements in [ADR-0007].
 
 ## Stage IO boundaries
 
 **Summary**: Each stage reads inputs from the run bundle and writes outputs back. The table below
 defines the minimum IO contract for v0.1.
 
-| Stage ID        | Minimum inputs                                                                                                | Minimum outputs                                                                                                                                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lab_provider`  | Run configuration, provider inputs                                                                            | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                  |
-| `runner`        | Inventory snapshot, scenario plan                                                                             | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); \[v0.2+: `plan/**`\]                                                                             |
-| `telemetry`     | Inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)                       | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)                                                                                           |
-| `normalization` | `raw_parquet/**`, mapping profiles                                                                            | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                  |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                                 | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                    |
-| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                        | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                       |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                         | `scoring/summary.json`                                                                                                                                                                                           |
-| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `logs/health.json`, `inputs/**` (when enabled) | `report/report.json`, `report/thresholds.json`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
-| `signing`       | Finalized `manifest.json`, selected artifacts                                                                 | `security/**` (checksums, signature, public key)                                                                                                                                                                 |
+| Stage ID        | Minimum inputs                                                                                       | Minimum outputs                                                                                                                                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lab_provider`  | Run configuration, provider inputs                                                                   | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                  |
+| `runner`        | Inventory snapshot, scenario plan                                                                    | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); \[v0.2+: `plan/**`\]                                                                             |
+| `telemetry`     | Inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)              | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)                                                                                           |
+| `normalization` | `raw_parquet/**`, mapping profiles                                                                   | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                  |
+| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                        | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                    |
+| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                               | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                       |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                | `scoring/summary.json`                                                                                                                                                                                           |
+| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `inputs/**` (when regression enabled) | `report/report.json`, `report/thresholds.json`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
+| `signing`       | Finalized `manifest.json`, selected artifacts                                                        | `security/**` (checksums, signature, public key)                                                                                                                                                                 |
 
-> **Note**: This table defines the **minimum** contract. Implementations MAY produce additional
-> artifacts, but MUST produce at least these outputs for the stage to be considered successful.
+**Note**: This table defines the **minimum** contract. Implementations MAY produce additional
+artifacts, but MUST produce at least these outputs for the stage to be considered successful.
 
-> **Note**: All stages contribute to `logs/health.json` per
-> [ADR-0005: Stage outcomes and failure classification][adr-0005]. Stage outcomes are recorded in
-> health files regardless of success or failure.
+**Note**: All enabled stages MUST record a stage outcome in `manifest.json` per
+[ADR-0005: Stage outcomes and failure classification][adr-0005]. When health files are enabled
+(`operability.health.emit_health_files=true`), the orchestrator MUST also write the same ordered
+outcomes to `logs/health.json`.
 
 See [ADR-0004: Deployment architecture and inter-component communication][adr-0004] for detailed
 publish semantics and filesystem coordination rules.
@@ -411,9 +475,10 @@ Environment configuration boundary (normative, v0.1):
 - The runner MAY perform run-scoped environment configuration work that is required to make the lab
   ready for telemetry collection and scenario execution (for example: telemetry agent bootstrap,
   collector configuration placement, readiness canaries).
-- When such configuration is performed, the runner MUST record an additive substage outcome
-  `runner.environment_config` in `logs/health.json` and MUST emit deterministic operability evidence
-  under `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
+- When such configuration is performed, the orchestrator MUST record an additive substage outcome
+  `runner.environment_config` in `manifest.json` and, when health files are enabled, in
+  `logs/health.json`. It MUST also emit deterministic operability evidence under
+  `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
   [operability specification][operability-spec]).
 - Environment configuration is distinct from per-action requirements evaluation in `prepare`. It
   MUST NOT change the semantics of per-action lifecycle outcomes.
@@ -422,7 +487,11 @@ Preflight / Readiness Gate:
 
 - Run before scenario execution.
 - Validate resources + config invariants + required collectors/log sources.
-- Emit a health substage outcome for quick triage.
+- Implementations MAY emit a `runner.preflight` substage outcome for quick triage.
+  - If emitted, it MUST be recorded in `manifest.json` and, when health files are enabled, in
+    `logs/health.json`.
+  - It MUST NOT introduce new `reason_code` values without updating
+    [ADR-0005: Stage outcomes and failure classification][adr-0005].
 
 Responsibilities:
 
@@ -621,8 +690,9 @@ Responsibilities:
     - MUST write `inputs/baseline_run_ref.json`.
     - SHOULD write `inputs/baseline/manifest.json` when baseline resolution succeeds.
   - Emit regression comparison results under `report/report.json.regression`.
-  - Record a `reporting.regression_compare` substage outcome in `logs/health.json` (even when
-    baseline resolution or comparison is indeterminate).
+  - Record a `reporting.regression_compare` substage outcome in `manifest.json` and, when health
+    files are enabled, in `logs/health.json` (even when baseline resolution or comparison is
+    indeterminate).
 - Support diffing and trending across runs.
 
 Outputs are stored under `report/**`.
@@ -695,6 +765,7 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 - [ADR-0004: Deployment architecture and inter-component communication][adr-0004]
 - [ADR-0005: Stage outcomes and failure classification][adr-0005]
 - [ADR-0006: Plan execution model (reserved; v0.2+)][adr-0006]
+- [ADR-0007: State machines for lifecycle semantics][adr-0007]
 - [Data contracts specification][data-contracts]
 - [Lab providers specification][lab-providers-spec]
 - [Scenarios specification][scenarios-spec]
@@ -730,6 +801,7 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 [adr-0004]: ../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md
 [adr-0005]: ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
 [adr-0006]: ../adr/ADR-0006-plan-execution-model.md
+[adr-0007]: ../adr/ADR-0007-state-machines.md
 [art-exec-spec]: 032_atomic_red_team_executor_integration.md
 [bridge-spec]: 065_sigma_to_ocsf_bridge.md
 [config-ref]: 120_config_reference.md

@@ -949,16 +949,16 @@ string as follows, in priority order:
    it as `raw_event_xml`.
 1. Else if `LogRecord.attributes["log.record.original"]` exists and is a string and begins with
    `<Event`, use it as `raw_event_xml` and increment `wineventlog_used_log_record_original_total`.
-1. Else treat the record as `RAW_XML_UNAVAILABLE` (see validation and gating) and increment
+1. Else treat the record as `raw_xml_unavailable` (see validation and gating) and increment
    `wineventlog_raw_unavailable_total`.
 
 If `raw_event_xml` is acquired, the pipeline MUST validate that it is well-formed XML using a strict
 XML parser with no heuristic repair. If well-formedness validation fails, treat the record as
-`RAW_XML_MALFORMED`, increment `wineventlog_raw_malformed_total`, and proceed according to the
+`raw_xml_malformed`, increment `wineventlog_raw_malformed_total`, and proceed according to the
 configured `fail_mode` (see validation and gating).
 
 The pipeline MUST NOT attempt heuristic recovery of identity fields (regex scraping, partial XML
-repair) when `RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` triggers, because this can introduce
+repair) when `raw_xml_unavailable` or `raw_xml_malformed` triggers, because this can introduce
 non-deterministic behavior across environments and library versions.
 
 #### Missing provider manifests and rendering metadata failures
@@ -1035,7 +1035,7 @@ Windows Event Log collection is enabled. These counters MUST be emitted into
 Under `fail_mode: fail_closed`, any non-zero `wineventlog_raw_unavailable_total` or
 `wineventlog_raw_malformed_total` MUST fail the telemetry stage with
 `reason_code=raw_xml_unavailable`. Under `fail_mode: warn_and_skip`, records that trigger
-`RAW_XML_UNAVAILABLE` or `RAW_XML_MALFORMED` MUST be skipped (not written to
+`raw_xml_unavailable` or `raw_xml_malformed` MUST be skipped (not written to
 `raw_parquet/windows_eventlog`) and MUST still be counted in telemetry validation output; the run
 MUST record a NON-FATAL telemetry warning with `reason_code=raw_xml_unavailable`.
 

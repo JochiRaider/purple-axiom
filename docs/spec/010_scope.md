@@ -80,6 +80,10 @@ This document does NOT cover:
 
 - Scenario execution (runner):
 
+  - Optional run-scoped environment configuration (`runner.environment_config`) is in scope when
+    enabled, including baseline readiness checks and benign background activity/noise generation
+    used to improve dataset realism.
+
   - v0.1 supports **Atomic Test Plan** scenarios.
 
   - The runner emits a deterministic ground truth timeline and per-action evidence artifacts.

@@ -38,7 +38,9 @@ Module boundaries (v0.1; normative where stated):
 
 - **Provision**: resolve and snapshot lab inventory (maps to `lab_provider`).
 - **Configure**: apply run-scoped environment readiness work required for telemetry collection and
-  scenario execution. When performed, it MUST be recorded as additive runner substage
+  scenario execution. This MAY include enabling benign background activity/noise generators used to
+  improve dataset realism (for example scheduled tasks/cron, domain activity generators, or user
+  simulation agents). When performed, it MUST be recorded as additive runner substage
   `runner.environment_config` and MUST NOT introduce a new stable stage identifier in v0.1.
 - **Simulate**: execute scenario actions and emit ground truth + runner evidence (maps to `runner`).
 
@@ -205,6 +207,7 @@ Regression comparison (when enabled) reads baseline reference artifacts under
 
 - `inputs/` contains both operator-supplied run inputs (always read-only) and pipeline-materialized
   baseline reference artifacts.
+- `inputs/threat_intel/` (when threat intelligence is enabled; v0.2+)
 - The following paths are **reserved for pipeline materialization** when regression is enabled:
   - `inputs/baseline_run_ref.json`
   - `inputs/baseline/**` Operators MUST NOT pre-populate these reserved paths.
@@ -396,6 +399,237 @@ Recommended integration points (non-normative in v0.1):
 
 If a future revision of this document introduces a conformance-critical state machine definition, it
 MUST use the template and conformance test requirements in [ADR-0007].
+
+## Cross-cutting patterns (v0.1; normative)
+
+**Summary**: This section defines cross-cutting design patterns that MUST be applied consistently
+across v0.1 stages and extension points. These patterns exist to preserve: (1) deterministic,
+contract-backed run bundles, (2) crash-safe reruns/replay behavior, and (3) safety-by-default
+operation in a lab-isolated environment.
+
+### Cross-cutting ports (interfaces)
+
+Implementations MAY choose any runtime framework, but the orchestrator and each stage MUST be
+written against the following logical ports (language-agnostic). Concrete implementations MAY add
+fields, but MUST preserve the semantics below.
+
+#### Port: `RunLock`
+
+Purpose: enforce the single-writer invariant for a run bundle.
+
+Required operations (minimum):
+
+- `acquire(run_id) -> acquired: bool`
+  - Semantics: MUST be an exclusive acquisition using atomic-create semantics for
+    `runs/.locks/<run_id>.lock` (or an equivalent mechanism with identical exclusivity).
+- `release(run_id) -> void` (best-effort; MAY be a no-op on crash)
+
+Observability:
+
+- If the lock cannot be acquired, the orchestrator MUST NOT create or mutate `runs/<run_id>/` and
+  MUST fail the invocation deterministically (see conformance tests).
+
+#### Port: `PublishGate`
+
+Purpose: provide “transaction-like” artifact publication: stage writes are staged, validated, and
+then atomically promoted.
+
+Required operations (minimum):
+
+- `begin_stage(stage_id) -> StagePublishSession`
+- `StagePublishSession.write_bytes(artifact_path, bytes) -> void`
+- `StagePublishSession.write_json(artifact_path, obj, canonical: bool=true) -> void`
+- `StagePublishSession.write_jsonl(artifact_path, rows_iterable) -> void`
+- `StagePublishSession.finalize(expected_outputs: list[ExpectedOutput]) -> PublishResult`
+- `StagePublishSession.abort() -> void`
+
+Where:
+
+- `artifact_path` is run-relative (e.g., `normalized/events.jsonl`), NOT an absolute path.
+- `ExpectedOutput` includes:
+  - `artifact_path` (run-relative)
+  - `contract_id` (schema/contract identity as used by the contract validator)
+  - `required: bool` (default `true`)
+
+Finalize semantics (normative):
+
+- All outputs for a stage MUST be written under `runs/<run_id>/.staging/<stage_id>/` first.
+- `finalize()` MUST validate all `expected_outputs[]` using `ContractValidator` before any atomic
+  promotion.
+- If validation fails, `finalize()` MUST NOT promote any staged outputs into their final run bundle
+  locations.
+- If validation succeeds, `finalize()` MUST promote outputs using atomic publish semantics (atomic
+  rename / replace into final locations).
+- After a successful `finalize()`, the stage MUST record a terminal stage outcome in `manifest.json`
+  (and in `logs/health.json` when enabled) before control returns to the orchestrator stage loop.
+
+#### Port: `ContractValidator`
+
+Purpose: deterministic schema/contract validation for run-bundle artifacts.
+
+Required operations (minimum):
+
+- `validate_artifact(artifact_path, contract_id) -> ValidationResult`
+- `validate_many(expected_outputs: list[ExpectedOutput]) -> ContractValidationReport`
+
+Required report behavior (normative):
+
+- When any contract-backed artifact fails validation, the implementation MUST emit a contract
+  validation report artifact under `runs/<run_id>/logs/contract_validation/`.
+- Validation error lists MUST be deterministically ordered as specified by the data contracts rules.
+
+#### Port: `OutcomeSink`
+
+Purpose: treat stage outcomes as the single source of truth for run status and CI gating.
+
+Required operations (minimum):
+
+- `record_stage_outcome(stage, status, fail_mode, reason_code?: string|null, details?: object|null) -> void`
+- `record_substage_outcome(stage, status, fail_mode, reason_code?: string|null, details?: object|null) -> void`
+
+Required ordering behavior (normative):
+
+- Stage outcomes MUST be emitted in stable ordering (canonical stage order).
+- Substages, when present, MUST be ordered immediately after their parent stage, sorted
+  lexicographically by full `stage` string.
+
+#### Port: `PolicyEngine`
+
+Purpose: centralize enforcement of safety-by-default rules and determinism-sensitive feature gates.
+
+Required operations (minimum):
+
+- `effective_policy() -> PolicySnapshot`
+- `assert_allowed(operation: PolicyOperation) -> void`
+  - MUST fail closed (raise/return denial) when the policy forbids an operation.
+- `redact_or_withhold(artifact_path, bytes, classification) -> RedactionDecision`
+  - `RedactionDecision` MUST be explainable and MUST map to the project’s redaction posture
+    (present/withheld/quarantined semantics).
+
+#### Port: `Adapter` (Ports-and-adapters pattern)
+
+Purpose: isolate external integrations (lab providers, telemetry tooling, rule engines, etc.) from
+the orchestrator and stage core logic.
+
+Each extension implementation MUST:
+
+- implement an adapter interface (or equivalent) that can be swapped without changing orchestrator
+  control flow,
+- validate its configuration deterministically,
+- record its identity/version inputs into the run bundle (manifest and/or deterministic evidence),
+- avoid introducing service-to-service RPC dependencies for stage coordination.
+
+### Cross-cutting invariants (normative)
+
+These invariants apply to the orchestrator, all stages, and all extension adapters.
+
+1. **Single-writer run bundle**
+
+   - A run bundle MUST have exactly one writer at a time (the orchestrator invocation holding the
+     run lock).
+   - Stage implementations MUST NOT write outside the publish-gate staging area and MUST NOT bypass
+     the lock.
+
+1. **File-based inter-stage coordination**
+
+   - Stages MUST communicate by reading/writing contract-backed artifacts under `runs/<run_id>/`.
+   - Core stages MUST NOT require service-to-service RPC for coordination (v0.1).
+
+1. **Publish-gate only for contract-backed outputs**
+
+   - Any write to a contract-backed location MUST go through `PublishGate`.
+   - Partial promotion is forbidden: if a stage fails fail-closed, it MUST NOT publish its final
+     output directory.
+
+1. **Deterministic artifact paths**
+
+   - Contract-backed artifacts MUST use deterministic paths.
+   - Timestamped contracted filenames are disallowed: timestamps belong inside artifact content, not
+     in filenames.
+   - Implementations MUST treat any filename containing date/time-like tokens (e.g., `YYYY-MM-DD`,
+     `YYYYMMDD`, RFC3339-like `...T...Z`) as “timestamped” for the purposes of this rule (a stricter
+     detector is allowed).
+
+1. **Deterministic serialization and ordering**
+
+   - Canonical JSON (RFC 8785 / JCS) MUST be used when canonical bytes are required for hashing or
+     deterministic comparisons.
+   - Arrays and ordered collections that participate in contracted artifacts or
+     regression-comparable metrics MUST be stably ordered using UTF-8 byte order (no locale).
+
+1. **Deterministic contract validation reports**
+
+   - Validation error ordering MUST be deterministic.
+   - The contract validation report artifact path MUST be stable and MUST be emitted on validation
+     failure.
+
+1. **Outcome-sourced status**
+
+   - `manifest.status` MUST be derived from stage outcomes, not from ad-hoc runtime heuristics.
+   - `reason_code` MUST be selected from the normative catalog for the relevant
+     `(stage, reason_code)` pair; unknown reason codes are forbidden.
+
+1. **Safety policy is enforced, not advisory**
+
+   - The system MUST be local-first and lab-isolated by default.
+   - Unexpected network egress MUST be denied by default and treated as run-fatal when violated.
+   - Evidence artifacts MUST follow the effective redaction posture; if redaction cannot be applied
+     deterministically, artifacts MUST be withheld or quarantined rather than written into standard
+     long-term locations.
+
+1. **Determinism-sensitive features are explicitly gated**
+
+   - Cross-run caching MUST be default-off.
+   - If cross-run caching is enabled, cache usage MUST be recorded deterministically in
+     `logs/cache_provenance.json` with stable ordering.
+   - If forbidden cache usage is detected at runtime, the run MUST fail closed.
+
+### Cross-cutting conformance tests (required)
+
+CI MUST include automated conformance tests that verify the invariants above. The following tests
+are mandatory (names are suggestions; harness/framework is implementation-defined).
+
+1. `run_lock_exclusive_single_writer`
+
+   - Setup: start two orchestrator invocations targeting the same `run_id`.
+   - Assert: at most one acquires the lock; the other fails deterministically without mutating the
+     run bundle.
+
+1. `publish_gate_atomic_publish_no_partial_outputs`
+
+   - Setup: simulate a stage that writes multiple outputs; force an injected failure between “write”
+     and “finalize”.
+   - Assert: no contracted outputs appear in final locations; only staging contains partial data.
+   - Assert: rerun behavior is deterministic (either cleanly resumes and publishes, or fails closed
+     with a stable storage/consistency reason code).
+
+1. `contract_validation_report_location_and_ordering`
+
+   - Setup: produce a schema-invalid artifact via publish gate.
+   - Assert: a report is written under `logs/contract_validation/`.
+   - Assert: errors are deterministically ordered per the contract rules.
+
+1. `artifact_path_timestamped_filename_blocked`
+
+   - Setup: attempt to publish a contract-backed artifact with a timestamped filename.
+   - Assert: validation fails with the stable timestamped-filename disallow rule and emits the
+     validation report.
+
+1. `outcome_ordering_and_health_mirroring`
+
+   - Setup: run a minimal pipeline with at least one substage outcome.
+   - Assert: stage ordering is stable; substages follow immediately after the parent and are sorted.
+   - Assert: when `operability.health.emit_health_files=true`, `logs/health.json` mirrors the same
+     ordered outcomes as `manifest.json`.
+
+1. `cache_cross_run_gate_and_provenance`
+
+   - Setup: attempt to use a cache directory outside `runs/<run_id>/` with
+     `cross_run_allowed=false`.
+   - Assert: config validation rejects the configuration OR runtime detection fails closed.
+   - Setup: enable cross-run caching explicitly.
+   - Assert: `logs/cache_provenance.json` is emitted and deterministically ordered by
+     `(component, cache_name, key)`.
 
 ## Stage IO boundaries
 
@@ -722,18 +956,28 @@ artifact selection rules.
 
 Purple Axiom is designed for extensibility at defined boundaries:
 
-| Extension type            | Examples                                              | Interface                                     |
-| ------------------------- | ----------------------------------------------------- | --------------------------------------------- |
-| Lab providers             | Manual, Ludus, Terraform, Vagrant, custom             | Inventory snapshot contract                   |
-| Environment configurators | Ansible, scripts, image-baked profiles, custom        | Readiness profile + deterministic operability |
-| Scenario runners          | Atomic Red Team, Caldera, custom                      | Ground truth + evidence contracts             |
-| Telemetry sources         | Windows Event Log, Sysmon, osquery, auditd, EDR, pcap | OTel receiver + raw schema                    |
-| Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles            | Mapping profile contract                      |
-| Rule languages            | Sigma, YARA, Suricata (future)                        | Bridge + evaluator contracts                  |
-| Bridge mapping packs      | Logsource routers, field alias maps                   | Mapping pack schema                           |
-| Evaluator backends        | DuckDB/SQL, Tenzir, streaming engines                 | Compiled plan + detection contract            |
-| Criteria packs            | Default, environment-specific                         | Criteria pack manifest + entries              |
-| Redaction policies        | Default patterns, custom patterns                     | Redaction policy contract                     |
+| Extension type            | Examples                                               | Interface                                     |
+| ------------------------- | ------------------------------------------------------ | --------------------------------------------- |
+| Lab providers             | Manual, Ludus, Terraform, Vagrant, custom              | Inventory snapshot contract                   |
+| Environment configurators | Ansible, DSC v3, scripts, image-baked profiles, custom | Readiness profile + deterministic operability |
+| Scenario runners          | Atomic Red Team, Caldera, custom                       | Ground truth + evidence contracts             |
+| Telemetry sources         | Windows Event Log, Sysmon, osquery, auditd, EDR, pcap  | OTel receiver + raw schema                    |
+| Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles             | Mapping profile contract                      |
+| Rule languages            | Sigma, YARA, Suricata (future)                         | Bridge + evaluator contracts                  |
+| Bridge mapping packs      | Logsource routers, field alias maps                    | Mapping pack schema                           |
+| Evaluator backends        | DuckDB/SQL, Tenzir, streaming engines                  | Compiled plan + detection contract            |
+| Criteria packs            | Default, environment-specific                          | Criteria pack manifest + entries              |
+| Redaction policies        | Default patterns, custom patterns                      | Redaction policy contract                     |
+
+Environment configurators are also the v0.1 integration point for generating realistic background
+activity (“noise”) so that datasets are not comprised solely of attack actions. Examples include:
+
+- domain and directory baseline activity (for example AD-Lab-Generator and ADTest.exe), and
+- server/workstation workload activity via scheduled tasks (Windows) and cron jobs (Linux).
+
+User simulation frameworks that require a coordinating server (for example GHOSTS) SHOULD be
+deployed as optional supporting services (outside core stage boundaries) and integrated by
+configuring endpoint agents via `runner.environment_config`.
 
 Extensions MUST preserve the stage IO boundaries and produce contract-compliant artifacts.
 

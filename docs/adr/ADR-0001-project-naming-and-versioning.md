@@ -63,6 +63,7 @@ compatibility, or coupling unless this ADR (or the owning spec) explicitly defin
    pinned, and treated as immutable per version.
 
    - criteria packs: `criteria_pack_id`, `criteria_pack_version`
+   - Threat intelligence packs: `threat_intel_pack_id` / `threat_intel_pack_version`
    - rule sets (Sigma or other): `rule_set_id`, `rule_set_version`
    - mapping packs (Sigma-to-OCSF bridge): `mapping_pack_id`, `mapping_pack_version`
    - mapping profiles (telemetry source to OCSF mapping profile): `mapping_profile_id`,
@@ -408,6 +409,7 @@ Minimum conformance checks (normative):
      `version_token_v1` (byte-for-byte comparable).
    - `manifest.versions.rule_set_version` MUST be present when rule evaluation is enabled and MUST
      validate as either `semver_v1` or `version_token_v1` (byte-for-byte comparable).
+   - `threat_intel_pack_version` (when `threat_intel.enabled=true`)
 1. Run ID validation:
    - `run_id` MUST validate as an RFC 4122 UUID in canonical hyphenated form.
    - Runs that violate this MUST fail contract validation and MUST be rejected by CI fixtures.

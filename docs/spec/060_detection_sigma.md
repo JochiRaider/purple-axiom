@@ -47,8 +47,6 @@ filtering and reporting:
 
 ### Configuration-driven filtering
 
-### Configuration-driven filtering
-
 Rule selection MAY be constrained via configuration (see the
 [configuration reference](120_config_reference.md)).
 
@@ -169,7 +167,7 @@ The `non_executable_reason` object MUST also include a human-readable explanatio
 
 | Reason code               | Category      | Description                                                                            |
 | ------------------------- | ------------- | -------------------------------------------------------------------------------------- |
-| `unrouted_logsource`      | Routing       | Sigma `logsource` matches no router entry                                              |
+| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                              |
 | `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                       |
 | `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                         |
 | `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                     |
@@ -196,7 +194,7 @@ using the scoring taxonomy. The minimum required mapping (from compiled plan
 
 | Reason code group                                                                                                                                   | Gap category         |
 | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| `unrouted_logsource`, `unmapped_field`, `raw_fallback_disabled`, `ambiguous_field_alias`                                                            | `bridge_gap_mapping` |
+| `unroutable_logsource`, `unmapped_field`, `raw_fallback_disabled`, `ambiguous_field_alias`                                                          | `bridge_gap_mapping` |
 | `unsupported_modifier`, `unsupported_operator`, `unsupported_regex`, `unsupported_value_type`, `unsupported_correlation`, `unsupported_aggregation` | `bridge_gap_feature` |
 | `backend_compile_error`, `backend_eval_error`                                                                                                       | `bridge_gap_other`   |
 

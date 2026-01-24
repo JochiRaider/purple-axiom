@@ -80,7 +80,7 @@ considered packaging only:
 
 - One-shot containers for stages (jobs) writing to a shared volume for `runs/`.
 - Optional long-running containers for supporting services (for example, a gateway collector, a
-  read-only UI).
+  read-only UI, or a user-noise simulator coordinator such as a GHOSTS API server).
 - Compose MUST NOT introduce a distributed control plane that changes stage semantics or determinism
   guarantees.
 

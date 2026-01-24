@@ -180,10 +180,10 @@ At run start, a provider implementation MUST:
 Provider implementations MAY be:
 
 - file-based (consume exported inventory)
-- API-based (query provider)
 
-All implementations (including `lab.provider: manual`) MUST still validate inputs and publish a
-deterministic snapshot for the run.
+API-based providers are RESERVED for v0.3+ (see "Reserved: API-based provider determinism
+requirements (v0.3+)"). All implementations (including `lab.provider: manual`) MUST still validate
+inputs and publish a deterministic snapshot for the run.
 
 ### Publish and validation gate
 
@@ -211,7 +211,8 @@ Fail-closed (`stage="lab_provider"`, `fail_mode="fail_closed"`) mappings:
 - Inventory artifact does not conform to the declared `lab.inventory.format` (including invalid IP
   strings) MUST use `reason_code="invalid_inventory_format"`.
 - Duplicate `asset_id` in the resolved `lab.assets` set MUST use `reason_code="asset_id_collision"`.
-- API provider query errors or timeouts MUST use `reason_code="provider_api_error"`.
+- API provider query errors or timeouts MUST use `reason_code="provider_api_error"` (reserved for
+  v0.3+).
 - Non-deterministic resolved `asset_id` set across retries within a single run start MUST use
   `reason_code="unstable_asset_id_resolution"`.
 
@@ -221,12 +222,33 @@ Non-fatal connectivity degradations MUST be recorded only as a substage
 - `reason_code="partial_connectivity"`
 - `reason_code="connectivity_check_error"`
 
-Connectivity checks are optional for v0.1. When implemented, they MUST NOT affect
-`lab.inventory_snapshot_sha256` and MUST NOT modify the published inventory snapshot.
+Connectivity checks are optional for v0.1. When implemented:
 
-### API-based provider determinism requirements
+- They MUST execute after the inventory snapshot is published (read-only).
+- They MUST NOT affect `lab.inventory_snapshot_sha256` and MUST NOT modify the published inventory
+  snapshot.
+- They MAY include an "addressability" canary that warns when a resolved asset is missing a usable
+  connection address (runner dependency):
+  - An asset is "addressable" when at least one of `ip` or `hostname` is present in the published
+    snapshot.
+  - If any assets are not addressable, the substage MUST record `status="failed"`,
+    `fail_mode="warn_and_skip"`, and `reason_code="partial_connectivity"`.
+  - If the addressability canary itself cannot be evaluated deterministically, the substage MUST
+    record `status="failed"`, `fail_mode="warn_and_skip"`, and
+    `reason_code="connectivity_check_error"`.
+  - Implementations SHOULD emit deterministic evidence for this canary under
+    `runs/<run_id>/logs/lab_provider_connectivity.json` (implementation-defined JSON; MUST NOT
+    contain secrets).
 
-API-based providers are permitted, but they MUST preserve run reproducibility:
+### Reserved: API-based provider determinism requirements (v0.3+)
+
+API-based providers are RESERVED for v0.3+.
+
+For v0.1-v0.2, implementations MUST NOT query provider APIs as part of `lab_provider`. Inventory
+resolution MUST consume a static, on-disk inventory artifact (`lab.inventory.path`) and then publish
+a deterministic `lab_inventory_snapshot.json` into the run bundle.
+
+When API-based providers are enabled in v0.3+, they MUST preserve run reproducibility:
 
 - Providers MUST record a deterministic `inventory_source_ref` in the manifest (for example: API
   endpoint and query parameters), with all secrets redacted or omitted.
@@ -237,20 +259,19 @@ API-based providers are permitted, but they MUST preserve run reproducibility:
 
 ## Configuration surface
 
-Recommended minimal keys (see [Configuration reference](120_config_reference.md)):
+Recommended minimal keys (aligned with [Configuration reference](120_config_reference.md)):
 
-- `lab.provider` (required): `manual | ludus | terraform | vagrant | other`
+- `lab.provider` (optional; default `manual`): `manual | ludus | terraform | vagrant | other`
 - `lab.assets` (required): stable target list; provider resolution enriches these entries.
 - `lab.inventory.path` (required when `lab.provider != manual`): provider-exported inventory
   artifact.
-- `lab.inventory.format` (required when `lab.provider != manual`):
-  `json | ansible_yaml | ansible_ini`
-- `lab.inventory.refresh` (optional; enum `never | on_run_start`):
-  - `on_run_start`: the provider MAY query/refresh inventory (when API-backed) and MUST resolve and
-    snapshot inventory at run start.
-  - `never`: the provider MUST NOT query provider APIs or mutate inventory sources; it MUST use the
-    existing artifact at `lab.inventory.path` and still snapshot deterministically.
-- `lab.inventory.snapshot_to_run_bundle` (default `true`):
+- `lab.inventory.format` (optional; default `ansible_yaml`): `ansible_yaml | ansible_ini | json`
+- `lab.inventory.refresh` (optional; default `on_run_start`; enum `never | on_run_start`):
+  - `on_run_start`: the provider MUST resolve and snapshot inventory at run start from the
+    configured inventory artifact(s). (API-based refresh is reserved for v0.3+.)
+  - `never`: the provider MUST NOT mutate or refresh inventory sources; it MUST use the existing
+    artifact at `lab.inventory.path` and still snapshot deterministically.
+- `lab.inventory.snapshot_to_run_bundle` (optional; default `true`):
   - v0.1: MUST be `true`. If set `false`, the configuration MUST be rejected during config
     validation because downstream stages require the snapshot artifact for correctness.
 
@@ -388,14 +409,16 @@ Host variable precedence:
 - When multiple groups apply to one host, group vars MUST be applied in bytewise UTF-8 lexical order
   by group name.
 
-### Deterministic resolution into `lab.assets`
+### Deterministic resolution into lab.assets
 
 When `lab.provider != manual`, resolution MUST:
 
 1. Build a host lookup map keyed by `hosts[].name`.
    - Duplicate `name` values MUST cause a fail-closed error.
-1. For each `lab.assets[]` entry, select an inventory host by match key:
+1. For each `lab.assets[]` entry, select an inventory host by match key (matched against
+   `hosts[].name`):
    - If `lab.assets[].hostname` is present: match on that value.
+   - Else if `lab.assets[].provider_asset_ref` is present: match on that value.
    - Else: match on `lab.assets[].asset_id`.
 1. Match key comparison MUST be an exact bytewise UTF-8 comparison.
    - Implementations MUST NOT apply locale-dependent casefolding.
@@ -410,8 +433,9 @@ When `lab.provider != manual`, resolution MUST:
      host `vars` (after allowlist + normalization + secret suppression).
    - If `lab.assets[].vars` is set, the provider MUST merge only missing allowlisted keys from the
      matched inventory host `vars` and MUST NOT override keys already specified by the operator.
-   - Provider-native identifiers MAY be recorded in the snapshot as `provider_asset_ref`, but MUST
-     NOT be required for deterministic joining.
+   - Provider-native identifiers MAY be recorded in the snapshot as `provider_asset_ref`. Downstream
+     stages MUST NOT require `provider_asset_ref` for deterministic joining (joins are on
+     `asset_id`).
 
 ### Minimum conformance fixtures
 
@@ -479,10 +503,17 @@ Determinism and safety notes (normative where stated):
 - To reduce inventory drift, management addressing SHOULD be stable (static IPs or stable DNS)
   rather than ephemeral NAT-forwarded ports.
 - A RECOMMENDED joining strategy is:
-  - `lab.assets[].provider_asset_ref = <vagrant_machine_name>` (exact match)
-  - `lab.assets[].asset_id = slugify(<vagrant_machine_name>)` where `slugify` follows the `asset_id`
-    constraints (ID slug v1) in this spec (lowercase ASCII; replace `_` with `-`; collapse repeated
-    `-`; trim leading/trailing `-`).
+  - Prefer joining on the stable Vagrant machine name via `provider_asset_ref`:
+    - `lab.assets[].provider_asset_ref = <vagrant_machine_name>` (exact match to the exported
+      inventory host identifier)
+    - omit `lab.assets[].hostname` unless the exported inventory host identifier differs from the
+      machine name (in which case set `hostname` explicitly)
+    - `lab.assets[].asset_id = slugify(<vagrant_machine_name>)` where `slugify` follows the
+      `asset_id` constraints (ID slug v1) in this spec (lowercase ASCII; replace `_` with `-`;
+      collapse repeated `-`; trim leading/trailing `-`).
+  - Because deterministic resolution matches `hostname` → `provider_asset_ref` → `asset_id`, this
+    makes `provider_asset_ref` operationally meaningful for Vagrant ranges while keeping `asset_id`
+    stable and human-readable.
 
 Reference implementation (optional):
 
@@ -518,9 +549,10 @@ Reference implementation (optional):
 
 ## Changelog
 
-| Date       | Change                                                                                       |
-| ---------- | -------------------------------------------------------------------------------------------- |
-| 2026-01-22 | Add optional Vagrant provider reference workflow                                             |
-| 2026-01-19 | Add `vars` to inventory snapshot; align enums + hashing/encoding; clarify publish + security |
-| 2026-01-14 | Align outcomes, publish gates, and snapshot determinism rules                                |
-| 2026-01-12 | Formatting update                                                                            |
+| Date       | Change                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| 2026-01-24 | Align match-key precedence; reserve API providers for v0.3+; align config defaults; add addressability canary |
+| 2026-01-22 | Add optional Vagrant provider reference workflow                                                              |
+| 2026-01-19 | Add `vars` to inventory snapshot; align enums + hashing/encoding; clarify publish + security                  |
+| 2026-01-14 | Align outcomes, publish gates, and snapshot determinism rules                                                 |
+| 2026-01-12 | Formatting update                                                                                             |

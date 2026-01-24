@@ -7,6 +7,7 @@ tags: [threat-intel, misp, integration, determinism, provenance, observability, 
 related:
   - ADR-0001-project-naming-and-versioning.md
   - ADR-0004-deployment-architecture-and-inter-component-communication.md
+  - ADR-0003-audit-tamper-evidence.md
   - ADR-0005-stage-outcomes-and-failure-classification.md
   - ADR-0007-state-machines.md
   - ../spec/010_scope.md
@@ -145,13 +146,23 @@ Resolution algorithm (normative):
 Validation requirements (normative; performed after selecting a candidate directory and before
 snapshotting):
 
-1. The resolved pack directory MUST contain:
-   - `manifest.json`
-   - `indicators.jsonl`
-1. The pack `manifest.json` MUST include the reserved hash fields:
+1. The pack `manifest.json` MUST include the required identity and hash fields:
+   - `threat_intel_pack_id`
+   - `threat_intel_pack_version`
    - `manifest_sha256`
    - `indicators_sha256`
    - `threat_intel.pack_sha256`
+1. `threat_intel_pack_id` and `threat_intel_pack_version` MUST match the resolved
+   `(pack_id, pack_version)` directory selection.
+1. `manifest_sha256` MUST match a recomputation over `manifest.json` using the canonicalization
+   rules in [Hash calculation rules](#hash-calculation-rules-normative).
+1. `indicators_sha256` MUST match a recomputation over the canonical indicators JSONL bytes.
+1. `threat_intel.pack_sha256` MUST match a recomputation using
+   [Hash calculation rules](#hash-calculation-rules-normative).
+1. `inputs/threat_intel/manifest.json` MUST validate against
+   `threat_intel_pack_manifest.schema.json`.
+1. Each line of `inputs/threat_intel/indicators.jsonl` MUST validate against
+   `threat_intel_indicator.schema.json`.
 1. The implementation MUST recompute and verify these hash fields per "Canonicalization and hashing
    (normative)".
 1. When the contract schemas exist (see Follow-ups), the implementation MUST validate:
@@ -282,7 +293,12 @@ Hash calculation rules (normative):
        "indicators_sha256": "..."
      }
      ```
-   - `threat_intel.pack_sha256 = sha256_hex(canonical_bytes)`.
+   - `threat_intel.pack_sha256 = sha256_hex(canonical_json_bytes(pack_basis_v1))`, where:
+     - `pack_basis_v1.v = 1`
+     - `pack_basis_v1.threat_intel_pack_id = <threat_intel_pack_id>`
+     - `pack_basis_v1.threat_intel_pack_version = <threat_intel_pack_version>`
+     - `pack_basis_v1.manifest_sha256 = <manifest_sha256>`
+     - `pack_basis_v1.indicators_sha256 = <indicators_sha256>`
 
 Hashing notes (normative):
 
@@ -570,8 +586,8 @@ This ADR requires follow-up changes before implementation can be considered comp
 1. **Contracts**
 
    - Add JSON Schemas under `docs/contracts/` for:
-     - `threat_intel_pack_manifest_schema.json`
-     - `threat_intel_indicator_schema.json`
+     - `threat_intel_pack_manifest.schema.json`
+     - `threat_intel_indicator.schema.json`
 
 1. **Config reference**
 

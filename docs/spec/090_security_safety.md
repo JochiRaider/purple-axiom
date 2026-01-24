@@ -140,6 +140,17 @@ MUST be explicitly enabled and logged, and rule content MUST be pinned and hashe
 - Run bundles MUST enforce strict file permissions.
 - Secrets MUST NOT be stored in run artifacts.
 
+### Noise and background activity generators
+
+- Any workload/noise generator tooling (for example AD-Lab-Generator, ADTest.exe, GHOSTS) MUST
+  operate on synthetic identities and synthetic credentials only. Operators MUST NOT import real
+  production user data into lab noise profiles.
+- Features that export plaintext credentials (for example password export options) MUST be disabled
+  by default. If enabled for a controlled lab experiment, exported material MUST be treated as a
+  secret and MUST NOT be included in publishable run artifacts.
+- Noise generator server components (when required) SHOULD run as internal-only supporting services
+  with outbound egress denied by default.
+
 ## Secrets
 
 Purple Axiom configuration MUST reference secrets rather than embedding them.

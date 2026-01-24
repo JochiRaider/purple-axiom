@@ -175,7 +175,6 @@ The appliance MUST support the following defaults:
    - allowlist filtering (default deny)
    - TLS termination
    - request rate limiting for authentication endpoints (minimum viable brute-force protection)
-   - request rate limiting for authentication endpoints (minimum viable brute-force protection)
    - v0.2 minimum: rate-limit `POST /api/auth/login` at the reverse proxy boundary
 
 1. The reverse proxy MUST forward authenticated traffic to the OI service over a local-only channel.
@@ -207,8 +206,6 @@ The allowlist is evaluated at the reverse proxy boundary.
   RP on a loopback/unix-socket channel.
 
 ## TLS and certificates (v0.2 normative)
-
-### UI TLS (reverse proxy termination)
 
 ### UI TLS (reverse proxy termination)
 

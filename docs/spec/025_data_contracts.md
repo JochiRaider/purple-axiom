@@ -366,6 +366,9 @@ Minimum publish-gate coverage (v0.1):
   - `runs/<run_id>/inputs/baseline/manifest.json` when produced (regression baseline snapshot form)
   - `runs/<run_id>/inputs/telemetry_baseline_profile.json` when
     `telemetry.baseline_profile.enabled=true`
+  - `runs/<run_id>/inputs/threat_intel/manifest.json` (when threat intelligence is enabled; v0.2+)
+  - `runs/<run_id>/inputs/threat_intel/indicators.jsonl` (when threat intelligence is enabled;
+    v0.2+)
   - `runner/**` artifacts that have contracts (for example, executor evidence, side-effect ledger,
     cleanup verification)
   - `runs/<run_id>/runner/principal_context.json`
@@ -424,6 +427,10 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
   - `inputs/baseline/manifest.json` (optional; regression baseline snapshot form)
   - `inputs/telemetry_baseline_profile.json` (optional; REQUIRED when telemetry baseline profile
     gate is enabled)
+  - `inputs/threat_intel/manifest.json` (v0.2+; REQUIRED when threat intelligence is enabled; threat
+    intel pack snapshot manifest)
+  - `inputs/threat_intel/indicators.jsonl` (v0.2+; REQUIRED when threat intelligence is enabled;
+    threat intel indicators snapshot)
 - `plan/` (v0.2+; compiled plan graph and expansion manifests)
 - `control/` (v0.2+; operator control-plane requests/decisions, when implemented)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)

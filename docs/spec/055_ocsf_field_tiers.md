@@ -80,11 +80,11 @@ Every emitted normalized event MUST include the following fields.
 
 ### Required top-level fields
 
-| Field       | Requirement | Notes                                                                        |
-| ----------- | ----------: | ---------------------------------------------------------------------------- |
-| `time`      |        MUST | Event time in ms since epoch, UTC.                                           |
-| `class_uid` |        MUST | The event class identifier (drives downstream routing and mapping coverage). |
-| `metadata`  |        MUST | Provenance and stable identity.                                              |
+| Field       | Requirement | Notes                                                                                                                                                                       |
+| ----------- | ----------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `time`      |        MUST | Event time in ms since epoch, UTC.                                                                                                                                          |
+| `class_uid` |        MUST | The event class identifier (drives downstream routing and mapping coverage). If no OCSF class can be assigned deterministically, set `class_uid = 0` (reserved "unmapped"). |
+| `metadata`  |        MUST | Provenance and stable identity.                                                                                                                                             |
 
 ### Required metadata fields
 
@@ -96,7 +96,9 @@ Every emitted normalized event MUST include the following fields.
 | `metadata.scenario_id`        |        MUST | Scenario identifier (ties to ground truth).                                                                                                                                                       |
 | `metadata.collector_version`  |        MUST | Collector build/version.                                                                                                                                                                          |
 | `metadata.normalizer_version` |        MUST | Normalizer build/version.                                                                                                                                                                         |
-| `metadata.source_type`        |        MUST | Source discriminator (example: `wineventlog`, `sysmon`, `osquery`).                                                                                                                               |
+| `metadata.source_type`        |        MUST | Source discriminator (example: `windows_security`, `sysmon`, `osquery`, `auditd`).                                                                                                                |
+| `metadata.source_event_id`    |        MUST | Source-native upstream ID when meaningful; else `null`.                                                                                                                                           |
+| `metadata.identity_tier`      |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                 |
 
 #### Provisional network telemetry source types (v0.1)
 
@@ -118,13 +120,11 @@ including a Tier 3 fallback based on 5-tuple plus flow start time.
 
 These fields SHOULD be included when available, but are not contract-required.
 
-| Field                      | Recommendation | Notes                                                                                                                                         |
-| -------------------------- | -------------: | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `metadata.source_event_id` |         SHOULD | Native upstream ID when meaningful (example: Windows `EventRecordID`).                                                                        |
-| `metadata.identity_tier`   |         SHOULD | Identity tier used to compute `metadata.event_id`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md). |
-| `metadata.ingest_time_utc` |         SHOULD | Ingest time as RFC3339 or ISO8601 UTC string, when available.                                                                                 |
-| `metadata.host`            |         SHOULD | Collector host identity if helpful for pipeline debugging.                                                                                    |
-| `metadata.pipeline`        |         SHOULD | Pipeline identifier (config profile, mapping version tag, etc.).                                                                              |
+| Field                      | Recommendation | Notes                                                                                   |
+| -------------------------- | -------------: | --------------------------------------------------------------------------------------- |
+| `metadata.ingest_time_utc` |         SHOULD | Ingest time as RFC3339 UTC string (for example, `2026-01-04T17:00:01Z`) when available. |
+| `metadata.host`            |         SHOULD | Collector host identity if helpful for pipeline debugging.                              |
+| `metadata.pipeline`        |         SHOULD | Pipeline identifier (config profile, mapping version tag, etc.).                        |
 
 ## Tier 1 core common
 
@@ -156,13 +156,41 @@ telemetry.
 
 #### Presence semantics
 
-For each Tier 1 field path and each in-scope event:
+For each Tier 1 field (or field group) and each in-scope event:
 
-- A field is **present** if the JSON key exists and its value is not `null`.
+- A field is **present** if the JSON key exists, its value is not `null`, and it satisfies the
+  type-specific rules below.
 - For strings, the value MUST be non-empty after trimming whitespace.
-- For arrays and objects, the value may be empty and still counts as present (existence is the pivot
+- For objects, the value may be empty and still counts as present (existence is the pivot\
   requirement).
+- For arrays, the value MUST contain at least one element to count as present.
 - Numeric zero and boolean `false` count as present.
+
+#### Tier 1 field set (F)
+
+The Tier 1 run coverage metric is computed over a fixed, ordered Tier 1 field set `F`. `F` MUST
+match the Tier 1 matrix column set in the [Mapping coverage matrix](../mappings/coverage_matrix.md).
+
+`F` (ordered):
+
+1. `category_uid`
+1. `type_uid`
+1. `severity_id`
+1. `device.hostname`
+1. `device.uid`
+1. `device.(ip|ips[])` (present if either `device.ip` or `device.ips[]` is present)
+1. `actor.user.name`
+1. `actor.user.uid`
+1. `actor.process.name`
+1. `actor.process.pid`
+1. `message`
+1. `observables[]`
+
+Notes:
+
+- Implementations SHOULD prefer emitting `device.ips[]` for the device IP pivot (even when only a
+  single IP is known). However, for coverage computation, `device.ip` MUST be treated as satisfying
+  `device.(ip|ips[])` when `device.ips[]` is absent.
 
 #### Coverage computation
 
@@ -176,6 +204,13 @@ Then:
 
 `tier1_field_coverage_pct = ( Σ_{e in E} Σ_{f in F} present(e,f) ) / ( |E| * |F| )`
 
+Notes:
+
+- Unit: `tier1_field_coverage_pct` is a unitless fraction in `[0.0, 1.0]` (despite `_pct`, it is not
+  `0-100`).
+- When emitted in regression comparable artifacts (for example, `normalized/mapping_coverage.json`),
+  `tier1_field_coverage_pct` MUST be rounded to 4 decimal places using round-half-up semantics.
+
 If `|E| == 0`, the metric is **indeterminate** and `tier1_field_coverage_pct` MUST be recorded as
 `null` with a reason code (for example, `indeterminate_no_events`).
 
@@ -183,13 +218,26 @@ If `|E| == 0`, the metric is **indeterminate** and `tier1_field_coverage_pct` MU
 
 The default Tier 1 coverage gate threshold is:
 
-- `min_tier1_field_coverage_pct = 0.80`
+- `tier1_field_coverage_threshold_pct = 0.80` (unitless fraction), derived from
+  `scoring.thresholds.min_tier1_field_coverage` (default `0.80`).
+
+The pipeline MUST compute `tier1_field_coverage_state` in
+`{ ok, below_threshold, indeterminate_no_events }`:
+
+- If `|E| == 0`: `indeterminate_no_events`.
+- Else if `tier1_field_coverage_pct < tier1_field_coverage_threshold_pct`: `below_threshold`.
+- Else: `ok`.
 
 The run health classification rules are defined in [Scoring metrics](070_scoring_metrics.md). In
 summary:
 
-- If `tier1_field_coverage_pct < 0.80`, the run MUST be marked `partial`.
-- If indeterminate due to `|E| == 0`, the run MUST be marked `partial`.
+- If `tier1_field_coverage_state = indeterminate_no_events`, the run MUST be marked `partial`.
+- If `tier1_field_coverage_state = below_threshold`, the run MUST be marked `partial`.
+
+Invariant:
+
+- `tier1_field_coverage_pct` MUST be `null` if and only if
+  `tier1_field_coverage_state = indeterminate_no_events`.
 
 This gate is intentionally a run-level quality signal. It does not convert Tier 1 event-level SHOULD
 into MUST.
@@ -206,13 +254,15 @@ into MUST.
 
 Purple Axiom treats a small set of pivots as core common because they unlock most triage workflows.
 
-| Object or field               | Recommendation | Notes                                                                                                           |
-| ----------------------------- | -------------: | --------------------------------------------------------------------------------------------------------------- |
-| `device.hostname`             |         SHOULD | Stable host identifier when available.                                                                          |
-| `device.uid`                  |         SHOULD | Stable host ID when available.                                                                                  |
-| `device.ip` or `device.ips[]` |         SHOULD | Prefer `device.ips[]` when multiple.                                                                            |
-| `actor.user`                  |         SHOULD | Normalize principal identity into the Tier 2 standard user shape (see Tier 2: Standard actor identity shapes).  |
-| `actor.process`               |         SHOULD | Normalize process identity into the Tier 2 standard process shape (see Tier 2: Standard actor identity shapes). |
+| Object or field      | Recommendation | Notes                                                                                                                 |
+| -------------------- | -------------: | --------------------------------------------------------------------------------------------------------------------- |
+| `device.hostname`    |         SHOULD | Stable host identifier when available.                                                                                |
+| `device.uid`         |         SHOULD | Stable host ID when available.                                                                                        |
+| \`device.(ip         |       ips[])\` | SHOULD                                                                                                                |
+| `actor.user.name`    |         SHOULD | Principal name in the Tier 2 standard user shape (see Tier 2: Standard actor identity shapes).                        |
+| `actor.user.uid`     |         SHOULD | Principal stable identifier (SID/UID) in the Tier 2 standard user shape (see Tier 2: Standard actor identity shapes). |
+| `actor.process.name` |         SHOULD | Process name in the Tier 2 standard process shape (see Tier 2: Standard actor identity shapes).                       |
+| `actor.process.pid`  |         SHOULD | Process ID in the Tier 2 standard process shape (see Tier 2: Standard actor identity shapes).                         |
 
 ### Message and observables
 
@@ -494,7 +544,8 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
     "collector_version": "collector@0.1.0",
     "normalizer_version": "normalizer@0.1.0",
     "source_type": "sysmon",
-    "source_event_id": "record:123456"
+    "source_event_id": "record:123456",
+    "identity_tier": 1
   },
   "raw": {
     "provider": "Microsoft-Windows-Sysmon",
@@ -520,6 +571,7 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
     "normalizer_version": "normalizer@0.1.0",
     "source_type": "sysmon",
     "source_event_id": "record:123456",
+    "identity_tier": 1,
     "ingest_time_utc": "2026-01-04T17:00:01Z",
     "pipeline": "profile.sysmon.v1"
   },
@@ -542,8 +594,8 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
 
 ## Open items
 
-- Define a standard shape for `actor.user` and `actor.process` for the pinned OCSF version or
-  profile.
+- Confirm the Tier 2 standard actor identity shapes match the pinned OCSF version/profile field
+  paths (and update field names if the pin changes).
 - Define per-source redaction profiles and automated tests for raw retention.
 - Enumerate the initial enabled event families for v0.1 (driven by scenario set).
 
@@ -553,7 +605,8 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
   retention.
 - Tier 1 pivots remain event-level SHOULD, but MUST be measured with a run-level coverage metric and
   gate.
-- Tier 1 gate default is `min_tier1_field_coverage_pct = 0.80`, with run health outcomes defined in
+- Tier 1 gate default is `tier1_field_coverage_threshold_pct = 0.80` (derived from
+  `scoring.thresholds.min_tier1_field_coverage`), with run health outcomes defined in
   [Scoring metrics](070_scoring_metrics.md).
 - Tier 2 minimums are defined by event family and apply only when that family is enabled by mappings
   and scenarios.

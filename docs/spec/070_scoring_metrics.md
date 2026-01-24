@@ -540,7 +540,7 @@ categories as follows:
 | `non_executable_reason.reason_code` (from compiled plan) | Gap Category         | Notes                                                                                           |
 | -------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
 | `unmapped_field`                                         | `bridge_gap_mapping` | Field alias missing in mapping pack                                                             |
-| `unrouted_logsource`                                     | `bridge_gap_mapping` | No router entry for Sigma logsource                                                             |
+| `unroutable_logsource`                                   | `bridge_gap_mapping` | No router entry for Sigma logsource                                                             |
 | `raw_fallback_disabled`                                  | `bridge_gap_mapping` | Rule needs raw.\* but policy disallows                                                          |
 | `ambiguous_field_alias`                                  | `bridge_gap_mapping` | Multiple conflicting aliases                                                                    |
 | `unsupported_modifier`                                   | `bridge_gap_feature` | Modifier (base64, windash, etc.) not supported                                                  |

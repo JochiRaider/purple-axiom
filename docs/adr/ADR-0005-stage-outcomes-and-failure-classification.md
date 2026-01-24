@@ -231,14 +231,18 @@ emitted in `logs/health.json` without a spec update.
 
 These reason codes MAY be used for any stage.
 
-| Reason code                   | Severity | Description                                                                                            |
-| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `redaction_policy_error`      | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                    |
-| `config_schema_invalid`       | FATAL    | A required config artifact is schema-invalid (for example `range.yaml`, `manifest.json`, `plan.json`). |
-| `input_missing`               | FATAL    | Required upstream input artifact missing or unreadable.                                                |
-| `lock_acquisition_failed`     | FATAL    | Exclusive lock could not be acquired.                                                                  |
-| `storage_io_error`            | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                      |
-| `blocked_by_upstream_failure` | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                        |
+| Reason code                          | Severity | Description                                                                                                               |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `redaction_policy_error`             | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                                       |
+| `config_schema_invalid`              | FATAL    | A required config artifact is schema-invalid (for example `range.yaml`, `manifest.json`, `plan.json`).                    |
+| `input_missing`                      | FATAL    | Required upstream input artifact missing or unreadable.                                                                   |
+| `lock_acquisition_failed`            | FATAL    | Exclusive lock could not be acquired.                                                                                     |
+| `storage_io_error`                   | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                                         |
+| `blocked_by_upstream_failure`        | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                                           |
+| `threat_intel_pack_not_found`        | FATAL    | Threat intelligence pack requested but not found (resolved directory missing and/or required files absent).               |
+| `threat_intel_pack_ambiguous`        | FATAL    | Multiple sources match the same `(pack_id, pack_version)` but differ in content; selection is ambiguous.                  |
+| `threat_intel_pack_invalid`          | FATAL    | Threat intelligence pack failed validation (schema invalid, hash mismatch, or indicators JSONL parse/validation failure). |
+| `threat_intel_snapshot_inconsistent` | FATAL    | Existing `inputs/threat_intel/` snapshot does not match resolved pins/hashes and would break reproducibility.             |
 
 ### Lab provider stage (`lab_provider`)
 
@@ -306,6 +310,7 @@ Default `fail_mode`: `fail_closed`
 | `version_resolution_ambiguous` | FATAL    | Multiple candidates exist with same id/version but differing content hash. |
 | `pin_consistency_violation`    | FATAL    | Canonical pins disagree across required mirrored locations/artifacts.      |
 | `artifact_snapshot_failed`     | FATAL    | Selected pack-like artifact could not be snapshotted into the run bundle.  |
+| `environment_config_failed`    | FATAL    | Environment configuration checks/apply failed or could not be verified.    |
 
 #### NON-FATAL reason codes
 
@@ -677,14 +682,20 @@ Minimum artifacts when enabled: `detections/detections.jsonl`, `bridge/**`
 
 These are emitted at rule granularity (for example in compiled plans). Stage continues.
 
-| Reason code             | Severity  | Description                                                                       |
-| ----------------------- | --------- | --------------------------------------------------------------------------------- |
-| `unroutable_logsource`  | NON-FATAL | Sigma `logsource` matches no router entry. Rule is non-executable.                |
-| `unmapped_field`        | NON-FATAL | Sigma field has no alias mapping. Rule is non-executable unless fallback enabled. |
-| `raw_fallback_disabled` | NON-FATAL | Rule requires `raw.*` but fallback is disabled.                                   |
-| `unsupported_modifier`  | NON-FATAL | Sigma modifier cannot be expressed.                                               |
-| `backend_compile_error` | NON-FATAL | Backend compilation failed.                                                       |
-| `backend_eval_error`    | NON-FATAL | Backend evaluation failed.                                                        |
+| Reason code               | Severity  | Description                                                                       |
+| ------------------------- | --------- | --------------------------------------------------------------------------------- |
+| `unroutable_logsource`    | NON-FATAL | Sigma `logsource` matches no router entry. Rule is non-executable.                |
+| `unmapped_field`          | NON-FATAL | Sigma field has no alias mapping. Rule is non-executable unless fallback enabled. |
+| `raw_fallback_disabled`   | NON-FATAL | Rule requires `raw.*` but fallback is disabled.                                   |
+| `ambiguous_field_alias`   | NON-FATAL | Sigma field alias resolution is ambiguous for the routed scope.                   |
+| `unsupported_modifier`    | NON-FATAL | Sigma modifier cannot be expressed.                                               |
+| `unsupported_operator`    | NON-FATAL | Sigma operator cannot be expressed.                                               |
+| `unsupported_value_type`  | NON-FATAL | Sigma value type cannot be represented for the chosen operator/backend.           |
+| `unsupported_regex`       | NON-FATAL | Sigma regex pattern uses unsupported constructs (RE2-only).                       |
+| `unsupported_correlation` | NON-FATAL | Sigma correlation / multi-event semantics are out of scope.                       |
+| `unsupported_aggregation` | NON-FATAL | Sigma aggregation semantics are out of scope.                                     |
+| `backend_compile_error`   | NON-FATAL | Backend compilation failed.                                                       |
+| `backend_eval_error`      | NON-FATAL | Backend evaluation failed.                                                        |
 
 ### Scoring stage (`scoring`)
 

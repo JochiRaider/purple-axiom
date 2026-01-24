@@ -176,6 +176,39 @@ Common keys:
     `runner.environment_config` and emits deterministic evidence under `runs/<run_id>/logs/**` (see
     [architecture](020_architecture.md)).
 
+  - Environment configuration is the recommended v0.1 integration point for generating benign
+    background activity (“noise”) to improve dataset realism.
+
+    - Examples:
+
+      - Active Directory / domain controllers: AD-Lab-Generator (domain population) and ADTest.exe
+        (directory/authentication workload).
+      - Windows + Linux servers: scheduled tasks / cron jobs that emulate routine service behavior
+        (periodic health checks, log rotation, internal HTTP requests, file reads/writes).
+      - Cross-platform user activity: GHOSTS clients/agents pointing at an operator-managed GHOSTS
+        server. In v0.1 the server SHOULD be treated as a supporting service (packaging-only) rather
+        than bundled into the orchestrator image.
+
+  - Noise tooling configuration MUST remain deterministic and reviewable.
+
+    - All configuration inputs MUST be pinned by content hash (for example `dsc_v3.config_sha256`).
+
+    - Noise tooling binaries/scripts SHOULD be treated as immutable inputs; runtime downloads MUST
+      NOT be required for v0.1 correctness (aligns with dependency immutability and egress-deny
+      defaults).
+
+    - If randomized schedules are used, the effective seed MUST be recorded in deterministic
+      evidence (implementation-defined) and SHOULD be included in the configuration document so the
+      `config_sha256` changes when the seed changes.
+
+    - For DSC v3, `resource_type_allowlist` SHOULD be used to constrain configurations to expected
+      safe resources.
+
+  - Tools/features that export plaintext credentials (for example AD-Lab-Generator
+    `ExportPasswords`) MUST be disabled by default; if enabled for a lab experiment, the exported
+    material MUST be treated as a secret and MUST NOT be included in publishable run artifacts (see
+    [security and safety](090_security_safety.md)).
+
 - `dependencies` (optional)
 
   - `allow_runtime_self_update` (default: `false`)

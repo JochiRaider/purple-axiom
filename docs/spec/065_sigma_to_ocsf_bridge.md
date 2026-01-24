@@ -30,7 +30,7 @@ abandoning OCSF as the canonical store.
 
 ## Non-goals
 
-- “Run every Sigma rule unmodified” as a hard guarantee.
+- "Run every Sigma rule unmodified" as a hard guarantee.
 - Perfect semantic equivalence between producer-specific event types and OCSF classes for all
   sources.
 - Correlation / multi-event sequence semantics beyond what the chosen evaluator backend supports in
@@ -46,7 +46,7 @@ The bridge is a composition of three artifacts:
 
 Together, these compile Sigma rules into an executable plan over OCSF events.
 
-## 1) Logsource router
+## Logsource router
 
 ### Inputs
 
@@ -122,12 +122,14 @@ Determinism:
 
 Example (router table route entry):
 
+Note: `metadata.source_type` values MUST use mapping-pack `event_source_type` tokens (see ADR-0002).
+
 ```json
 {
   "sigma_logsource": { "category": "process_creation", "product": "windows" },
   "ocsf_scope": { "class_uids": [1007] },
   "filters": [
-    { "path": "metadata.source_type", "op": "eq", "value": "windows_eventlog" },
+    { "path": "metadata.source_type", "op": "eq", "value": "windows-security" },
     { "path": "raw.channel", "op": "eq", "value": "Security" },
     { "path": "raw.provider", "op": "eq", "value": "Microsoft-Windows-Security-Auditing" }
   ]
@@ -151,7 +153,7 @@ Multi-class routing semantics (normative):
 - Route primarily on `logsource.category`.
 - Use `product/service` only to **narrow** when necessary.
 - If routing cannot be determined (no matching route), the rule is **non-executable** (fail-closed).
-- Routing to multiple classes MUST NOT be treated as “undetermined routing”.
+- Routing to multiple classes MUST NOT be treated as "undetermined routing".
 
 ### Mapping packs
 
@@ -163,7 +165,7 @@ The mapping pack is versioned independently of:
 - the Sigma ruleset version
 - the Purple Axiom pipeline version
 
-## 2) Field alias map
+## Field alias map
 
 ### Purpose
 
@@ -194,7 +196,7 @@ A controlled escape hatch is permitted for MVP:
 - If an event attribute cannot be mapped yet, allow evaluation to reference `raw.*` when:
   - the event is still within the correct OCSF class scope, and
   - provenance clearly identifies the producer/source
-- If fallback is used, it MUST be recorded (see “Bridge provenance in detections”).
+- If fallback is used, it MUST be recorded (see "Bridge provenance in detections").
 - Fallback enablement MUST be controlled by `detection.sigma.bridge.raw_fallback_enabled` (see the
   [configuration reference](120_config_reference.md)).
 - If fallback is used, `extensions.bridge.fallback_used` MUST be `true` in emitted detection
@@ -217,7 +219,7 @@ These values MUST be recorded in compiled plan files under `non_executable_reaso
 
 Routing and mapping:
 
-- `unrouted_logsource`: Sigma `logsource` matches no router entry.
+- `unroutable_logsource`: Sigma `logsource` matches no router entry.
 - `unmapped_field`: Sigma field has no alias mapping.
 - `raw_fallback_disabled`: Rule requires `raw.*` but fallback disabled.
 - `ambiguous_field_alias`: Alias resolution ambiguous for routed scope.
@@ -236,7 +238,7 @@ Backend execution:
 - `backend_compile_error`: Backend compiler error.
 - `backend_eval_error`: Backend runtime evaluation error.
 
-## 3) Evaluator backend adapter
+## Evaluator backend adapter
 
 ### Batch backend (v0.1 default)
 
@@ -246,7 +248,7 @@ Backend execution:
   - `SET threads = 1;`
   - `SET TimeZone = 'UTC';`
 - If the implementation allows overriding these settings for performance, it MUST record the
-  effective values in backend provenance (see “Backend provenance”).
+  effective values in backend provenance (see "Backend provenance").
 - Compile Sigma -> SQL (after routing + aliasing)
 - Execute over OCSF Parquet using DuckDB
 - Return:
@@ -318,7 +320,7 @@ the evaluator backend adapter. It is authoritative for:
 1. Output artifacts:
 
    - For each evaluated Sigma rule, the bridge MUST emit exactly one compiled plan file under
-     `bridge/compiled_plans/<rule_id>.plan.json` (see “Bridge artifacts in the run bundle”).
+     `bridge/compiled_plans/<rule_id>.plan.json` (see "Bridge artifacts in the run bundle").
    - A compiled plan MUST either:
      - be executable (contains backend-specific executable content), or
      - be explicitly non-executable (contains `non_executable_reason` with a stable `reason_code`
@@ -327,7 +329,7 @@ the evaluator backend adapter. It is authoritative for:
 1. Fail-closed semantics:
 
    - If routing is unknown, aliasing is unknown, or backend compilation cannot represent the rule,
-     the bridge MUST mark the rule non-executable. It MUST NOT silently degrade into “no matches”.
+     the bridge MUST mark the rule non-executable. It MUST NOT silently degrade into "no matches".
 
 1. Deterministic match sets:
 
@@ -370,7 +372,7 @@ Boolean composition:
 Out of scope in v0.1 (MUST be marked non-executable when encountered):
 
 - Correlation and multi-event sequence semantics (beyond single-event matching)
-- Temporal aggregation semantics (for example: `count()`, `near`, `within`, “threshold” rules)
+- Temporal aggregation semantics (for example: `count()`, `near`, `within`, "threshold" rules)
 - Field modifiers that require binary transforms (example: `base64`, `utf16`, `windash`) unless the
   mapping pack has already materialized an equivalent normalized value
 - PCRE-only regex constructs (lookaround, backreferences, etc.). Regex matching is supported only in
@@ -400,10 +402,10 @@ The `duckdb_sql` adapter MUST support the following constructs for v0.1:
 - Existence: `|exists` (`IS NOT NULL` / `IS NULL` depending on positive vs negated context).
 - Numeric comparisons: `|lt`, `|lte`, `|gt`, `|gte`.
 - Regex match: `|re` with RE2-compatible patterns only; unsupported constructs are Non-executable.
-  DuckDB regex functions use RE2 and accept option flags. :contentReference[oaicite:0]{index=0}
+  DuckDB regex functions use RE2 and accept option flags.
 - Timestamp extraction: `|hour`, `|day`, `|month`, `|year` against the canonical `time` field.
 - LIST semantics: equality against LIST-typed fields MUST mean any element matches. The adapter MUST
-  use DuckDB list functions when the field is LIST-typed. :contentReference[oaicite:1]{index=1}
+  use DuckDB list functions when the field is LIST-typed.
 
 #### Deferred (post-MVP)
 
@@ -436,15 +438,15 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
      - For non-string types: `field IN (v1, v2, ...)`
      - For string-typed membership: `lower(field) IN (lower(v1), lower(v2), ...)`
    - Ordering: list value expansions MUST preserve the input order from the Sigma rule and MUST NOT
-     be reordered as a “determinism” technique.
+     be reordered as a "determinism" technique.
 
 1. LIST-typed field semantics:
 
-   - If the resolved field expression is LIST-typed, scalar comparisons MUST mean “any element
-     matches” and MUST compile using DuckDB list functions:
+   - If the resolved field expression is LIST-typed, scalar comparisons MUST mean "any element
+     matches" and MUST compile using DuckDB list functions:
      - Single value: `list_contains(field, value)`
      - Multiple values (default OR semantics): `list_has_any(field, [values...])`
-     - `all` modifier: `list_has_all(field, [values...])` :contentReference[oaicite:2]{index=2}
+     - `all` modifier: `list_has_all(field, [values...])`
    - Pattern matching against LIST-typed fields MUST unnest and use `EXISTS` with a correlated
      predicate (exact formatting is implementation-defined, semantics are normative).
 
@@ -468,17 +470,17 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
 1. Regex (`|re`) support (RE2-only):
 
    - Regex matching MUST compile to `regexp_matches(field, pattern[, options])`.
-     :contentReference[oaicite:3]{index=3}
+
    - The adapter MUST validate patterns as RE2-compatible at compile time.
+
    - PCRE-only constructs (lookahead, lookbehind, backreferences, atomic groups, etc.) MUST be
      rejected as Non-executable with reason_code `unsupported_regex`.
+
    - Options mapping:
+
      - `|re|i` MUST compile with option `i` (case-insensitive).
-       :contentReference[oaicite:4]{index=4}
      - `|re|m` MUST compile with a newline-sensitive option (`m` or its DuckDB equivalents).
-       :contentReference[oaicite:5]{index=5}
      - `|re|s` MUST compile with option `s` (non-newline sensitive).
-       :contentReference[oaicite:6]{index=6}
 
 1. Timestamp extraction:
 
@@ -505,7 +507,7 @@ Failure reporting: when a rule cannot be compiled, the adapter MUST record a Non
 plan entry with a stable `non_executable_reason.reason_code` and deterministic explanation string.
 At a minimum, the following mappings MUST apply:
 
-- Unknown logsource -> unrouted_logsource
+- Unknown logsource -> unroutable_logsource
 - Unmapped Sigma field (no alias + fallback disabled) -> unmapped_field
 - Raw fallback required but disabled -> raw_fallback_disabled
 - Unsupported modifier -> unsupported_modifier
@@ -567,7 +569,7 @@ Detection instances SHOULD include bridge metadata in `extensions.bridge`:
 - `fallback_used` (boolean)
 - `ignored_modifiers` (array of strings)
 - `unmapped_sigma_fields` (array of strings)
-- `non_executable_reason` (object) when \`executable=false
+- `non_executable_reason` (object) when `executable=false`
 
 Also store the original Sigma logsource under `extensions.sigma.logsource` (verbatim) when
 available.
@@ -582,7 +584,7 @@ available.
   - `detections/detections.jsonl` written in a deterministic order (see storage requirements)
 - Fail-closed:
   - unknown logsource, unmapped fields (without fallback), or unsupported modifiers MUST not
-    silently degrade into “no matches”
+    silently degrade into "no matches"
 
 ## Testing guidance (MVP)
 

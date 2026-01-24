@@ -307,7 +307,8 @@ For v0.1 (single-action plans), requirements are expressed under `plan.requireme
 `plan.requirements` (v0.1) minimal shape:
 
 - `platform` (optional object): OS constraints.
-  - `os` (optional array of strings): allowed OS families (`windows`, `linux`, `macos`).
+  - `os` (optional array of strings): allowed OS families allowed OS families (`windows`, `linux`,
+    `macos`, `bsd`, `appliance`, `other`).
 - `privilege` (optional string enum): `user | admin | system | unknown`
 - `tools` (optional array of strings): required tools/capabilities.
 
@@ -482,7 +483,8 @@ candidate set. The runner/provider resolves selectors against the lab inventory 
 - `asset_ids` (optional): explicit list
 - `tags` (optional): match-any tags
 - `roles` (optional): match-any roles
-- `os` (optional): constrain to OS families
+- `os` (optional): constrain to OS families (must match `lab.assets[].os`; one of
+  `windows | linux | macos | bsd | appliance | other`)
 
 The resolved target set for a run MUST be captured in:
 
@@ -529,10 +531,12 @@ Fields (per line):
 - `template_id` (string; optional; v0.2+ only; stable procedure identity of action template)
 - `technique_id` (string; ATT&CK)
 - `target_asset_id` (string; lab asset stable ID)
-- `resolved_target` (object; optional metadata):
-  - `role` (string)
-  - `tags` (array of strings)
-  - `os` (string)
+- `resolved_target` (object; optional metadata derived from the inventory snapshot):
+  - `role` (string; optional; when present, matches `lab.assets[].role`)
+  - `os` (string; optional; when present, matches `lab.assets[].os`)
+  - `hostname` (string; optional; inventory hostname/DNS identifier)
+  - `ip` (string; optional; management IP address literal (no port))
+  - `tags` (array of strings; optional)
   - `provider_asset_ref` (string; optional; provider native ID)
 - `parameters` (object):
   - `input_args_redacted` (object)
@@ -634,7 +638,9 @@ Ground truth is emitted as JSONL, one action per line.
   "target_asset_id": "asset-001",
   "resolved_target": {
     "role": "endpoint",
-    "os": "windows"
+    "os": "windows",
+    "hostname": "host-001",
+    "ip": "192.0.2.10"
   },
   "criteria_ref": {
     "criteria_pack_id": "ocsf-win",
@@ -758,6 +764,71 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
 - Action identity is derived from `action_key_basis_v1` using RFC 8785 canonicalization.
 - Target selection must be deterministic when selectors match multiple assets.
 
+## Appendix: Action lifecycle state machine representation
+
+This appendix is **representational only**. It is included to make the action lifecycle easier to
+reason about and to align the document with ADR-0007's guidance for state machine notation. It MUST
+NOT be treated as introducing new lifecycle requirements.
+
+Lifecycle authority references:
+
+- This document:
+  - [Action lifecycle](#action-lifecycle)
+  - [Allowed transitions (finite-state machine, normative)](#allowed-transitions-finite-state-machine-normative)
+  - [Recording requirements (normative)](#recording-requirements-normative)
+- [ADR-0007 State machines for lifecycle semantics](../adr/ADR-0007-state-machines.md)
+
+### Machine overview
+
+- **Scope**: per-action lifecycle for a single `(run_id, action_id)` pair.
+- **Authoritative state representation**: `ground_truth.jsonl` -> `lifecycle.phases[]` ordering and
+  `(phase, phase_outcome, reason_code)` tuples.
+
+### States (closed set)
+
+| State      | Kind         | Description (mapping)                                                           |
+| ---------- | ------------ | ------------------------------------------------------------------------------- |
+| `init`     | initial      | No lifecycle phase records have been written for the action.                    |
+| `prepare`  | intermediate | `prepare` phase is being attempted (or is the next phase to attempt).           |
+| `execute`  | intermediate | `execute` phase is being attempted (or is the next phase to attempt).           |
+| `revert`   | intermediate | `revert` phase is being attempted (or is the next phase to attempt).            |
+| `teardown` | intermediate | `teardown` phase is being attempted (or is the next phase to attempt).          |
+| `done`     | terminal     | The lifecycle has been fully recorded through `teardown` (including `skipped`). |
+
+### Events and triggers
+
+| Event                     | Meaning                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| `event.prepare_recorded`  | A `prepare` phase record is present in `lifecycle.phases[]`.  |
+| `event.execute_recorded`  | An `execute` phase record is present in `lifecycle.phases[]`. |
+| `event.revert_recorded`   | A `revert` phase record is present in `lifecycle.phases[]`.   |
+| `event.teardown_recorded` | A `teardown` phase record is present in `lifecycle.phases[]`. |
+
+### Transition mapping
+
+This table summarizes the *allowed* ordering and the most important gating rules described in this
+spec. Guards are expressed in terms of the phase outcomes recorded in ground truth.
+
+| From state | Event                     | Guard (authoritative semantics)                                                                                                                                                                                       | To state   |
+| ---------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `init`     | `event.prepare_recorded`  | Always                                                                                                                                                                                                                | `prepare`  |
+| `prepare`  | `event.execute_recorded`  | `prepare.phase_outcome=success` -> `execute` is attempted; otherwise `execute.phase_outcome=skipped` with a stable `reason_code`                                                                                      | `execute`  |
+| `execute`  | `event.revert_recorded`   | `revert` is attempted only when `execute` was attempted; otherwise `revert.phase_outcome=skipped` with `reason_code=prior_phase_blocked` (when cleanup is enabled) or `cleanup_suppressed` (when cleanup is disabled) | `revert`   |
+| `revert`   | `event.teardown_recorded` | `teardown` is recorded after `revert` (attempted or skipped). When cleanup is enabled, `teardown` is typically attempted even when earlier phases failed.                                                             | `teardown` |
+| `teardown` | `event.teardown_recorded` | Once `teardown` is recorded, the lifecycle is complete for the action.                                                                                                                                                | `done`     |
+
+### Illegal transition surface
+
+If an implementation is asked to force an invalid lifecycle ordering or to re-run a `non_idempotent`
+action unsafely, this spec requires that the lifecycle evidence surfaces stable enforcement reason
+codes:
+
+- `invalid_lifecycle_transition`
+- `unsafe_rerun_blocked`
+
+See the authoritative "Allowed transitions" section for the normative requirements and the
+`logs/health.json` linkage.
+
 ## References
 
 - [Data contracts spec](025_data_contracts.md)
@@ -765,12 +836,13 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
 - [Atomic Red Team executor integration spec](032_atomic_red_team_executor_integration.md)
 - [Validation criteria spec](035_validation_criteria.md)
 - [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md)
+- [State machines ADR](../adr/ADR-0007-state-machines.md)
 
 ## Changelog
 
 | Date      | Change                                                                                               |
 | --------- | ---------------------------------------------------------------------------------------------------- |
-| 1/21/2026 | update                                                                                               |
+| 1/24/2026 | update                                                                                               |
 | 1/19/2026 | align scenario types with plan execution model; align ground truth seed/examples with data contracts |
 | 1/13/2026 | Define allow_network enforcement + validation hook                                                   |
 | 1/10/2026 | Style guide migration (no technical changes)                                                         |

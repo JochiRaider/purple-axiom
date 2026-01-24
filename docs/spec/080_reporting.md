@@ -605,8 +605,8 @@ Required content (per `source_type`):
 - Gap breakdown (counts per category)
 - Top unmapped fields (when `normalization_gap` present)
 
-Source types MUST align with `metadata.source_type` values in normalized events (e.g., `sysmon`,
-`windows_security`, `osquery`, `auditd`).
+Source types MUST align with `metadata.source_type` values in normalized events (e.g.,
+`windows-security`, `windows-sysmon`, `osquery`, `auditd`).
 
 ### Sigma-to-OCSF bridge health
 
@@ -724,6 +724,8 @@ Required content (from `manifest.versions`):
 - `ocsf_version`
 - `mapping_pack_id`, `mapping_pack_version` (when the Sigma-to-OCSF bridge is enabled)
 - `criteria_pack_id`, `criteria_pack_version` (when criteria evaluation is enabled)
+- `threat_intel_pack_id` (when threat intelligence is enabled)
+- `threat_intel_pack_version` (when threat intelligence is enabled)
 
 Conditional pins (from `manifest.versions`, when enabled):
 

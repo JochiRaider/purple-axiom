@@ -1,0 +1,5 @@
+{"scenario_id":"s1","action_id":"a1","status":"pass","reason_code":null,"evidence_refs":[{"artifact_path":"criteria/results.jsonl","selector":"jsonl_line:1"}]}
+{"scenario_id":"s1","action_id":"a2","status":"pass","reason_code":null,"evidence_refs":[{"artifact_path":"criteria/results.jsonl","selector":"jsonl_line:2"}]}
+{"scenario_id":"s1","action_id":"a3","status":"fail","reason_code":"missing_expected_signal","evidence_refs":[{"artifact_path":"criteria/results.jsonl","selector":"jsonl_line:3"}]}
+{"scenario_id":"s1","action_id":"a4","status":"skipped","reason_code":"action_skipped","evidence_refs":[{"artifact_path":"criteria/results.jsonl","selector":"jsonl_line:4"}]}
+{"scenario_id":"s1","action_id":"a5","status":"skipped","reason_code":"criteria_unavailable","evidence_refs":[{"artifact_path":"criteria/results.jsonl","selector":"jsonl_line:5"}]}

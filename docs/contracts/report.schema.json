@@ -198,7 +198,8 @@
       "description": "Extension point for forward-compatible additions and vendor-specific data.",
       "additionalProperties": false,
       "properties": {
-        "execution_context": { "$ref": "#/$defs/extensions_execution_context" }
+        "execution_context": { "$ref": "#/$defs/extensions_execution_context" },
+        "defense_outcomes": { "$ref": "defense_outcomes.schema.json" }
       },
       "patternProperties": {
         "^[a-z][a-z0-9_]*$": {

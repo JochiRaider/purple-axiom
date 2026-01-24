@@ -1,0 +1,5 @@
+{"action_id":"a1","technique_id":"T1059.001","lifecycle":{"execute":{"phase_outcome":"success"}}}
+{"action_id":"a2","technique_id":"T1059.001","lifecycle":{"execute":{"phase_outcome":"success"}}}
+{"action_id":"a3","technique_id":"T1110","lifecycle":{"execute":{"phase_outcome":"success"}}}
+{"action_id":"a4","technique_id":"T1110","lifecycle":{"execute":{"phase_outcome":"skipped"}}}
+{"action_id":"a5","technique_id":"T1547.001","lifecycle":{"execute":{"phase_outcome":"success"}}}

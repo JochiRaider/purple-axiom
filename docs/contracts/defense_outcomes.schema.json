@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/defense_outcomes.schema.json",
+  "title": "Purple Axiom Defense Outcomes (VECTR-style) - v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taxonomy_version",
+    "outcome_precedence",
+    "summary",
+    "by_technique"
+  ],
+  "properties": {
+    "taxonomy_version": {
+      "type": "string",
+      "const": "pa.defense_outcomes.v1"
+    },
+    "outcome_precedence": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/outcome_token" },
+      "description": "Fixed precedence order (highest -> lowest). Must be: blocked, alerted, logged, none, not_applicable, tbd."
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actions_total",
+        "outcome_counts",
+        "by_action_omitted"
+      ],
+      "properties": {
+        "actions_total": { "type": "integer", "minimum": 0 },
+        "outcome_counts": { "$ref": "#/$defs/outcome_counts" },
+        "by_action_omitted": { "type": "boolean" },
+        "by_action_omitted_reason": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "by_technique": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/technique_outcome_row" }
+    },
+    "by_action": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/action_outcome_row" }
+    }
+  },
+  "$defs": {
+    "outcome_token": {
+      "type": "string",
+      "enum": [
+        "blocked",
+        "alerted",
+        "logged",
+        "none",
+        "not_applicable",
+        "tbd"
+      ]
+    },
+    "outcome_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blocked",
+        "alerted",
+        "logged",
+        "none",
+        "not_applicable",
+        "tbd"
+      ],
+      "properties": {
+        "blocked": { "type": "integer", "minimum": 0 },
+        "alerted": { "type": "integer", "minimum": 0 },
+        "logged": { "type": "integer", "minimum": 0 },
+        "none": { "type": "integer", "minimum": 0 },
+        "not_applicable": { "type": "integer", "minimum": 0 },
+        "tbd": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "id_slug_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "description": "ADR-0001 id_slug_v1 (schema-enforceable approximation)."
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_path"],
+      "properties": {
+        "artifact_path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "selector": {
+          "type": ["string", "null"],
+          "maxLength": 256,
+          "pattern": "^(json_pointer:|jsonl_line:).*$"
+        },
+        "handling": {
+          "type": ["string", "null"],
+          "enum": ["present", "withheld", "quarantined", "absent", null]
+        }
+      }
+    },
+    "tool_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool_kind", "tool_id", "outcome", "evidence_refs"],
+      "properties": {
+        "tool_kind": {
+          "type": "string",
+          "enum": ["telemetry", "detection", "prevention", "other"]
+        },
+        "tool_id": { "$ref": "#/$defs/id_slug_v1" },
+        "outcome": { "$ref": "#/$defs/outcome_token" },
+        "reason_code": { "type": ["string", "null"], "maxLength": 128 },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence_ref" }
+        },
+        "derived": { "type": "boolean", "default": true },
+        "override": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["outcome", "evidence_refs"],
+          "properties": {
+            "outcome": { "$ref": "#/$defs/outcome_token" },
+            "evidence_refs": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/evidence_ref" }
+            }
+          }
+        }
+      }
+    },
+    "action_outcome_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "technique_id",
+        "derived_outcome",
+        "tool_outcomes"
+      ],
+      "properties": {
+        "action_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "technique_id": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "derived_outcome": { "$ref": "#/$defs/outcome_token" },
+        "tool_outcomes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/tool_outcome" }
+        }
+      }
+    },
+    "technique_outcome_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "technique_id",
+        "outcome_best",
+        "outcome_counts",
+        "actions_total"
+      ],
+      "properties": {
+        "technique_id": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "outcome_best": { "$ref": "#/$defs/outcome_token" },
+        "outcome_counts": { "$ref": "#/$defs/outcome_counts" },
+        "actions_total": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

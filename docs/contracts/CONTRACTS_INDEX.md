@@ -40,7 +40,7 @@ Rows are sorted lexicographically by filename, all in the `docs/contracts/` diec
 | `pcap_manifest.schema.json`             | Schema for pcap artifacts (placeholder / optional)               |
 | `principal_context.schema.json`         | Schema for runner principal context evidence                     |
 | `range_config.schema.json`              | Schema for range.yaml configuration inputs                       |
-| `report_schema.json`                    | Schema for consolidated run report outputs                       |
+| `report.schema.json`                    | Schema for consolidated run report outputs                       |
 | `requirements_evaluation.schema.json`   | Schema for per-action requirements evaluation results            |
 | `resolved_inputs_redacted.schema.json`  | Schema for redaction-safe resolved inputs evidence               |
 | `runner_executor_evidence.schema.json`  | Schema for runner/executor evidence outputs                      |

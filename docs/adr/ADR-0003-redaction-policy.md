@@ -36,7 +36,8 @@ This blocks implementable decisions for:
 
 Purple Axiom MUST define a deterministic redaction policy that is:
 
-1. Configurable via a policy file (`policy_ref`) but with a normative minimum baseline.
+1. Configurable via a policy file (`security.redaction.policy_ref`) but with a normative minimum
+   baseline that policy overrides MUST NOT weaken.
 1. Deterministic across implementations (stable ordering, stable truncation).
 1. Fail-closed when redaction cannot be safely applied or post-checks detect residual sensitive
    material.
@@ -45,13 +46,20 @@ Purple Axiom MUST define a deterministic redaction policy that is:
 Enablement is optional per run:
 
 - Components MUST implement this policy format (required capability).
-- Whether the policy is applied for a run MUST be controlled by config `security.redaction.enabled`.
+- Whether the policy is applied for a run MUST be controlled by config `security.redaction.enabled`
+  (default: `true`).
   - When enabled, artifacts promoted into standard long-term locations MUST be redacted-safe.
   - When disabled, the run MUST be labeled unredacted and standard long-term locations MUST NOT
     silently receive unredacted evidence.
-- Disabled behavior MUST be deterministic and config-controlled:
-  - withhold-from-long-term (default), or
-  - quarantine-unredacted (explicit opt-in)
+- Disabled behavior MUST be deterministic and config-controlled via
+  `security.redaction.disabled_behavior` (default: `withhold_from_long_term`):
+  - `withhold_from_long_term` (default): unredacted evidence MUST NOT be persisted into standard
+    long-term locations; standard long-term paths receive deterministic placeholders.
+  - `quarantine_unredacted`: unredacted evidence MAY be persisted only if
+    `security.redaction.allow_unredacted_evidence_storage: true` (explicit opt-in gate), and only
+    under `runs/<run_id>/<security.redaction.unredacted_dir>/` (default: `unredacted/`), preserving
+    the original relative artifact path. Standard long-term paths still receive deterministic
+    placeholders.
 
 This policy applies to:
 
@@ -67,8 +75,9 @@ This policy applies to:
 - structured execution records when string fields contain command-like content (for example,
   `attire.json` command fields)
 
-For structured artifacts (JSON), redaction MUST be applied to string-typed fields that may contain
-sensitive content. Object structure MUST be preserved; only string values are transformed.
+For structured artifacts (JSON), when `structured.enabled: true` in the effective policy, redaction
+MUST be applied to string-typed fields that may contain sensitive content. Object structure MUST be
+preserved; only string values are transformed.
 
 Cross-reference: Runner artifact requirements are defined in the
 [Atomic Red Team executor integration spec](../spec/032_atomic_red_team_executor_integration.md).
@@ -87,13 +96,18 @@ configured redaction policy:
 
 ### Fail-closed
 
-If redaction fails for any reason (parse error, unsupported regex engine, invalid encoding,
+If redaction fails for any reason (policy parse error, unsupported regex engine, invalid encoding,
 post-check match), the pipeline MUST:
 
-- withhold the unsafe content from long-term artifacts
-- emit a deterministic placeholder instead
-- record the failure as a run-level policy violation (run becomes `partial` unless configured
-  stricter)
+- withhold the unsafe content from standard long-term artifact paths
+- emit deterministic placeholders in the standard paths instead (see
+  [Withholding behavior](#withholding-behavior))
+- record the failure in machine-readable form (Tier 0 logs and run manifest), including which
+  artifacts were affected
+
+Run status MUST be derived from the stage outcomes model (ADR-0005). If a redaction failure is
+emitted as a stage/substage outcome, it MUST use the cross-cutting reason code
+`redaction_policy_error`.
 
 ## Policy model: pa.redaction_policy.v1
 
@@ -107,8 +121,23 @@ Components MUST compute an effective policy for a run:
 
 Merging rules (deterministic):
 
-- Objects merge by key (policy file overrides baseline at leaf keys).
-- Arrays are replaced as a whole (no deep merge).
+- Objects merge by key (policy file overrides baseline at leaf keys) unless stated otherwise below.
+
+- Arrays MUST be merged additively to preserve the normative minimum baseline:
+
+  - Arrays of objects with stable IDs are merged by ID:
+
+    - `regex_redactions[]` merges by `rule_id`
+    - `passthrough_patterns[]` merges by `rule_id`
+    - `post_checks[]` merges by `check_id`
+
+    Effective list = baseline entries in baseline order, followed by policy-file entries sorted
+    lexicographically by ID. Duplicate IDs MUST be rejected (fail-closed).
+
+  - Arrays of strings (for example `cli.secret_flags[]`) are merged as a set union:
+
+    - Effective list = baseline entries in baseline order, followed by policy entries not already
+      present, appended in lexicographic order (UTF-8 byte order).
 
 ### Regex engine constraint
 
@@ -122,6 +151,12 @@ All regex patterns in the policy MUST be RE2-compatible.
 
 Policy files SHOULD follow this shape (JSON). YAML MAY be supported but MUST be normalized to the
 JSON shape prior to hashing.
+
+Deterministic YAML normalization requirements (apply only when YAML support is implemented):
+
+- YAML parsers MUST reject duplicate mapping keys.
+- YAML parsers MUST reject anchors, aliases, and merge keys.
+- YAML input MUST be interpreted as UTF-8.
 
 ```json
 {
@@ -166,7 +201,9 @@ JSON shape prior to hashing.
     "enabled": false,
     "redact_email": true,
     "redact_ipv4": false,
+    "redact_ipv4_strict": false,
     "redact_ipv6": false,
+    "redact_ipv6_strict": false,
     "redact_hostname": false,
     "custom_patterns": []
   },
@@ -352,7 +389,8 @@ command echo):
 
 ### Structured artifact redaction
 
-For JSON-structured artifacts (for example, `attire.json`, `executor.json`, normalized OCSF events):
+For JSON-structured artifacts (for example, `attire.json`, `executor.json`, normalized OCSF events),
+when `structured.enabled: true` in the effective policy:
 
 1. Redaction MUST traverse the object tree and apply to all string-typed leaf values.
 1. Object structure (keys, nesting, arrays) MUST be preserved.
@@ -365,6 +403,14 @@ Target fields for structured redaction:
 - Fields matching `*command*`, `*cmd*`, `*script*`, `*password*`, `*secret*`, `*token*`, `*key*`
   (case-insensitive) SHOULD be prioritized for redaction.
 - Fields explicitly listed in `structured.target_paths[]` (JSONPath notation) MUST be redacted.
+
+`structured.target_paths[]` dialect (normative, restricted JSONPath subset):
+
+- Root MUST be `$`.
+- Member selection MUST use dot notation with unquoted identifiers (example: `$.process.cmd_line`).
+- Array selection MAY use `[<index>]` (0-based) or `[*]`.
+- Filters, recursive descent (`..`), unions, and script expressions MUST NOT be used.
+- If any entry does not conform to this subset, effective policy resolution MUST fail-closed.
 
 Example policy extension:
 
@@ -390,6 +436,15 @@ replacement within a quoted string).
 Recommendation: Enable structured redaction for artifacts that will be queried or joined downstream.
 
 ### CLI argument redaction
+
+Definition (normative): A token is considered a "flag token" if it matches one of:
+
+- `--` followed by an ASCII letter (`--[A-Za-z]`)
+- `-` followed by an ASCII letter (`-[A-Za-z]`)
+- `/` followed by an ASCII letter (`/[A-Za-z]`)
+
+This definition is used to determine whether `t[i+1]` "is another flag" for the purposes of
+flag-value redaction.
 
 Given an argv token stream, apply in this order:
 
@@ -439,8 +494,10 @@ When `pii.enabled: true`:
 
 1. If `pii.redact_ipv6: true`, apply:
 
-   - Pattern: `(?i)(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:|...` (full IPv6
-     pattern per RFC 5952)
+   - Detection: Identify IPv6 addresses using a standards-compliant parser that accepts the common
+     textual representations of IPv6 addresses, including compressed forms (for example
+     `2001:db8::1`) and IPv4-embedded forms (for example `::ffff:192.0.2.1`). A regex-based
+     implementation is allowed but MUST be RE2-compatible and MUST cover these forms.
    - Replacement: `<REDACTED:IPV6>`
    - Exception: loopback (`::1`) SHOULD be preserved unless `pii.redact_ipv6_strict: true`.
 
@@ -460,16 +517,24 @@ sanitization pass.
 
 ### Passthrough patterns (allowlist)
 
-Before applying `regex_redactions[]`, implementations MUST check each candidate match region against
-`passthrough_patterns[]`. If a region matches any passthrough pattern, it MUST NOT be redacted by
-subsequent rules.
+Passthrough patterns mark allowlisted regions of text that MUST NOT be redacted by
+`regex_redactions[]` (for example, UUIDs and labeled checksums).
 
-Processing order:
+Normative algorithm:
 
-1. Identify all candidate match regions from `regex_redactions[]` patterns.
-1. For each candidate, check if the matched text also matches any `passthrough_patterns[]` entry.
-1. If a passthrough matches, skip redaction for that region.
-1. Apply redaction to remaining candidates.
+1. Compute `allow_spans` by applying every `passthrough_patterns[]` pattern to the input string.
+   - Pattern evaluation order MUST be lexicographic by `rule_id`.
+   - Match semantics MUST follow RE2 leftmost-first matching.
+   - Within a single passthrough pattern, matches MUST be non-overlapping.
+1. Compute redaction candidates by applying every `regex_redactions[]` pattern to the same input
+   string (same ordering and match semantics).
+1. Discard any redaction candidate whose match span overlaps any span in `allow_spans`.
+1. Resolve overlaps among remaining redaction candidates deterministically:
+   - Primary: redaction rule order (lexicographic by `rule_id`, lowest wins)
+   - Secondary: earliest start offset (0-based byte offset in UTF-8, lowest wins)
+   - Tertiary: longest match length (highest wins)
+1. Apply replacements by reconstructing the output from the original input plus the selected
+   non-overlapping replacements, from left to right.
 
 Passthrough patterns reduce false positives for:
 
@@ -487,7 +552,10 @@ Apply `regex_redactions[]` to any remaining string content.
 
 - Ordering MUST be lexicographic by `rule_id` unless an explicit `order` field is added in a future
   version.
-- Replacements MUST be exact string substitutions (no environment-dependent behavior).
+- Matching semantics MUST follow RE2 leftmost-first matching.
+- Replacement strings MUST use RE2 replacement expansion (`$1`, `$2`, ...) when capture groups are
+  present.
+- Replacements MUST be deterministic exact string substitutions (no environment-dependent behavior).
 
 ### Rule severity (optional)
 
@@ -511,8 +579,8 @@ Supported values:
 
 When `severity: audit`:
 
-- The match MUST be logged with `rule_id`, match offset, and a truncated sample (first 32 chars of
-  match).
+- The match MUST be logged with `rule_id`, match offset (0-based byte offset in UTF-8), and a
+  truncated sample (first 32 Unicode scalar values of the match).
 - The original content MUST be preserved (no replacement applied).
 - The run manifest SHOULD record `redaction.audit_matches_observed: true` if any audit-mode matches
   occurred.
@@ -526,36 +594,57 @@ Audit mode is intended for:
 
 Truncation MUST be applied after redaction.
 
+Definitions (normative):
+
+- "Character count" and prefix lengths in this section are measured in Unicode scalar values (code
+  points) of the decoded UTF-8 string, not bytes.
+
 1. Token truncation:
 
-   - If any token length exceeds `limits.max_token_chars`, it MUST be replaced with:
+   - If any token length exceeds `limits.max_token_chars`, it MUST be replaced with a prefix plus a
+     marker.
 
-     - prefix: first 32 characters of the token (UTF-8 code points, not bytes), then
-     - suffix: `<TRUNCATED len=<N>>` where `<N>` is the original character count
+   - Marker selection (deterministic):
 
-   - If (and only if) the token did not match any secret redaction rule, the suffix MAY also include
-     a SHA-256 of the original token: `<TRUNCATED len=<N> sha256=<64hex>>`.
+     - Let `<N>` be the original token character count (Unicode scalar values).
+     - If the token did not match any credential redaction rule (CLI flag-value redaction, URI
+       userinfo redaction, or any `regex_redactions[]` rule), then the marker MUST be:
+       - `<TRUNCATED len=<N> sha256=sha256:<64hex>>`
+     - Otherwise, the marker MUST be:
+       - `<TRUNCATED len=<N>>`
+
+   - Prefix length (deterministic):
+
+     - Let `L = limits.max_token_chars`.
+     - If the marker length exceeds `L`, the output MUST be the first `L` Unicode scalar values of
+       the marker (no prefix).
+     - Otherwise, let `P = min(32, max(0, L - len(marker)))`, and the output MUST be:
+       - prefix: first `P` Unicode scalar values of the original token, then
+       - suffix: the marker
 
    - Hash basis for truncated tokens (normative):
 
-     - The hash MUST be computed over the UTF-8 byte sequence of the original token value, before
-       any redaction or normalization.
-     - The hash MUST be lowercase hexadecimal (64 characters).
-     - If the token contained a secret (matched any redaction rule), the hash MUST NOT be included
-       to prevent hash-based secret recovery attacks.
+     - The hash MUST be computed over the UTF-8 byte sequence of the original token value (before
+       any redaction or normalization).
+     - The hash MUST be lowercase hexadecimal (64 characters) and MUST be rendered as
+       `sha256:<64hex>` inside the marker.
+     - If the token matched any credential redaction rule, the hash MUST NOT be included to prevent
+       hash-based secret recovery attacks.
 
-   - This hash basis is consistent with `command_hash_basis: "command_material_v1_redacted"` used in
-     ground truth extensions (see the [data contracts spec](../spec/025_data_contracts.md)).
+   - Note: This truncation hash is for diagnostics only. It is independent from
+     `extensions.command_sha256`, which hashes canonical JSON command material (see the data
+     contracts specification).
 
 1. Field truncation:
 
    - If a single field (free-form string) exceeds `limits.max_field_chars`, apply the same
-     truncation rule (prefix plus `<TRUNCATED ...>`).
+     truncation rule as token truncation, where `<N>` is the original field character count.
 
 1. Command summary truncation:
 
-   - If the final `command_summary` exceeds `limits.max_summary_chars`, truncate to that limit and
-     append `<TRUNCATED_SUMMARY>`.
+   - Let `marker = <TRUNCATED_SUMMARY>`.
+   - If the final `command_summary` would exceed `limits.max_summary_chars`, truncate to the first
+     `max(0, limits.max_summary_chars - len(marker))` Unicode scalar values and append `marker`.
 
 ### Post-checks
 
@@ -581,23 +670,60 @@ If a redaction rule produces output that still matches a post-check pattern, thi
 When a post-check matches after redaction:
 
 1. The content MUST be withheld (fail-closed).
-1. The failure record MUST include `reason_code: post_check_match_after_redaction`.
+1. The failure record and any emitted placeholder MUST use `reason_code: redaction_policy_error`.
 1. The failure record MUST include the `check_id` that matched and a truncated sample (first 64
-   chars) of the matching region.
+   Unicode scalar values) of the matching region.
 
 Implementations SHOULD log a warning when a post-check pattern exactly duplicates a redaction
 pattern, as this may indicate unnecessary redundancy or a copy-paste error.
 
 ## Withholding behavior
 
-When content is withheld (fail-closed), the pipeline MUST:
+When content is withheld or quarantined (fail-closed), the pipeline MUST:
 
-- write a deterministic placeholder file or value
-  - Text placeholder: the single-line `pa.placeholder.v1` record (see
+- write deterministic placeholder artifacts/values at the standard artifact paths
+  - For text artifacts, the placeholder MUST be a single-line `PA_PLACEHOLDER_V1` record (see
     [Placeholder artifacts](../spec/090_security_safety.md#placeholder-artifacts)).
-- record a failure reason (machine-readable) in Tier 0 logs
-- record that withholding occurred and which artifacts were affected
-  - The run manifest SHOULD include this information
+  - For asciinema v2 `.cast` artifacts, the placeholder MUST be a single JSON header object line
+    with `env.PA_PLACEHOLDER: "1"` (see
+    [Placeholder artifacts](../spec/090_security_safety.md#placeholder-artifacts)).
+- record a failure reason (machine-readable) in Tier 0 logs, including which artifacts were affected
+- surface the handling outcome in the run manifest and report so consumers can distinguish real
+  evidence from placeholders (for example via evidence references with
+  `handling: present|withheld|quarantined`)
+
+Placeholder reason codes (normative, `PA_PLACEHOLDER_V1 reason_code=...`):
+
+- `redaction_policy_error`: redaction was enabled but could not safely be applied (including
+  post-check matches)
+- `redaction_disabled`: redaction was disabled for the run (`security.redaction.enabled: false`)
+
+Quarantine storage (only when `security.redaction.disabled_behavior: quarantine_unredacted`):
+
+- Unredacted bytes MUST be written under `runs/<run_id>/<security.redaction.unredacted_dir>/`
+  (default: `unredacted/`), preserving the original relative artifact path.
+- Quarantine storage MUST be gated by `security.redaction.allow_unredacted_evidence_storage: true`.
+- Standard artifact paths MUST still contain placeholders (never unredacted evidence).
+
+### State machine integration
+
+This ADR's per-artifact handling can be represented as a small state machine consistent with the
+state machine guidance in ADR-0007:
+
+- `allowed`: content is redacted-safe and written to standard artifact paths (`handling: present`)
+- `withheld`: content is not safe to publish; standard paths contain placeholders
+  (`handling: withheld`)
+- `quarantined`: content is not safe to publish; standard paths contain placeholders and unredacted
+  bytes are written under `security.redaction.unredacted_dir` (`handling: quarantined`)
+
+Transitions (representational):
+
+- `allowed` -> `withheld` on any redaction error or post-check match.
+- `allowed` -> `quarantined` only when redaction is disabled and quarantine is explicitly enabled
+  (`security.redaction.enabled: false`,
+  `security.redaction.disabled_behavior: quarantine_unredacted`,
+  `security.redaction.allow_unredacted_evidence_storage: true`).
+- No transition may result in unredacted bytes being written to a standard artifact path.
 
 ## Provenance requirements
 

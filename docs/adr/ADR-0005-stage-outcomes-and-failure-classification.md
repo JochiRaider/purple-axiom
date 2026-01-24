@@ -290,6 +290,23 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 - Multi-target iteration (matrix plans) is reserved for v0.2; v0.1 enforces 1:1 action-target
   resolution.
 
+#### FATAL reason codes (substage: `runner.environment_config`)
+
+This substage records run-scoped environment configuration and input-preparation work performed
+prior to any action entering lifecycle `prepare` (including version pin validation, deterministic
+SemVer resolution when permitted, and pack snapshotting).
+
+Default `fail_mode`: `fail_closed`
+
+| Reason code                    | Severity | Description                                                                |
+| ------------------------------ | -------- | -------------------------------------------------------------------------- |
+| `version_pin_missing`          | FATAL    | Required version pin is missing for an enabled feature (rules/packs/etc.). |
+| `version_pin_unparseable`      | FATAL    | A `semver_v1` pin cannot be parsed as SemVer.                              |
+| `version_resolution_failed`    | FATAL    | Omitted SemVer pin cannot be resolved deterministically (no candidates).   |
+| `version_resolution_ambiguous` | FATAL    | Multiple candidates exist with same id/version but differing content hash. |
+| `pin_consistency_violation`    | FATAL    | Canonical pins disagree across required mirrored locations/artifacts.      |
+| `artifact_snapshot_failed`     | FATAL    | Selected pack-like artifact could not be snapshotted into the run bundle.  |
+
 #### NON-FATAL reason codes
 
 | Reason code                   | Severity  | Description                                                                            |

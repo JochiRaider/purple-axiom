@@ -576,11 +576,27 @@ Determinism requirements:
 
 ### Invoke-AtomicRedTeam remote mapping
 
-For remote Windows execution, the runner MUST translate `connection_address` into a PowerShell
-remoting session and then execute `Invoke-AtomicTest` within that session:
+For remote execution, the runner MUST translate `connection_address` into a PowerShell remoting
+session and then execute `Invoke-AtomicTest` within that session.
 
-- `connection_address` MUST map to `New-PSSession -ComputerName <connection_address>`.
-- The created PSSession MUST be passed to `Invoke-AtomicTest` via `-Session <PSSession>`.
+Normative v0.1 transport (cross-platform): SSH-based PowerShell remoting:
+
+- The runner MUST create a `PSSession` using the SSH transport parameter set:
+  - `New-PSSession -HostName <connection_address> [-UserName <user>] [-Port <port>] [-KeyFilePath <key_path>]`
+- The runner SHOULD derive `user` and `port` from allowlisted inventory `vars` when present:
+  - `vars.ansible_user` -> `-UserName`
+  - `vars.ansible_port` -> `-Port`
+- If session creation requires user interaction (for example, a password prompt or host-key trust
+  prompt), the runner MUST fail closed with `reason_code=interactive_prompt_blocked`.
+
+Optional transport: WSMan/WinRM (explicit enable; runner-host support required):
+
+- Implementations MAY support WSMan/WinRM sessions when explicitly enabled and when the runner host
+  supports WSMan.
+- When WSMan is used, `connection_address` MUST map to
+  `New-PSSession -ComputerName <connection_address>`.
+
+The created `PSSession` MUST be passed to `Invoke-AtomicTest` via `-Session <PSSession>`.
 
 If a remoting session cannot be created, the runner MUST fail closed with reason code
 `executor_invoke_error` (and SHOULD include error details in `stderr.txt` and `executor.json`).

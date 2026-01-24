@@ -80,6 +80,9 @@ Scenario safety interaction (normative):
 ### Orchestrator boundary
 
 - Orchestration tools (Caldera, Atomic) MUST be allowed to execute only on lab assets.
+- Any run-scoped environment configuration that mutates endpoint state (for example,
+  `runner.environment_config` in apply mode) MUST be explicitly enabled (default off), scoped to an
+  allowlist, and recorded deterministically in run evidence.
 - Orchestration tools MUST NOT have access to production networks, identities, or secrets.
 
 ### Telemetry boundary (collector)

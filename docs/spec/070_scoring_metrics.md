@@ -25,6 +25,101 @@ for v0.1 while keeping evaluation deterministic and auditable.
     MUST ignore detections without any technique ids (see
     [Detection Rules (Sigma)](060_detection_sigma.md)).
 
+### Defense outcomes v0.1 (normative)
+
+**Purpose**: Provide an operator-facing outcome classification per action instance and per
+technique, derived deterministically from per-tool outcomes. This is modeled after VECTR’s "tool
+outcomes → test case outcome" derivation (priority-based reduction).
+
+#### Outcome tokens (normative)
+
+The following outcome tokens are the complete, closed set for v0.1:
+
+- `blocked`: The action was prevented by a security control (future-proofed; MUST NOT be emitted by
+  v0.1 derivation unless an explicit prevention signal is present).
+- `alerted`: At least one detection was produced for the action (by any enabled detection tool).
+- `logged`: Telemetry evidence exists for the action, but no detection was produced.
+- `none`: No telemetry evidence exists for the action (expected signals absent).
+- `not_applicable`: The action was not executed (e.g., skipped due to requirements, platform
+  mismatch, or safety gating).
+- `tbd`: Outcome is indeterminate due to evaluation being unavailable/misconfigured or missing
+  necessary inputs.
+
+Implementations MUST NOT emit any additional outcome tokens.
+
+#### Outcome precedence (normative)
+
+Derived outcomes MUST be computed using this fixed precedence order (highest → lowest):
+
+`blocked` > `alerted` > `logged` > `none` > `not_applicable` > `tbd`
+
+#### Tool outcomes (normative, v0.1)
+
+v0.1 defines two tool dimensions:
+
+1. Telemetry validation tool outcome (`tool_kind = telemetry`)
+1. Detection tool outcome for Sigma evaluation (`tool_kind = detection`)
+
+Each tool produces an outcome token per action instance; the action’s derived outcome is the
+precedence-reduction over the tool outcomes (plus any explicit override, if present).
+
+#### Deterministic derivation per action (normative)
+
+Inputs (authoritative, in priority order where applicable):
+
+- `runner/ground_truth.jsonl` for action execution status and technique attribution.
+- `criteria/results.jsonl` for telemetry presence when available (preferred).
+- Synthetic correlation marker observability (if enabled) MAY be used as a fallback telemetry
+  signal.
+- `detections/detections.jsonl` for detection presence.
+
+Telemetry tool outcome for an action_id:
+
+- If the action’s execute phase was skipped: outcome = `not_applicable`.
+- Else, if a criteria result row exists for the action:
+  - `status = pass` → `logged`
+  - `status = fail` → `none`
+  - `status = skipped` → `tbd` (reason_code conveys `criteria_unavailable` /
+    `criteria_misconfigured` etc.)
+- Else, if synthetic marker observability is available for the action (marker emission enabled):
+  - observed = yes → `logged`
+  - observed = no → `none`
+- Else: `tbd`
+
+Detection tool outcome for an action_id (Sigma v0.1):
+
+- If the action’s execute phase was skipped: outcome = `not_applicable`.
+- Else, if detection evaluation was not performed (missing detections output, or stage
+  skipped/failed): outcome = `tbd`.
+- Else, if there exists ≥1 detection instance attributed to the action: `alerted`.
+- Else (no detections attributed):
+  - if telemetry tool outcome is `logged` → `logged`
+  - if telemetry tool outcome is `none` → `none`
+  - else → `tbd`
+
+Derived action outcome:
+
+- Reduce the set of tool outcomes using Outcome precedence.
+
+#### Deterministic derivation per technique (normative)
+
+For each `technique_id`, gather all action instances in ground truth with that technique_id.
+Compute:
+
+- `outcome_counts`: counts of derived action outcomes by token.
+- `outcome_best`: the highest-precedence token with count > 0 (using the same precedence list).
+
+The report MUST expose at least `outcome_best` plus `outcome_counts` to prevent "single-row masking"
+when a technique has multiple action variants/targets.
+
+#### Deterministic ordering (normative)
+
+Whenever outcomes are emitted as arrays:
+
+- Per-action rows MUST be sorted by `action_id` ascending (UTF-8 byte order, no locale).
+- Per-technique rows MUST be sorted by `technique_id` ascending (UTF-8 byte order, no locale).
+- Per-action `tool_outcomes[]` MUST be sorted by `(tool_kind, tool_id)` ascending.
+
 ### Normalization coverage gate (Tier 1 Core Common)
 
 Scoring and operator pivots assume that "Core Common" (Tier 1) fields exist at high frequency.

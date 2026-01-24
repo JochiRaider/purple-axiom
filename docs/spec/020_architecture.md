@@ -474,7 +474,8 @@ Environment configuration boundary (normative, v0.1):
 
 - The runner MAY perform run-scoped environment configuration work that is required to make the lab
   ready for telemetry collection and scenario execution (for example: telemetry agent bootstrap,
-  collector configuration placement, readiness canaries).
+  collector configuration placement, baseline desired-state configuration (for example: DSC v3),
+  readiness canaries).
 - When such configuration is performed, the orchestrator MUST record an additive substage outcome
   `runner.environment_config` in `manifest.json` and, when health files are enabled, in
   `logs/health.json`. It MUST also emit deterministic operability evidence under

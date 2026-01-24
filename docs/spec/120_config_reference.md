@@ -50,6 +50,8 @@ Common keys:
   - `role` (optional): `endpoint | server | domain_controller | network | sensor | other`
   - `hostname` (optional)
   - `ip` (optional)
+  - `vars` (object, optional): allowlisted, non-secret connection hints. See the
+    [lab providers specification](015_lab_providers.md) "Canonical intermediate model".
   - `tags` (optional): list of strings
 - `inventory` (optional)
   - `path` (required when `provider != manual`): path to a provider-exported inventory artifact
@@ -121,6 +123,58 @@ Common keys:
       The runner MUST still record probe-attempt status deterministically in runner evidence.
   - `cache_policy` (default: `per_run_only`; enum: `disabled | per_run_only | cross_run_allowed`)
     - Mirrors the cache provenance policy enum already defined for `cache_provenance.json`.
+
+- `environment_config` (optional)
+
+  - `mode` (optional, default: `off`): `off | check_only | apply`
+
+    - `off`: do not perform run-scoped environment configuration.
+    - `check_only`: perform preflight checks only. MUST NOT mutate target state.
+    - `apply`: MAY mutate target state to converge the configured baseline. This is a destructive
+      capability and MUST be explicitly enabled.
+
+  - `fail_mode` (optional, default: `fail_closed`): `fail_closed | warn_and_skip`
+
+    - `fail_closed`: any failed check blocks scenario execution (preferred for v0.1).
+    - `warn_and_skip`: record the failure deterministically but continue execution (use only for
+      non-critical checks).
+
+  - `transport` (optional, default: `ssh`): `ssh | winrm | other`
+
+    - Transport used for remote environment configuration and checks.
+
+  - `targets` (optional): allowlist of `lab.assets[].asset_id` eligible for environment
+    configuration and checks.
+
+    - When `mode=apply`, this list MUST be present and MUST be non-empty; otherwise config
+      validation MUST fail closed with `reason_code=config_schema_invalid`.
+
+  - `dsc_v3` (optional)
+
+    - `enabled` (optional, default: `false`)
+
+    - `config_path` (required when `enabled=true`): path to a DSC v3 configuration document (JSON or
+      YAML).
+
+    - `config_sha256` (required when `enabled=true`): SHA-256 of the canonical config bytes (UTF-8,
+      strip UTF-8 BOM if present, normalize CRLF to LF).
+
+    - `output_format` (optional, default: `json`): `json | pretty-json`
+
+    - `what_if_before_apply` (optional, default: `true`)
+
+      - When `true` and `mode=apply`, the runner MUST emit a WhatIf plan before applying.
+
+    - `resource_type_allowlist` (optional)
+
+      - When present and non-empty, the runner MUST reject any configuration document that contains
+        resources outside the allowlist.
+
+  Notes:
+
+  - When `environment_config.mode != off`, the orchestrator records the substage outcome as
+    `runner.environment_config` and emits deterministic evidence under `runs/<run_id>/logs/**` (see
+    [architecture](020_architecture.md)).
 
 - `dependencies` (optional)
 

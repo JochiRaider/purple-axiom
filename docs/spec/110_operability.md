@@ -197,6 +197,9 @@ Practices:
 To support debugging and CI verification, implementations MUST emit the following counters/gauges
 per run (at minimum into `runs/<run_id>/logs/counters.json` and optionally into metrics backends):
 
+- `telemetry_records_received_total`
+- `telemetry_records_written_total`
+- `telemetry_records_skipped_total`
 - `telemetry_checkpoints_written_total`
 - `telemetry_checkpoint_loss_total`
 - `telemetry_checkpoint_corruption_total`
@@ -207,8 +210,10 @@ per run (at minimum into `runs/<run_id>/logs/counters.json` and optionally into 
 
 `runs/<run_id>/logs/counters.json` MUST be a JSON object with:
 
+- `contract_version` (string; schema constant; see contract registry)
 - `schema_version` (string; MUST be `pa:counters:v1`)
 - `run_id` (string)
+- `generated_at_utc` (string; RFC 3339 UTC timestamp)
 - `counters` (object; map of counter name → u64)
 - `gauges` (optional object; map of gauge name → number)
 
@@ -256,6 +261,60 @@ Rules:
   - If a counter is explicitly marked optional (for example, `cache_provenance_bypassed_total`),
     implementations MAY omit it even when the feature is enabled; consumers MUST treat omission as
     value `0`.
+
+### Telemetry ETL counter semantics (normative)
+
+This counter group provides a stable "stats aggregation" surface for telemetry+ETL.
+
+Definitions (normative):
+
+- **received**: a telemetry record accepted by the pipeline from collectors (after any
+  collector-side retry/replay behavior, before raw-store write decisions).
+- **written**: a received record that is persisted into the run's raw telemetry store.
+- **skipped**: a received record that is intentionally not written to the raw store under
+  `fail_mode=warn_and_skip` due to a deterministic validation/QC failure (for example
+  `RAW_XML_UNAVAILABLE`).
+
+Requirements (normative):
+
+- `telemetry_records_received_total` MUST increment exactly once per received record.
+- `telemetry_records_written_total` MUST increment exactly once per record written to the raw store.
+- `telemetry_records_skipped_total` MUST increment exactly once per skipped record.
+- For any run, `telemetry_records_received_total` MUST equal
+  `telemetry_records_written_total + telemetry_records_skipped_total`.
+
+### Windows Event Log raw XML counters (when Windows Event Log is enabled) (normative)
+
+When Windows Event Log collection is enabled for any asset in the run, implementations MUST emit the
+following additional counters (u64). These counters are feature-conditional:
+
+- If Windows Event Log collection is disabled for the run, these counters MUST be omitted.
+- If Windows Event Log collection is enabled for the run, these counters MUST be present (zero when
+  not observed).
+
+Counters (normative):
+
+- `wineventlog_raw_unavailable_total`
+- `wineventlog_raw_malformed_total`
+- `wineventlog_used_log_record_original_total`
+- `wineventlog_rendering_metadata_missing_total`
+- `wineventlog_binary_decode_failed_total`
+- `wineventlog_payload_overflow_total`
+- `wineventlog_sidecar_write_failed_total`
+
+Semantics (normative):
+
+- The `wineventlog_*` counters MUST follow the definitions in
+  [Raw or unrendered Windows Event Log failure modes](040_telemetry_pipeline.md#raw-or-unrendered-windows-event-log-failure-modes).
+- Under `fail_mode=warn_and_skip`, records counted by `wineventlog_raw_unavailable_total` or
+  `wineventlog_raw_malformed_total` MUST also increment `telemetry_records_skipped_total`.
+
+Conformance tests (normative):
+
+- CI MUST include a counters fixture where Windows Event Log is enabled and all `wineventlog_*`
+  counters are present (including zero values).
+- CI MUST include a counters fixture where Windows Event Log is disabled and `wineventlog_*`
+  counters are omitted.
 
 ### Additional stable counters (principal context, cache provenance, dependency immutability) (normative)
 

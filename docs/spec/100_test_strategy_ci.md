@@ -674,6 +674,44 @@ record the outcome as `health.json` stage `telemetry.windows_eventlog.raw_mode` 
 - Binary decode failure MUST NOT drop the record. It MUST emit bounded summary and increment
   `wineventlog_binary_decode_failed_total`.
 
+#### Defense outcomes derivation
+
+These fixtures validate deterministic derivation of per-tool outcomes and the precedence-based
+reduction to a derived outcome.
+
+The fixture set under `tests/fixtures/reporting/defense_outcomes/` MUST include at least:
+
+- `alerted_logged_none_tbd_not_applicable`:
+
+  - Input:
+
+    - `runner/ground_truth.jsonl` contains at least 5 actions spanning:
+      - executed + detection present
+      - executed + telemetry present + no detection
+      - executed + telemetry absent
+      - skipped (not executed)
+      - criteria unavailable/misconfigured (indeterminate)
+    - `criteria/results.jsonl` includes rows for those actions (or a subset, to test missing rows).
+    - `detections/detections.jsonl` includes at least one detection row attributable to exactly one
+      action.
+    - (Optional) synthetic marker summary or upstream marker-bearing telemetry to enable the marker
+      fallback case.
+
+  - Expected:
+
+    - `report/report.json.extensions.defense_outcomes` exists and validates against
+      `docs/contracts/defense_outcomes.schema.json`.
+    - `by_technique[]` is sorted by `technique_id` ascending.
+    - If `by_action[]` is present, it is sorted by `action_id` ascending, and each row’s
+      `tool_outcomes[]` is sorted deterministically.
+    - Derived outcomes match the precedence reduction rules.
+
+Determinism hook (recommended):
+
+- The harness SHOULD compute a stable hash over the JSON subtree
+  `report/report.json.extensions.defense_outcomes` (RECOMMENDED: RFC 8785 JCS hash) and assert it is
+  identical across repeated runs with identical inputs.
+
 #### Synthetic correlation marker observability
 
 These fixtures validate marker propagation using the same captured-telemetry fixture approach as

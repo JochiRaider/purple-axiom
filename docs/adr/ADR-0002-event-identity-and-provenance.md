@@ -53,6 +53,45 @@ Provenance surfaces (normative):
 - `metadata.identity_tier` MUST be present on every event and MUST be one of `1 | 2 | 3`, matching
   the tier used to compute `metadata.event_id`.
 
+Terminology note (normative):
+
+- `metadata.identity_tier` refers to event identity strength tiers (1|2|3) defined in this ADR.
+- This is distinct from OCSF field tiering (Tier 0/1/2/3 in 055_ocsf_field_tiers.md) and MUST NOT be
+  conflated in reporting or gate naming.
+
+### `metadata.source_type` vs `identity_basis.source_type`
+
+Purple Axiom distinguishes between a *pack/event discriminator* and an *identity-family
+discriminator*:
+
+- `metadata.source_type` (**event_source_type**): the producer / mapping-pack discriminator for the
+  normalized event stream.
+- `identity_basis.source_type` (**identity_source_type**): the identity-family discriminator that
+  participates in `metadata.event_id` hashing.
+
+`metadata.source_type` and `identity_basis.source_type` MAY differ. Implementations MUST NOT assume
+they are equal.
+
+Examples (non-normative):
+
+| `metadata.source_type` (event_source_type) | `identity_basis.source_type` (identity_source_type) |
+| ------------------------------------------ | --------------------------------------------------- |
+| `windows-security`                         | `windows_eventlog`                                  |
+| `windows-sysmon`                           | `sysmon`                                            |
+| `osquery`                                  | `osquery`                                           |
+
+Derivation and recording (normative):
+
+- When using OCSF mapping profiles, the normalizer MUST derive:
+  - `metadata.source_type` from the profile `event_source_type`, and
+  - `identity_basis.source_type` from the profile `identity_source_type` (or a deterministic
+    derivation defined by that profile).
+- The chosen mapping profile (including `event_source_type` and `identity_source_type`) MUST be
+  recorded in the run bundle at `runs/<run_id>/normalized/mapping_profile_snapshot.json`.
+- Implementations MAY emit `metadata.extensions.purple_axiom.identity_source_type` (string) on each
+  normalized event for debugging; if emitted, it MUST equal the value used for
+  `identity_basis.source_type`.
+
 ### Event ID format
 
 `metadata.event_id` MUST be computed as:
@@ -89,10 +128,20 @@ deduplication.
 
 Identity basis selection is tiered:
 
+Terminology note (normative): within `identity_basis`, the `source_type` field is the
+**identity_source_type** discriminator used for event-id hashing. It MUST NOT be confused with
+`metadata.source_type` (event_source_type).
+
 Additional rules (normative):
 
 - The normalizer MUST set `metadata.identity_tier` to the selected tier number (`1`, `2`, or `3`).
-- `identity_basis.source_type` MUST equal `metadata.source_type`.
+- `identity_basis.source_type` MUST be set to the identity-family discriminator
+  (**identity_source_type**) used for identity computation. Implementations MUST NOT assume it
+  equals `metadata.source_type`.
+  - When using OCSF mapping profiles, `identity_basis.source_type` MUST equal the mapping profile
+    `identity_source_type` (see the mapping profile authoring guide).
+  - If `metadata.extensions.purple_axiom.identity_source_type` is emitted, it MUST equal
+    `identity_basis.source_type`.
 - `identity_basis` MUST be a JSON object. Optional fields MUST be omitted when absent (do not emit
   `null`).
 - Identity-basis values whose semantics are identifiers or cursors (examples: `origin.record_id`,
@@ -113,8 +162,11 @@ Use when the source provides a stable per-record identifier or cursor.
 - `origin.host`: event's source computer name (from the event payload)
 - `origin.channel`: event channel (Security/System/Application/ForwardedEvents, etc.)
 - `origin.record_id`: Windows `EventRecordID` from the event payload (base-10 string)
-- `origin.provider`: provider name and/or provider GUID (include both when available)
+- `origin.provider_name`: provider name
+- `origin.provider_guid`: provider GUID
 - `origin.event_id`: the Windows EventID (include qualifiers/version if available)
+- `origin.event_qualifiers` (optional)
+- `origin.event_version` (optional)
 
 > **Note**: `origin.record_id` is unique only within `(origin.host, origin.channel)`; both MUST be
 > included. Do not include event time in Tier 1 (avoid precision drift across collectors).
@@ -125,15 +177,19 @@ Use when the source provides a stable per-record identifier or cursor.
 - `origin.host`: event's source computer name (from the event payload)
 - `origin.channel`: `Microsoft-Windows-Sysmon/Operational`
 - `origin.record_id`: Windows `EventRecordID` from the event payload (base-10 string)
-- `origin.provider`: provider name and/or provider GUID (include both when available)
+- `origin.provider_name`: provider name
+- `origin.provider_guid`: provider GUID
 - `origin.event_id`: the Sysmon EventID (include qualifiers/version if available)
+- `origin.event_qualifiers` (optional)
+- `origin.event_version` (optional)
 
-Source-type selection rule (normative):
+Identity-source-type selection rule (normative):
 
 - For events collected via Windows Event Log, the normalizer MUST set
   `identity_basis.source_type = "sysmon"` if and only if `origin.channel` equals
   `Microsoft-Windows-Sysmon/Operational`. Otherwise it MUST set
-  `identity_basis.source_type = "windows_eventlog"`.
+  `identity_basis.source_type = "windows_eventlog"`. This rule constrains only identity computation;
+  `metadata.source_type` MAY be a different pack/event discriminator.
 
 **Other examples (non-exhaustive)**
 
@@ -532,7 +588,8 @@ To make at-least-once delivery compatible with deterministic outputs:
 
 Define `instance_without_volatile_fields` as the normalized event with the following fields removed:
 
-- `metadata.observed_time`
+- `metadata.ingest_time_utc` (if present)
+- `metadata.observed_time` (if present; deprecated alias for ingest/observation time)
 - `metadata.extensions.purple_axiom.ingest_id`
 
 Define `instance_canonical_bytes = canonical_json_bytes(instance_without_volatile_fields)`.
@@ -551,15 +608,17 @@ If two instances share the same `metadata.event_id` but have different `instance
   sensitive payloads into long-term artifacts). Minimal evidence SHOULD include:
   - `metadata.event_id`
   - `metadata.source_type`
+  - `identity_source_type` (the value used for `identity_basis.source_type`)
   - `metadata.source_event_id`
   - `metadata.identity_tier`
   - `conflict_key` of the incoming instance and the retained canonical instance
 
 ### Collector restarts and checkpoints (Windows Event Log)
 
-Windows Event Log collectors (including sources normalized under `windows_eventlog` and `sysmon`)
-SHOULD persist read state using bookmarks/checkpoints to minimize duplicates on restart. Duplicates
-can still occur; identity and dedupe rules above remain authoritative.
+Windows Event Log collectors (including Sysmon events collected from
+`Microsoft-Windows-Sysmon/Operational`) SHOULD persist read state using bookmarks/checkpoints to
+minimize duplicates on restart. Duplicates can still occur; identity and dedupe rules above remain
+authoritative.
 
 ### Checkpoint persistence (normative)
 
@@ -570,6 +629,10 @@ To reduce replay volume while preserving at-least-once correctness:
 - Checkpoints MUST be stored inside the run bundle under
   `runs/<run_id>/logs/telemetry_checkpoints/`. The default layout SHOULD be:
   - `runs/<run_id>/logs/telemetry_checkpoints/<source_type>/<asset_id>/<stream_id>.json`
+
+> **Note**: `<source_type>` in the checkpoint path is a telemetry-collection namespace (checkpoint
+> key space). It is not required to match `metadata.source_type` and is typically less granular.
+
 - Checkpoint updates MUST be atomic (write temp file, fsync, rename).
 - Each successful checkpoint flush MUST increment `telemetry_checkpoints_written_total`.
 - The pipeline MUST flush checkpoints at least once every `N` events or `T` seconds (configurable).
@@ -691,6 +754,8 @@ provides acceptable coverage while maintaining transparency about identity confi
 - Stable event joins and reproducible scoring become practical.
 - At-least-once delivery is explicitly supported with clear deduplication semantics.
 - Identity tier tracking enables coverage metrics to surface when weaker identity is used.
+- Decoupling pack-level `metadata.source_type` from identity-family `identity_basis.source_type`
+  prevents event-id drift when mapping pack naming changes.
 - Windows Event Log stored-artifact reprocessing produces identical identities to live collection.
 
 ### Negative
@@ -698,10 +763,12 @@ provides acceptable coverage while maintaining transparency about identity confi
 - Requires collectors/normalizers to capture `source_event_id`-class fields (for example: Windows
   `EventRecordID`) whenever available.
 - Tier 3 fallback is explicitly weaker; coverage metrics should track how often it is used.
-- Introducing a distinct `source_type = "sysmon"` changes the Tier 1 identity basis for Sysmon
-  events (because `source_type` participates in the identity hash). Implementations MUST treat this
-  as join-key drift relative to older artifacts that used `windows_eventlog` for Sysmon and SHOULD
-  regenerate golden fixtures/baselines accordingly.
+- Introducing a distinct `identity_source_type = "sysmon"` (i.e., using
+  `identity_basis.source_type = "sysmon"`) changes the Tier 1 identity basis for Sysmon events
+  (because `identity_basis.source_type` participates in the identity hash). Implementations MUST
+  treat this as join-key drift relative to older artifacts that used
+  `identity_source_type = "windows_eventlog"` for Sysmon and SHOULD regenerate golden
+  fixtures/baselines accordingly.
 
 ### Neutral
 
@@ -714,6 +781,7 @@ provides acceptable coverage while maintaining transparency about identity confi
 - [Telemetry pipeline specification](../spec/040_telemetry_pipeline.md)
 - [Osquery integration specification](../spec/042_osquery_integration.md)
 - [Configuration reference](../spec/120_config_reference.md)
+- [OCSF mapping profile authoring guide](../mappings/ocsf_mapping_profile_authoring_guide.md)
 - [RFC 8785: JSON Canonicalization Scheme (JCS)](https://www.rfc-editor.org/rfc/rfc8785)
 - [OpenTelemetry Log Data Model - Timestamp](https://opentelemetry.io/docs/specs/otel/logs/data-model/#field-timestamp)
 
@@ -721,6 +789,7 @@ provides acceptable coverage while maintaining transparency about identity confi
 
 | Date       | Change                                              |
 | ---------- | --------------------------------------------------- |
+| 2026-01-23 | Clarified event_source_type vs identity_source_type |
 | 2026-01-12 | Added Linux identity basis (auditd/journald/syslog) |
 | 2026-01-XX | Added osquery identity basis (Tier 3)               |
 | 2026-01-XX | Added alternatives considered section               |

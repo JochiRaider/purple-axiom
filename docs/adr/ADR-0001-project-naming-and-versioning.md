@@ -40,8 +40,9 @@ Purple Axiom MUST implement the naming, versioning, and pinning conventions belo
 
 ### Version domains
 
-Purple Axiom uses distinct version domains. A version value MUST NOT be reused across domains unless
-explicitly stated.
+Purple Axiom uses distinct version domains. A version string MUST be interpreted only within its own
+domain; identical version strings across domains MUST NOT be assumed to imply equivalence,
+compatibility, or coupling unless this ADR (or the owning spec) explicitly defines such a linkage.
 
 1. **Project release version**
 
@@ -93,7 +94,7 @@ All `*_id` fields defined by this ADR MUST conform to `id_slug_v1`.
 
 Regex (informative, suitable for schema validation):
 
-- `^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])$` plus an additional check that `--` is not present.
+- `^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$` plus an additional check that `--` is not present.
 
 Rationale:
 
@@ -102,14 +103,57 @@ Rationale:
 
 #### Version strings (`*_version`)
 
-All `*_version` fields defined by this ADR MUST conform to SemVer 2.0.0.
+This ADR defines version-string requirements for *pinned version fields* that participate in run
+comparability (for example: `manifest.versions.*` and pack-like artifact version pins).
 
-SemVer requirements (normative):
+This section does **not** constrain JSON Schema `contract_version` constants; contract identifiers
+are defined and validated by their owning JSON Schema contracts.
+
+Allowed pinned version formats:
+
+- `semver_v1` — SemVer 2.0.0 string
+- `version_token_v1` — opaque pinned token string (byte-for-byte comparable)
+
+##### `semver_v1` (normative)
+
+A `semver_v1` value:
 
 - MUST be parseable as SemVer 2.0.0 (`MAJOR.MINOR.PATCH` with optional pre-release and build).
 - MUST NOT include a leading `v` (for example, `1.2.3`, not `v1.2.3`).
-- When a version is recorded in artifacts, it MUST be recorded exactly as the SemVer string (no
-  additional prefixes or formatting).
+- MUST be recorded exactly as the SemVer string (no additional prefixes or formatting).
+
+The following pinned fields MUST be `semver_v1`:
+
+- `project_version`
+- `pipeline_version`
+- `scenario_version`
+- `criteria_pack_version` (when criteria evaluation is enabled)
+- `mapping_pack_version` (when the Sigma-to-OCSF bridge is enabled)
+- `mapping_profile_version` (when normalization mapping profiles are in use)
+
+##### `version_token_v1` (normative)
+
+A `version_token_v1` value:
+
+- MUST be an ASCII string of length 1–128 characters.
+- MUST NOT contain whitespace.
+- MUST NOT contain `/` or `\` and MUST NOT contain control characters.
+- MUST be treated as opaque: consumers MUST compare tokens using byte-for-byte equality with no
+  normalization.
+- MUST be recorded exactly as used for the run.
+
+The following pinned fields MAY be `version_token_v1`:
+
+- `ocsf_version` (when upstream OCSF does not publish SemVer, or when the implementation uses a
+  pinned non-SemVer schema identifier)
+- `rule_set_version` (when the implementation pins rule sets by snapshot id rather than SemVer)
+
+Component/tool version keys (for example `runner_version`, `collector_version`) SHOULD be
+`semver_v1` where practical, but MAY be `version_token_v1`.
+
+Regex (informative):
+
+- `^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$`
 
 ### Run bundle naming and path safety
 
@@ -135,18 +179,19 @@ specifications that define regression comparability checks (for example, the rep
 specification) MUST treat this list as authoritative and MUST NOT redefine pin names or introduce
 alternate pin locations for regression comparisons.
 
-- `project_version` (SemVer)
-- `pipeline_version` (SemVer)
-  - Definition: the pipeline definition version used to interpret config and produce artifacts. This
-    MAY equal `project_version`, but MUST be recorded explicitly for trending joins.
-- `scenario_id` (id_slug_v1)
-- `scenario_version` (SemVer)
-- `ocsf_version` (SemVer or OCSF upstream version string if OCSF does not publish SemVer; the
-  implementation MUST still record the exact pinned value)
-- `criteria_pack_id` (id_slug_v1), when criteria evaluation is enabled
-- `criteria_pack_version` (SemVer), when criteria evaluation is enabled
-- `rule_set_id` (id_slug_v1), when Sigma or rule evaluation is enabled
-- `rule_set_version` (SemVer or rule-set snapshot version), when Sigma or rule evaluation is enabled
+- `project_version` (`semver_v1`; version of the Purple Axiom release)
+- `pipeline_version` (`semver_v1`; version of the pipeline definition used to interpret configs and
+  produce artifacts)
+- `scenario_id` (id_slug_v1; stable scenario identifier)
+- `scenario_version` (`semver_v1`; pinned scenario version)
+- `ocsf_version` (`semver_v1` or `version_token_v1`; the implementation MUST record the exact pinned
+  value)
+- `rule_set_id` (id_slug_v1; stable rule set identifier)
+- `rule_set_version` (`semver_v1` or `version_token_v1`; pinned rule set identifier for
+  comparability)
+- `contracts_version` (`semver_v1`; version of the JSON schema contract set used for validation)
+- `schema_registry_version` (`semver_v1`; version of any external schema registry snapshot used, if
+  applicable)
 - `mapping_pack_id` (id_slug_v1), when the Sigma-to-OCSF bridge is enabled
 - `mapping_pack_version` (SemVer), when the Sigma-to-OCSF bridge is enabled
 
@@ -170,6 +215,45 @@ Precedence rule (normative):
 1. If both are present and disagree, consumers MUST fail closed for runs intended for regression or
    CI comparison, and MUST surface a deterministic error that includes both values.
 
+#### Consistency with other manifest fields and snapshot artifacts (normative)
+
+`manifest.versions` is the canonical source of pinned identifiers and versions used for regression
+comparability and trending joins.
+
+When other manifest sections or snapshot artifacts also carry copies of these values, producers and
+consumers MUST enforce byte-for-byte equality (when both values are present):
+
+- `manifest.versions.scenario_id` MUST equal `manifest.scenario.scenario_id`.
+- `manifest.versions.scenario_version` MUST equal `manifest.scenario.scenario_version`, when
+  `manifest.scenario.scenario_version` is present.
+- `manifest.versions.ocsf_version` MUST equal `manifest.normalization.ocsf_version`, when
+  `manifest.normalization.ocsf_version` is present.
+- When `normalized/mapping_profile_snapshot.json` is present, its `ocsf_version` MUST equal
+  `manifest.versions.ocsf_version`.
+- When `bridge/mapping_pack_snapshot.json` is present, its `ocsf_version` MUST equal
+  `manifest.versions.ocsf_version`.
+
+If any required equality check fails, CI/regression mode implementations MUST fail closed. In
+non-regression runs, implementations MAY continue only if configured to do so, but MUST record the
+mismatch as a deterministic stage outcome (see ADR-0005).
+
+#### Mapping from configuration inputs to `manifest.versions` pins (normative)
+
+When the corresponding feature is enabled, orchestrators MUST project configuration-level selectors
+into `manifest.versions` pins as follows (effective/resolved values):
+
+- Criteria packs:
+  - `validation.criteria_pack.pack_id` -> `manifest.versions.criteria_pack_id`
+  - `validation.criteria_pack.pack_version` -> `manifest.versions.criteria_pack_version`
+- Sigma rule evaluation:
+  - `detection.sigma.rule_set_version` -> `manifest.versions.rule_set_version`
+  - Because v0.1 configuration does not carry an explicit `rule_set_id`, implementations MUST set
+    `manifest.versions.rule_set_id` deterministically when Sigma evaluation is enabled. Default:
+    `rule_set_id = "sigma"` unless configured otherwise.
+- Sigma-to-OCSF bridge:
+  - `detection.sigma.bridge.mapping_pack` -> `manifest.versions.mapping_pack_id`
+  - `detection.sigma.bridge.mapping_pack_version` -> `manifest.versions.mapping_pack_version`
+
 ### Deterministic resolution when version pins are omitted
 
 Pinned versions are the default expectation for deterministic runs.
@@ -182,29 +266,28 @@ Pinned versions are the default expectation for deterministic runs.
   deterministically using the algorithm below and MUST record the resolved version in
   `manifest.versions`.
 
-#### Resolution algorithm (SemVer-based, normative)
+#### Resolution algorithm (SemVer-based, normative):
 
-For a given `(artifact_kind, artifact_id)` where `artifact_kind` is one of: `criteria_pack`,
-`rule_set`, `mapping_pack`, `mapping_profile`:
+Omission rules (normative):
 
-1. Enumerate candidate versions across the configured search paths, using the conventional layout:
+- Omission is permitted only for pins whose version format is `semver_v1`.
+- Pins that use `version_token_v1` MUST NOT be omitted; omission MUST fail closed.
 
-   - `<root>/<artifact_kind>/<artifact_id>/<artifact_version>/`
+Algorithm:
 
-1. Parse candidate directory names as SemVer.
-
-1. Select the highest SemVer version.
-
+1. For the target artifact kind, enumerate candidate version directories across the configured
+   search paths. The directory layout is artifact-kind-specific and defined by the owning
+   spec/configuration. At minimum, each search path root MUST contain
+   `<artifact_id>/<artifact_version>/` directories.
+1. Parse each candidate `artifact_version` directory name as `semver_v1`. Ignore candidates that do
+   not parse.
+1. Select the highest SemVer version by SemVer precedence.
 1. If no candidates parse as SemVer, fail closed.
-
-1. If the same `(artifact_id, artifact_version)` appears in multiple search paths, fail closed
-   unless proven byte-identical by matching content hashes recorded at selection time.
-
-Resolved-version recording (normative):
-
-- The resolved `*_version` MUST be recorded in `manifest.versions`.
-- The selected artifact content MUST be snapshotted into the run bundle (or otherwise made
-  content-addressable) so the run remains reproducible if the repository changes.
+1. If the same `(artifact_id, artifact_version)` is present in multiple search paths, fail closed
+   unless the candidates are proven byte-identical by comparing the canonical content fingerprint
+   for that artifact (see "Content hashes and immutability discipline"). If identical, select the
+   first match in the configured search path order.
+1. Record the resolved `artifact_version` into the appropriate pin field in `manifest.versions`.
 
 ### Content hashes and immutability discipline
 
@@ -218,16 +301,29 @@ MUST be treated as immutable.
 
 #### Hash recording (normative)
 
-For each selected pack-like artifact, the manifest MUST record a deterministic content hash for the
-effective content used by the run.
+For each selected pack-like artifact, the run bundle MUST contain a deterministic SHA-256 content
+fingerprint for the effective content used by the run.
 
-Minimum required hash fields (normative):
+Minimum required canonical fingerprints (v0.1; normative when the corresponding feature is enabled):
 
-- `*_content_sha256` (string, lowercase hex SHA-256)
+- Criteria packs: `criteria/manifest.json` MUST include `criteria.pack_sha256`.
+- Sigma-to-OCSF mapping packs: `bridge/mapping_pack_snapshot.json` MUST include
+  `mapping_pack_sha256`.
+- Normalization mapping profiles: `normalized/mapping_profile_snapshot.json` MUST include
+  `mapping_profile_sha256`.
 
-Hash computation basis (normative):
+Producers MAY also mirror these canonical fingerprints into `manifest.versions` (for example as
+`criteria_pack_content_sha256`, `mapping_pack_content_sha256`, `mapping_profile_content_sha256`) to
+simplify operator inspection, but consumers MUST treat the snapshotted artifact metadata as the
+source of truth.
 
-- Implementations MUST compute `*_content_sha256` using a deterministic file-list basis:
+For any artifact kind that lacks a spec-defined canonical fingerprint, implementations MUST compute
+a deterministic SHA-256 fingerprint using the `hash_basis_v1` algorithm below and MUST record it in
+a deterministic, contract-backed location for that artifact kind.
+
+Hash computation basis for `hash_basis_v1` (normative):
+
+- Implementations MUST compute the fingerprint using a deterministic file-list basis:
 
   - Build an object containing:
     - `v` (string, fixed value identifying the hash basis version)
@@ -278,35 +374,58 @@ Non-goal (normative):
 
 - `run_id` is unique per execution and MUST NOT be used as a trending key.
 
+### Lifecycle and state machine integration (normative)
+
+Version pin validation, SemVer resolution (when permitted), and pack snapshotting are
+input-preparation work that MUST complete before any stage that consumes those artifacts publishes
+outputs.
+
+Implementations that emit stage outcomes SHOULD record this work as the dedicated runner substage
+`runner.environment_config` so that failures are visible and triageable via
+`(stage, status, fail_mode, reason_code)` per ADR-0005.
+
+In CI/regression mode, any version-pin validation/resolution failure MUST fail closed and MUST be
+recorded deterministically as a stage outcome (see ADR-0005 for reason code constraints).
+
 ### Verification and CI requirements
 
 Implementations MUST provide deterministic validation for this ADR, suitable for CI.
 
 Minimum conformance checks (normative):
 
-1. **ID validation**
-
+1. ID validation:
    - Every `*_id` recorded in `manifest.versions` MUST conform to `id_slug_v1`.
-
-1. **Version validation**
-
-   - Every `*_version` recorded in `manifest.versions` that claims SemVer MUST parse as SemVer.
-   - If a version is unparseable, the run MUST fail closed for regression or CI modes.
-
-1. **Run ID validation**
-
+1. Version validation:
+   - The following pins MUST be present and parseable as `semver_v1`:
+     - `manifest.versions.project_version`
+     - `manifest.versions.pipeline_version`
+     - `manifest.versions.scenario_version`
+     - `manifest.versions.contracts_version`
+   - When enabled, the following pins MUST be present and parseable as `semver_v1`:
+     - `manifest.versions.criteria_pack_version`
+     - `manifest.versions.mapping_pack_version`
+   - `manifest.versions.ocsf_version` MUST be present and MUST validate as either `semver_v1` or
+     `version_token_v1` (byte-for-byte comparable).
+   - `manifest.versions.rule_set_version` MUST be present when rule evaluation is enabled and MUST
+     validate as either `semver_v1` or `version_token_v1` (byte-for-byte comparable).
+1. Run ID validation:
    - `run_id` MUST validate as an RFC 4122 UUID in canonical hyphenated form.
    - Runs that violate this MUST fail contract validation and MUST be rejected by CI fixtures.
-
-1. **Resolution determinism**
-
+1. Resolution determinism:
    - If any `*_version` is omitted in inputs, the resolved version MUST be recorded in
      `manifest.versions`.
    - If duplicate `(id, version)` candidates exist across search paths, the run MUST fail closed
      unless the content hash matches.
-
-1. **Snapshot reproducibility**
-
+1. Cross-location consistency:
+   - When both are present, `manifest.versions.scenario_id` MUST equal
+     `manifest.scenario.scenario_id`.
+   - When both are present, `manifest.versions.scenario_version` MUST equal
+     `manifest.scenario.scenario_version`.
+   - When present, `normalized/mapping_profile_snapshot.json.ocsf_version` MUST equal
+     `manifest.versions.ocsf_version`.
+   - When present, `bridge/mapping_pack_snapshot.json.ocsf_version` MUST equal
+     `manifest.versions.ocsf_version`.
+1. Snapshot reproducibility:
    - For each selected pack-like artifact, the run bundle MUST contain enough material to reproduce
      the selection (snapshot or content-addressable reference), and the recorded hash MUST match the
      snapshotted content.

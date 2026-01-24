@@ -21,6 +21,36 @@ The telemetry pipeline standardizes collection through OpenTelemetry, preserves 
 Log XML, and normalizes events into OCSF for scoring. Validation focuses on determinism under
 restarts, resilience under backpressure, and predictable handling of large or binary payloads.
 
+### Telemetry ETL spine (normative)
+
+The telemetry stage MUST be implementable as a deterministic ETL loop over an ordered stream of
+input records (OTel `LogRecord`s). For each input record, implementations MUST apply the following
+stable processing spine, in order:
+
+1. **Classify** the record:
+   - derive `asset_id` using the asset identification mechanism selected for the run, and
+   - set a stable `source_type` (for example `windows_eventlog` or `osquery`).
+1. **Acquire** the canonical raw payload:
+   - for Windows Event Log, derive `raw_event_xml` using the deterministic acquisition algorithm
+     defined in this document, and
+   - for file-tailed NDJSON sources, preserve the original line bytes (after newline stripping).
+1. **Enforce** payload limits and sidecar policy deterministically (including hashing of overflow
+   payloads).
+1. **Persist** the record to the raw store (Parquet dataset and/or evidence-tier blob store, as
+   applicable) using deterministic partition keys.
+1. **Account** for the record:
+   - update per-run counters in `runs/<run_id>/logs/counters.json` (see the operability spec), and
+   - when telemetry validation is enabled, record any required per-asset evidence in
+     `runs/<run_id>/logs/telemetry_validation.json`.
+
+Constraints (normative):
+
+- Implementations MUST NOT drop or "best-effort" repair records silently. When
+  `fail_mode=warn_and_skip` applies, skipped records MUST be counted and classified with stable
+  reason codes.
+- Any per-record transformation that can affect downstream identity (`metadata.event_id`) MUST be
+  deterministic and MUST NOT depend on locale, host time zone, or OS rendering state.
+
 ## Canonical topology
 
 **Endpoint agents (preferred)**:
@@ -684,11 +714,11 @@ When `telemetry.baseline_profile.enabled=true`:
 1. Simulate checkpoint store corruption by corrupting the collector checkpoint database, then
    restart; confirm behavior matches the configured policy (fail-closed or recreate-fresh).
 1. If osquery or any file-tailed source is enabled, perform a crash/restart and rotation continuity
-   test: generate a monotonic sequence in the source NDJSON stream, force at least one rotation
-   boundary during the test window, crash the collector mid-stream, restart it, confirm no sequence
-   gaps in the raw store after restart (duplication is acceptable), and record measured `loss_pct`
-   and `dup_pct` for the test window alongside the collector config hash and checkpoint directory
-   fingerprint.
+   test: generate a monotonic sequence in the source NDJSON stream, force at least one rotation gaps
+   in the raw store after restart (duplication is acceptable), compute `loss_pct` and `dup_pct` for
+   the test window, and record these values in `runs/<run_id>/logs/telemetry_validation.json` under
+   `assets[].file_tailed_continuity_test` alongside `assets[].collector_config_sha256` and
+   `assets[].checkpoint_store_fingerprint_sha256`.
 
 ### Backpressure
 
@@ -714,6 +744,8 @@ Minimum required fields for `logs/telemetry_validation.json`:
 
 - `assets` (array of objects; sorted by `asset_id` ascending)
   - `asset_id` (string)
+  - `collector_config_sha256` (string; lowercase hex; 64 chars)
+  - `checkpoint_store_fingerprint_sha256` (string; lowercase hex; 64 chars)
   - `collector_restart_test` (object)
     - `passed` (bool)
   - `checkpoint_loss_test` (object)
@@ -726,6 +758,34 @@ Minimum required fields for `logs/telemetry_validation.json`:
     - `passed` (bool)
     - `rotation_exercised` (bool)
     - `sequence_gap_observed` (bool)
+    - `loss_pct` (number; 0.0-1.0)
+    - `dup_pct` (number; 0.0-1.0)
+
+Collector config hashing (normative):
+
+- `collector_config_sha256` MUST be the SHA-256 of the exact effective OTel Collector config used by
+  the asset during the validation window, encoded as lowercase hex.
+- Before hashing, implementations MUST normalize line endings by converting CRLF (`\r\n`) to LF
+  (`\n`). Implementations MUST NOT perform other whitespace normalization.
+- If the config is generated from templates, the hash MUST be computed over the fully rendered
+  config after variable substitution.
+
+Checkpoint store fingerprinting (normative):
+
+- `checkpoint_store_fingerprint_sha256` MUST be a stable fingerprint of the collector checkpoint
+  store directory contents, encoded as lowercase hex.
+
+- The fingerprint MUST be computed as:
+
+  1. Recursively enumerate all regular files under the checkpoint store directory.
+     - Symlinks MUST NOT be followed.
+     - Each enumerated path MUST be recorded relative to the checkpoint store directory root using
+       POSIX separators (`/`).
+  1. For each file, compute `sha256` over the raw file bytes and record `size_bytes`.
+  1. Sort file entries by `path` ascending (UTF-8 byte order; no locale).
+  1. Serialize the sorted list as canonical JSON (object keys sorted; UTF-8; no insignificant
+     whitespace requirements beyond what the JSON serializer deterministically emits).
+  1. Compute SHA-256 over the UTF-8 bytes of that JSON and encode as lowercase hex.
 
 Recommended additional fields (operator UX and regression tracking):
 
@@ -960,7 +1020,9 @@ Reason codes and evidence pointers (normative):
   or a sample log reference) MUST be a run-relative path using POSIX separators (`/`) even on
   Windows.
 
-Telemetry validation output MUST include the following counters (integers, deterministic):
+Telemetry-stage counters MUST include the following per-run counters (u64, deterministic) when
+Windows Event Log collection is enabled. These counters MUST be emitted into
+`runs/<run_id>/logs/counters.json` per the operability spec:
 
 - `wineventlog_raw_unavailable_total`
 - `wineventlog_raw_malformed_total`

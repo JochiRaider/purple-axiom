@@ -65,8 +65,6 @@ Determinism defaults (normative):
 Each run produces a deterministic artifact bundle under `runs/<run_id>/`. The reporting stage
 consumes upstream artifacts and emits outputs to `report/`.
 
-AFTER
-
 ### Required artifacts (v0.1)
 
 The following artifacts MUST be present for a run to be considered reportable:
@@ -236,13 +234,13 @@ These artifacts are produced by upstream stages and referenced in the report:
 
 | File                               | Purpose                                  | Schema reference                                                    |
 | ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
-| `manifest.json`                    | Run-level provenance and outcomes        | [manifest schema](manifest_schema.json)                             |
+| `manifest.json`                    | Run-level provenance and outcomes        | [manifest schema](manifest.schema.json)                             |
 | `ground_truth.jsonl`               | Executed actions timeline                | [Scenarios](030_scenarios.md)                                       |
 | `logs/telemetry_validation.json`   | Telemetry validation outcomes            | [Telemetry pipeline](040_telemetry_pipeline.md)                     |
-| `scoring/summary.json`             | Operator-facing metrics rollup           | [summary schema](summary_schema.json)                               |
-| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality             | [bridge coverage schema](bridge_coverage_schema.json)               |
-| `normalized/mapping_coverage.json` | OCSF normalization coverage              | [mapping coverage schema](mapping_coverage_schema.json)             |
-| `criteria/manifest.json`           | Criteria pack snapshot metadata          | [criteria pack manifest schema](criteria_pack_manifest_schema.json) |
+| `scoring/summary.json`             | Operator-facing metrics rollup           | [summary schema](summary.schema.json)                               |
+| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality             | [bridge coverage schema](bridge_coverage.schema.json)               |
+| `normalized/mapping_coverage.json` | OCSF normalization coverage              | [mapping coverage schema](mapping_coverage.schema.json)             |
+| `criteria/manifest.json`           | Criteria pack snapshot metadata          | [criteria pack manifest schema](criteria_pack_manifest.schema.json) |
 | `criteria/criteria.jsonl`          | Criteria pack snapshot contents          | [Validation criteria](035_validation_criteria.md)                   |
 | `criteria/results.jsonl`           | Per-action criteria outcomes             | [Validation criteria](035_validation_criteria.md)                   |
 | `detections/detections.jsonl`      | Rule hits with matched event references  | [Detection (Sigma)](060_detection_sigma.md)                         |
@@ -302,8 +300,6 @@ The HTML report MUST include the following sections. JSON equivalents SHOULD be 
 
 ### Executive summary
 
-**Summary**: High-level run outcome for operator triage.
-
 The report MUST include:
 
 - Run name, timestamp, and overall status
@@ -317,9 +313,6 @@ The report MUST include:
 - Link to raw artifacts (if published)
 
 ### Execution context
-
-**Summary**: Safe-by-default execution context summary that supports “show your work” debugging
-without exposing sensitive raw details.
 
 Principal context summary:
 
@@ -365,8 +358,6 @@ JSON equivalent (recommended):
 
 ### Action lifecycle outcomes
 
-**Summary**: Operator-visible action execution health, separated by lifecycle phase.
-
 The report MUST include::
 
 - Idempotence distribution over executed actions:
@@ -409,9 +400,6 @@ Deterministic ordering (normative):
 
 ### Synthetic correlation marker
 
-**Summary**: Correlate synthetic activity using a durable marker emitted by the runner and preserved
-in normalized events.
-
 Required content (when marker emission is enabled):
 
 - Marker status: `enabled | disabled`.
@@ -437,8 +425,6 @@ JSON equivalent (recommended):
 
 ### Coverage metrics
 
-**Summary**: Detection coverage relative to executed techniques.
-
 The report MUST include:
 
 - Total executed techniques (`techniques_executed`)
@@ -447,9 +433,39 @@ The report MUST include:
   `[0.0, 1.0]`)
 - Per-technique breakdown table (technique_id, detection count, first detection latency (seconds))
 
-### Latency distribution
+### Defense outcomes
 
-**Summary**: Time from action execution to first detection.
+Required content:
+
+- Outcome precedence rendered verbatim: `blocked > alerted > logged > none > not_applicable > tbd`
+- Per-technique outcome table (stable ordering, required):
+  - Sort rows by `technique_id` ascending.
+  - Columns:
+    - `technique_id`
+    - `outcome_best`
+    - `outcome_counts` (at least: alerted/logged/none/not_applicable/tbd; blocked MAY be present)
+    - `actions_total` (count of action instances with this technique_id in ground truth)
+- Per-action outcome table (stable ordering, recommended when the run has ≤ 500 actions):
+  - Sort rows by `action_id` ascending.
+  - Columns:
+    - `action_id` (and action name when available)
+    - `technique_id`
+    - `derived_outcome`
+    - `tool_outcomes[]` (tool_kind, tool_id, outcome, reason_code)
+    - evidence references (criteria result row and/or marker result row; detection evidence when
+      alerted)
+
+JSON equivalent (required):
+
+- The report JSON MUST include `extensions.defense_outcomes` containing:
+  - `taxonomy_version`
+  - `outcome_precedence[]`
+  - `summary`
+  - `by_technique[]`
+  - `by_action[]` (MAY be omitted only when a configured size guard is exceeded; if omitted, the
+    report MUST set `summary.by_action_omitted=true` and record the omission reason)
+
+### Latency distribution
 
 The report MUST include:
 
@@ -458,8 +474,6 @@ The report MUST include:
 - Techniques with latency exceeding threshold (flagged)
 
 ### Detection fidelity
-
-**Summary**: Quality of detection matches.
 
 The report MUST include:
 
@@ -470,8 +484,6 @@ The report MUST include:
 - Fidelity breakdown by technique (when available)
 
 ### Gap analysis
-
-**Summary**: Categorized failure reasons aligned with the normative gap taxonomy.
 
 The report MUST classify failures using the categories defined in
 [Scoring metrics](070_scoring_metrics.md) (Pipeline health, v0.1). Gap categories are mutually
@@ -566,8 +578,6 @@ Deterministic ordering (normative):
 
 ### Tier 1 normalization coverage
 
-**Summary**: OCSF Core Common field presence across normalized events.
-
 This section surfaces the Tier 1 coverage gate defined in
 [OCSF field tiers](055_ocsf_field_tiers.md).
 
@@ -585,8 +595,6 @@ Required content:
 
 ### Per-source breakdown
 
-**Summary**: Metrics segmented by telemetry source type.
-
 Detection engineering requires understanding which sources contribute to coverage and gaps.
 
 Required content (per `source_type`):
@@ -601,8 +609,6 @@ Source types MUST align with `metadata.source_type` values in normalized events 
 `windows_security`, `osquery`, `auditd`).
 
 ### Sigma-to-OCSF bridge health
-
-**Summary**: Bridge compilation and routing quality.
 
 Required content (from `bridge/coverage.json`):
 
@@ -621,8 +627,6 @@ Breakdown tables:
 
 ### Criteria evaluation
 
-**Summary**: Validation outcomes against criteria packs (when enabled).
-
 Required content:
 
 - Criteria pack ID and version (from `criteria/manifest.json`)
@@ -635,9 +639,6 @@ Required content:
 - Skipped reasons breakdown (no matching criteria, evaluation disabled, action failed)
 
 ### Requirements & environment gates
-
-**Summary**: Action-level preflight gates derived from declared requirements (platform, privilege,
-tools/capabilities) when requirements evaluation is enabled.
 
 Required content:
 
@@ -663,8 +664,6 @@ Disclosure minimization (normative):
 
 ### Cleanup verification
 
-**Summary**: Post-action cleanup status.
-
 Required content:
 
 - Cleanup invocation count vs skipped count
@@ -673,9 +672,6 @@ Required content:
 - Cleanup policy applied (from scenario or range config)
 
 ### State reconciliation
-
-**Summary**: Post-action drift detection between recorded effects and observed environment state
-(when enabled).
 
 Required content:
 
@@ -706,8 +702,6 @@ Required content:
 
 ### Event volume metrics
 
-**Summary**: Telemetry throughput for capacity planning.
-
 Required content:
 
 - Total events captured (raw)
@@ -720,22 +714,16 @@ Required content:
 
 ### Version inventory
 
-**Summary**: Component versions for reproducibility.
-
 The report MUST include a version inventory section with:
 
 Required content (from `manifest.versions`):
 
-- `purple_axiom` (pipeline core)
+- `project_version` (Purple Axiom core release)
+- `pipeline_version` (pipeline definition version)
+- `scenario_id`, `scenario_version`, `rule_set_id`, `rule_set_version`
 - `ocsf_version`
-- `otel_collector_version`
-- `normalizer_version`
-- `sigma_compiler_version`
-- `pipeline_version`
-- `scenario_id`
-- `scenario_version`
-- `rule_set_id`
-- `rule_set_version`
+- `mapping_pack_id`, `mapping_pack_version` (when the Sigma-to-OCSF bridge is enabled)
+- `criteria_pack_id`, `criteria_pack_version` (when criteria evaluation is enabled)
 
 Conditional pins (from `manifest.versions`, when enabled):
 
@@ -1073,27 +1061,18 @@ Deterministic ordering (normative):
 
 ## Trend tracking
 
-AFTER Trending enables longitudinal analysis across runs. Downstream dashboards and exporters MUST
-use the stable trending dimensions defined here.
+Trending enables longitudinal analysis across runs. Downstream dashboards and exporters MUST use the
+stable trending dimensions defined here.
 
-### Trending keys (normative)
+#### Trending keys (normative)
 
-Exporters MUST use the following trending keys (dimensions) as join keys for trend series. These are
-the pinned version fields from `manifest.versions` (see
-[ADR-0001](ADR-0001-project-naming-and-versioning.md)):
+Trending join dimensions MUST be sourced from `manifest.versions` only, per ADR-0001.
 
-| Key                              | Source                                    | Requirement                                       |
-| -------------------------------- | ----------------------------------------- | ------------------------------------------------- |
-| `versions.scenario_id`           | `manifest.versions.scenario_id`           | REQUIRED                                          |
-| `versions.scenario_version`      | `manifest.versions.scenario_version`      | SHOULD                                            |
-| `versions.rule_set_id`           | `manifest.versions.rule_set_id`           | REQUIRED (when rule evaluation is enabled)        |
-| `versions.rule_set_version`      | `manifest.versions.rule_set_version`      | REQUIRED (when rule evaluation is enabled)        |
-| `versions.pipeline_version`      | `manifest.versions.pipeline_version`      | REQUIRED                                          |
-| `versions.mapping_pack_id`       | `manifest.versions.mapping_pack_id`       | RECOMMENDED (when bridge is enabled)              |
-| `versions.mapping_pack_version`  | `manifest.versions.mapping_pack_version`  | RECOMMENDED (when bridge is enabled)              |
-| `versions.ocsf_version`          | `manifest.versions.ocsf_version`          | RECOMMENDED                                       |
-| `versions.criteria_pack_id`      | `manifest.versions.criteria_pack_id`      | RECOMMENDED (when criteria validation is enabled) |
-| `versions.criteria_pack_version` | `manifest.versions.criteria_pack_version` | RECOMMENDED (when criteria validation is enabled) |
+Producers MUST NOT derive or "fallback" pins from other artifacts (for example
+`manifest.scenario.*`, `bridge/coverage.json`, or snapshot manifests). If required pins are absent,
+the run MUST be treated as non-trendable/non-comparable for the affected join surfaces.
+
+See "Trend tracking" for the authoritative set of trend keys and their selectors.
 
 ### Non-trending keys
 
@@ -1383,7 +1362,7 @@ The `report/report.json` output MUST conform to the following structure:
 }
 ```
 
-Full schema definition: `report_schema.json` see `docs/contracts/report_schema.json`.
+Full schema definition: `report.schema.json` see `docs/contracts/report.schema.json`.
 
 ## HTML report structure
 
@@ -1465,11 +1444,11 @@ The reporting stage MUST set exit codes aligned with
 
 ## References
 
-- [Manifest schema](manifest_schema.json)
-- [Summary schema](summary_schema.json)
-- [Bridge coverage schema](bridge_coverage_schema.json)
-- [Mapping coverage schema](mapping_coverage_schema.json)
-- [Criteria pack manifest schema](criteria_pack_manifest_schema.json)
+- [Manifest schema](manifest.schema.json)
+- [Summary schema](summary.schema.json)
+- [Bridge coverage schema](bridge_coverage.schema.json)
+- [Mapping coverage schema](mapping_coverage.schema.json)
+- [Criteria pack manifest schema](criteria_pack_manifest.schema.json)
 - [Scoring metrics specification](070_scoring_metrics.md)
 - [OCSF field tiers specification](055_ocsf_field_tiers.md)
 - [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md)

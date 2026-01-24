@@ -15,8 +15,6 @@ invariants that cannot be expressed in JSON Schema alone.
 
 ## Overview
 
-## Overview
-
 This spec defines the artifact schemas, run bundle layout, and cross-artifact invariants that make
 runs reproducible and comparable. It covers the normative requirements for manifest status, ground
 truth identity, normalized event envelopes, and optional signing.
@@ -105,8 +103,28 @@ The registry instance MUST include, at minimum:
 
 #### Contract version constant (normative)
 
-Each schema MUST include a `contract_version` constant. The contract version is bumped only when the
-contract meaningfully changes (new required fields, semantics changes, or validation tightening).
+Each schema MUST include a `contract_version` constant as a SemVer string (for example, `"1.0.0"`),
+expressed in JSON Schema via a `const` value. The `contract_version` value:
+
+- MUST match the `contracts[].contract_version` entry in `docs/contracts/contract_registry.json` for
+  the same `contract_id`.
+- MUST be bumped per the Versioning and compatibility policy in this document when the contract
+  meaningfully changes (new required fields, semantic changes, or validation tightening).
+  Documentation-only edits do not require a bump.
+
+If a schema’s `contract_version` disagrees with the registry entry for that `contract_id`, contract
+validation tooling MUST fail closed (treat as misconfiguration).Each schema MUST include a
+`contract_version` constant as a SemVer string (for example, `"1.0.0"`), expressed in JSON Schema
+via a `const` value. The `contract_version` value:
+
+- MUST match the `contracts[].contract_version` entry in `docs/contracts/contract_registry.json` for
+  the same `contract_id`.
+- MUST be bumped per the Versioning and compatibility policy in this document when the contract
+  meaningfully changes (new required fields, semantic changes, or validation tightening).
+  Documentation-only edits do not require a bump.
+
+If a schema’s `contract_version` disagrees with the registry entry for that `contract_id`, contract
+validation tooling MUST fail closed (treat as misconfiguration).
 
 ### Human-readable schema inventory (non-authoritative)
 
@@ -116,7 +134,9 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/ground_truth.schema.json`
 - `docs/contracts/action_descriptor.schema.json`
 - `docs/contracts/principal_context.schema.json`
+- `docs/contracts/defense_outcomes.schema.json`
 - `docs/contracts/cache_provenance.schema.json`
+- `docs/contracts/counters.schema.json`
 - `docs/contracts/runner_executor_evidence.schema.json`
 - `docs/contracts/resolved_inputs_redacted.schema.json`
 - `docs/contracts/requirements_evaluation.schema.json`
@@ -129,6 +149,7 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/ocsf_event_envelope.schema.json`
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
+- `docs/contracts/report.schema.json`
 - `docs/contracts/telemetry_baseline_profile.schema.json`
 - `docs/contracts/telemetry_validation.schema.json`
 - `docs/contracts/duckdb_conformance_report.schema.json`
@@ -214,12 +235,24 @@ validation errors with deterministic ordering:
 
 Minimum error fields (per error):
 
-- `artifact_path`: run-relative path using POSIX separators (`/`)
-- `contract`: contract identifier (for example, the schema filename)
-- `instance_path`: JSON Pointer to the failing instance location
-- `schema_path`: JSON Pointer to the failing schema location
-- `message`: human-readable error message
-- `line_number`: REQUIRED for JSONL validation errors (1-indexed), omitted otherwise
+- `artifact_path`: run-relative path using POSIX separators (`/`).
+- `contract_id`: contract identifier from `docs/contracts/contract_registry.json`.
+- `instance_path`: JSON Pointer to the failing instance location (`""` for the document root).
+- `schema_path`: JSON Pointer to the failing schema location (`""` if unavailable, for example on
+  parse failure).
+- `keyword`: OPTIONAL JSON Schema keyword that triggered the failure (example: `required`, `type`).
+- `message`: human-readable error message.
+- `line_number`: REQUIRED for JSONL validation errors and JSONL parse errors (1-indexed); omitted
+  otherwise.
+
+JSONL parse failures (normative):
+
+- If a JSONL line cannot be parsed as JSON, implementations MUST emit one error with:
+  - `line_number` set to the failing line (1-indexed),
+  - `instance_path=""`,
+  - `schema_path=""`,
+  - `keyword` omitted,
+  - `message` describing the parse error.
 
 Ordering (normative):
 
@@ -228,6 +261,7 @@ Ordering (normative):
   1. `line_number` (treat missing as `0`)
   1. `instance_path`
   1. `schema_path`
+  1. `keyword` (treat missing as empty string)
   1. `message`
 
 Error caps (normative):
@@ -288,8 +322,26 @@ For any stage that publishes contract-backed artifacts:
 
 - The stage MUST write outputs to `runs/<run_id>/.staging/<stage_id>/...` and MUST perform contract
   validation as a publish gate before atomic publish.
+- `.staging/` is a reserved, non-contracted scratch area:
+  - Stages MUST NOT write long-term artifacts outside their `.staging/<stage_id>/` subtree until
+    publish.
+  - `.staging/**` MUST NOT be referenced by `evidence_refs[]` (or any other contracted evidence
+    pointer) and MUST be excluded from signing/checksumming inputs.
+- Atomic publish and cleanup:
+  - Publishing MUST be implemented as an atomic rename/move from staging into final run-bundle
+    paths.
+  - On successful publish, the stage MUST delete (or leave empty) its
+    `runs/<run_id>/.staging/<stage_id>/` directory.
+  - If validation fails, stages MUST NOT partially publish final-path artifacts.
 - A stage MUST NOT publish contract-invalid artifacts into their final locations under
   `runs/<run_id>/`.
+- State machine integration hook (derivability; see ADR-0007):
+  - For any stage that records a terminal stage outcome, the outcome plus the presence/absence of
+    the stage’s published contracted outputs (minimum outputs for that stage when enabled) MUST be
+    sufficient to derive the stage’s terminal state.
+  - If terminal state cannot be derived due to inconsistent artifacts (for example, outputs present
+    but the stage outcome is missing), implementations MUST fail closed with a cross-cutting
+    `reason_code` (`input_missing` or `storage_io_error` per ADR-0005).
 
 Validation by artifact type:
 
@@ -318,6 +370,7 @@ Minimum publish-gate coverage (v0.1):
     cleanup verification)
   - `runs/<run_id>/runner/principal_context.json`
   - `runs/<run_id>/logs/cache_provenance.json`
+  - `runs/<run_id>/logs/counters.json`
   - `criteria/**` artifacts that have contracts (criteria pack snapshot, criteria results)
   - `normalized/**` artifacts that have contracts (OCSF event envelope for JSONL outputs, mapping
     coverage, mapping profile snapshot)
@@ -361,6 +414,8 @@ the [operability spec](110_operability.md) and the
 
 A run bundle is stored at `runs/<run_id>/` and follows this layout:
 
+- `.staging/` (transient scratch for publish-gate writes; MUST be absent or empty in a finalized run
+  bundle)
 - `manifest.json` (single JSON object)
 - `ground_truth.jsonl` (JSONL)
 - `inputs/` (input snapshots and references used to interpret and compare runs)
@@ -370,6 +425,7 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
   - `inputs/telemetry_baseline_profile.json` (optional; REQUIRED when telemetry baseline profile
     gate is enabled)
 - `plan/` (v0.2+; compiled plan graph and expansion manifests)
+- `control/` (v0.2+; operator control-plane requests/decisions, when implemented)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw_parquet/` (raw telemetry datasets, long-term; see storage formats)
 - `raw/` (evidence-tier blobs and source-native payloads where applicable)
@@ -380,11 +436,14 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `bridge/` (Sigma-to-OCSF bridge artifacts: mapping pack snapshot, compiled plans, bridge coverage)
 - `detections/` (detections emitted by evaluators)
 - `scoring/` (joins and summary metrics)
+- `security/` (integrity artifacts and redaction policy snapshot when enabled)
 - `report/` (HTML and JSON report outputs)
   - Regression results (when enabled) are embedded only in `report/report.json` under the
     `regression` object (see `docs/spec/080_reporting.md` for the contract).
 - `logs/` (structured operability summaries and debug logs; not considered long-term storage)
   - `logs/health.json` (when enabled; see the [operability spec](110_operability.md))
+  - `logs/counters.json` (schema-backed per-run counters and gauges; see the
+    [operability spec](110_operability.md))
   - `logs/telemetry_validation.json` (when telemetry validation is enabled)
   - `logs/cache_provenance.json` (schema-backed cache usage provenance)
   - `logs/contract_validation/` (contract validation failure reports, when emitted)
@@ -405,26 +464,95 @@ names, prefix forms, and ordering rules defined here.
 
 Minimum evidence ref fields (normative):
 
-- `artifact_path` (string; REQUIRED): run-relative POSIX path to the evidence artifact
-- `selector` (string; optional): optional selector within the artifact (for example, a JSON Pointer
-  or a JSONL line number)
-- `handling` (enum; optional): `present | withheld | quarantined | absent`
+- `artifact_path` (string, required): run-relative path to the evidence artifact.
+- `selector` (string, optional): sub-selection within the artifact (see Selector constraints below).
+- `handling` (string, optional): how the referenced evidence is handled. Allowed values:
+  `present | withheld | quarantined | absent` (default: `present`).
+
+Handling semantics (normative):
+
+- `present`: `artifact_path` exists and contains the referenced evidence.
+- `withheld`: `artifact_path` exists but contains a deterministic redaction/placeholder; the
+  underlying evidence is intentionally not retained.
+- `quarantined`: `artifact_path` exists but is quarantined (for example, under `unredacted/**`) and
+  MUST NOT be used for scoring/trending outputs.
+- `absent`: evidence was expected for this reference but is not present; `artifact_path` SHOULD
+  indicate the expected location.
 
 Artifact path requirements (normative):
 
-- `artifact_path` MUST be a run-relative path using POSIX separators (`/`).
-- `artifact_path` MUST NOT be an absolute path and MUST NOT contain `..` segments.
-- `artifact_path` MUST refer to a deterministic path as defined by the storage formats spec
-  (`045_storage_formats.md`).
-- Within any `evidence_refs[]` array, entries MUST be sorted by `artifact_path` ascending (UTF-8
-  byte order, no locale).
+- `artifact_path` MUST be run-relative (no leading `/`), must not contain `..` segments, and must be
+  normalized to use `/` separators.
+- `artifact_path` MUST refer to a deterministic path defined by the storage formats spec.
+- Within any `evidence_refs` array, entries MUST be sorted deterministically using UTF-8 byte order
+  (no locale) by the tuple:
+  1. `artifact_path`
+  1. `selector` (treat missing as empty string)
+  1. `handling` (treat missing as `present`, and sort by the fixed order: `present`, `withheld`,
+     `quarantined`, `absent`)
 
 Selector constraints (normative when present):
 
-- `selector` MUST be ASCII and MUST be no longer than 256 characters.
-- `selector` MUST match one of the following prefix forms:
-  - `json_pointer:` followed by an RFC 6901 JSON Pointer starting with `/`
-  - `jsonl_line:` followed by a 1-indexed positive integer
+- `selector` MUST be ASCII, \<=256 chars.
+- `selector` MUST be one of:
+  - `json_pointer:<RFC6901 JSON Pointer>` (selects subobject from JSON file)
+  - `jsonl_line:<N>` (selects 1-indexed line from JSONL)
+
+### Run counters (operability) (normative)
+
+Purpose:
+
+- Provides a per-run snapshot of stable counters and gauges for debugging, CI assertions, and
+  deterministic regression triage.
+
+Location (normative):
+
+- `runs/<run_id>/logs/counters.json`
+
+Validation (normative):
+
+- Must validate against `counters.schema.json`.
+
+Contract registry binding (normative):
+
+- `artifact_glob`: `logs/counters.json`
+- `contract_id`: `counters`
+- `schema_path`: `docs/contracts/counters.schema.json`
+
+Minimum required fields (normative):
+
+- `contract_version` (schema constant)
+- `schema_version` (const: `pa:counters:v1`)
+- `run_id` (string; MUST equal `manifest.run_id`)
+- `generated_at_utc` (string; RFC 3339 UTC)
+- `counters` (object; map of `counter_name -> u64`)
+- `gauges` (object; optional; map of `gauge_name -> number`)
+
+Type constraints (normative):
+
+- Every `counters` value MUST be an integer in the inclusive range `[0, 2^64-1]`.
+- Every `gauges` value MUST be a finite JSON number (no NaN or Infinity).
+
+Determinism constraints (normative):
+
+- The emitted JSON serialization MUST sort `counters` keys by UTF-8 byte order (no locale).
+- When present, the emitted JSON serialization MUST sort `gauges` keys by UTF-8 byte order (no
+  locale).
+
+Counter naming and semantics (normative):
+
+- This contract does not require a fixed set of counter keys.
+- Required counter keys and omit-vs-zero semantics are defined by stage specifications (for
+  telemetry+ETL, see the operability and telemetry pipeline specs).
+
+Conformance tests (normative):
+
+- CI MUST include, at minimum:
+  - one valid counters fixture (minimum required fields and at least one counter), and
+  - one invalid counters fixture that fails schema validation (for example, missing `run_id` or an
+    invalid `schema_version` constant).
+- CI MUST include a determinism test that asserts `counters.json` key ordering is stable when
+  serialized (sorted keys) for a fixture with multiple counter keys.
 
 ### Regression baseline reference inputs (normative)
 
@@ -438,46 +566,65 @@ Implementations MUST support two baseline reference forms. The pointer form is r
 regression is enabled; the snapshot form is optional but RECOMMENDED when the baseline manifest is
 readable.
 
-#### A) Snapshot form: `inputs/baseline/manifest.json`
+Baseline reference artifacts under `runs/<run_id>/inputs/` are owned by the reporting stage and are
+immutable once published:
 
-Normative requirements:
+- Operators MUST NOT pre-populate `inputs/baseline_run_ref.json` or any `inputs/baseline/**` paths.
 
-- When present, `inputs/baseline/manifest.json` MUST be a byte-for-byte copy of the baseline run’s
-  `manifest.json` (no normalization, reformatting, or key reordering).
-- When present, `inputs/baseline/manifest.json` MUST validate against the existing manifest schema
-  at publish gate (`docs/contracts/manifest.schema.json`).
-- If `inputs/baseline_run_ref.json` is also present, the SHA-256 of the snapshot bytes MUST equal
-  `baseline_manifest_sha256` recorded in the pointer form (consistency requirement; see
-  `045_storage_formats.md`).
+- All stages MUST treat `inputs/**` as read-only inputs; only reporting (or the orchestrator
+  component that owns regression) may materialize baseline reference artifacts under these reserved
+  paths.
 
-#### B) Pointer form: `inputs/baseline_run_ref.json`
+- If a run is resumed/replayed and these baseline reference artifacts already exist, implementations
+  MUST validate them and MUST NOT rewrite them.
 
-The pointer form is a schema-backed JSON object that records baseline selection and integrity. This
-object MUST be stable across repeated runs using the same baseline selection: it MUST NOT include
-timestamps or environment-specific values (for example, hostnames).
+- Pointer form: `inputs/baseline_run_ref.json` (required when regression enabled)
 
-Minimum fields (normative):
+- Snapshot form: `inputs/baseline/manifest.json` (optional, recommended)
 
-- Baseline selection (exactly one is REQUIRED):
-  - `baseline_run_id` (string; UUID): baseline run identifier
-  - `baseline_manifest_path` (string): relative path to a baseline `manifest.json`
-    - `baseline_manifest_path` MUST be relative to `reporting.output_dir`.
-    - Absolute paths MUST NOT be used for baseline selection.
-- `baseline_manifest_sha256` (string; conditional): lowercase hex SHA-256 of the baseline manifest
-  bytes, computed over the exact baseline manifest bytes read (and, if snapshot form is
-  materialized, MUST match the snapshot bytes).
-  - `baseline_manifest_sha256` MUST be present when the baseline manifest bytes were successfully
-    read.
-  - `baseline_manifest_sha256` MUST be omitted when the baseline manifest cannot be located or read.
-- `baseline_manifest_ref` (string; optional): resolved reference used by the implementation to
-  locate the baseline manifest.
-  - RECOMMENDED values:
-    - `runs/<baseline_run_id>/manifest.json` when selecting by `baseline_run_id`
-    - the provided `baseline_manifest_path` when selecting by `baseline_manifest_path`
-- `expected_contract_versions` (object; optional): map of `contract_id` to expected
-  `contract_version` for artifacts required by regression comparison.
-  - Keys SHOULD be stable `contract_id` values from `docs/contracts/contract_registry.json`.
-  - This field is intended to make “baseline incompatible” triage deterministic and auditable.
+The pointer form includes:
+
+Baseline selection (exactly one is REQUIRED):
+
+- `baseline_run_id`: string, run_id of the baseline run whose manifest will be fetched from storage.
+- `baseline_manifest_path`: string, path to a manifest.json file that is directly accessible.
+
+Optional integrity field:
+
+- `baseline_manifest_sha256`: string (hex). If the baseline manifest is readable, implementations
+  SHOULD populate this field to pin the exact bytes used for comparison.
+
+Output guarantees:
+
+- The reporting stage MUST include the pointer form. If snapshot form is present, it MUST match the
+  bytes of the baseline manifest referenced by the pointer (by sha256).
+
+Resolution algorithm (normative):
+
+1. Determine `baseline_manifest_ref` based on the configured baseline selection:
+
+   - If `baseline_run_id` selected, `baseline_manifest_ref = runs/<baseline_run_id>/manifest.json`.
+   - If `baseline_manifest_path` selected, `baseline_manifest_ref = <that path>`.
+
+1. Materialize or reuse the pointer form prior to regression comparison:
+
+   - If `inputs/baseline_run_ref.json` exists, implementations MUST read and validate it and MUST
+     use its contents (do not rewrite). If it conflicts with the configured baseline selection, the
+     implementation MUST fail closed (use `baseline_incompatible` in the reporting regression
+     substage).
+   - Otherwise, implementations MUST attempt to read baseline manifest bytes from
+     `baseline_manifest_ref` (best effort) in order to populate `baseline_manifest_sha256` when
+     possible, and then MUST write `inputs/baseline_run_ref.json` atomically once with:
+     - the selected baseline fields,
+     - `baseline_manifest_ref`, and
+     - `baseline_manifest_sha256` if the bytes were successfully read.
+
+1. Materialize or reuse the snapshot form (best-effort, recommended):
+
+   - If `inputs/baseline/manifest.json` exists, implementations MUST validate it and MUST NOT
+     rewrite it.
+   - Otherwise, if baseline manifest bytes were successfully read, implementations SHOULD write
+     `inputs/baseline/manifest.json` to exactly those bytes (atomic write).
 
 #### Deterministic baseline resolution and failure mapping (normative)
 
@@ -592,17 +739,34 @@ Key semantics:
 
 Status derivation (normative):
 
-- Implementations MUST compute an effective outcome for each enabled pipeline stage (a "stage
-  outcome").
-- A stage outcome MUST include: `stage` (stable identifier), `status`
-  (`success | failed | skipped`), `fail_mode` (`fail_closed | warn_and_skip`), and an optional
-  `reason_code` (stable token).
-- `manifest.status` MUST be derived from the set of stage outcomes:
-  - `failed` if any stage has `status=failed` and `fail_mode=fail_closed`
-  - else `partial` if any stage has `status=failed`
-  - else `success`
-- When `operability.health.emit_health_files=true`, stage outcomes MUST also be written to
-  `runs/<run_id>/logs/health.json` (minimum schema in the [operability spec](110_operability.md)).
+Implementations MUST compute an effective outcome for each enabled pipeline stage (a "stage
+outcome").
+
+A stage outcome MUST include:
+
+- `stage` (string): stable identifier (`runner`, `telemetry`, `normalization`, `detection`,
+  `scoring`, `reporting`), optionally suffixed by substage (`reporting.regression_compare`).
+- `status` (enum): `success | failed | skipped`.
+- `fail_mode` (enum): `fail_closed | warn_and_skip`.
+- `reason_code` (string, optional): stable reason token, required on `failed`. If present, it MUST
+  be a token allowed by ADR-0005.
+
+Stage outcome ordering (normative):
+
+- Stage outcomes MUST be emitted in deterministic order:
+  - pipeline order for top-level stages (`runner`, `telemetry`, `normalization`, `detection`,
+    `scoring`, `reporting`), and
+  - within a stage, substage outcomes (dot-suffixed) ordered lexicographically by `stage` (UTF-8
+    byte order).
+
+`manifest.status` MUST be derived from the set of stage outcomes as:
+
+- `failed` if any enabled stage has `status=failed` and `fail_mode=fail_closed`
+- else `partial` if any enabled stage has `status=failed` and `fail_mode=warn_and_skip`
+- else `success` if all enabled stages have `status=success`
+
+When `health.emit_health_files=true`, stage outcomes MUST also be written to
+`runs/<run_id>/logs/health.json`.
 
 Recommended manifest additions (normative in schema when implemented):
 
@@ -678,74 +842,50 @@ Key semantics:
 
 Lifecycle semantics (normative):
 
-- Each ground truth entry MUST include:
+Each ground truth entry MUST include:
 
-- `idempotence` (`idempotent | non_idempotent | unknown`), and `lifecycle.phases[]` (ordered phase
-  records).
+- `idempotence` (`idempotent | non_idempotent | unknown`)
+- `lifecycle.phases[]` (ordered phase records)
 
-  - `lifecycle.phases[]` MUST be ordered deterministically:
-    - The first record MUST be `phase="prepare"` and the last record MUST be `phase="teardown"`.
-    - If more than four phase records are present, any additional records MUST be `execute` and/or
-      `revert` retry records and MUST appear between `prepare` and `teardown`.
-    - When retry records are present, each retry record MUST include `attempt_ordinal` (integer;
-      0-based).
-      - Retry records MUST be ordered by the tuple `(attempt_ordinal, phase)` using UTF-8 byte order
-        (no locale), with phase order `execute` before `revert` for the same `attempt_ordinal`.
-      - `attempt_ordinal` values MUST be contiguous (no gaps) for the retry records present.
-  - Each phase record MUST include:
-    - `phase` (`prepare | execute | revert | teardown`)
-    - `phase_outcome` (`success | failed | skipped`)
-    - `started_at_utc` and `ended_at_utc` (UTC)
-    - `reason_code` (string; required when `phase_outcome != "success"`): stable reason token (ASCII
-      `lower_snake_case`).
-    - `error` (object; optional): per-phase failure classification for deterministic reporting.
-      - When present, `error.type` MUST be one of:
-        - `exit_code`
-        - `timeout`
-        - `missing_tool`
-        - `insufficient_privileges`
-        - `unsupported_platform`
-        - `internal_error`
-        - `unknown`
-      - When `error.type="exit_code"`, `error.exit_code` (integer) MUST be present.
-      - When `error.type="timeout"`, `error.timeout_ms` (integer) MUST be present.
-    - `evidence` (object; optional): run-relative pointers to runner evidence artifacts that justify
-      the phase outcome.
-      - Evidence pointers MUST be POSIX-style run-relative paths (no `..` segments).
-      - Allowed evidence keys (non-exhaustive; stable when used):
-        - `requirements_evaluation_ref` (example:
-          `runner/actions/<action_id>/requirements_evaluation.json`)
-        - `executor_ref` (example: `runner/actions/<action_id>/executor.json`)
-        - `stdout_ref` / `stderr_ref` (example: `runner/actions/<action_id>/stdout.txt`)
-        - `terminal_recording_ref` (example: `runner/actions/<action_id>/terminal.cast`)
-        - `cleanup_stdout_ref` / `cleanup_stderr_ref` (example:
-          `runner/actions/<action_id>/cleanup_stdout.txt`)
-        - `cleanup_verification_ref` (example:
-          `runner/actions/<action_id>/cleanup_verification.json`)
-        - `state_reconciliation_report_ref` (example:
-          `runner/actions/<action_id>/state_reconciliation_report.json`)
-        - `side_effect_ledger_ref` (example: `runner/actions/<action_id>/side_effect_ledger.json`)
-        - `attire_ref` (example: `runner/actions/<action_id>/attire.json`)
-    - `timestamp_utc` MUST equal `lifecycle.phases[0].started_at_utc` when the lifecycle is present.
+Invariants (normative):
+
+- When `lifecycle.phases[]` is present, `timestamp_utc` MUST equal
+  `lifecycle.phases[0].started_at_utc`.
+- Phases MUST appear in chronological order; within a phase, `attempt_ordinal` increases for
+  retries.
+
+Each phase record MUST include:
+
+- `phase` (`prepare | execute | revert | teardown`)
+- `attempt_ordinal` (int, starting at 1)
+- `started_at_utc`, `ended_at_utc` (RFC3339 UTC)
+- `phase_outcome` (`success | failed | skipped`)
+- `exit_code` (int or null)
+- `error` (object or null), with:
+  - `type` (enum):
+    `timeout | nonzero_exit | validation_failed | exception | unsafe_rerun_blocked | cleanup_suppressed | invalid_lifecycle_transition | unknown`
+  - `message` (string; redacted)
+  - `details_ref` (optional evidence ref path)
 
 Phase evidence attachment (normative; when artifacts exist):
 
 - If `runner/actions/<action_id>/requirements_evaluation.json` is produced, the runner MUST attach
   `evidence.requirements_evaluation_ref` to the `prepare` phase record.
-- If the runner attempts `execute`, the runner MUST attach:
+- If `execute` is attempted, the runner MUST attach:
   - `evidence.executor_ref`, and
   - `evidence.stdout_ref` and `evidence.stderr_ref` to the `execute` phase record.
-  - If `runner/actions/<action_id>/terminal.cast` is produced, the runner MUST attach
-    `evidence.terminal_recording_ref` to the `execute` phase record.
-- If the runner attempts `revert`, the runner MUST attach:
+- If `runner/actions/<action_id>/terminal.cast` is produced, the runner MUST attach
+  `evidence.terminal_recording_ref` to the `execute` phase record.
+- If `revert` is attempted, the runner MUST attach:
   - `evidence.executor_ref`, and
   - `evidence.cleanup_stdout_ref` and `evidence.cleanup_stderr_ref` to the `revert` phase record.
 - If `runner/actions/<action_id>/cleanup_verification.json` is produced, the runner MUST attach
   `evidence.cleanup_verification_ref` to the `teardown` phase record.
-- `runner/actions/<action_id>/terminal.cast` (optional; asciinema terminal session recording for
-  human playback; MUST NOT be used for scoring)
 - If `runner/actions/<action_id>/state_reconciliation_report.json` is produced, the runner MUST
   attach `evidence.state_reconciliation_report_ref` to the `teardown` phase record.
+
+Note (normative): `runner/actions/<action_id>/terminal.cast` is an optional asciinema terminal
+session recording for human playback and MUST NOT be used for scoring inputs.
 
 Requirements and environment assumptions (normative; when evaluated):
 
@@ -1626,12 +1766,15 @@ Required invariants:
      MUST enforce that `plan/expanded_graph.json.scenario_posture.mode` equals
      `manifest.scenario.posture.mode`.
 1. Scenario cardinality (v0.1):
-   - The set of distinct scenario IDs observed in `ground_truth.scenario_id` across all lines MUST
-     contain exactly one value.
+   - `manifest.scenario.scenario_id` MUST be present.
+   - `ground_truth.jsonl.scenario_id` MUST either be absent or equal the manifest scenario_id.
    - The set of distinct scenario IDs observed in `normalized.metadata.scenario_id` across all
      normalized events MUST contain exactly one value.
    - Multi-scenario runs are reserved in v0.1. If more than one distinct scenario ID is observed,
-     implementations MUST fail closed with `reason_code=contract.multi_scenario_reserved`.
+     implementations MUST fail closed.
+     - The enforcing stage MUST record a failed stage outcome with a stable `reason_code` drawn from
+       ADR-0005’s allowed catalog (codes not listed there MUST NOT be emitted). RECOMMENDED:
+       `config_schema_invalid`.
 1. Time bounds:
    - All `ground_truth.timestamp_utc` and normalized event times must be within
      `[manifest.started_at_utc, manifest.ended_at_utc]` when `ended_at_utc` is present, allowing a
@@ -1647,6 +1790,13 @@ Required invariants:
 1. Deterministic ordering requirements (for diffability):
    - When writing JSONL outputs, lines are sorted deterministically (see storage spec).
    - When writing Parquet, within-file ordering is deterministic (see storage spec).
+1. Publish-scratch hygiene (state machine integration):
+   - A finalized run bundle MUST NOT contain a non-empty `runs/<run_id>/.staging/` directory.
+   - If `runs/<run_id>/.staging/` exists and is non-empty after orchestration completes,
+     implementations MUST fail closed (cross-cutting reason code: `storage_io_error` per ADR-0005).
+1. Health/manifest coupling (when health files are emitted):
+   - If `runs/<run_id>/logs/health.json` is present, then `health.run_id` MUST equal
+     `manifest.run_id` and `health.status` MUST equal `manifest.status`.
 1. Action identifier model:
    - When `plan/expanded_graph.json` is present, every `ground_truth.action_id` MUST match the
      deterministic action instance id format: `^pa_aid_v1_[0-9a-f]{32}$`.
@@ -1679,10 +1829,15 @@ signing artifacts, and related metadata).
 
 ### Long-term artifact selection for checksumming
 
+`security/checksums.txt` MUST include one line per included file, sorted by `path` ascending using
+UTF-8 byte order (no locale), in the format: `<sha256_hex><space><path><newline>`. `path` MUST be
+run-relative using POSIX separators (`/`). Newlines MUST be `\n` (LF).
+
 `security/checksums.txt` MUST include every file under `runs/<run_id>/` except:
 
 - `logs/**` (volatile)
 - `unredacted/**` (quarantine, if present)
+- `.staging/**` (transient publish-gate scratch area)
 - `security/checksums.txt` and `security/signature.ed25519` (to avoid self-reference)
 
 Inclusion notes (normative):

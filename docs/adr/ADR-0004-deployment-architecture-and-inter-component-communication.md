@@ -51,14 +51,14 @@ Non-goal (v0.1): a required long-running daemon or scheduler control plane.
 #### Telemetry plane (OpenTelemetry Collector tiers)
 
 - Telemetry collection MUST follow the canonical OTel model:
-  - **Agent tier (required):** Collector on each endpoint to read OS sources (Windows Event Log with
-    `raw: true`, Sysmon, Linux auditd, syslog, osquery results).
+  - **Agent tier (required):** Collector on each endpoint to read OS sources (Windows Event Log
+    (including Sysmon) with `raw: true`, Linux auditd, syslog, osquery results).
   - **Gateway tier (optional):** A collector service that receives OTLP from agents and applies
     buffering/fan-out.
 - OTLP MAY be used between Collector tiers (agent to gateway, gateway to sinks).
 - OTLP MUST NOT be required as a coordination mechanism between Purple Axiom's core stages
-  (`lab_provider`, `runner`, `normalization`, `validation`, `detection`, `scoring`, `reporting`,
-  `signing`). Core-stage coordination is file-based.
+  (`lab_provider`, `runner`, `telemetry`, `normalization`, `validation`, `detection`, `scoring`,
+  `reporting`, `signing`). Core-stage coordination is file-based.
 
 #### Run bundle (coordination and evidence plane)
 
@@ -94,7 +94,7 @@ Core stages MUST use one of the following mechanisms, in priority order:
 1. **Local process invocation** (optional implementation detail).
 1. **OTLP within the telemetry plane only** (allowed for collectors, not for stage coordination).
 
-Core stages MUST NOT require service-to-service RPC between `lab_provider`, `runner`,
+Core stages MUST NOT require service-to-service RPC between `lab_provider`, `runner`, `telemetry`,
 `normalization`, `validation`, `detection`, `scoring`, `reporting`, and `signing` in v0.1.
 
 #### Stable stage identifiers
@@ -171,6 +171,11 @@ For any stage that writes a directory or multi-file artifact set:
 1. If the stage fails before publish, it MUST NOT create or partially populate the final output
    directory.
 
+Cleanup note: `.staging/` is an internal scratch area. Implementations SHOULD remove any remaining
+stage staging directories under `runs/<run_id>/.staging/` during run finalization or resume (after
+acquiring the run lock), but such cleanup MUST be limited to `.staging/**` and MUST NOT delete
+published outputs or logs.
+
 #### Completion requires outcome recording
 
 A stage MUST be considered complete only when:
@@ -183,6 +188,23 @@ A stage MUST be considered complete only when:
 
 Stage outcome recording and failure classification are defined in the
 [stage outcomes ADR](ADR-0005-stage-outcomes-and-failure-classification.md).
+
+#### State reconciliation rules (normative)
+
+- The orchestrator MUST perform a deterministic reconciliation pass after acquiring the run lock and
+  before executing any stage.
+- The orchestrator MUST treat stage outcomes recorded in `manifest.json` as the authoritative record
+  of stage completion. Published outputs MUST be treated as authoritative only when they are
+  consistent with a recorded outcome.
+- For any stage with a recorded outcome that implies outputs are published, the orchestrator MUST
+  verify the required published paths exist (and MUST run publish-gate contract validation where
+  applicable) before executing any downstream stage.
+- If published output paths for a stage exist but no stage outcome is recorded, the orchestrator
+  MUST re-run publish-gate contract validation on those outputs and then:
+  - if validation passes, record the missing stage outcome as `status="success"` (it SHOULD annotate
+    the outcome with an implementation-defined "reconciled from filesystem" marker), or
+  - if validation fails, fail closed and mark downstream stages `skipped`.
+- `.staging/**` entries MUST NOT be treated as published outputs during reconciliation.
 
 ### Error propagation and partial failures (v0.1)
 

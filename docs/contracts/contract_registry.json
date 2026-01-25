@@ -2,14 +2,6 @@
   "registry_version": "0.1.0",
   "contracts": [
     {
-      "contract_id": "action_descriptor",
-      "schema_path": "docs/contracts/action_descriptor.schema.json",
-      "contract_version": "0.1.0",
-      "purpose": "Action descriptor (schema-backed; artifact binding TBD in v0.1 spec).",
-      "artifact_kind": "other",
-      "format": "json"
-    },
-    {
       "contract_id": "bridge_compiled_plan",
       "schema_path": "docs/contracts/bridge_compiled_plan.schema.json",
       "contract_version": "0.1.0",
@@ -112,6 +104,14 @@
       "purpose": "Per-line schema for ground_truth.jsonl.",
       "artifact_kind": "run_artifact",
       "format": "jsonl"
+    },
+    {
+      "contract_id": "lab_inventory_snapshot",
+      "schema_path": "docs/contracts/lab_inventory_snapshot.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Deterministic lab inventory snapshot (logs/lab_inventory_snapshot.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
     },
     {
       "contract_id": "manifest",
@@ -264,6 +264,22 @@
       "purpose": "Telemetry validation summary (logs/telemetry_validation.json).",
       "artifact_kind": "run_artifact",
       "format": "json"
+    },
+    {
+      "contract_id": "threat_intel_indicator",
+      "schema_path": "docs/contracts/threat_intel_indicator.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Threat intel indicator records (inputs/threat_intel/indicators.jsonl).",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
+      "contract_id": "threat_intel_pack_manifest",
+      "schema_path": "docs/contracts/threat_intel_pack_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Threat intel pack snapshot manifest (inputs/threat_intel/manifest.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
     }
   ],
   "bindings": [
@@ -277,7 +293,10 @@
     { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "inputs/telemetry_baseline_profile.json", "contract_id": "telemetry_baseline_profile", "validation_mode": "json_document" },
+    { "artifact_glob": "inputs/threat_intel/indicators.jsonl", "contract_id": "threat_intel_indicator", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "inputs/threat_intel/manifest.json", "contract_id": "threat_intel_pack_manifest", "validation_mode": "json_document" },
     { "artifact_glob": "logs/cache_provenance.json", "contract_id": "cache_provenance", "validation_mode": "json_document" },
+    { "artifact_glob": "logs/lab_inventory_snapshot.json", "contract_id": "lab_inventory_snapshot", "validation_mode": "json_document" },
     { "artifact_glob": "logs/telemetry_validation.json", "contract_id": "telemetry_validation", "validation_mode": "json_document" },
     { "artifact_glob": "manifest.json", "contract_id": "manifest", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/mapping_coverage.json", "contract_id": "mapping_coverage", "validation_mode": "json_document" },

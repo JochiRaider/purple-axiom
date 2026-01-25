@@ -83,27 +83,67 @@ Version bumps:
 
 ### Selection and pinning
 
+Ownership and responsibility:
+
+- Criteria pack resolution and snapshotting is performed by the **validation stage** (the “criteria
+  evaluator”), which is the first stage that consumes criteria packs.
+- The runner MUST NOT resolve criteria packs (the runner only records execution-definition
+  provenance used for drift detection).
+
 Determinism requirement:
 
-- For any run intended to be diffable or regression-tested, the effective criteria pack MUST be
-  pinned by `pack_id` and a concrete `pack_version`, and MUST be recorded in the run manifest under
-  `manifest.versions.*` as:
-  - `manifest.versions.criteria_pack_id = <pack_id>`
-  - `manifest.versions.criteria_pack_version = <pack_version>`
+- For any run intended to be diffable across time and across environments (CI/regression), the
+  effective criteria pack MUST be pinned by `(criteria_pack_id, criteria_pack_version)` and recorded
+  in the run manifest under:
+  - `manifest.versions.criteria_pack_id`
+  - `manifest.versions.criteria_pack_version`
 
-If `pack_version` is not provided (non-recommended):
+Resolution algorithm (normative):
 
-1. Enumerate available `<pack_id>/<pack_version>/` directories across the configured search paths
-   (`validation.criteria_pack.paths[]`).
-1. Parse candidate versions as SemVer.
-1. Select the highest SemVer version.
-1. If no candidates parse as SemVer, fail closed (do not guess lexicographically).
-1. If the same `(pack_id, pack_version)` appears in multiple search paths, the runner MUST fail
-   closed unless the packs are identical as proven by:
-   - matching `criteria.pack_sha256` in the pack manifests, and
-   - matching `criteria_sha256` and `manifest_sha256` in the pack manifests.
+1. Let `criteria_pack_id = validation.criteria_pack.pack_id`.
+1. Let `criteria_pack_version = validation.criteria_pack.pack_version` (may be omitted;
+   non-recommended).
+1. Let `paths[] = validation.criteria_pack.paths[]` (search order is authoritative; earlier entries
+   win ties when content is identical).
 
-The resolved `(pack_id, pack_version)` MUST be recorded in run provenance (manifest and report).
+Case A — pinned version provided:
+
+- If `criteria_pack_version` is provided:
+  - The resolver MUST locate exactly `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/`
+    under the first search path where it exists.
+  - If the directory does not exist in any search path, the resolver MUST fail closed for
+    CI/regression runs.
+
+Case B — version omitted (non-recommended):
+
+- If `criteria_pack_version` is omitted:
+  1. Enumerate candidate versions under each search path in `paths[]` for
+     `criteria/packs/<criteria_pack_id>/`.
+  1. Parse candidate directory names as SemVer and select the highest precedence version.
+  1. The resolved `(criteria_pack_id, criteria_pack_version)` MUST be recorded in run provenance
+     (manifest and report).
+
+Duplicate `(id, version)` handling (normative):
+
+- If the same `(criteria_pack_id, criteria_pack_version)` appears in multiple search paths, the
+  resolver MUST fail closed **unless** the candidates are proven identical by:
+  - matching `criteria.pack_sha256` (and, for debugging, matching `criteria_sha256` and
+    `manifest_sha256`) in their manifests.
+- When duplicates are proven identical, the resolver MUST select the candidate from the earliest
+  matching search path in `paths[]` order.
+
+Pack validation before snapshot (normative):
+
+- Before snapshotting, the resolver MUST validate the selected pack directory:
+  - Required files exist:
+    - `manifest.json`
+    - `criteria.jsonl`
+  - `manifest.json` MUST validate against the criteria pack manifest schema.
+  - `criteria.jsonl` MUST validate line-by-line against the criteria entry schema.
+  - The resolver MUST recompute `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` and
+    MUST fail closed if any recorded hash differs from the recomputed value.
+  - The `criteria_pack_id` and `criteria_pack_version` values recorded inside `manifest.json` MUST
+    exactly match the selected directory identity.
 
 Note: `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` are content fingerprints and
 MUST NOT be used as a substitute for the version pins (`manifest.versions.criteria_pack_id` and
@@ -116,12 +156,20 @@ MUST NOT be used as a substitute for the version pins (`manifest.versions.criter
 
 ## Run bundle snapshot
 
-Each run snapshots the selected criteria pack into the run bundle so results remain reproducible
-even if the repo changes:
+The **validation stage** MUST snapshot the selected criteria pack into the run bundle so results
+remain reproducible even if the repo changes. After publish, the snapshot MUST be treated as
+read-only by all downstream stages.
+
+Snapshot paths:
 
 - `runs/<run_id>/criteria/manifest.json`
 - `runs/<run_id>/criteria/criteria.jsonl`
 - `runs/<run_id>/criteria/results.jsonl`
+
+Normative rule:
+
+- Criteria evaluation MUST use only the run-bundle snapshot (`runs/<run_id>/criteria/**`) and MUST
+  NOT read criteria pack files directly from the repository after snapshotting.
 
 Unless a `runs/<run_id>/` prefix is explicitly included, paths in this document are run-relative.
 
@@ -878,8 +926,8 @@ Minimum fields for `criteria/results.jsonl` (v0.1; one JSON object per action):
 - `criteria_ref` object (required; selection provenance)
 - `status` (`pass` | `fail` | `skipped`)
 - `reason_code` (required when `status=skipped`; omitted otherwise)
-  - This `reason_code` vocabulary is scoped to `criteria/results.jsonl` and is not a stage
-    outcome reason code (ADR-0005).
+  - This `reason_code` vocabulary is scoped to `criteria/results.jsonl` and is not a stage outcome
+    reason code (ADR-0005).
 - `signals[]` array:
   - MUST be an empty array (`[]`) when `status=skipped`.
   - Otherwise: one element per expected signal with `signal_id`, `status`, `matched_count`,
@@ -940,7 +988,7 @@ Deterministic ordering (normative):
 
 - The evaluator MUST emit `criteria/results.jsonl` rows in a deterministic order, sorted by:
   1. `scenario_id` ascending (UTF-8 byte order, no locale)
-  2. `action_id` ascending (UTF-8 byte order, no locale)
+  1. `action_id` ascending (UTF-8 byte order, no locale)
 
 ## Design constraints
 
@@ -991,8 +1039,8 @@ following minimal set:
 - `unstable_observation` (indeterminate; observation flaps across probes)
 - `disabled_by_policy` (skipped; check not run by policy)
 
-Note: This `reason_code` vocabulary is scoped to cleanup verification check results and is
-not a stage outcome reason code (ADR-0005).
+Note: This `reason_code` vocabulary is scoped to cleanup verification check results and is not a
+stage outcome reason code (ADR-0005).
 
 **Skipped requires reason_code**: If a check result status is `skipped`, it MUST include
 `reason_code`, and `reason_code` MUST be one of `unsupported_platform`, `insufficient_privileges`,

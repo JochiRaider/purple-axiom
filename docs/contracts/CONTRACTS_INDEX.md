@@ -32,6 +32,7 @@ Rows are sorted lexicographically by filename, all in the `docs/contracts/` diec
 | `detection_instance.schema.json`          | Schema for a single detection hit / finding                    |
 | `duckdb_conformance_report.schema.json`   | Schema for DuckDB conformance harness reports                  |
 | `ground_truth.schema.json`                | Schema for ground-truth execution evidence                     |
+| `lab_inventory_snapshot.schema.json`      | Schema for deterministic lab inventory snapshots               |
 | `manifest.schema.json`                    | Schema for the run manifest root object                        |
 | `mapping_coverage.schema.json`            | Schema for mapping coverage summaries                          |
 | `mapping_profile_input.schema.json`       | Schema for mapping profile input YAML files                    |
@@ -51,6 +52,8 @@ Rows are sorted lexicographically by filename, all in the `docs/contracts/` diec
 | `summary.schema.json`                     | Schema for run-level summary outputs                           |
 | `telemetry_baseline_profile.schema.json`  | Schema for telemetry baseline profiles                         |
 | `telemetry_validation.schema.json`        | Schema for telemetry validation outputs                        |
+| `threat_intel_indicator.schema.json`      | Schema for normalized threat-intel indicator records           |
+| `threat_intel_pack_manifest.schema.json`  | Schema for threat-intel pack manifest snapshots                |
 
 ## Update rule (required)
 

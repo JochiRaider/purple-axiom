@@ -150,11 +150,14 @@ lexicographically by full `stage` string.
 
 - This ADR governs stage/substage outcome `reason_code` values only (those emitted in
   `manifest.stage_outcomes[]` and `logs/health.json`).
+
 - Other contract-backed artifacts may also use a field named `reason_code`; those vocabularies are
   scoped to their owning schema and are not governed by this ADR.
 
 - `reason_code` MUST be ASCII `lower_snake_case`.
+
 - `reason_code` MUST be stable across runs and versions within v0.1.
+
 - `reason_code` MUST be selected from the normative catalog in this ADR for the relevant
   `(stage, reason_code)` pair.
 
@@ -237,18 +240,18 @@ MUST NOT be emitted as a stage outcome `reason_code` in `logs/health.json` (or
 
 These reason codes MAY be used for any stage.
 
-| Reason code                          | Severity | Description                                                                                                               |
-| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `redaction_policy_error`             | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                                       |
-| `config_schema_invalid`              | FATAL    | A required config artifact is schema-invalid (for example `range.yaml`, `manifest.json`, or `inputs/plan_draft.yaml` when plan building is enabled).|
-| `input_missing`                      | FATAL    | Required upstream input artifact missing or unreadable.                                                                   |
-| `lock_acquisition_failed`            | FATAL    | Exclusive lock could not be acquired.                                                                                     |
-| `storage_io_error`                   | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                                         |
-| `blocked_by_upstream_failure`        | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                                           |
-| `threat_intel_pack_not_found`        | FATAL    | Threat intelligence pack requested but not found (resolved directory missing and/or required files absent).               |
-| `threat_intel_pack_ambiguous`        | FATAL    | Multiple sources match the same `(pack_id, pack_version)` but differ in content; selection is ambiguous.                  |
-| `threat_intel_pack_invalid`          | FATAL    | Threat intelligence pack failed validation (schema invalid, hash mismatch, or indicators JSONL parse/validation failure). |
-| `threat_intel_snapshot_inconsistent` | FATAL    | Existing `inputs/threat_intel/` snapshot does not match resolved pins/hashes and would break reproducibility.             |
+| Reason code                          | Severity | Description                                                                                                                                          |
+| ------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `redaction_policy_error`             | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                                                                  |
+| `config_schema_invalid`              | FATAL    | A required config artifact is schema-invalid (for example `range.yaml`, `manifest.json`, or `inputs/plan_draft.yaml` when plan building is enabled). |
+| `input_missing`                      | FATAL    | Required upstream input artifact missing or unreadable.                                                                                              |
+| `lock_acquisition_failed`            | FATAL    | Exclusive lock could not be acquired.                                                                                                                |
+| `storage_io_error`                   | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                                                                    |
+| `blocked_by_upstream_failure`        | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                                                                      |
+| `threat_intel_pack_not_found`        | FATAL    | Threat intelligence pack requested but not found (resolved directory missing and/or required files absent).                                          |
+| `threat_intel_pack_ambiguous`        | FATAL    | Multiple sources match the same `(pack_id, pack_version)` but differ in content; selection is ambiguous.                                             |
+| `threat_intel_pack_invalid`          | FATAL    | Threat intelligence pack failed validation (schema invalid, hash mismatch, or indicators JSONL parse/validation failure).                            |
+| `threat_intel_snapshot_inconsistent` | FATAL    | Existing `inputs/threat_intel/` snapshot does not match resolved pins/hashes and would break reproducibility.                                        |
 
 ### Lab provider stage (`lab_provider`)
 
@@ -311,7 +314,7 @@ Default `fail_mode`: `fail_closed`
 
 | Reason code                    | Severity | Description                                                                |
 | ------------------------------ | -------- | -------------------------------------------------------------------------- |
-| `invalid_posture_mode`         | FATAL    | `posture.mode` is present but not one of the allowed enum values.            |
+| `invalid_posture_mode`         | FATAL    | `posture.mode` is present but not one of the allowed enum values.          |
 | `version_pin_missing`          | FATAL    | Required version pin is missing for an enabled feature (rules/packs/etc.). |
 | `version_pin_unparseable`      | FATAL    | A `semver_v1` pin cannot be parsed as SemVer.                              |
 | `version_resolution_failed`    | FATAL    | Omitted SemVer pin cannot be resolved deterministically (no candidates).   |
@@ -814,8 +817,8 @@ Default `fail_mode`: `fail_closed` (when enabled)
 
 ## Changelog
 
-| Date       | Change                                                  |
-| ---------- | ------------------------------------------------------- |
+| Date       | Change                                                                           |
+| ---------- | -------------------------------------------------------------------------------- |
 | 2026-01-25 | Replace legacy `plan.json` example with `inputs/plan_draft.yaml` for plan drafts |
-| 2026-01-13 | Add telemetry.network.egress_policy canary reason codes |
-| 2026-01-12 | Formatting update                                       |
+| 2026-01-13 | Add telemetry.network.egress_policy canary reason codes                          |
+| 2026-01-12 | Formatting update                                                                |

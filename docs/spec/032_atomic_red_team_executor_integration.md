@@ -1344,15 +1344,13 @@ Reason code scope (normative):
 
 - Stage/substage outcome `reason_code` values emitted in `manifest.stage_outcomes[]` and
   `logs/health.json` are governed exclusively by ADR-0005.
-- The reason codes listed below are action-level reason codes emitted in per-action
-  lifecycle/phase records and runner evidence. They MUST NOT be emitted as stage/substage
-  outcome reason codes in `logs/health.json` unless the specific code is also present in
-  ADR-0005 for that stage/substage.
+- The reason codes listed below are action-level reason codes emitted in per-action lifecycle/phase
+  records and runner evidence. They MUST NOT be emitted as stage/substage outcome reason codes in
+  `logs/health.json` unless the specific code is also present in ADR-0005 for that stage/substage.
 
-When an action-level failure causes the overall runner stage to fail, the runner MUST map it to
-the appropriate ADR-0005 runner stage reason code (for example `prepare_failed`,
-`execute_failed`, `cleanup_invocation_failed`) while preserving the action-level reason code in
-the per-action record.
+When an action-level failure causes the overall runner stage to fail, the runner MUST map it to the
+appropriate ADR-0005 runner stage reason code (for example `prepare_failed`, `execute_failed`,
+`cleanup_invocation_failed`) while preserving the action-level reason code in the per-action record.
 
 At minimum, the runner MUST emit stable action-level reason codes for these failure classes:
 

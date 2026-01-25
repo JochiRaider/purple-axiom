@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Audit event (UI and control plane)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "ts",
+    "event_id",
+    "actor",
+    "session_id",
+    "client_ip",
+    "action",
+    "target",
+    "outcome"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.2.0",
+      "description": "Audit event contract version."
+    },
+    "ts": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+      "description": "RFC3339 timestamp in UTC (must include Z suffix)."
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "UUID (lowercase hex)."
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "auth_provider"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "auth_provider": {
+          "type": "string",
+          "enum": [
+            "local"
+          ],
+          "description": "Authentication provider. v0.2 supports local auth."
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Session identifier; null allowed for CLI-originated events."
+    },
+    "client_ip": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Best-effort client IP; null allowed for CLI-originated events."
+    },
+    "action": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "description": "Dot-separated action name; each segment must be lower_snake_case."
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^/[^?#]*$",
+          "description": "HTTP path (no querystring or fragment)."
+        },
+        "verb": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ]
+        },
+        "export_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "allowed",
+        "denied",
+        "succeeded",
+        "failed"
+      ],
+      "description": "allowed/denied are gate decisions; succeeded/failed are execution outcomes."
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "auth_invalid_credentials",
+        "auth_account_disabled",
+        "session_expired",
+        "allowlist_denied",
+        "origin_mismatch",
+        "concurrency_limit",
+        "run_busy",
+        "run_lock_held",
+        "run_not_found",
+        "run_already_terminal",
+        "artifact_path_denied",
+        "artifact_extension_denied",
+        "artifact_path_traversal",
+        "quarantine_access_disabled",
+        "export_policy_denied",
+        "config_validation_failed"
+      ],
+      "description": "Required for denied/failed outcomes; v0.2 closed set."
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Forward-compatible extension point."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "denied",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "reason_code"
+        ]
+      }
+    }
+  ]
+}

@@ -123,7 +123,6 @@ The following list is for navigation only. The authoritative mapping is
 
 - `docs/contracts/manifest.schema.json`
 - `docs/contracts/ground_truth.schema.json`
-- `docs/contracts/action_descriptor.schema.json`
 - `docs/contracts/principal_context.schema.json`
 - `docs/contracts/defense_outcomes.schema.json`
 - `docs/contracts/cache_provenance.schema.json`

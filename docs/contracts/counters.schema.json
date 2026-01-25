@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/contracts/counters.schema.json",
+  "title": "Purple Axiom Run Counters",
+  "description": "Run-level snapshot of stable counters and gauges for debugging, CI assertions, and deterministic regression triage. Contract for runs/<run_id>/logs/counters.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "schema_version",
+    "run_id",
+    "generated_at_utc",
+    "counters"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Schema contract version (SemVer). Must match the contract_version declared in the authoritative contract registry for contract_id='counters'."
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "pa:counters:v1",
+      "description": "Logical schema identifier for this artifact shape."
+    },
+    "run_id": {
+      "$ref": "#/$defs/run_id"
+    },
+    "generated_at_utc": {
+      "$ref": "#/$defs/rfc3339_utc"
+    },
+    "counters": {
+      "type": "object",
+      "description": "Map of counter_name -> u64. Producers must serialize keys in deterministic sorted order (UTF-8 byte order, no locale).",
+      "additionalProperties": {
+        "$ref": "#/$defs/u64"
+      }
+    },
+    "gauges": {
+      "type": "object",
+      "description": "Optional map of gauge_name -> number. Producers must serialize keys in deterministic sorted order (UTF-8 byte order, no locale). Values must be finite JSON numbers (JSON does not support NaN/Infinity).",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "$defs": {
+    "run_id": {
+      "type": "string",
+      "description": "Run identifier. Cross-artifact invariant: MUST equal manifest.run_id.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "rfc3339_utc": {
+      "type": "string",
+      "description": "RFC 3339 timestamp in UTC ('Z' suffix).",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "u64": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615,
+      "description": "Unsigned 64-bit integer (inclusive range [0, 2^64-1])."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved extension point for forward-compatible additions and vendor-specific data. Keys are namespace identifiers; values should be JSON objects.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "$comment": "Determinism requirements for JSON key ordering and cross-artifact invariants (for example, run_id == manifest.run_id) are specified by the data contracts spec and cannot be fully enforced by JSON Schema alone."
+}

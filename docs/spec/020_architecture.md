@@ -567,8 +567,7 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
 
    - `manifest.status` MUST be derived from stage outcomes, not from ad-hoc runtime heuristics.
    - Stage outcome `reason_code` MUST be selected from the normative catalog for the relevant
-     `(stage, reason_code)` pair (see ADR-0005); unknown stage-outcome reason codes are
-     forbidden.
+     `(stage, reason_code)` pair (see ADR-0005); unknown stage-outcome reason codes are forbidden.
 
 1. **Safety policy is enforced, not advisory**
 

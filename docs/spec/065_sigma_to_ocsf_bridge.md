@@ -7,11 +7,14 @@ tags: [bridge, sigma, ocsf]
 related:
   - 060_detection_sigma.md
   - 050_normalization_ocsf.md
-  - ADR-0002-event-identity-and-provenance.md
-  - 070_scoring_metrics.md
   - 025_data_contracts.md
-  - ADR-0005-stage-outcomes-and-failure-classification.md
-  - ADR-0007-state-machines.md
+  - 080_reporting.md
+  - 120_config_reference.md
+  - 070_scoring_metrics.md
+  - ../adr/ADR-0001-project-naming-and-versioning.md
+  - ../adr/ADR-0002-event-identity-and-provenance.md
+  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
+  - ../adr/ADR-0007-state-machines.md
 ---
 
 # Sigma-to-OCSF bridge
@@ -140,7 +143,8 @@ Each filter object MUST have:
       - `eq` matches iff any element equals `value`.
       - `neq` matches iff no element equals `value`.
   - `in` / `nin`:
-    - `value` MUST be an array.
+    - `value` MUST be an array. If `value` is not an array, the filter is invalid and the mapping
+      pack MUST be rejected as invalid (detection stage fatal `bridge_mapping_pack_invalid`).
     - If resolved VALUE is a scalar:
       - `in` matches iff the scalar is equal to any element of `value`.
       - `nin` matches iff the scalar is equal to no elements of `value`.
@@ -148,11 +152,15 @@ Each filter object MUST have:
       - `in` matches iff any element is equal to any element of `value`.
       - `nin` matches iff no element is equal to any element of `value` (intersection empty).
   - `contains` / `prefix` / `suffix`:
+    - `value` MUST be a string. If `value` is not a string, the filter is invalid and the mapping
+      pack MUST be rejected as invalid (detection stage fatal `bridge_mapping_pack_invalid`).
     - Resolved VALUE MUST be a string, or an array of strings.
     - When resolved VALUE is an array, the predicate matches iff any element matches.
     - `prefix` is equivalent to a "starts with" match; `suffix` is equivalent to an "ends with"
       match.
   - `regex`:
+    - `value` MUST be a string. If `value` is not a string, the filter is invalid and the mapping
+      pack MUST be rejected as invalid (detection stage fatal `bridge_mapping_pack_invalid`).
     - Resolved VALUE MUST be a string, or an array of strings (any-element semantics).
     - Patterns MUST be RE2-compatible.
     - `regex` is a search match unless the pattern is explicitly anchored.
@@ -166,7 +174,8 @@ Determinism:
 
 Example (router table route entry):
 
-Note: `metadata.source_type` values MUST use mapping-pack `event_source_type` tokens (see ADR-0002).
+Note: `metadata.source_type` values MUST use mapping-pack `event_source_type` tokens (see ADR-0002)
+and MUST conform to `id_slug_v1` (see ADR-0001).
 
 ```json
 {
@@ -256,10 +265,28 @@ For the selected route:
 
 ### Mapping packs
 
-Adopt SigmaHQ’s OCSF routing where possible, then constrain to your pinned OCSF version and enabled
-profiles.
+#### Selection and pins (normative)
 
-The mapping pack is versioned independently of:
+When `detection.sigma.enabled=true`, the bridge MUST resolve a mapping pack using:
+
+- `detection.sigma.bridge.mapping_pack` (pack id)
+- `detection.sigma.bridge.mapping_pack_version` (pack version)
+
+The resolved `(mapping_pack_id, mapping_pack_version)` MUST be recorded in run provenance
+(`manifest.json.versions.*`) per ADR-0001.
+
+If mapping pack resolution or contract validation fails, the detection stage MUST fail with
+`reason_code="bridge_mapping_pack_invalid"`. The stage `fail_mode` MUST follow
+`detection.sigma.bridge.fail_mode` (default: `fail_closed`).
+
+#### Authoring guidance (non-normative)
+
+Adopt SigmaHQ’s OCSF routing where possible, then constrain to the pinned OCSF version and the
+enabled normalization mapping profiles for the run (`normalization.mapping_profiles`).
+
+#### Version domain (normative)
+
+The mapping pack version domain is independent of:
 
 - the Sigma ruleset version
 - the Purple Axiom pipeline version
@@ -293,7 +320,7 @@ A deterministic resolution expression is permitted only when:
 
 - each candidate expression is type-compatible under the backend, and
 - the expression ordering is deterministic (ascending by `class_uid`), and
-- the semantics are explicitly "value from any routed class".n.
+- the semantics are explicitly "value from any routed class" (union semantics at the field level).
 
 Recommended structure (conceptual):
 
@@ -333,7 +360,8 @@ filter, the mapping pack MUST be rejected as invalid (detection stage fatal
 
 If rule compilation requires `raw.*` fallback and the selected route does not contain the required
 `metadata.source_type` filter, the rule MUST be marked non-executable with
-`reason_code="raw_fallback_disabled"` and an explanation that the safety gate prevented fallback.
+`reason_code="raw_fallback_disabled"` and an explanation that the safety gate blocked fallback (raw
+fallback is treated as effectively disabled for this rule).
 
 #### Recording and determinism (normative)
 
@@ -387,7 +415,7 @@ The bridge MUST classify Sigma features into one of:
   - Each match group MUST correspond to exactly one matched event id.
   - The evaluator MUST emit one detection instance per matched event with:
     - `matched_event_ids = [<event_id>]`
-    - `first_seen_utc == last_seen_utc` (event time)
+    - `first_seen_utc == last_seen_utc` (event time derived from the OCSF `time` field; UTC)
 
 Version pinning (normative):
 
@@ -422,7 +450,7 @@ At least one of the following MUST be true to justify adding or enabling Tenzir:
 
 ### Backend conformance gates (CI)
 
-Any backend implementation (including `duckdb_sql` and `tenzir` in v0.2) MUST satisfy the following
+Any backend implementation (including `duckdb_sql` and `tenzir` in v0.2) MUST satisfy the following.
 Conformance fixtures for these gates are defined in
 [test strategy CI: unit tests](100_test_strategy_ci.md#unit-tests) (rule compilation, multi-class
 routing) and [test strategy CI: integration tests](100_test_strategy_ci.md#integration-tests)
@@ -456,10 +484,10 @@ the evaluator backend adapter. It is authoritative for:
 
    - For each evaluated Sigma rule, the bridge MUST emit exactly one compiled plan file under
      `bridge/compiled_plans/<rule_id>.plan.json` (see "Bridge artifacts in the run bundle").
-   - A compiled plan MUST either:
-     - be executable (contains backend-specific executable content), or
-     - be explicitly non-executable (contains `non_executable_reason` with a stable `reason_code`
-       and a human-readable explanation).
+   - A compiled plan MUST declare `executable: true | false` and MUST either:
+     - be executable (`executable=true` and contains backend-specific executable content), or
+     - be explicitly non-executable (`executable=false` and contains `non_executable_reason` with a
+       stable `reason_code` and a human-readable explanation).
 
 1. Fail-closed semantics:
 
@@ -650,6 +678,10 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
      - a deterministic `explanation` string.
    - For backend-originated compilation failures, the `explanation` MUST include the stable backend
      error code prefix `PA_SIGMA_. .` (as defined by R-03) to support deterministic aggregation.
+   - `explanation` strings MUST be deterministic and redaction-safe:
+     - MUST NOT include raw event payload fragments or `raw.*` values.
+     - SHOULD avoid embedding volatile backend text (file paths, line numbers, memory addresses);
+       include only stable error tokens plus minimal, non-sensitive context.
 
 1. Determinism requirements:
 
@@ -663,8 +695,9 @@ plan entry with a stable `non_executable_reason.reason_code` and deterministic e
 At a minimum, the following mappings MUST apply:
 
 - Unknown logsource -> unroutable_logsource
+- Ambiguous field alias resolution -> ambiguous_field_alias
 - Unmapped Sigma field (no alias + fallback disabled) -> unmapped_field
-- Raw fallback required but disabled -> raw_fallback_disabled
+- Raw fallback required but disabled or blocked by policy -> raw_fallback_disabled
 - Unsupported modifier -> unsupported_modifier
 - Unsupported operator -> unsupported_operator
 - Unsupported value type -> unsupported_value_type
@@ -696,6 +729,8 @@ These artifacts MUST conform to the data contracts specification, including cano
   - MUST include `mapping_pack_id`, `mapping_pack_version`, `ocsf_version`, `router_table_ref`,
     `field_aliases`, `fallback_policy`, optional `backend_defaults`, `mapping_pack_sha256`, and
     `generated_at_utc`.
+  - `router_table_ref` MUST reference the router table by id + version + `router_table_sha256`.
+    Mapping packs SHOULD embed the referenced router table for single-file reproducibility.
   - `mapping_pack_sha256` MUST be computed as specified by the data contracts specification (SHA-256
     over canonical JSON stable inputs; MUST exclude run-specific fields such as `run_id`,
     `scenario_id`, and `generated_at_utc`).
@@ -705,20 +740,50 @@ These artifacts MUST conform to the data contracts specification, including cano
   - `compiled_plans/<rule_id>.plan.json` MUST be emitted for each evaluated rule.
   - Each plan MUST include:
     - `rule_id`
-    - `rule_sha256` (SHA-256 over canonical Sigma rule bytes per the data contracts specification)
+    - `rule_sha256` (SHA-256 over canonical Sigma rule bytes per the data contracts specification;
+      see canonical rule hashing guidance in `060_detection_sigma.md`)
     - `mapping_pack_sha256`
-    - `non_executable_reason` when non-executable
+    - `executable` (boolean)
+    - `non_executable_reason` when `executable=false`
 
 - `coverage.json` (required)
 
-  - MUST include `mapping_pack_sha256` and MUST reference `mapping_profile_sha256` as required by
-    the data contracts specification.
+  - MUST include:
+
+    - `mapping_pack_ref` (at minimum: `mapping_pack_id`, `mapping_pack_version`,
+      `mapping_pack_sha256`)
+    - `mapping_profile_sha256`
+    - `ocsf_version`
+    - `total_rules`
+    - `routed_rules`
+    - `executable_rules`
+    - `matched_rules`
+    - `match_events_total`
+    - `fallback_used_rules`
+    - `non_executable_reason_counts` (map: `reason_code -> count`)
+    - `top_unmapped_fields` (array of `{field, count}`; MAY be empty)
+    - `top_unroutable_logsources` (array of `{logsource, count}`; MAY be empty)
+
+  - Determinism:
+
+    - `top_unmapped_fields` MUST be sorted by (`count` desc, then `field` asc).
+    - `top_unroutable_logsources` MUST be sorted by (`count` desc, then `logsource` asc).
 
 ### Cross-artifact invariants (normative)
 
 - `mapping_pack_snapshot.json.ocsf_version` MUST match the run's OCSF version pins (including
   `manifest.json.versions.ocsf_version`).
+
+- `mapping_pack_snapshot.json.mapping_pack_id` and `mapping_pack_snapshot.json.mapping_pack_version`
+  MUST match the resolved mapping pack pins recorded in `manifest.json.versions.*` (see ADR-0001).
+
+- When present, `bridge/coverage.json.mapping_profile_sha256` MUST match
+  `normalized/mapping_profile_snapshot.json.mapping_profile_sha256`.
+
 - Any mismatch MUST fail closed and MUST NOT proceed with rule evaluation.
+
+  - Fail-closed reason code (stage-level): `bridge_mapping_pack_invalid`
+  - Stage `fail_mode`: follow `detection.sigma.bridge.fail_mode`
 
 ## Bridge provenance in detections
 
@@ -753,6 +818,33 @@ available.
   - unknown logsource, unmapped fields (without fallback), or unsupported modifiers MUST not
     silently degrade into "no matches"
 
+## State machine integration hooks (representational, non-normative)
+
+The bridge’s per-rule compilation/evaluation lifecycle is a candidate for explicit state machine
+modeling per ADR-0007 to improve determinism, observability, and testability.
+
+Lifecycle authority remains:
+
+- ADR-0005 (stage outcomes and reason codes)
+- Data contracts specification (required artifacts when detection is enabled)
+- Detection specification (Sigma execution model + representational per-rule lifecycle)
+- This specification (routing, aliasing, backend adapter contract, and non-executable reasons)
+
+Representational per-rule lifecycle (v0.1; within the detection stage):
+
+- `loaded` → `compiled(executable=true)` → `evaluated`
+- `loaded` → `compiled(executable=true)` → `evaluated(error)` (recorded as non-executable with
+  `non_executable_reason.reason_code: "backend_eval_error"`)
+- `loaded` → `compiled(executable=false)` (non-executable; recorded in `bridge/compiled_plans/`)
+
+Observable anchors (run bundle):
+
+- Stage outcome: `manifest.json` / `logs/health.json` entry for stage `detection` (status +
+  reason_code)
+- Publish gate artifacts when enabled: `detections/detections.jsonl` and `bridge/**`
+- Per-rule compiled plan files: `bridge/compiled_plans/<rule_id>.plan.json` (executable flag and
+  `non_executable_reason`)
+
 ## Testing guidance (MVP)
 
 - Golden tests:
@@ -780,12 +872,15 @@ scoring impact.
 
 ## References
 
-- [Detection rules specification](060_detection_sigma.md)
+- [Detection specification](060_detection_sigma.md)
+- [Configuration reference](120_config_reference.md)
+- [Reporting specification](080_reporting.md)
+- [ADR-0001: Project naming and versioning](../adr/ADR-0001-project-naming-and-versioning.md)
 - [Supported versions reference](../../SUPPORTED_VERSIONS.md)
-- [Test strategy CI specification](100_test_strategy_ci.md)
+- [Test strategy CI](100_test_strategy_ci.md)
 - [Bridge router table schema](../contracts/bridge_router_table.schema.json)
-- [Bridge compiled plan schema](../contracts/bridge_compiled_plan.schema.json)
 - [Bridge mapping pack schema](../contracts/bridge_mapping_pack.schema.json)
+- [Bridge compiled plan schema](../contracts/bridge_compiled_plan.schema.json)
 - [Bridge coverage schema](../contracts/bridge_coverage.schema.json)
 
 ## Changelog

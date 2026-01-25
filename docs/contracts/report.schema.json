@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://purple-axiom.local/schemas/report_schema.json",
+  "$id": "https://purple-axiom.local/schemas/report.schema.json",
   "title": "Purple Axiom Run Report (report/report.json)",
   "type": "object",
   "additionalProperties": false,

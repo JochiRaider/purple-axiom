@@ -106,7 +106,8 @@ to `runs/<run_id>/`).
     invocation, and cleanup verification.
   - Runner-evidence artifacts required for deterministic joins and safe disclosure are in scope,
     including (non-exhaustive): `runner/actions/<action_id>/resolved_inputs_redacted.json`,
-    `runner/actions/<action_id>/requirements_evaluation.json`, and `runner/side_effects.json`.
+    `runner/actions/<action_id>/requirements_evaluation.json`, and
+    `runner/actions/<action_id>/side_effect_ledger.json`.
   - Runner requirements evaluation is in scope:
     - Deterministic pre-execution requirement checks (platform, privilege, tool availability).
     - Deterministic action `skipped` outcomes and reason codes when requirements are not satisfied.

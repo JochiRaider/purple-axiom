@@ -1,14 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Purple Axiom range.yaml configuration (v0.1)",
+  "$id": "range_config.schema.json",
+  "title": "Purple Axiom range configuration (range.yaml)",
+  "description": "JSON Schema for the Purple Axiom range configuration file (range.yaml).",
+  "$comment": "contract_id=range_config; contract_version=0.1.0",
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
     "lab": {
       "$ref": "#/$defs/lab"
     },
     "runner": {
       "$ref": "#/$defs/runner"
+    },
+    "cache": {
+      "$ref": "#/$defs/cache"
     },
     "control_plane": {
       "$ref": "#/$defs/control_plane"
@@ -34,9 +44,6 @@
     "operability": {
       "$ref": "#/$defs/operability"
     },
-    "cache": {
-      "$ref": "#/$defs/cache"
-    },
     "security": {
       "$ref": "#/$defs/security"
     },
@@ -47,11 +54,398 @@
   "required": [
     "lab",
     "runner",
-    "telemetry",
     "normalization",
     "reporting"
   ],
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "security": {
+            "properties": {
+              "secrets": {
+                "properties": {
+                  "provider": {
+                    "const": "env"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            },
+            "required": [
+              "secrets"
+            ]
+          }
+        },
+        "required": [
+          "security"
+        ]
+      },
+      "then": {
+        "properties": {
+          "runner": {
+            "properties": {
+              "caldera": {
+                "properties": {
+                  "api_token_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  }
+                }
+              }
+            }
+          },
+          "control_plane": {
+            "properties": {
+              "auth": {
+                "properties": {
+                  "username_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  },
+                  "password_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  },
+                  "private_key_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  },
+                  "token_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  }
+                }
+              }
+            }
+          },
+          "reporting": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  }
+                }
+              }
+            }
+          },
+          "security": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  }
+                }
+              },
+              "signing": {
+                "properties": {
+                  "key_ref": {
+                    "$ref": "#/$defs/secret_ref_env"
+                  }
+                }
+              },
+              "secrets": {
+                "properties": {
+                  "refs": {
+                    "$ref": "#/$defs/security_secrets_refs_env"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "security": {
+            "properties": {
+              "secrets": {
+                "properties": {
+                  "provider": {
+                    "const": "file"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            },
+            "required": [
+              "secrets"
+            ]
+          }
+        },
+        "required": [
+          "security"
+        ]
+      },
+      "then": {
+        "properties": {
+          "runner": {
+            "properties": {
+              "caldera": {
+                "properties": {
+                  "api_token_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  }
+                }
+              }
+            }
+          },
+          "control_plane": {
+            "properties": {
+              "auth": {
+                "properties": {
+                  "username_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  },
+                  "password_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  },
+                  "private_key_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  },
+                  "token_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  }
+                }
+              }
+            }
+          },
+          "reporting": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  }
+                }
+              }
+            }
+          },
+          "security": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  }
+                }
+              },
+              "signing": {
+                "properties": {
+                  "key_ref": {
+                    "$ref": "#/$defs/secret_ref_file"
+                  }
+                }
+              },
+              "secrets": {
+                "properties": {
+                  "refs": {
+                    "$ref": "#/$defs/security_secrets_refs_file"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "security": {
+            "properties": {
+              "secrets": {
+                "properties": {
+                  "provider": {
+                    "const": "keychain"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            },
+            "required": [
+              "secrets"
+            ]
+          }
+        },
+        "required": [
+          "security"
+        ]
+      },
+      "then": {
+        "properties": {
+          "runner": {
+            "properties": {
+              "caldera": {
+                "properties": {
+                  "api_token_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  }
+                }
+              }
+            }
+          },
+          "control_plane": {
+            "properties": {
+              "auth": {
+                "properties": {
+                  "username_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  },
+                  "password_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  },
+                  "private_key_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  },
+                  "token_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  }
+                }
+              }
+            }
+          },
+          "reporting": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  }
+                }
+              }
+            }
+          },
+          "security": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  }
+                }
+              },
+              "signing": {
+                "properties": {
+                  "key_ref": {
+                    "$ref": "#/$defs/secret_ref_keychain"
+                  }
+                }
+              },
+              "secrets": {
+                "properties": {
+                  "refs": {
+                    "$ref": "#/$defs/security_secrets_refs_keychain"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "security": {
+            "properties": {
+              "secrets": {
+                "properties": {
+                  "provider": {
+                    "const": "custom"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            },
+            "required": [
+              "secrets"
+            ]
+          }
+        },
+        "required": [
+          "security"
+        ]
+      },
+      "then": {
+        "properties": {
+          "runner": {
+            "properties": {
+              "caldera": {
+                "properties": {
+                  "api_token_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  }
+                }
+              }
+            }
+          },
+          "control_plane": {
+            "properties": {
+              "auth": {
+                "properties": {
+                  "username_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  },
+                  "password_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  },
+                  "private_key_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  },
+                  "token_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  }
+                }
+              }
+            }
+          },
+          "reporting": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  }
+                }
+              }
+            }
+          },
+          "security": {
+            "properties": {
+              "redaction": {
+                "properties": {
+                  "policy_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  }
+                }
+              },
+              "signing": {
+                "properties": {
+                  "key_ref": {
+                    "$ref": "#/$defs/secret_ref_custom"
+                  }
+                }
+              },
+              "secrets": {
+                "properties": {
+                  "refs": {
+                    "$ref": "#/$defs/security_secrets_refs_custom"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {
@@ -78,69 +472,287 @@
         ]
       },
       "then": {
-        "required": [
-          "cache"
-        ],
         "properties": {
           "cache": {
-            "properties": {
-              "policy": {
-                "const": "cross_run_allowed"
-              }
-            },
             "required": [
-              "policy"
-            ]
+              "cross_run_allowed",
+              "emit_cache_provenance"
+            ],
+            "properties": {
+              "cross_run_allowed": {
+                "const": true
+              },
+              "emit_cache_provenance": {
+                "const": true
+              }
+            }
           }
-        }
+        },
+        "required": [
+          "cache"
+        ]
       }
     }
   ],
   "$defs": {
     "extensions": {
       "type": "object",
-      "description": "Forward-compatible extension point. Keys are implementation-defined.",
+      "description": "Forward-compatible extension bag. Keys are implementation-defined.",
       "additionalProperties": true
     },
-    "nonempty_string": {
+    "id_slug_v1": {
       "type": "string",
-      "minLength": 1
-    },
-    "path": {
-      "type": "string",
-      "minLength": 1
-    },
-    "secret_ref": {
-      "type": "string",
-      "pattern": "^(env|file|keychain|custom):.+$"
+      "pattern": "^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "description": "ID slug v1 (lowercase ASCII, hyphen-separated)."
     },
     "semver": {
       "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "description": "Semantic Versioning 2.0.0 string."
     },
-    "attck_technique_id": {
+    "version_token_v1": {
       "type": "string",
-      "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$",
+      "description": "Version token v1 (no slashes/spaces); may be SemVer or implementation token."
     },
-    "string_array": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID string (lowercase hex with hyphens)."
     },
-    "cache_policy": {
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex SHA-256 digest."
+    },
+    "hex64": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "64 lowercase hex characters."
+    },
+    "attack_technique_id": {
+      "type": "string",
+      "pattern": "^T[0-9]{4}(?:\\.[0-9]{3})?$",
+      "description": "MITRE ATT&CK technique id (e.g., T1059 or T1059.001)."
+    },
+    "path_any": {
+      "type": "string",
+      "pattern": "^[^\\r\\n]+$",
+      "description": "Filesystem path (string). Newlines are disallowed."
+    },
+    "path_rel": {
+      "type": "string",
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!\\\\\\\\\\\\\\\\)[^\\r\\n]+$",
+      "description": "Relative filesystem path (must not be absolute or UNC)."
+    },
+    "path_abs": {
+      "type": "string",
+      "description": "Absolute filesystem path (Unix, Windows drive, or UNC).",
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^/[^\\\\0\\r\\n]+$"
+        },
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z]:[\\\\/][^\\r\\n]+$"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\\\\\\\\\\\\\\\[^\\r\\n]+$"
+        }
+      ]
+    },
+    "secret_ref_any": {
+      "type": "string",
+      "pattern": "^(env|file|keychain|custom):[^\\r\\n]+$",
+      "description": "Secret reference string: <provider>:<selector>."
+    },
+    "secret_ref_env": {
+      "type": "string",
+      "pattern": "^env:[A-Za-z_][A-Za-z0-9_]*$",
+      "description": "Secret reference string using env:<VAR_NAME>."
+    },
+    "secret_ref_file": {
+      "type": "string",
+      "pattern": "^file:[^\\r\\n]+$",
+      "description": "Secret reference string using file:<PATH>."
+    },
+    "secret_ref_keychain": {
+      "type": "string",
+      "pattern": "^keychain:[^\\r\\n]+$",
+      "description": "Secret reference string using keychain:<SELECTOR>."
+    },
+    "secret_ref_custom": {
+      "type": "string",
+      "pattern": "^custom:[^\\r\\n]+$",
+      "description": "Secret reference string using custom:<REF_KEY>."
+    },
+    "secret_provider": {
       "type": "string",
       "enum": [
-        "disabled",
-        "per_run_only",
-        "cross_run_allowed"
+        "env",
+        "file",
+        "keychain",
+        "custom"
       ],
-      "default": "per_run_only",
-      "description": "Caching posture for components that support caching."
+      "description": "Secret reference provider selector."
+    },
+    "os_enum": {
+      "type": "string",
+      "enum": [
+        "windows",
+        "linux",
+        "macos",
+        "bsd",
+        "appliance",
+        "other"
+      ]
+    },
+    "asset_role_enum": {
+      "type": "string",
+      "enum": [
+        "endpoint",
+        "server",
+        "domain_controller",
+        "network",
+        "sensor",
+        "other"
+      ]
+    },
+    "fail_mode_enum": {
+      "type": "string",
+      "enum": [
+        "fail_closed",
+        "warn_and_skip"
+      ]
+    },
+    "scalar": {
+      "description": "Scalar YAML/JSON value (string, number, integer, boolean) used for non-secret hints.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "map_string_to_scalar": {
+      "type": "object",
+      "description": "Arbitrary key/value map (values are scalars).",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z0-9_.-]{1,64}$": {
+          "$ref": "#/$defs/scalar"
+        }
+      }
+    },
+    "lab_asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id",
+        "os"
+      ],
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id_slug_v1"
+        },
+        "os": {
+          "$ref": "#/$defs/os_enum"
+        },
+        "role": {
+          "$ref": "#/$defs/asset_role_enum"
+        },
+        "hostname": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ip": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vars": {
+          "$ref": "#/$defs/map_string_to_scalar"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "lab_inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path_any"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "ansible_yaml",
+            "ansible_ini",
+            "json"
+          ]
+        },
+        "refresh": {
+          "type": "string",
+          "enum": [
+            "never",
+            "on_run_start"
+          ]
+        },
+        "snapshot_to_run_bundle": {
+          "type": "boolean"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "lab_networks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cidrs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "string"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
     },
     "lab": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "assets"
+      ],
       "properties": {
         "provider": {
           "type": "string",
@@ -148,9 +760,9 @@
             "manual",
             "ludus",
             "terraform",
+            "vagrant",
             "other"
-          ],
-          "default": "manual"
+          ]
         },
         "assets": {
           "type": "array",
@@ -169,363 +781,280 @@
           "$ref": "#/$defs/extensions"
         }
       },
-      "required": [
-        "assets"
-      ],
       "allOf": [
         {
           "if": {
-            "properties": {
-              "provider": {
-                "enum": [
-                  "ludus",
-                  "terraform",
-                  "other"
+            "anyOf": [
+              {
+                "not": {
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "provider": {
+                    "const": "manual"
+                  }
+                },
+                "required": [
+                  "provider"
                 ]
               }
-            },
-            "required": [
-              "provider"
             ]
           },
-          "then": {
-            "required": [
-              "inventory"
-            ],
+          "then": {},
+          "else": {
             "properties": {
               "inventory": {
                 "required": [
                   "path"
-                ]
+                ],
+                "properties": {
+                  "path": {
+                    "$ref": "#/$defs/path_any"
+                  }
+                }
               }
-            }
+            },
+            "required": [
+              "inventory"
+            ]
           }
         }
       ]
     },
-    "lab_inventory": {
+    "map_string_to_string": {
       "type": "object",
+      "description": "Arbitrary key/value map (values are strings).",
       "additionalProperties": false,
       "properties": {
-        "path": {
-          "$ref": "#/$defs/path"
-        },
-        "format": {
-          "type": "string",
-          "enum": [
-            "ansible_yaml",
-            "ansible_ini",
-            "json"
-          ],
-          "default": "ansible_yaml"
-        },
-        "refresh": {
-          "type": "string",
-          "enum": [
-            "never",
-            "on_run_start"
-          ],
-          "default": "on_run_start"
-        },
-        "snapshot_to_run_bundle": {
-          "type": "boolean",
-          "default": true
-        },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       },
-      "required": [
-        "path"
-      ]
-    },
-    "lab_asset": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "asset_id": {
-          "$ref": "#/$defs/nonempty_string"
-        },
-        "os": {
-          "type": "string",
-          "enum": [
-            "windows",
-            "linux",
-            "macos",
-            "bsd",
-            "appliance",
-            "other"
-          ]
-        },
-        "role": {
-          "type": "string",
-          "enum": [
-            "endpoint",
-            "server",
-            "domain_controller",
-            "network",
-            "sensor",
-            "other"
-          ]
-        },
-        "hostname": {
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z_][A-Za-z0-9_]{0,127}$": {
           "type": "string"
-        },
-        "ip": {
-          "type": "string"
-        },
-        "tags": {
-          "$ref": "#/$defs/string_array"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "required": [
-        "asset_id",
-        "os"
-      ]
-    },
-    "lab_networks": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "cidrs": {
-          "$ref": "#/$defs/string_array"
-        },
-        "notes": {
-          "type": "string"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
         }
       }
     },
     "runner_identity": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Runner principal attribution and identity-probe controls (safe-by-default).",
       "properties": {
         "emit_principal_context": {
-          "type": "boolean",
-          "default": true,
-          "description": "When true, emit runs/<run_id>/runner/principal_context.json."
+          "type": "boolean"
         },
         "probe_enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "When true, the runner may perform local, non-secret identity probes."
+          "type": "boolean"
         },
         "probe_detail": {
           "type": "string",
           "enum": [
             "summary",
             "none"
-          ],
-          "default": "summary",
-          "description": "Controls whether redaction-safe summary fields are emitted in principal_context."
-        },
-        "cache_policy": {
-          "$ref": "#/$defs/cache_policy",
-          "description": "Policy for any runner identity/probe caching."
-        }
-      }
-    },
-    "runner_dependencies": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Runner dependency mutation controls.",
-      "properties": {
-        "allow_runtime_self_update": {
-          "type": "boolean",
-          "default": false,
-          "description": "When false, any runner-managed self-update attempt must be blocked deterministically."
-        }
-      }
-    },
-    "runner": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": [
-            "caldera",
-            "atomic",
-            "custom"
           ]
         },
-        "identity": {
-          "$ref": "#/$defs/runner_identity"
+        "cache_policy": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "per_run_only",
+            "cross_run_allowed"
+          ]
         },
-        "dependencies": {
-          "$ref": "#/$defs/runner_dependencies"
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "runner_env_dsc_v3": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
         },
-        "caldera": {
-          "$ref": "#/$defs/runner_caldera"
+        "config_path": {
+          "$ref": "#/$defs/path_any"
         },
-        "atomic": {
-          "$ref": "#/$defs/runner_atomic"
+        "config_sha256": {
+          "$ref": "#/$defs/sha256_hex"
         },
-        "custom": {
-          "$ref": "#/$defs/runner_custom"
+        "output_format": {
+          "type": "string",
+          "enum": [
+            "json",
+            "pretty-json"
+          ]
+        },
+        "what_if_before_apply": {
+          "type": "boolean"
+        },
+        "resource_type_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       },
-      "required": [
-        "type"
-      ],
       "allOf": [
         {
           "if": {
             "properties": {
-              "type": {
-                "const": "caldera"
+              "enabled": {
+                "const": true
               }
             },
             "required": [
-              "type"
+              "enabled"
             ]
           },
           "then": {
             "required": [
-              "caldera"
-            ]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "atomic"
-              }
-            },
-            "required": [
-              "type"
-            ]
-          },
-          "then": {
-            "required": [
-              "atomic"
-            ]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "custom"
-              }
-            },
-            "required": [
-              "type"
-            ]
-          },
-          "then": {
-            "required": [
-              "custom"
+              "config_path",
+              "config_sha256"
             ]
           }
         }
       ]
     },
-    "runner_caldera": {
+    "runner_environment_config": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "off",
+            "check_only",
+            "apply"
+          ]
+        },
+        "fail_mode": {
+          "$ref": "#/$defs/fail_mode_enum"
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "ssh",
+            "winrm",
+            "other"
+          ]
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id_slug_v1"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "dsc_v3": {
+          "$ref": "#/$defs/runner_env_dsc_v3"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "apply"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "targets"
+            ],
+            "properties": {
+              "targets": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "runner_dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_runtime_self_update": {
+          "type": "boolean",
+          "const": false
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "runner_caldera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "api_token_ref"
+      ],
+      "properties": {
         "endpoint": {
-          "$ref": "#/$defs/nonempty_string"
+          "type": "string",
+          "format": "uri"
         },
         "api_token_ref": {
-          "$ref": "#/$defs/secret_ref"
+          "$ref": "#/$defs/secret_ref_any"
         },
         "operation": {
           "type": "string"
         },
         "agent_selector": {
-          "$ref": "#/$defs/runner_agent_selector"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "required": [
-        "endpoint",
-        "api_token_ref"
-      ]
-    },
-    "runner_agent_selector": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "asset_ids": {
-          "$ref": "#/$defs/string_array"
-        },
-        "tags": {
-          "$ref": "#/$defs/string_array"
+          "description": "Caldera agent selector (tags or asset ids).",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ]
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "runner_atomic": {
+    "runner_atomic_prereqs": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "atomic_root": {
-          "$ref": "#/$defs/path"
-        },
-        "executor": {
+        "mode": {
           "type": "string",
           "enum": [
-            "invoke_atomic_red_team",
-            "atomic_operator",
-            "other"
-          ],
-          "default": "invoke_atomic_red_team"
-        },
-        "timeout_seconds": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 300
-        },
-        "capture_transcripts": {
-          "type": "boolean",
-          "default": true
-        },
-        "capture_executor_metadata": {
-          "type": "boolean",
-          "default": true
-        },
-        "cleanup": {
-          "$ref": "#/$defs/runner_atomic_cleanup"
-        },
-        "requirements": {
-          "$ref": "#/$defs/runner_atomic_requirements"
-        },
-        "synthetic_correlation_marker": {
-          "$ref": "#/$defs/runner_atomic_synthetic_marker"
-        },
-        "state_reconciliation": {
-          "$ref": "#/$defs/runner_atomic_state_reconciliation"
-        },
-        "technique_allowlist": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/attck_technique_id"
-          }
-        },
-        "technique_denylist": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/attck_technique_id"
-          }
-        },
-        "executor_allowlist": {
-          "$ref": "#/$defs/string_array"
+            "check_only",
+            "check_then_get",
+            "get_only"
+          ]
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -537,12 +1066,10 @@
       "additionalProperties": false,
       "properties": {
         "invoke": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "verify": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "verification_profile": {
           "type": "string"
@@ -557,25 +1084,19 @@
       "additionalProperties": false,
       "properties": {
         "fail_mode": {
-          "type": "string",
-          "enum": [
-            "fail_closed",
-            "warn_and_skip"
-          ],
-          "default": "fail_closed"
+          "$ref": "#/$defs/fail_mode_enum"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "runner_atomic_synthetic_marker": {
+    "runner_atomic_synthetic_correlation_marker": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "type": "boolean"
         },
         "method": {
           "type": "string",
@@ -584,11 +1105,10 @@
             "windows_eventlog",
             "syslog",
             "filelog"
-          ],
-          "default": "auto"
+          ]
         },
         "filelog_path": {
-          "$ref": "#/$defs/path"
+          "$ref": "#/$defs/path_any"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -619,16 +1139,93 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "type": "boolean"
         },
         "allow_repair": {
           "type": "boolean",
-          "const": false,
-          "default": false
+          "const": false
         },
         "repair_allowlist_effect_types": {
-          "$ref": "#/$defs/string_array"
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "runner_atomic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "atomic_root": {
+          "$ref": "#/$defs/path_any"
+        },
+        "executor": {
+          "type": "string",
+          "enum": [
+            "invoke_atomic_red_team",
+            "atomic_operator",
+            "other"
+          ]
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "prereqs": {
+          "$ref": "#/$defs/runner_atomic_prereqs"
+        },
+        "capture_transcripts": {
+          "type": "boolean"
+        },
+        "capture_terminal_recordings": {
+          "type": "boolean"
+        },
+        "capture_executor_metadata": {
+          "type": "boolean"
+        },
+        "cleanup": {
+          "$ref": "#/$defs/runner_atomic_cleanup"
+        },
+        "requirements": {
+          "$ref": "#/$defs/runner_atomic_requirements"
+        },
+        "synthetic_correlation_marker": {
+          "$ref": "#/$defs/runner_atomic_synthetic_correlation_marker"
+        },
+        "state_reconciliation": {
+          "$ref": "#/$defs/runner_atomic_state_reconciliation"
+        },
+        "technique_allowlist": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/attack_technique_id"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "technique_denylist": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/attack_technique_id"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "executor_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -638,74 +1235,249 @@
     "runner_custom": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "command"
+      ],
       "properties": {
         "command": {
-          "$ref": "#/$defs/nonempty_string"
+          "type": "string",
+          "minLength": 1
         },
         "args": {
-          "$ref": "#/$defs/string_array"
-        },
-        "env": {
-          "type": "object",
-          "additionalProperties": {
+          "type": "array",
+          "items": {
             "type": "string"
           }
         },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "required": [
-        "command"
-      ]
-    },
-    "control_plane": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "const": false,
-          "default": false
-        },
-        "transport": {
-          "type": "string",
-          "enum": [
-            "ssh",
-            "winrm",
-            "grpc",
-            "other"
-          ]
-        },
-        "targets": {
-          "$ref": "#/$defs/string_array"
-        },
-        "auth": {
-          "$ref": "#/$defs/control_plane_auth"
-        },
-        "audit": {
-          "$ref": "#/$defs/control_plane_audit"
+        "env": {
+          "$ref": "#/$defs/map_string_to_string"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
+    "runner_plan_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "max_nodes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fail_fast": {
+          "type": "boolean"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "caldera",
+            "atomic",
+            "custom"
+          ]
+        },
+        "identity": {
+          "$ref": "#/$defs/runner_identity"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id_slug_v1"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "environment_config": {
+          "$ref": "#/$defs/runner_environment_config"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/runner_dependencies"
+        },
+        "caldera": {
+          "$ref": "#/$defs/runner_caldera"
+        },
+        "atomic": {
+          "$ref": "#/$defs/runner_atomic"
+        },
+        "custom": {
+          "$ref": "#/$defs/runner_custom"
+        },
+        "plan": {
+          "$ref": "#/$defs/runner_plan_defaults"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "caldera"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "caldera"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "atomic"
+                  ]
+                },
+                {
+                  "required": [
+                    "custom"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "atomic"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "atomic"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "caldera"
+                  ]
+                },
+                {
+                  "required": [
+                    "custom"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "custom"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "custom"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "caldera"
+                  ]
+                },
+                {
+                  "required": [
+                    "atomic"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cross_run_allowed": {
+          "type": "boolean"
+        },
+        "emit_cache_provenance": {
+          "type": "boolean"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "cross_run_allowed": {
+                "const": true
+              }
+            },
+            "required": [
+              "cross_run_allowed"
+            ]
+          },
+          "then": {
+            "properties": {
+              "emit_cache_provenance": {
+                "const": true
+              }
+            },
+            "required": [
+              "emit_cache_provenance"
+            ]
+          }
+        }
+      ]
+    },
     "control_plane_auth": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "username_ref": {
-          "$ref": "#/$defs/secret_ref"
+          "$ref": "#/$defs/secret_ref_any"
         },
         "password_ref": {
-          "$ref": "#/$defs/secret_ref"
+          "$ref": "#/$defs/secret_ref_any"
         },
         "private_key_ref": {
-          "$ref": "#/$defs/secret_ref"
+          "$ref": "#/$defs/secret_ref_any"
         },
         "token_ref": {
-          "$ref": "#/$defs/secret_ref"
+          "$ref": "#/$defs/secret_ref_any"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -717,88 +1489,43 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "telemetry": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "otel": {
-          "$ref": "#/$defs/telemetry_otel"
-        },
-        "sources": {
-          "$ref": "#/$defs/telemetry_sources"
-        },
-        "payload_limits": {
-          "$ref": "#/$defs/telemetry_payload_limits"
-        },
-        "native_container_exports": {
-          "$ref": "#/$defs/telemetry_native_container_exports"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "otel": {
-                "properties": {
-                  "enabled": {
-                    "const": false
-                  }
-                },
-                "required": [
-                  "enabled"
-                ]
-              }
-            },
-            "required": [
-              "otel"
-            ]
-          },
-          "then": {},
-          "else": {
-            "required": [
-              "otel"
-            ],
-            "properties": {
-              "otel": {
-                "required": [
-                  "config_path"
-                ]
-              }
-            }
-          }
-        }
-      ]
-    },
-    "telemetry_otel": {
+    "control_plane": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true
+          "const": false
         },
-        "config_path": {
-          "$ref": "#/$defs/path"
+        "transport": {
+          "type": "string",
+          "enum": [
+            "ssh",
+            "winrm",
+            "grpc",
+            "other"
+          ]
         },
-        "channels": {
-          "$ref": "#/$defs/string_array"
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id_slug_v1"
+          },
+          "minItems": 1,
+          "uniqueItems": true
         },
-        "bookmarks": {
-          "$ref": "#/$defs/telemetry_otel_bookmarks"
+        "auth": {
+          "$ref": "#/$defs/control_plane_auth"
         },
-        "checkpoint_corruption": {
-          "$ref": "#/$defs/telemetry_otel_checkpoint_corruption"
+        "audit": {
+          "$ref": "#/$defs/control_plane_audit"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -815,16 +1542,14 @@
             "auto",
             "resume",
             "reset"
-          ],
-          "default": "auto"
+          ]
         },
         "checkpoint_dir": {
-          "$ref": "#/$defs/path"
+          "$ref": "#/$defs/path_any"
         },
         "flush_interval_seconds": {
           "type": "integer",
-          "minimum": 1,
-          "default": 5
+          "minimum": 1
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -840,12 +1565,194 @@
           "enum": [
             "fail_closed",
             "recreate_fresh"
-          ],
-          "default": "fail_closed"
+          ]
         },
         "require_fsync": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "telemetry_otel_agent_liveness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "startup_grace_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "required_metric_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "telemetry_otel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "config_path": {
+          "$ref": "#/$defs/path_any"
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "bookmarks": {
+          "$ref": "#/$defs/telemetry_otel_bookmarks"
+        },
+        "checkpoint_corruption": {
+          "$ref": "#/$defs/telemetry_otel_checkpoint_corruption"
+        },
+        "agent_liveness": {
+          "$ref": "#/$defs/telemetry_otel_agent_liveness"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "required": [
+              "config_path"
+            ]
+          }
+        }
+      ]
+    },
+    "telemetry_baseline_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "profile_path": {
+          "$ref": "#/$defs/path_any"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "required": [
+              "profile_path"
+            ]
+          }
+        }
+      ]
+    },
+    "path_run_raw": {
+      "type": "string",
+      "pattern": "^raw/[^\\r\\n]+$",
+      "description": "Run-bundle-relative path under raw/."
+    },
+    "telemetry_source_osquery_otel_ingest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "receiver_id": {
+          "type": "string"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "telemetry_source_osquery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_path"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "config_path": {
+          "$ref": "#/$defs/path_any"
+        },
+        "results_log_path": {
+          "$ref": "#/$defs/path_any"
+        },
+        "log_format": {
+          "type": "string",
+          "enum": [
+            "event_ndjson",
+            "batch_json"
+          ]
+        },
+        "otel_ingest": {
+          "$ref": "#/$defs/telemetry_source_osquery_otel_ingest"
+        },
+        "output_path": {
+          "$ref": "#/$defs/path_run_raw"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "telemetry_source_generic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "output_path"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "config_path": {
+          "$ref": "#/$defs/path_any"
+        },
+        "output_path": {
+          "$ref": "#/$defs/path_run_raw"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -857,127 +1764,28 @@
       "additionalProperties": false,
       "properties": {
         "osquery": {
-          "$ref": "#/$defs/telemetry_osquery"
+          "$ref": "#/$defs/telemetry_source_osquery"
         },
         "pcap": {
-          "$ref": "#/$defs/telemetry_pcap"
+          "$ref": "#/$defs/telemetry_source_generic"
         },
         "netflow": {
-          "$ref": "#/$defs/telemetry_netflow"
+          "$ref": "#/$defs/telemetry_source_generic"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "telemetry_osquery": {
+    "telemetry_payload_limits_sidecar": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "type": "boolean"
         },
-        "config_path": {
-          "$ref": "#/$defs/path"
-        },
-        "results_log_path": {
-          "type": "string"
-        },
-        "log_format": {
-          "type": "string",
-          "enum": [
-            "event_ndjson",
-            "batch_json"
-          ],
-          "default": "event_ndjson"
-        },
-        "otel_ingest": {
-          "$ref": "#/$defs/telemetry_osquery_otel_ingest"
-        },
-        "output_path": {
-          "$ref": "#/$defs/path"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "not": {
-              "properties": {
-                "enabled": {
-                  "const": false
-                }
-              },
-              "required": [
-                "enabled"
-              ]
-            }
-          },
-          "then": {
-            "required": [
-              "output_path"
-            ]
-          }
-        }
-      ]
-    },
-    "telemetry_osquery_otel_ingest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "receiver_id": {
-          "$ref": "#/$defs/nonempty_string"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "telemetry_pcap": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "interface": {
-          "type": "string"
-        },
-        "config_path": {
-          "$ref": "#/$defs/path"
-        },
-        "output_path": {
-          "$ref": "#/$defs/path"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "telemetry_netflow": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "listen": {
-          "type": "string"
-        },
-        "config_path": {
-          "$ref": "#/$defs/path"
-        },
-        "output_path": {
-          "$ref": "#/$defs/path"
+        "dir": {
+          "$ref": "#/$defs/path_rel"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -990,38 +1798,18 @@
       "properties": {
         "max_event_xml_bytes": {
           "type": "integer",
-          "minimum": 1,
-          "default": 1048576
+          "minimum": 1
         },
         "max_field_chars": {
           "type": "integer",
-          "minimum": 1,
-          "default": 262144
+          "minimum": 1
         },
         "max_binary_bytes": {
           "type": "integer",
-          "minimum": 1,
-          "default": 262144
+          "minimum": 1
         },
         "sidecar": {
-          "$ref": "#/$defs/telemetry_payload_sidecar"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "telemetry_payload_sidecar": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "dir": {
-          "$ref": "#/$defs/path",
-          "default": "raw/evidence/blobs/wineventlog/"
+          "$ref": "#/$defs/telemetry_payload_limits_sidecar"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1033,80 +1821,62 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "type": "boolean"
         },
         "dir": {
-          "$ref": "#/$defs/path",
-          "default": "raw/evidence/"
+          "$ref": "#/$defs/path_rel"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "normalization": {
+    "telemetry": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "ocsf_version": {
-          "$ref": "#/$defs/nonempty_string"
+        "otel": {
+          "$ref": "#/$defs/telemetry_otel"
         },
-        "mapping_profiles": {
-          "$ref": "#/$defs/string_array"
+        "baseline_profile": {
+          "$ref": "#/$defs/telemetry_baseline_profile"
         },
-        "source_type_mapping": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
+        "sources": {
+          "$ref": "#/$defs/telemetry_sources"
         },
-        "strict_mode": {
-          "type": "boolean",
-          "default": true
+        "payload_limits": {
+          "$ref": "#/$defs/telemetry_payload_limits"
         },
-        "dedupe": {
-          "$ref": "#/$defs/normalization_dedupe"
-        },
-        "raw_preservation": {
-          "$ref": "#/$defs/normalization_raw_preservation"
-        },
-        "output": {
-          "$ref": "#/$defs/normalization_output"
+        "native_container_exports": {
+          "$ref": "#/$defs/telemetry_native_container_exports"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
-      },
-      "required": [
-        "ocsf_version"
-      ]
+      }
     },
     "normalization_dedupe": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "scope": {
           "type": "string",
           "enum": [
             "per_run"
-          ],
-          "default": "per_run"
+          ]
         },
         "index_dir": {
-          "$ref": "#/$defs/path"
+          "$ref": "#/$defs/path_rel"
         },
         "conflict_policy": {
           "type": "string",
           "enum": [
             "warn",
             "fail_closed"
-          ],
-          "default": "warn"
+          ]
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1118,8 +1888,7 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "policy": {
           "type": "string",
@@ -1128,26 +1897,6 @@
             "minimal",
             "full"
           ]
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "normalization_output": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "format": {
-          "type": "string",
-          "enum": [
-            "jsonl",
-            "parquet"
-          ],
-          "default": "parquet"
-        },
-        "parquet": {
-          "$ref": "#/$defs/normalization_output_parquet"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1164,15 +1913,169 @@
             "zstd",
             "snappy",
             "none"
-          ],
-          "default": "zstd"
+          ]
         },
         "row_group_size": {
           "type": "integer",
           "minimum": 1
         },
         "partitioning": {
-          "$ref": "#/$defs/string_array"
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "normalization_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "jsonl",
+            "parquet"
+          ]
+        },
+        "parquet": {
+          "$ref": "#/$defs/normalization_output_parquet"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "normalization_source_type_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z0-9_.-]{1,128}$": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ocsf_version"
+      ],
+      "properties": {
+        "ocsf_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path_any"
+          },
+          "minItems": 1
+        },
+        "source_type_mapping": {
+          "$ref": "#/$defs/normalization_source_type_mapping"
+        },
+        "dedupe": {
+          "$ref": "#/$defs/normalization_dedupe"
+        },
+        "strict_mode": {
+          "type": "boolean"
+        },
+        "raw_preservation": {
+          "$ref": "#/$defs/normalization_raw_preservation"
+        },
+        "output": {
+          "$ref": "#/$defs/normalization_output"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "validation_entry_selectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "$ref": "#/$defs/os_enum"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/asset_role_enum"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "executor": {
+          "type": "string",
+          "enum": [
+            "atomic",
+            "caldera",
+            "custom"
+          ]
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "validation_criteria_pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pack_id": {
+          "$ref": "#/$defs/id_slug_v1"
+        },
+        "pack_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path_any"
+          },
+          "minItems": 1
+        },
+        "entry_selectors": {
+          "$ref": "#/$defs/validation_entry_selectors"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "validation_evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_window_before_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "time_window_after_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_sample_event_ids": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fail_mode": {
+          "$ref": "#/$defs/fail_mode_enum"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1184,8 +2087,7 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "criteria_pack": {
           "$ref": "#/$defs/validation_criteria_pack"
@@ -1226,97 +2128,85 @@
         }
       ]
     },
-    "validation_criteria_pack": {
+    "detection_sigma_limits": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "pack_id": {
-          "$ref": "#/$defs/nonempty_string"
+        "max_rules": {
+          "type": "integer",
+          "minimum": 1
         },
-        "pack_version": {
+        "max_compile_errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "detection_join": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clock_skew_tolerance_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "detection_sigma_bridge_backend_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "table_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_format": {
+          "type": "string",
+          "minLength": 1
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "detection_sigma_bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mapping_pack"
+      ],
+      "properties": {
+        "mapping_pack": {
+          "$ref": "#/$defs/id_slug_v1"
+        },
+        "mapping_pack_version": {
           "$ref": "#/$defs/semver"
         },
-        "paths": {
-          "$ref": "#/$defs/string_array"
+        "backend": {
+          "type": "string",
+          "enum": [
+            "duckdb_sql",
+            "tenzir",
+            "other"
+          ]
         },
-        "entry_selectors": {
-          "$ref": "#/$defs/validation_entry_selectors"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "required": [
-        "pack_id"
-      ]
-    },
-    "validation_entry_selectors": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "os": {
-          "type": "string"
-        },
-        "roles": {
-          "$ref": "#/$defs/string_array"
-        },
-        "executor": {
-          "type": "string"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "validation_evaluation": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "time_window_before_seconds": {
-          "type": "integer",
-          "minimum": 0,
-          "default": 5
-        },
-        "time_window_after_seconds": {
-          "type": "integer",
-          "minimum": 0,
-          "default": 120
-        },
-        "max_sample_event_ids": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 20
+        "backend_options": {
+          "$ref": "#/$defs/detection_sigma_bridge_backend_options"
         },
         "fail_mode": {
-          "type": "string",
-          "enum": [
-            "fail_closed",
-            "warn_and_skip"
-          ],
-          "default": "warn_and_skip"
+          "$ref": "#/$defs/fail_mode_enum"
         },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "detection": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": [
-            "batch",
-            "streaming"
-          ],
-          "default": "batch"
+        "raw_fallback_enabled": {
+          "type": "boolean"
         },
-        "sigma": {
-          "$ref": "#/$defs/detection_sigma"
-        },
-        "join": {
-          "$ref": "#/$defs/detection_join"
+        "compile_cache_dir": {
+          "$ref": "#/$defs/path_any"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1328,14 +2218,25 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "rule_paths": {
-          "$ref": "#/$defs/string_array"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path_any"
+          },
+          "minItems": 1
         },
         "rule_set_version": {
-          "type": "string"
+          "description": "Optional version identifier for the rule set (SemVer strongly recommended).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/semver"
+            },
+            {
+              "$ref": "#/$defs/version_token_v1"
+            }
+          ]
         },
         "bridge": {
           "$ref": "#/$defs/detection_sigma_bridge"
@@ -1369,109 +2270,22 @@
         }
       ]
     },
-    "detection_sigma_bridge": {
+    "detection": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "mapping_pack": {
-          "$ref": "#/$defs/path"
-        },
-        "mapping_pack_version": {
-          "$ref": "#/$defs/semver"
-        },
-        "backend": {
+        "mode": {
           "type": "string",
           "enum": [
-            "duckdb_sql",
-            "tenzir",
-            "other"
-          ],
-          "default": "duckdb_sql"
+            "batch",
+            "streaming"
+          ]
         },
-        "backend_options": {
-          "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "table_name": {
-              "type": "string",
-              "default": "events"
-            },
-            "output_format": {
-              "type": "string",
-              "default": "default"
-            }
-          }
+        "sigma": {
+          "$ref": "#/$defs/detection_sigma"
         },
-        "fail_mode": {
-          "type": "string",
-          "enum": [
-            "fail_closed",
-            "warn_and_skip"
-          ],
-          "default": "fail_closed"
-        },
-        "raw_fallback_enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "compile_cache_dir": {
-          "$ref": "#/$defs/path"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "required": [
-        "mapping_pack"
-      ]
-    },
-    "detection_sigma_limits": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "max_rules": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_compile_errors": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "detection_join": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "clock_skew_tolerance_seconds": {
-          "type": "integer",
-          "minimum": 0,
-          "default": 30
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "scoring": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "gap_taxonomy": {
-          "$ref": "#/$defs/string_array"
-        },
-        "thresholds": {
-          "$ref": "#/$defs/scoring_thresholds"
-        },
-        "weights": {
-          "$ref": "#/$defs/scoring_weights"
+        "join": {
+          "$ref": "#/$defs/detection_join"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1484,71 +2298,45 @@
       "properties": {
         "min_technique_coverage": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.9
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "max_allowed_latency_seconds": {
           "type": "integer",
-          "minimum": 1,
-          "default": 300
+          "minimum": 0
         },
         "min_tier1_field_coverage": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.5
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "max_missing_telemetry_rate": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.05
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "max_normalization_gap_rate": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.1
-        },
-        "max_bridge_gap_rate": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.15
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "max_bridge_gap_mapping_rate": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.1
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "max_bridge_gap_feature_rate": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.05
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "max_bridge_gap_other_rate": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.05
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
-        },
-        "max_undetected_rate": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.2
-        },
-        "max_false_positive_rate": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.2
         }
       }
     },
@@ -1558,56 +2346,60 @@
       "properties": {
         "coverage_weight": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "latency_weight": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "fidelity_weight": {
           "type": "number",
-          "minimum": 0,
-          "maximum": 1
+          "minimum": 0.0,
+          "maximum": 1.0
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "reporting": {
+    "scoring": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "output_dir": {
-          "$ref": "#/$defs/path"
+        "enabled": {
+          "type": "boolean"
         },
-        "emit_html": {
-          "type": "boolean",
-          "default": true
+        "gap_taxonomy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "missing_telemetry",
+              "criteria_unavailable",
+              "criteria_misconfigured",
+              "normalization_gap",
+              "bridge_gap_mapping",
+              "bridge_gap_feature",
+              "bridge_gap_other",
+              "rule_logic_gap",
+              "cleanup_verification_failed"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
         },
-        "emit_json": {
-          "type": "boolean",
-          "default": true
+        "thresholds": {
+          "$ref": "#/$defs/scoring_thresholds"
         },
-        "include_debug_sections": {
-          "type": "boolean",
-          "default": false
-        },
-        "requirements": {
-          "$ref": "#/$defs/reporting_requirements"
-        },
-        "redaction": {
-          "$ref": "#/$defs/reporting_redaction"
+        "weights": {
+          "$ref": "#/$defs/scoring_weights"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
-      },
-      "required": [
-        "output_dir"
-      ]
+      }
     },
     "reporting_requirements": {
       "type": "object",
@@ -1616,44 +2408,150 @@
         "detail_level": {
           "type": "string",
           "enum": [
-            "reason_codes_only",
-            "include_sensitive_details"
-          ],
-          "default": "reason_codes_only"
+            "summary",
+            "full"
+          ]
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
+    },
+    "policy_ref": {
+      "$ref": "#/$defs/secret_ref_any"
     },
     "reporting_redaction": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "policy_ref": {
-          "$ref": "#/$defs/path"
+          "$ref": "#/$defs/secret_ref_any"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "operability": {
+    "reporting_regression_threshold_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_id",
+        "tolerance"
+      ],
+      "properties": {
+        "metric_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,127}$"
+        },
+        "tolerance": {
+          "type": "number"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "reporting_regression": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "logging": {
-          "$ref": "#/$defs/operability_logging"
+        "enabled": {
+          "type": "boolean"
         },
-        "run_limits": {
-          "$ref": "#/$defs/operability_run_limits"
+        "baseline_run_id": {
+          "$ref": "#/$defs/uuid"
         },
-        "health": {
-          "$ref": "#/$defs/operability_health"
+        "baseline_manifest_path": {
+          "$ref": "#/$defs/path_rel"
+        },
+        "thresholds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reporting_regression_threshold_entry"
+          },
+          "minItems": 1
+        },
+        "alert_status_recommendation": {
+          "type": "string",
+          "enum": [
+            "partial",
+            "failed"
+          ]
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "oneOf": [
+              {
+                "required": [
+                  "baseline_run_id"
+                ],
+                "not": {
+                  "required": [
+                    "baseline_manifest_path"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "baseline_manifest_path"
+                ],
+                "not": {
+                  "required": [
+                    "baseline_run_id"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_dir"
+      ],
+      "properties": {
+        "output_dir": {
+          "$ref": "#/$defs/path_any"
+        },
+        "emit_html": {
+          "type": "boolean"
+        },
+        "emit_json": {
+          "type": "boolean"
+        },
+        "include_debug_sections": {
+          "type": "boolean"
+        },
+        "regression": {
+          "$ref": "#/$defs/reporting_regression"
+        },
+        "requirements": {
+          "$ref": "#/$defs/reporting_requirements"
+        },
+        "redaction": {
+          "$ref": "#/$defs/reporting_redaction"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1671,12 +2569,10 @@
             "info",
             "warn",
             "error"
-          ],
-          "default": "info"
+          ]
         },
         "json": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1695,13 +2591,12 @@
           "type": "number",
           "minimum": 0
         },
-        "disk_limit_behavior": {
+        "on_disk_exceed_behavior": {
           "type": "string",
           "enum": [
             "partial",
             "hard_fail"
-          ],
-          "default": "partial"
+          ]
         },
         "max_memory_mb": {
           "type": "integer",
@@ -1717,106 +2612,25 @@
       "additionalProperties": false,
       "properties": {
         "emit_health_files": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
       }
     },
-    "cache": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Global cache policy gate. Cross-run caching must be explicitly enabled and provenance-recorded.",
-      "properties": {
-        "policy": {
-          "$ref": "#/$defs/cache_policy"
-        },
-        "record_provenance": {
-          "type": "boolean",
-          "default": true,
-          "description": "When true, emit cache provenance artifact (cache_provenance.json) describing cache usage."
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "policy": {
-                "const": "cross_run_allowed"
-              }
-            },
-            "required": [
-              "policy"
-            ]
-          },
-          "then": {
-            "properties": {
-              "record_provenance": {
-                "const": true
-              }
-            },
-            "required": [
-              "record_provenance"
-            ]
-          }
-        }
-      ]
-    },
-    "security": {
+    "operability": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "redaction": {
-          "$ref": "#/$defs/security_redaction"
+        "logging": {
+          "$ref": "#/$defs/operability_logging"
         },
-        "secrets": {
-          "$ref": "#/$defs/security_secrets"
+        "run_limits": {
+          "$ref": "#/$defs/operability_run_limits"
         },
-        "network": {
-          "$ref": "#/$defs/security_network"
-        },
-        "signing": {
-          "$ref": "#/$defs/security_signing"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "security_redaction": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "policy_ref": {
-          "$ref": "#/$defs/path"
-        },
-        "limits": {
-          "$ref": "#/$defs/security_redaction_limits"
-        },
-        "disabled_behavior": {
-          "type": "string",
-          "enum": [
-            "withhold_from_long_term",
-            "quarantine_unredacted"
-          ],
-          "default": "withhold_from_long_term"
-        },
-        "allow_unredacted_evidence_storage": {
-          "type": "boolean",
-          "default": false
-        },
-        "unredacted_dir": {
-          "$ref": "#/$defs/path",
-          "default": "unredacted/"
+        "health": {
+          "$ref": "#/$defs/operability_health"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -1844,25 +2658,81 @@
         }
       }
     },
+    "security_redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "policy_ref": {
+          "$ref": "#/$defs/secret_ref_any"
+        },
+        "limits": {
+          "$ref": "#/$defs/security_redaction_limits"
+        },
+        "disabled_behavior": {
+          "type": "string",
+          "enum": [
+            "withhold_from_long_term",
+            "quarantine_unredacted"
+          ]
+        },
+        "allow_unredacted_evidence_storage": {
+          "type": "boolean"
+        },
+        "unredacted_dir": {
+          "$ref": "#/$defs/path_rel"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "security_secrets_custom": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "executable": {
+          "$ref": "#/$defs/path_abs"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_stdout_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "security_secrets_refs": {
+      "type": "object",
+      "description": "Map of secret identifiers to secret reference strings.",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z0-9_.-]{1,64}$": {
+          "$ref": "#/$defs/secret_ref_any"
+        }
+      }
+    },
     "security_secrets": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "provider": {
-          "type": "string",
-          "enum": [
-            "env",
-            "file",
-            "keychain",
-            "custom"
-          ],
-          "default": "env"
+          "$ref": "#/$defs/secret_provider"
         },
         "refs": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/secret_ref"
-          }
+          "$ref": "#/$defs/security_secrets_refs"
         },
         "custom": {
           "$ref": "#/$defs/security_secrets_custom"
@@ -1886,62 +2756,29 @@
           "then": {
             "required": [
               "custom"
-            ]
+            ],
+            "properties": {
+              "custom": {
+                "required": [
+                  "executable"
+                ]
+              }
+            }
           }
         }
       ]
     },
-    "security_secrets_custom": {
+    "security_network_egress_canary": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {
-        "executable": {
-          "$ref": "#/$defs/path"
-        },
-        "timeout_seconds": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 5
-        },
-        "max_stdout_bytes": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 65536
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      },
       "required": [
-        "executable"
-      ]
-    },
-    "security_network": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "allow_outbound": {
-          "type": "boolean",
-          "default": false
-        },
-        "allowlist": {
-          "$ref": "#/$defs/string_array"
-        },
-        "egress_canary": {
-          "$ref": "#/$defs/security_egress_canary"
-        },
-        "extensions": {
-          "$ref": "#/$defs/extensions"
-        }
-      }
-    },
-    "security_egress_canary": {
-      "type": "object",
-      "additionalProperties": false,
+        "address",
+        "port"
+      ],
       "properties": {
         "address": {
           "type": "string",
-          "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$"
+          "minLength": 1
         },
         "port": {
           "type": "integer",
@@ -1950,53 +2787,69 @@
         },
         "timeout_ms": {
           "type": "integer",
-          "minimum": 1,
-          "default": 2000
+          "minimum": 1
         },
         "required_on_deny": {
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
         }
-      },
-      "required": [
-        "address",
-        "port"
-      ]
+      }
+    },
+    "security_network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_outbound": {
+          "type": "boolean"
+        },
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "egress_canary": {
+          "$ref": "#/$defs/security_network_egress_canary"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
     },
     "security_signing": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "type": "boolean"
         },
         "key_ref": {
-          "$ref": "#/$defs/secret_ref"
+          "$ref": "#/$defs/secret_ref_any"
         },
         "algorithm": {
           "type": "string",
           "enum": [
             "ed25519"
-          ],
-          "default": "ed25519"
+          ]
         },
         "key_format": {
           "type": "string",
           "enum": [
             "ed25519_seed_base64"
-          ],
-          "default": "ed25519_seed_base64"
+          ]
         },
         "trusted_key_ids": {
           "type": "array",
           "items": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          }
+            "$ref": "#/$defs/hex64"
+          },
+          "minItems": 1,
+          "uniqueItems": true
         },
         "extensions": {
           "$ref": "#/$defs/extensions"
@@ -2021,6 +2874,87 @@
           }
         }
       ]
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "redaction": {
+          "$ref": "#/$defs/security_redaction"
+        },
+        "secrets": {
+          "$ref": "#/$defs/security_secrets"
+        },
+        "network": {
+          "$ref": "#/$defs/security_network"
+        },
+        "signing": {
+          "$ref": "#/$defs/security_signing"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "security_secrets_refs_env": {
+      "type": "object",
+      "description": "Map of secret identifiers to secret reference strings.",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z0-9_.-]{1,64}$": {
+          "$ref": "#/$defs/secret_ref_env"
+        }
+      }
+    },
+    "security_secrets_refs_file": {
+      "type": "object",
+      "description": "Map of secret identifiers to secret reference strings.",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z0-9_.-]{1,64}$": {
+          "$ref": "#/$defs/secret_ref_file"
+        }
+      }
+    },
+    "security_secrets_refs_keychain": {
+      "type": "object",
+      "description": "Map of secret identifiers to secret reference strings.",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z0-9_.-]{1,64}$": {
+          "$ref": "#/$defs/secret_ref_keychain"
+        }
+      }
+    },
+    "security_secrets_refs_custom": {
+      "type": "object",
+      "description": "Map of secret identifiers to secret reference strings.",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "patternProperties": {
+        "^(?!extensions$)[A-Za-z0-9_.-]{1,64}$": {
+          "$ref": "#/$defs/secret_ref_custom"
+        }
+      }
     }
   }
 }

@@ -598,7 +598,8 @@ selector grammar defined in `025_data_contracts.md` (Evidence references (shared
 Minimum evidence pointer set by measurement layer (normative):
 
 - telemetry:
-  - MUST include `logs/health.json`.
+  - MUST include `manifest.json`.
+  - MUST include `logs/health.json` when present.
   - SHOULD include `logs/telemetry_validation.json` when telemetry validation is enabled and the
     artifact is present.
 - normalization:
@@ -612,7 +613,8 @@ Minimum evidence pointer set by measurement layer (normative):
 Conditional minimums by gap category (normative):
 
 - `missing_telemetry`:
-  - Evidence pointers MUST include `logs/health.json`.
+  - Evidence pointers MUST include `manifest.json`.
+  - Evidence pointers MUST include `logs/health.json` when present.
   - Evidence pointers SHOULD include the most directly causal telemetry validation artifact(s) when
     present.
 - `criteria_unavailable`, `criteria_misconfigured`:

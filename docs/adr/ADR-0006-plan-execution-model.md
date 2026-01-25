@@ -215,7 +215,7 @@ The plan execution model specification (`031_plan_execution_model.md`) defines t
 plan artifacts and their determinism, versioning, and safety requirements. Key requirements (v0.2+):
 
 - The expanded plan graph MUST be recorded at `plan/expanded_graph.json` and MUST validate against a
-  contract schema (registered in `contract_registry.json`).
+  contract schema (registered in `docs/contracts/contract_registry.json`).
 - When present, `plan/expansion_manifest.json` MUST validate against its contract schema and MUST be
   consistent with `plan/expanded_graph.json` (node ids, `node_ordinal`, and expansion coordinates).
 - Compiled plan artifacts MUST be immutable after publish and MUST be safe to retain (no unredacted

@@ -26,12 +26,15 @@ stable reason codes.
   gaps.
 - Treat cleanup as a first-class stage and record verification results.
 
-## Repository layout (source of truth)
+### Repository layout (source of truth)
 
-Criteria packs live in-repo under a conventional folder:
+Criteria packs live in-repo under a conventional folder layout:
 
-- `criteria/packs/<pack_id>/<pack_version>/manifest.json`
-- `criteria/packs/<pack_id>/<pack_version>/criteria.jsonl`
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json`
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/criteria.jsonl`
+
+For avoidance of doubt: `<criteria_pack_id>` and `<criteria_pack_version>` MUST match the identity
+recorded inside the pack manifest (`criteria_pack_id`, `criteria_pack_version`).
 
 Optional (non-contractual):
 
@@ -45,14 +48,22 @@ and how pack changes are managed so operational handoff is deterministic.
 
 ### Pack identity
 
-- `pack_id` MUST be a stable identifier for a logical criteria pack (example: `default`,
+This document uses:
+
+- `criteria_pack_id` and `criteria_pack_version` as the canonical names (matching
+  `manifest.versions` pins per ADR-0001).
+- `pack_id` and `pack_version` as shorthand placeholders only when referring to filesystem layout.
+
+Normative requirements:
+
+- `criteria_pack_id` MUST be a stable identifier for a logical criteria pack (examples: `default`,
   `windows-enterprise`, `lab-small`).
-  - `pack_id` MUST conform to `id_slug_v1` (lowercase ASCII and hyphen-separated).
-  - Allowed form (normative): `^[a-z0-9]+(-[a-z0-9]+)*$`
-- `pack_version` MUST be a SemVer string (`MAJOR.MINOR.PATCH`) and MUST be compared using SemVer
-  precedence rules.
-- Pre-release identifiers MAY be used for development (for example `-alpha.1`), but production CI
-  SHOULD pin only stable versions.
+  - `criteria_pack_id` MUST conform to `id_slug_v1` as defined by ADR-0001.
+- `criteria_pack_version` MUST be a SemVer string and MUST be compared using SemVer precedence
+  rules.
+  - `criteria_pack_version` MUST conform to `semver_v1` as defined by ADR-0001.
+- Pre-release identifiers MAY be used for development (for example `0.3.0-alpha.1`), but production
+  CI SHOULD pin only stable versions.
 
 ### Immutability and change discipline
 
@@ -867,6 +878,8 @@ Minimum fields for `criteria/results.jsonl` (v0.1; one JSON object per action):
 - `criteria_ref` object (required; selection provenance)
 - `status` (`pass` | `fail` | `skipped`)
 - `reason_code` (required when `status=skipped`; omitted otherwise)
+  - This `reason_code` vocabulary is scoped to `criteria/results.jsonl` and is not a stage
+    outcome reason code (ADR-0005).
 - `signals[]` array:
   - MUST be an empty array (`[]`) when `status=skipped`.
   - Otherwise: one element per expected signal with `signal_id`, `status`, `matched_count`,
@@ -927,7 +940,7 @@ Deterministic ordering (normative):
 
 - The evaluator MUST emit `criteria/results.jsonl` rows in a deterministic order, sorted by:
   1. `scenario_id` ascending (UTF-8 byte order, no locale)
-  1. `action_id` ascending (UTF-8 byte order, no locale)
+  2. `action_id` ascending (UTF-8 byte order, no locale)
 
 ## Design constraints
 
@@ -977,6 +990,9 @@ following minimal set:
 - `ambiguous_match` (indeterminate; multiple targets match but check expects exactly one)
 - `unstable_observation` (indeterminate; observation flaps across probes)
 - `disabled_by_policy` (skipped; check not run by policy)
+
+Note: This `reason_code` vocabulary is scoped to cleanup verification check results and is
+not a stage outcome reason code (ADR-0005).
 
 **Skipped requires reason_code**: If a check result status is `skipped`, it MUST include
 `reason_code`, and `reason_code` MUST be one of `unsupported_platform`, `insufficient_privileges`,

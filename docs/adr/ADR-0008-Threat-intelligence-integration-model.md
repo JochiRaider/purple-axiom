@@ -7,7 +7,7 @@ tags: [threat-intel, misp, integration, determinism, provenance, observability, 
 related:
   - ADR-0001-project-naming-and-versioning.md
   - ADR-0004-deployment-architecture-and-inter-component-communication.md
-  - ADR-0003-audit-tamper-evidence.md
+  - ADR-0003-redaction-policy.md
   - ADR-0005-stage-outcomes-and-failure-classification.md
   - ADR-0007-state-machines.md
   - ../spec/010_scope.md
@@ -166,8 +166,8 @@ snapshotting):
 1. The implementation MUST recompute and verify these hash fields per "Canonicalization and hashing
    (normative)".
 1. When the contract schemas exist (see Follow-ups), the implementation MUST validate:
-   - `manifest.json` against `threat_intel_pack_manifest_schema.json`, and
-   - each `indicators.jsonl` line against `threat_intel_indicator_schema.json`.
+   - `manifest.json` against `threat_intel_pack_manifest.schema.json`, and
+   - each `indicators.jsonl` line against `threat_intel_indicator.schema.json`.
 1. If TI is enabled and resolution or validation fails:
    - the owning stage MUST fail closed by default, and
    - the failure MUST be recorded in stage outcomes per ADR-0005.

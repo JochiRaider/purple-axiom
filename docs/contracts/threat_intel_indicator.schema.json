@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Threat intel indicator (one record per JSONL line)",
+  "description": "Contract for one normalized threat-intel indicator record. Intended for each line of `threat_intel/packs/<threat_intel_pack_id>/<threat_intel_pack_version>/indicators.jsonl` and its run-bundle snapshot under `runs/<run_id>/inputs/threat_intel/indicators.jsonl`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "indicator_id",
+    "type",
+    "value",
+    "value_normalized"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract version for this record schema (SemVer)."
+    },
+    "indicator_id": {
+      "type": "string",
+      "pattern": "^pa\\.ti\\.indicator\\.v1:[0-9a-f]{64}$",
+      "description": "Stable indicator identifier. Computed deterministically from (type, value_normalized) per ADR-0008."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "ipv4",
+        "ipv6",
+        "domain",
+        "url",
+        "md5",
+        "sha1",
+        "sha256",
+        "sha512"
+      ],
+      "description": "Indicator type vocabulary (baseline v0.2+)."
+    },
+    "value": {
+      "$ref": "#/$defs/trimmed_string_nonempty_v1",
+      "description": "Original indicator value (ASCII-trimmed)."
+    },
+    "value_normalized": {
+      "$ref": "#/$defs/trimmed_string_nonempty_v1",
+      "description": "Deterministic normalized value used for matching and for indicator_id computation."
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Optional confidence score in [0.0, 1.0]; null when unknown."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trimmed_string_nonempty_v1"
+      },
+      "uniqueItems": true,
+      "description": "Optional tag strings. When present, must be unique and sorted ascending by UTF-8 byte order (enforced by semantic validation; not expressible in JSON Schema)."
+    },
+    "valid_from_utc": {
+      "$ref": "#/$defs/timestamp_rfc3339_utc_millis_or_null_v1",
+      "description": "Optional validity window start (UTC RFC 3339, fixed `YYYY-MM-DDTHH:MM:SS.mmmZ` form)."
+    },
+    "valid_until_utc": {
+      "$ref": "#/$defs/timestamp_rfc3339_utc_millis_or_null_v1",
+      "description": "Optional validity window end (UTC RFC 3339, fixed `YYYY-MM-DDTHH:MM:SS.mmmZ` form)."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_ref_v1"
+      },
+      "uniqueItems": true,
+      "description": "Optional provenance pointers. When present, must be de-duplicated and sorted deterministically per ADR-0008 (enforced by semantic validation; not expressible in JSON Schema)."
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Non-normative extensibility bucket. Consumers must ignore unknown keys under `extensions`. Producers must treat this as potentially sensitive and must not store secrets here."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "md5"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value_normalized": {
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "sha1"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value_normalized": {
+            "pattern": "^[0-9a-f]{40}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "sha256"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value_normalized": {
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "sha512"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value_normalized": {
+            "pattern": "^[0-9a-f]{128}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ipv4"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value_normalized": {
+            "pattern": "^(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ipv6"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value_normalized": {
+            "format": "ipv6",
+            "pattern": "^[0-9a-f:.]+$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "domain"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "value_normalized": {
+            "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "trimmed_string_nonempty_v1": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![ \\t\\r\\n\\f\\v])[\\s\\S]*[^ \\t\\r\\n\\f\\v]$",
+      "description": "Non-empty string with no leading/trailing ASCII whitespace."
+    },
+    "timestamp_rfc3339_utc_millis_or_null_v1": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+      "description": "UTC RFC 3339 timestamp in fixed `YYYY-MM-DDTHH:MM:SS.mmmZ` form, or null."
+    },
+    "source_ref_v1": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Optional source kind (e.g., misp, taxii, csv, manual, unknown)."
+        },
+        "source_ref": {
+          "type": "string",
+          "description": "Optional stable upstream identifier (event id, attribute id, feed id, etc.)."
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional upstream URI (if applicable)."
+        },
+        "observed_at_utc": {
+          "$ref": "#/$defs/timestamp_rfc3339_utc_millis_or_null_v1",
+          "description": "Optional observation time at source (UTC RFC 3339, fixed millis form)."
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Optional confidence for this specific source reference."
+        }
+      }
+    }
+  },
+  "$comment": "File-level invariants (uniqueness and ordering across lines) are enforced outside JSON Schema. Per ADR-0008: indicators.jsonl must be sorted by indicator_id and contain no duplicate indicator_id.",
+  "examples": [
+    {
+      "contract_version": "0.1.0",
+      "indicator_id": "pa.ti.indicator.v1:517f5c3bbd4779251af141d2ebdea0df558aab6a93f21df6ee1e735a52d1c4be",
+      "type": "ipv4",
+      "value": "203.0.113.5",
+      "value_normalized": "203.0.113.5",
+      "confidence": 0.9,
+      "tags": [
+        "c2",
+        "test-fixture"
+      ],
+      "valid_from_utc": "2026-01-01T00:00:00.000Z",
+      "valid_until_utc": null,
+      "sources": [
+        {
+          "kind": "misp",
+          "source_ref": "event:123:attribute:456"
+        }
+      ]
+    },
+    {
+      "contract_version": "0.1.0",
+      "indicator_id": "pa.ti.indicator.v1:ce3786f3b1b99ae3a4c7658cece3aee71fa83cb8647a5481eba90a699b88e9fe",
+      "type": "domain",
+      "value": "Example.COM.",
+      "value_normalized": "example.com",
+      "tags": [
+        "test-fixture"
+      ],
+      "sources": [
+        {
+          "kind": "manual",
+          "source_ref": "fixture"
+        }
+      ]
+    }
+  ]
+}

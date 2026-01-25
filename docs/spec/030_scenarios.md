@@ -17,8 +17,8 @@ runner executes actions through a deterministic lifecycle, emits stable identifi
 ground truth for scoring and comparison. Expected telemetry is linked through criteria packs when
 available.
 
-Unless otherwise specified, artifact paths in this document are run-bundle-relative (i.e., relative
-to `runs/<run_id>/`).
+Unless otherwise specified, artifact paths in this document are run-relative (i.e., relative to the
+run bundle root `runs/<run_id>/` and MUST NOT include the `runs/<run_id>/` prefix).
 
 ## Separation of concerns
 
@@ -55,7 +55,10 @@ Normative requirements:
 
 - If `posture` is omitted, the runner MUST treat the effective posture as `baseline`.
 - If `posture.mode` is present and is not one of the allowed values above, the runner MUST fail
-  closed before execution with `reason_code="invalid_posture_mode"`.
+  closed before execution and MUST record the stage outcome `reason_code="invalid_posture_mode"`
+  (see
+  [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md))
+  in `logs/health.json` (and `manifest.stage_outcomes[]`).
 - `posture` MUST be non-secret. It MUST NOT include credentials, tokens, usernames, hostnames, IPs,
   or any other sensitive identifiers.
 - Changing `posture.mode` changes scenario semantics. Scenario authors MUST bump `scenario_version`
@@ -77,8 +80,10 @@ Provenance (normative):
 v0.1 support (normative):
 
 - The v0.1 runner MUST support `plan.type: "atomic"` only.
-- If any other `plan.type` is encountered in v0.1, the runner MUST fail closed before execution with
-  `reason_code="plan_type_reserved"`.
+- If any other `plan.type` is encountered in v0.1, the runner MUST fail closed before execution and
+  MUST record the stage outcome `reason_code="plan_type_reserved"` (see
+  [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md))
+  in `logs/health.json` (and `manifest.stage_outcomes[]`).
 
 Plan types (evolution path):
 
@@ -280,7 +285,7 @@ v0.1 repair handling (normative):
 
 - `repair` is reserved in v0.1. Implementations MUST NOT mutate targets as part of reconciliation.
 - If a scenario requests `policy=repair` but repair is not enabled/supported (for example,
-  `runner.atomic.state_reconciliation.repair_enabled=false`), the runner MUST:
+  `runner.atomic.state_reconciliation.allow_repair=false`), the runner MUST:
   - perform reconciliation probes in observe-only mode, and
   - record the blocked intent deterministically in the reconciliation report (per-item `reason_code`
     SHOULD be `repair_blocked` for affected items), and

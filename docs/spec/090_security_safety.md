@@ -416,7 +416,7 @@ operations that contain sensitive artifacts.
 
 Normative requirements:
 
-- The side-effect ledger MUST be stored at `runner/side_effects.json`.
+- The side-effect ledger MUST be stored at `runner/actions/<action_id>/side_effect_ledger.json`.
 - Side-effect entries MUST avoid storing raw secrets. If a side-effect involves secret material, the
   entry MUST record `reason_code` only, and MAY include a redacted-safe `sha256` only when allowed
   by the effective redaction policy.
@@ -427,8 +427,8 @@ Normative requirements:
   - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
     bundle).
   - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
-    artifact at `runner/side_effects.json` conforming to "Placeholder artifacts" (including required
-    `reason_code`, and `sha256` when allowed).
+    artifact at `runner/actions/<action_id>/side_effect_ledger.json` conforming to "Placeholder
+    artifacts" (including required `reason_code`, and `sha256` when allowed).
 - If the ledger contains raw credential material, it MUST be withheld or quarantined (never stored
   in standard long-term artifact locations).
 - When side-effect ledger is quarantined or withheld, the run manifest and reports MUST disclose the

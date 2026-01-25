@@ -148,6 +148,11 @@ lexicographically by full `stage` string.
 
 ### Stable reason codes
 
+- This ADR governs stage/substage outcome `reason_code` values only (those emitted in
+  `manifest.stage_outcomes[]` and `logs/health.json`).
+- Other contract-backed artifacts may also use a field named `reason_code`; those vocabularies are
+  scoped to their owning schema and are not governed by this ADR.
+
 - `reason_code` MUST be ASCII `lower_snake_case`.
 - `reason_code` MUST be stable across runs and versions within v0.1.
 - `reason_code` MUST be selected from the normative catalog in this ADR for the relevant
@@ -224,8 +229,9 @@ example `normalization.strict_mode`, `reporting.emit_html`).
 
 ## Failure taxonomy (normative reason codes)
 
-This section defines the authoritative reason codes for v0.1. Codes not listed here MUST NOT be
-emitted in `logs/health.json` without a spec update.
+This section defines the authoritative stage outcome reason codes for v0.1. Codes not listed here
+MUST NOT be emitted as a stage outcome `reason_code` in `logs/health.json` (or
+`manifest.stage_outcomes[]`) without a spec update.
 
 ### Cross-cutting (applies to any stage)
 
@@ -234,7 +240,7 @@ These reason codes MAY be used for any stage.
 | Reason code                          | Severity | Description                                                                                                               |
 | ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `redaction_policy_error`             | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                                       |
-| `config_schema_invalid`              | FATAL    | A required config artifact is schema-invalid (for example `range.yaml`, `manifest.json`, `plan.json`).                    |
+| `config_schema_invalid`              | FATAL    | A required config artifact is schema-invalid (for example `range.yaml`, `manifest.json`, or `inputs/plan_draft.yaml` when plan building is enabled).|
 | `input_missing`                      | FATAL    | Required upstream input artifact missing or unreadable.                                                                   |
 | `lock_acquisition_failed`            | FATAL    | Exclusive lock could not be acquired.                                                                                     |
 | `storage_io_error`                   | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                                         |
@@ -280,6 +286,7 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 | ------------------------------ | -------- | --------------------------------------------------------------------------------- |
 | `unstable_asset_id_resolution` | FATAL    | `target_asset_id` cannot be resolved deterministically.                           |
 | `plan_type_reserved`           | FATAL    | Plan type is reserved and not supported in this version.                          |
+| `invalid_posture_mode`         | FATAL    | `posture.mode` is present but not one of the allowed enum values.                 |
 | `executor_not_found`           | FATAL    | Required executor binary/module is missing.                                       |
 | `ground_truth_write_failed`    | FATAL    | Cannot write `ground_truth.jsonl`.                                                |
 | `action_key_collision`         | FATAL    | Duplicate `action_key` within the run.                                            |
@@ -304,6 +311,7 @@ Default `fail_mode`: `fail_closed`
 
 | Reason code                    | Severity | Description                                                                |
 | ------------------------------ | -------- | -------------------------------------------------------------------------- |
+| `invalid_posture_mode`         | FATAL    | `posture.mode` is present but not one of the allowed enum values.            |
 | `version_pin_missing`          | FATAL    | Required version pin is missing for an enabled feature (rules/packs/etc.). |
 | `version_pin_unparseable`      | FATAL    | A `semver_v1` pin cannot be parsed as SemVer.                              |
 | `version_resolution_failed`    | FATAL    | Omitted SemVer pin cannot be resolved deterministically (no candidates).   |
@@ -510,7 +518,7 @@ If this substage fails, the telemetry stage MUST fail closed. The telemetry stag
 
 - `baseline_profile_missing`
 - `baseline_profile_invalid`
-- \`baseline_profile_not_met
+- `baseline_profile_not_met`
 
 #### Windows raw-mode canary (substage: `telemetry.windows_eventlog.raw_mode`)
 
@@ -808,5 +816,6 @@ Default `fail_mode`: `fail_closed` (when enabled)
 
 | Date       | Change                                                  |
 | ---------- | ------------------------------------------------------- |
+| 2026-01-25 | Replace legacy `plan.json` example with `inputs/plan_draft.yaml` for plan drafts |
 | 2026-01-13 | Add telemetry.network.egress_policy canary reason codes |
 | 2026-01-12 | Formatting update                                       |

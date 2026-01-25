@@ -298,7 +298,7 @@
   ],
   "notes": [
     "contracts[].contract_version MUST be kept in sync with each schema file's contract_version const (enforced by validation/runtime).",
-    "bindings[].artifact_glob values are run-bundle-relative (do not include runs/<run_id>/ prefix).",
+    "bindings[].artifact_glob values are run-relative (relative to the run bundle root; do not include the runs/<run_id>/ prefix).",
     "raw_parquet/** network manifest bindings are placeholders; reconcile final paths with the run bundle layout spec before relying on them as stable."
   ]
 }

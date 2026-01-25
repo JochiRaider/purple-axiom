@@ -222,11 +222,11 @@ The collector or downstream normalizer MUST set `metadata.source_type` based on 
 
 | Journal `_TRANSPORT` | `metadata.source_type` |
 | -------------------- | ---------------------- |
-| `syslog`             | `linux_syslog`         |
-| `journal`            | `linux_journald`       |
-| `stdout`             | `linux_journald`       |
-| `kernel`             | `linux_journald`       |
-| `audit`              | `linux_auditd`         |
+| `syslog`             | `linux-syslog`         |
+| `journal`            | `linux-journald`       |
+| `stdout`             | `linux-journald`       |
+| `kernel`             | `linux-journald`       |
+| `audit`              | `linux-auditd`         |
 
 This mapping MUST remain consistent with "Normalization to OCSF" → "Source type assignment".
 
@@ -349,7 +349,7 @@ same timestamp bucket are common. Per ADR-0002, use Tier 2 when a stable cursor 
 
 ```json
 {
-  "source_type": "linux_syslog",
+  "source_type": "linux-syslog",
   "origin.host": "<emitting_host>",
   "stream.name": "<log_file_name>",
   "stream.cursor": "<line_index_or_byte_offset>"
@@ -511,7 +511,7 @@ When audit records are aggregated into a single logical event before normalizati
 
 ```json
 {
-  "source_type": "linux_auditd",
+  "source_type": "linux-auditd",
   "origin.host": "<emitting_host>",
   "origin.audit_node": "<node_value_if_present>",
   "origin.audit_msg_id": "audit(<epoch>.<fractional>:<serial>)"
@@ -531,7 +531,7 @@ artifact cursor to avoid identity collisions across records within the same even
 
 ```json
 {
-  "source_type": "linux_auditd",
+  "source_type": "linux-auditd",
   "origin.host": "<emitting_host>",
   "stream.name": "audit.log",
   "stream.cursor": "<line_index_or_byte_offset>"
@@ -612,12 +612,12 @@ The normalizer must set `metadata.source_type` based on the ingestion path:
 
 | Ingestion path                   | `metadata.source_type` |
 | -------------------------------- | ---------------------- |
-| journald (syslog transport)      | `linux_syslog`         |
-| journald (journal/stdout/kernel) | `linux_journald`       |
-| journald (audit transport)       | `linux_auditd`         |
-| filelog on syslog files          | `linux_syslog`         |
-| filelog on audit.log             | `linux_auditd`         |
-| syslog receiver (network)        | `linux_syslog`         |
+| journald (syslog transport)      | `linux-syslog`         |
+| journald (journal/stdout/kernel) | `linux-journald`       |
+| journald (audit transport)       | `linux-auditd`         |
+| filelog on syslog files          | `linux-syslog`         |
+| filelog on audit.log             | `linux-auditd`         |
+| syslog receiver (network)        | `linux-syslog`         |
 
 ### OCSF class routing (v0.1 seed)
 

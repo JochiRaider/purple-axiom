@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Threat intelligence pack manifest",
+  "description": "Manifest for a threat intelligence pack snapshot. This schema is intended for both the repository pack manifest (threat_intel/packs/<threat_intel_pack_id>/<threat_intel_pack_version>/manifest.json) and the run-bundle snapshot (runs/<run_id>/inputs/threat_intel/manifest.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "threat_intel_pack_id",
+    "threat_intel_pack_version",
+    "manifest_sha256",
+    "indicators_sha256",
+    "threat_intel"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract version for this manifest schema."
+    },
+    "threat_intel_pack_id": {
+      "$ref": "#/$defs/id_slug_v1",
+      "description": "Stable threat intelligence pack identifier (id_slug_v1)."
+    },
+    "threat_intel_pack_version": {
+      "$ref": "#/$defs/semver_v1",
+      "description": "Threat intelligence pack version (SemVer 2.0.0, no leading 'v')."
+    },
+    "manifest_sha256": {
+      "$ref": "#/$defs/sha256_hex",
+      "description": "SHA-256 over the canonicalized manifest basis (with hash fields removed) as defined by the threat intelligence pack spec."
+    },
+    "indicators_sha256": {
+      "$ref": "#/$defs/sha256_hex",
+      "description": "SHA-256 over the canonicalized indicators.jsonl bytes as defined by the threat intelligence pack spec."
+    },
+    "threat_intel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pack_sha256"
+      ],
+      "properties": {
+        "pack_sha256": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "Pack-level deterministic content fingerprint computed from (threat_intel_pack_id, threat_intel_pack_version, manifest_sha256, indicators_sha256) as defined by the threat intelligence pack spec."
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "upstreams": {
+      "type": "array",
+      "description": "Optional provenance for upstream exports used to build the pack. When present, each element records a stable source reference and a deterministic tree hash over the upstream export artifact set.",
+      "items": {
+        "$ref": "#/$defs/upstream_provenance_v1"
+      },
+      "uniqueItems": true
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "$defs": {
+    "id_slug_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "description": "Lowercase, path-safe identifier: 1-64 chars, a-z0-9 and '-', must start/end with [a-z0-9], and must not contain '--'."
+    },
+    "semver_v1": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "description": "SemVer 2.0.0 string without a leading 'v'."
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex-encoded SHA-256 digest (64 chars)."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved for forward-compatible, non-normative extensions. Consumers MUST ignore unknown keys under extensions.",
+      "additionalProperties": true
+    },
+    "upstream_provenance_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "source_ref",
+        "source_tree_sha256"
+      ],
+      "properties": {
+        "source_kind": {
+          "$ref": "#/$defs/id_slug_v1",
+          "description": "Source system / export kind (example: misp, taxii, stix_bundle)."
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Stable upstream revision identifier (examples: git commit, MISP event UUID, TAXII collection+timestamp)."
+        },
+        "source_tree_sha256": {
+          "$ref": "#/$defs/sha256_hex",
+          "description": "SHA-256 over a deterministic tree hash basis for the upstream export artifact set."
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Optional redaction-safe notes."
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    }
+  }
+}

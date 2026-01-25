@@ -96,7 +96,7 @@ Every emitted normalized event MUST include the following fields.
 | `metadata.scenario_id`        |        MUST | Scenario identifier (ties to ground truth). MUST conform to `id_slug_v1`. See [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md).                                                                         |
 | `metadata.collector_version`  |        MUST | Collector build/version.                                                                                                                                                                                                                     |
 | `metadata.normalizer_version` |        MUST | Normalizer build/version.                                                                                                                                                                                                                    |
-| `metadata.source_type`        |        MUST | Source discriminator (example: `windows_security`, `sysmon`, `osquery`, `auditd`).                                                                                                                                                           |
+| `metadata.source_type`        |        MUST | Source discriminator (example: `windows-security`, `windows-sysmon`, `osquery`, `linux-auditd`).                                                                                                                                             |
 | `metadata.source_event_id`    |        MUST | Source-native upstream ID when present; else `null`. MUST be a string when non-null. For `metadata.identity_tier = 3`, this MUST be `null`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).       |
 | `metadata.identity_tier`      |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). This is distinct from the Tier 0/1/2/3/R field tier model. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                 |
 
@@ -351,13 +351,13 @@ unless:
 The baseline families are intentionally achievable using common endpoint telemetry (no mandatory
 network sensors).
 
-| Enabled family (v0.1)     | Typical sources / `metadata.source_type`                   | Notes                                                                          |
-| ------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Process execution         | `sysmon`, `osquery`, `auditd`                              | Primary pivot for most endpoint detections and correlations.                   |
-| Network connections       | `sysmon`, host firewall logs, optional flow sensors        | Prefer endpoint connection events in v0.1; pcap/NetFlow are optional/reserved. |
-| DNS queries               | `dns` (DNS client logs / resolver logs), optional `zeek_*` | Treated as its own family to support domain-based detections and correlation.  |
-| Authentication/logon      | `windows_security`, POSIX auth logs, IdP audit logs        | Focus on success/failure + principal identity pivots.                          |
-| File writes (selectively) | `sysmon`, `auditd`, `osquery`                              | High-volume and high-variance unless bounded (see selection policy below).     |
+| Enabled family (v0.1)     | Typical sources / `metadata.source_type`                    | Notes                                                                          |
+| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Process execution         | `windows-sysmon`, `osquery`, `linux-auditd`                 | Primary pivot for most endpoint detections and correlations.                   |
+| Network connections       | `windows-sysmon`, host firewall logs, optional flow sensors | Prefer endpoint connection events in v0.1; pcap/NetFlow are optional/reserved. |
+| DNS queries               | `dns` (DNS client logs / resolver logs), optional `zeek_*`  | Treated as its own family to support domain-based detections and correlation.  |
+| Authentication/logon      | `windows-security`, POSIX auth logs, IdP audit logs         | Focus on success/failure + principal identity pivots.                          |
+| File writes (selectively) | `windows-sysmon`, `linux-auditd`, `osquery`                 | High-volume and high-variance unless bounded (see selection policy below).     |
 
 #### File write selection policy (recommended; v0.1)
 
@@ -470,9 +470,9 @@ Applicability and absence:
 Implementations MUST maintain fixture-backed tests that validate Tier 2 actor identity extraction
 and canonicalization across at least the following telemetry sources:
 
-- Windows Event Log (`metadata.source_type` variants such as `windows_security` or `sysmon`)
+- Windows Event Log (`metadata.source_type` variants such as `windows-security` or `windows-sysmon`)
 - osquery (`metadata.source_type = "osquery"`)
-- Unix logs (`metadata.source_type = "linux_auditd"` and/or `linux_syslog`)
+- Unix logs (`metadata.source_type = "linux-auditd"` and/or `linux-syslog`)
 
 Each fixture MUST include (1) a representative raw source record (or minimally sufficient parsed
 representation) and (2) the expected normalized OCSF event. The test suite MUST assert:

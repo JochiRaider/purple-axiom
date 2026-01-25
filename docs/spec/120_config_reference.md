@@ -275,7 +275,7 @@ Common keys:
       - When `true`, the runner emits synthetic marker events for correlation (see
         `032_atomic_red_team_executor_integration.md`) and records the marker value in run
         artifacts.
-    - `method` (optional, default: `auto`): `auto | windows_eventlog | syslog | filelog`
+    - `method` (optional, default: `auto`): `auto | windows_eventlog | linux_syslog | filelog`
       - `auto`: implementation selects an OS-appropriate method.
       - `filelog`: marker is appended to a local file that is tailed by the collector.
     - `filelog_path` (optional, required when `method=filelog`)
@@ -732,8 +732,6 @@ Common keys:
 
 Notes:
 
-Notes:
-
 - `gap_taxonomy` is a selection/filter for evaluation, budgeting, and CI gating. It MUST NOT change
   the schema shape of scoring outputs or the regression comparable metric surface.
 - Excluded categories MUST still appear in scoring outputs as indeterminate to preserve a stable row
@@ -855,8 +853,7 @@ Common keys:
       report redaction policy and the pipeline redaction/quarantine rules.
 - `redaction` (optional)
   - `enabled` (default: true)
-  - `policy_ref` (optional): reference to a redaction policy file
-  - Notes:
+  - `policy_ref` (optional): reference to a redaction policy file Notes:
     - `reporting.redaction` controls report rendering. It MUST NOT be interpreted as the pipeline
       redaction enablement switch.
     - Pipeline redaction enablement is controlled by `security.redaction.enabled`.
@@ -1074,7 +1071,7 @@ telemetry:
   otel:
     enabled: true
     config_path: configs/otel-collector.yaml
-    channels: ["windows_security", "sysmon", "dns"]
+    channels: ["windows-security", "windows-sysmon", "dns"]
   sources:
     osquery:
       enabled: false

@@ -566,8 +566,9 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
 1. **Outcome-sourced status**
 
    - `manifest.status` MUST be derived from stage outcomes, not from ad-hoc runtime heuristics.
-   - `reason_code` MUST be selected from the normative catalog for the relevant
-     `(stage, reason_code)` pair; unknown reason codes are forbidden.
+   - Stage outcome `reason_code` MUST be selected from the normative catalog for the relevant
+     `(stage, reason_code)` pair (see ADR-0005); unknown stage-outcome reason codes are
+     forbidden.
 
 1. **Safety policy is enforced, not advisory**
 
@@ -725,7 +726,7 @@ Preflight / Readiness Gate:
 - Implementations MAY emit a `runner.preflight` substage outcome for quick triage.
   - If emitted, it MUST be recorded in `manifest.json` and, when health files are enabled, in
     `logs/health.json`.
-  - It MUST NOT introduce new `reason_code` values without updating
+  - It MUST NOT introduce new stage outcome `reason_code` values without updating
     [ADR-0005: Stage outcomes and failure classification][adr-0005].
 
 Responsibilities:

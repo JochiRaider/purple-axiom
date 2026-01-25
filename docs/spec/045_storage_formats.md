@@ -378,7 +378,7 @@ Rationale:
 Within a run bundle, store Parquet datasets as directories with one or more Parquet files:
 
 - `runs/<run_id>/raw_parquet/windows_eventlog/`
-- `runs/<run_id>/raw_parquet/syslog/`
+- `runs/<run_id>/raw_parquet/linux_syslog/`
 - `runs/<run_id>/raw_parquet/osquery/`
 - `runs/<run_id>/raw_parquet/pcap/` (placeholder contract; capture/ingestion is not required for
   v0.1)

@@ -69,7 +69,9 @@ Sigma `logsource` fields:
 
 An OCSF query scope:
 
-- required: one or more OCSF class filters (preferred: `class_uid` or class name)
+- required: one or more OCSF `class_uids` (integer class_uids) for execution.
+  - Mapping packs MAY carry class names for authoring/readability, but the router/bridge MUST
+    resolve any such names to `class_uids` deterministically before emitting compiled plans.
 - optional: producer/source predicates via `filters[]` expressed as OCSF filter objects
   (`{path, op, value}`; see below)
 
@@ -101,28 +103,59 @@ Each filter object MUST have:
 #### Semantics (normative)
 
 - The effective routed scope is:
+
   - `class_uid IN routed_scope.class_uids` (union semantics; see below), AND
   - all `filters[]` evaluate true (conjunction / logical AND).
+
 - If `filters[]` is omitted or empty, only the class scope applies.
 
-Path resolution and missing data:
+- Path resolution:
 
-- If `path` is missing or resolves to null:
-  - `op=exists` MUST evaluate to false when `value` is omitted or true.
-  - `op=exists` MUST evaluate to true when `value` is false.
-  - All other operators MUST evaluate to false (fail-closed narrowing).
+  - `path` is a dot-delimited field path into the event JSON object.
+  - Resolution yields one of:
+    - MISSING: any path segment is absent
+    - NULL: path exists but value is JSON null
+    - VALUE: any non-null JSON value (including false, 0, "", empty arrays, empty objects)
 
-Type and operator behavior:
+- `op=exists` truth table:
 
-- Comparisons are type-strict. Implementations MUST NOT perform implicit type coercion.
-- `eq` / `neq`: JSON equality / inequality on the resolved value.
-- `in` / `nin`: `value` MUST be an array. If the resolved value is scalar, membership is tested
-  against the array. If the resolved value is an array, the predicate matches when any element is
-  (not) in `value`.
-- `contains` / `prefix` / `suffix`: resolved value MUST be a string (or an array of strings, matched
-  element-wise).
-- `regex`: resolved value MUST be a string (or an array of strings, matched element-wise). Patterns
-  MUST be RE2-compatible. `regex` is a search match unless the pattern is explicitly anchored.
+  - If `value` is omitted, it defaults to `true`.
+  - If `value` is present, it MUST be boolean; otherwise the filter is invalid and the mapping pack
+    MUST be rejected as invalid (detection stage fatal `bridge_mapping_pack_invalid`).
+  - Evaluate:
+    - `exists=true` => match iff resolution is VALUE
+    - `exists=false` => match iff resolution is MISSING or NULL
+
+- For all other operators:
+
+  - If resolution is MISSING or NULL, the predicate MUST evaluate to `false` (fail-closed at filter
+    level).
+
+- Type and operator behavior:
+
+  - Comparisons are type-strict. Implementations MUST NOT perform implicit type coercion.
+  - `eq` / `neq`:
+    - If resolved VALUE is a scalar, use JSON equality / inequality.
+    - If resolved VALUE is an array:
+      - `eq` matches iff any element equals `value`.
+      - `neq` matches iff no element equals `value`.
+  - `in` / `nin`:
+    - `value` MUST be an array.
+    - If resolved VALUE is a scalar:
+      - `in` matches iff the scalar is equal to any element of `value`.
+      - `nin` matches iff the scalar is equal to no elements of `value`.
+    - If resolved VALUE is an array:
+      - `in` matches iff any element is equal to any element of `value`.
+      - `nin` matches iff no element is equal to any element of `value` (intersection empty).
+  - `contains` / `prefix` / `suffix`:
+    - Resolved VALUE MUST be a string, or an array of strings.
+    - When resolved VALUE is an array, the predicate matches iff any element matches.
+    - `prefix` is equivalent to a "starts with" match; `suffix` is equivalent to an "ends with"
+      match.
+  - `regex`:
+    - Resolved VALUE MUST be a string, or an array of strings (any-element semantics).
+    - Patterns MUST be RE2-compatible.
+    - `regex` is a search match unless the pattern is explicitly anchored.
 
 Determinism:
 
@@ -151,20 +184,75 @@ Multi-class routing semantics (normative):
 
 - A route that produces multiple `class_uid` values is a valid, fully-determined route.
 - The evaluator MUST evaluate the rule against the **union** of all routed classes.
-  - Equivalent semantics: `class_uid IN (<uids...>)` or `(class_uid = u1 OR class_uid = u2 OR ...)`.
+  - Equivalent semantics: `class_uid IN (<uids. .>)` or `(class_uid = u1 OR class_uid = u2 OR . .)`.
   - The evaluator MUST NOT pick an arbitrary single class when multiple classes are routed.
 - For determinism and diffability, the router MUST emit multi-class `class_uid` sets in ascending
   numeric order.
 - Backend implementations MAY realize union semantics via:
-  - a single query with `class_uid IN (...)`, or
+  - a single query with `class_uid IN (. .)`, or
   - multiple per-class subqueries combined as a deterministic UNION of results.
 
 ### Rules
 
-- Route primarily on `logsource.category`.
-- Use `product/service` only to **narrow** when necessary.
-- If routing cannot be determined (no matching route), the rule is **non-executable** (fail-closed).
-- Routing to multiple classes MUST NOT be treated as "undetermined routing".
+Route selection MUST be deterministic and MUST be computed only from:
+
+- the Sigma rule `logsource` object, and
+- `bridge/router_table.json` `routes[]` content.
+
+#### Token normalization (normative)
+
+For matching purposes, implementations MUST normalize each token by:
+
+1. trimming ASCII whitespace, then
+1. ASCII-lowercasing (`A-Z` → `a-z`).
+
+This applies to:
+
+- `logsource.category`, `logsource.product`, `logsource.service`
+- `routes[].sigma_logsource.{category,product,service}`
+
+#### Matching (normative)
+
+A route `r` matches a rule `L` iff:
+
+- `r.sigma_logsource.category == L.category`, AND
+- if `r.sigma_logsource.product` is present, `L.product` MUST be present and equal, AND
+- if `r.sigma_logsource.service` is present, `L.service` MUST be present and equal.
+
+Notes:
+
+- A route MUST NOT match a rule by "assuming" a missing `product/service`.
+  - If a rule omits `product/service`, only routes that also omit those fields may match.
+
+#### Specificity and selection (normative)
+
+Define:
+
+- `specificity(r) = count_present(r.sigma_logsource.product) + count_present(r.sigma_logsource.service)`
+
+Selection algorithm:
+
+1. Compute `matches = { r | r matches L }`.
+1. If `matches` is empty:
+   - The rule MUST be marked non-executable with `reason_code="unroutable_logsource"`.
+   - `non_executable_reason.explanation` MUST include the normalized `logsource` tuple and MUST
+     state whether the category was unknown vs known-but-unmatched on product/service.
+1. Else:
+   - Let `m = max_{r in matches} specificity(r)`.
+   - Let `best = { r in matches | specificity(r) == m }`.
+   - If `best` contains exactly one route, select it.
+   - If `best` contains more than one route:
+     - The rule MUST be marked non-executable with `reason_code="unroutable_logsource"`.
+     - `non_executable_reason.explanation` MUST begin with `Ambiguous routing:` and MUST list the
+       matching route signatures (`category`, `product`, `service`) in deterministic order.
+
+#### Selected route output (normative)
+
+For the selected route:
+
+- `ocsf_scope.class_uids` MUST be emitted as an ascending numeric list.
+- `filters[]` MUST be preserved in the stored order of the router table snapshot.
+- Multi-class routing is a union scope, not an ambiguity.
 
 ### Mapping packs
 
@@ -178,21 +266,34 @@ The mapping pack is versioned independently of:
 
 ## Field alias map
 
-### Purpose
+Translate Sigma field references into backend-evaluable OCSF field selectors.
 
-Translate Sigma field references into OCSF JSONPaths (or evaluator-specific column expressions).
+Terminology:
+
+- OCSF field path: a dot-delimited path rooted at the OCSF event object (example: `process.name`).
+- Backend field expression: a backend-specific expression derived deterministically from an OCSF
+  field path (example for DuckDB structs: `process.name`).
 
 ### Structure
 
 Field aliases SHOULD be scoped by router result (at minimum by `logsource.category`), because field
 meaning varies by event family.
 
-Multi-class aliasing note (recommended):
+### Multi-class aliasing note (normative)
 
-- When a `logsource.category` routes to multiple `class_uid` values, field aliases SHOULD be scoped
-  such that alias resolution remains unambiguous.
-  - Recommended: scope by `(logsource.category, class_uid)` (even if materialized internally), or
-  - ensure the alias mapping for that category is valid for all routed classes used in evaluation.
+If a rule routes to multiple OCSF classes, each referenced Sigma field MUST resolve
+deterministically.
+
+- If a Sigma field maps to different OCSF field paths/expressions per routed class, the bridge MUST
+  either:
+  - emit a deterministic resolution expression (for example, a class-ordered `COALESCE(. .)`), or
+  - mark the rule non-executable with `reason_code="ambiguous_field_alias"`.
+
+A deterministic resolution expression is permitted only when:
+
+- each candidate expression is type-compatible under the backend, and
+- the expression ordering is deterministic (ascending by `class_uid`), and
+- the semantics are explicitly "value from any routed class".n.
 
 Recommended structure (conceptual):
 
@@ -202,52 +303,71 @@ Recommended structure (conceptual):
 
 ### Fallback policy (raw field fallback)
 
-A controlled escape hatch is permitted for MVP:
+This section governs *rule-field* fallback to `raw.*` when the mapping pack does not provide a
+normalized OCSF alias for a referenced Sigma field.
 
-- If an event attribute cannot be mapped yet, allow evaluation to reference `raw.*` when:
-  - the event is still within the correct OCSF class scope, and
-  - provenance clearly identifies the producer/source
-- If fallback is used, it MUST be recorded (see "Bridge provenance in detections").
-- Fallback enablement MUST be controlled by `detection.sigma.bridge.raw_fallback_enabled` (see the
-  [configuration reference](120_config_reference.md)).
-- If fallback is used, `extensions.bridge.fallback_used` MUST be `true` in emitted detection
-  instances.
-- Any list of fallback-related fields (example: `extensions.bridge.unmapped_sigma_fields`) MUST be
-  sorted by UTF-8 byte order (no locale).
+#### Distinguish two uses of `raw.*` (normative)
 
-Over time, the target is to reduce fallback rate by expanding normalized fields.
+1. `raw.*` in router `filters[]`:
+
+   - Router routes MAY include `filters[]` whose `path` begins with `raw.` for producer
+     disambiguation.
+   - This usage is independent of `detection.sigma.bridge.raw_fallback_enabled`.
+
+1. `raw.*` in Sigma field aliasing / compilation:
+
+   - A Sigma selector MAY compile to a `raw.*` field path only when fallback is enabled by config
+     `detection.sigma.bridge.raw_fallback_enabled=true`.
+
+#### Safety gate: producer identification (normative)
+
+Before evaluating any predicate that references `raw.*` (router filters or rule-field fallback), the
+selected route MUST include an explicit producer/source identifier:
+
+- At minimum, the route MUST include a filter:
+  `{ "path": "metadata.source_type", "op": "eq", "value": "<event_source_type_token>" }`
+
+If a route contains any `raw.*` filter and does not contain the required `metadata.source_type`
+filter, the mapping pack MUST be rejected as invalid (detection stage fatal
+`bridge_mapping_pack_invalid`).
+
+If rule compilation requires `raw.*` fallback and the selected route does not contain the required
+`metadata.source_type` filter, the rule MUST be marked non-executable with
+`reason_code="raw_fallback_disabled"` and an explanation that the safety gate prevented fallback.
+
+#### Recording and determinism (normative)
+
+If rule-field fallback is used, it MUST be observable in emitted outputs:
+
+- `extensions.bridge.fallback_used` MUST be `true` on emitted detection instances.
+- The list `extensions.bridge.unmapped_sigma_fields` MUST contain the Sigma field names that
+  required fallback and MUST be de-duplicated and sorted by UTF-8 byte order (no locale).
+
+If implementations also record the specific `raw.*` paths referenced, those lists MUST be
+de-duplicated and sorted by UTF-8 byte order.
 
 ### Unsupported fields or modifiers
 
+The bridge MUST classify Sigma features into one of:
+
+- Supported (compiled into backend predicates),
+- Ignored (accepted but does not affect execution in v0.1; recorded for observability), or
+- Non-executable (rule cannot be evaluated safely/correctly).
+
+#### Ignored modifiers (v0.1, normative)
+
+- `timeframe`:
+  - MUST be ignored for execution in v0.1 (no time-window constraint is applied).
+  - MUST be recorded as an ignored modifier.
+  - Any `ignored_modifiers[]` list MUST be de-duplicated and sorted by UTF-8 byte order.
+
+#### Non-executable conditions (normative)
+
 - If a rule references an unmapped field and fallback is disabled, the rule is **non-executable**.
-- If a Sigma modifier cannot be expressed in the backend (example: complex regex semantics), the
-  rule is **non-executable**.
-- Non-executable rules are reported with reasons and counts.
-
-Non-executable `reason_code` values (normative, v0.1):
-
-These values MUST be recorded in compiled plan files under `non_executable_reason.reason_code`.
-
-Routing and mapping:
-
-- `unroutable_logsource`: Sigma `logsource` matches no router entry.
-- `unmapped_field`: Sigma field has no alias mapping.
-- `raw_fallback_disabled`: Rule requires `raw.*` but fallback disabled.
-- `ambiguous_field_alias`: Alias resolution ambiguous for routed scope.
-
-Expression support:
-
-- `unsupported_operator`: Operator not in supported subset.
-- `unsupported_modifier`: Modifier cannot be expressed (cidr, base64, windash, etc.).
-- `unsupported_value_type`: Value type incompatible with operator.
-- `unsupported_regex`: Regex use is unsupported or disallowed by backend policy.
-- `unsupported_correlation`: Correlation / multi-event semantics are out of scope for v0.1.
-- `unsupported_aggregation`: Aggregation semantics are out of scope for v0.1.
-
-Backend execution:
-
-- `backend_compile_error`: Backend compiler error.
-- `backend_eval_error`: Backend runtime evaluation error.
+- If the Sigma expression requires an operator or modifier outside the supported subset for the
+  configured backend, the rule is **non-executable**.
+- Non-executable rules MUST be reported via compiled plans and bridge coverage; they MUST NOT
+  silently degrade into "no matches".
 
 ## Evaluator backend adapter
 
@@ -262,9 +382,12 @@ Backend execution:
   effective values in backend provenance (see "Backend provenance").
 - Compile Sigma -> SQL (after routing + aliasing)
 - Execute over OCSF Parquet using DuckDB
-- Return:
-  - matched event ids (`metadata.event_id`)
-  - first/last seen timestamps
+- Output (normative, v0.1):
+  - The backend MUST produce match results at *event granularity*.
+  - Each match group MUST correspond to exactly one matched event id.
+  - The evaluator MUST emit one detection instance per matched event with:
+    - `matched_event_ids = [<event_id>]`
+    - `first_seen_utc == last_seen_utc` (event time)
 
 Version pinning (normative):
 
@@ -273,6 +396,7 @@ Version pinning (normative):
 - The bridge MUST record the effective runtime versions used for:
   - DuckDB (library/runtime version),
   - pySigma (library version), in backend provenance within each compiled plan.
+  - pySigma OCSF pipeline version (e.g., `pySigma-pipeline-ocsf`)
 - If the effective version differs from the pins, the evaluator stage MUST fail closed (see the
   version drift policy in the [supported versions reference](../../SUPPORTED_VERSIONS.md)).
 
@@ -365,7 +489,7 @@ Selector primitives (field-to-value comparisons):
 
 - Equality:
   - `field: <scalar>` (string, number, boolean)
-  - `field: [<scalar> ...]` (list membership)
+  - `field: [<scalar> . .]` (list membership)
 - Existence:
   - `field|exists: true|false`
 - Relational (numeric only):
@@ -396,9 +520,11 @@ This contract is aligned with research report R-03 (DuckDB backend plugin for py
 
 #### MVP compilation gate
 
-MVP compilation is allowed only when **all** required constructs are **Supported** by this section.
-Anything marked **Requires validation** MUST be treated as **Non-executable** until promoted to
-Supported by a recorded experiment.
+MVP compilation is allowed only when all constructs required by the rule are explicitly listed as
+Supported by this specification and the configured backend section.
+
+Any construct that is not explicitly listed as Supported MUST be treated as Non-executable and MUST
+map to exactly one `non_executable_reason.reason_code`.
 
 #### Supported capability surface (v0.1)
 
@@ -429,6 +555,24 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
 
 #### SQL compilation requirements (normative)
 
+##### SQL safety (normative)
+
+- Generated queries MUST be read-only and MUST be a single statement of the form
+  `WITH ... SELECT ...` or `SELECT ...`.
+- The adapter MUST compile against a pre-registered relation containing the normalized OCSF events
+  (table or view), and MUST NOT embed file paths or use DuckDB table functions (for example,
+  `read_csv`, `read_parquet`) in generated SQL.
+- The adapter MUST NOT emit statements that can mutate state or load code (non-exhaustive): `COPY`,
+  `ATTACH`, `DETACH`, `EXPORT`, `IMPORT`, `CREATE`, `INSERT`, `UPDATE`, `DELETE`, `INSTALL`, `LOAD`.
+
+##### Type policy (normative)
+
+- The adapter MUST determine field types using the normalized store schema snapshot (when present),
+  otherwise it MAY introspect the backend catalog.
+- If a required field’s type is unknown, the rule MUST be non-executable with
+  `reason_code="unsupported_value_type"` (fail closed).
+- The adapter MUST NOT apply implicit casts.
+
 1. Identifiers and quoting:
 
    - Field references MUST be quoted with double quotes when required (reserved keywords,
@@ -446,8 +590,8 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
    - Inequality (`|neq`) MUST compile NULL-safe using:
      - `field IS DISTINCT FROM value`
    - List values on scalar fields MUST compile to membership semantics:
-     - For non-string types: `field IN (v1, v2, ...)`
-     - For string-typed membership: `lower(field) IN (lower(v1), lower(v2), ...)`
+     - For non-string types: `field IN (v1, v2, . .)`
+     - For string-typed membership: `lower(field) IN (lower(v1), lower(v2), . .)`
    - Ordering: list value expansions MUST preserve the input order from the Sigma rule and MUST NOT
      be reordered as a "determinism" technique.
 
@@ -456,8 +600,8 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
    - If the resolved field expression is LIST-typed, scalar comparisons MUST mean "any element
      matches" and MUST compile using DuckDB list functions:
      - Single value: `list_contains(field, value)`
-     - Multiple values (default OR semantics): `list_has_any(field, [values...])`
-     - `all` modifier: `list_has_all(field, [values...])`
+     - Multiple values (default OR semantics): `list_has_any(field, [values. .])`
+     - `all` modifier: `list_has_all(field, [values. .])`
    - Pattern matching against LIST-typed fields MUST unnest and use `EXISTS` with a correlated
      predicate (exact formatting is implementation-defined, semantics are normative).
 
@@ -505,7 +649,7 @@ The following constructs are explicitly deferred and MUST be treated as Non-exec
      - a stable `reason_code`, and
      - a deterministic `explanation` string.
    - For backend-originated compilation failures, the `explanation` MUST include the stable backend
-     error code prefix `PA_SIGMA_...` (as defined by R-03) to support deterministic aggregation.
+     error code prefix `PA_SIGMA_. .` (as defined by R-03) to support deterministic aggregation.
 
 1. Determinism requirements:
 
@@ -532,57 +676,69 @@ At a minimum, the following mappings MUST apply:
 
 ## Bridge artifacts in the run bundle
 
-When Sigma evaluation is enabled, the bridge SHOULD emit a small, contract-validated set of
-artifacts under `runs/<run_id>/bridge/` so routing, compilation, and coverage are mechanically
-testable:
+When Sigma evaluation is enabled, the bridge MUST emit a contract-validated set of artifacts under
+`runs/<run_id>/bridge/` so routing, compilation, and coverage are reproducible and mechanically
+testable.
+
+These artifacts MUST conform to the data contracts specification, including canonical hashing rules.
+
+### Required artifacts (v0.1)
 
 - `router_table.json` (required)
 
-  - Snapshot of `logsource` routing (Sigma category to OCSF scope).
-  - Schema: [bridge router table schema](../contracts/bridge_router_table.schema.json).
+  - MUST include `router_table_id`, `router_table_version`, `ocsf_version`, `routes[]`,
+    `router_table_sha256`, and `generated_at_utc`.
+  - `router_table_sha256` MUST be computed as specified by the data contracts specification (SHA-256
+    over canonical JSON stable inputs; MUST exclude `generated_at_utc`).
 
 - `mapping_pack_snapshot.json` (required)
 
-  - Snapshot of the full bridge inputs (router + alias map + fallback policy).
-  - Schema: [bridge mapping pack schema](../contracts/bridge_mapping_pack.schema.json).
-  - `mapping_pack_sha256` MUST be computed over stable mapping inputs and MUST NOT include
-    run-specific fields.
+  - MUST include `mapping_pack_id`, `mapping_pack_version`, `ocsf_version`, `router_table_ref`,
+    `field_aliases`, `fallback_policy`, optional `backend_defaults`, `mapping_pack_sha256`, and
+    `generated_at_utc`.
+  - `mapping_pack_sha256` MUST be computed as specified by the data contracts specification (SHA-256
+    over canonical JSON stable inputs; MUST exclude run-specific fields such as `run_id`,
+    `scenario_id`, and `generated_at_utc`).
 
-- `compiled_plans/`
+- `compiled_plans/` (directory; required)
 
-  - `compiled_plans/<rule_id>.plan.json` (required for each evaluated rule)
-  - Deterministic compilation output for the chosen backend (SQL or IR), including non-executable
-    reasons.
-  - Schema: [bridge compiled plan schema](../contracts/bridge_compiled_plan.schema.json) per file.
-  - For `duckdb_sql`, the plan MUST include the effective DuckDB determinism settings recorded in
-    backend provenance (see above).
+  - `compiled_plans/<rule_id>.plan.json` MUST be emitted for each evaluated rule.
+  - Each plan MUST include:
+    - `rule_id`
+    - `rule_sha256` (SHA-256 over canonical Sigma rule bytes per the data contracts specification)
+    - `mapping_pack_sha256`
+    - `non_executable_reason` when non-executable
 
 - `coverage.json` (required)
 
-  - Summary metrics and top failure modes (unrouted categories, unmapped fields, fallback usage).
-  - Schema: [bridge coverage schema](../contracts/bridge_coverage.schema.json).
+  - MUST include `mapping_pack_sha256` and MUST reference `mapping_profile_sha256` as required by
+    the data contracts specification.
 
-These artifacts are intentionally small and diffable, and they enable CI to distinguish:
+### Cross-artifact invariants (normative)
 
-- telemetry gaps (no events)
-- normalization gaps (missing required/core fields)
-- bridge gaps (unrouted categories, unmapped fields, unsupported modifiers)
-- rule logic gaps (compiled and executed but did not match expected activity)
+- `mapping_pack_snapshot.json.ocsf_version` MUST match the run's OCSF version pins (including
+  `manifest.json.versions.ocsf_version`).
+- Any mismatch MUST fail closed and MUST NOT proceed with rule evaluation.
 
 ## Bridge provenance in detections
 
-Detection instances SHOULD include bridge metadata in `extensions.bridge`:
+Detection instances (which represent executable rules that produced ≥1 match) SHOULD include bridge
+provenance in `extensions.bridge`, such as:
 
-- `mapping_pack_id`
-- `mapping_pack_version`
-- `backend`
-- `compiled_at_utc`
-- `fallback_used` (boolean)
-- `ignored_modifiers` (array of strings)
-- `unmapped_sigma_fields` (array of strings)
-- `non_executable_reason` (object) when `executable=false`
+- `mapping_pack_id`, `mapping_pack_version`
+- `mapping_pack_sha256`
+- `backend`, `compiled_at_utc`
+- `fallback_used` (when rule-field `raw.*` fallback was required)
+- `unmapped_sigma_fields` (when compilation required dropping selectors or using fallback)
+- `ignored_modifiers` (when any ignored modifiers were present)
 
-Also store the original Sigma logsource under `extensions.sigma.logsource` (verbatim) when
+Non-executable rules MUST NOT emit detection instances. Non-executable status MUST be represented
+via:
+
+- `bridge/compiled_plans/<rule_id>.plan.json` (`non_executable_reason`), and
+- `bridge/coverage.json`.
+
+Also store the original Sigma `logsource` under `extensions.sigma.logsource` (verbatim) when
 available.
 
 ## Determinism and reproducibility requirements

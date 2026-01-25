@@ -58,6 +58,8 @@ with this document referenced as needed.
 
 - Contract: A schema plus invariants for one artifact type.
 - Run bundle: The folder `runs/<run_id>/` containing all artifacts for one execution.
+- Run-relative path: A POSIX-style path interpreted as relative to the run bundle root
+  (`runs/<run_id>/`). Run-relative paths MUST NOT include the `runs/<run_id>/` prefix.
 - JSONL: JSON Lines, one JSON object per line.
 - OCSF event: A normalized event that conforms to the required envelope fields and may include
   additional OCSF fields and vendor extensions.
@@ -80,7 +82,8 @@ Registry files (required for implementations):
 
 Normative requirements:
 
-- Implementations MUST treat `contract_registry.json` as the single source of truth for:
+- Implementations MUST treat `docs/contracts/contract_registry.json` as the single source of truth
+  for:
   - which artifacts are contract-backed, and
   - which schema validates each artifact.
 - This spec MAY include a human-readable list of schema files for convenience, but that list is
@@ -106,19 +109,6 @@ The registry instance MUST include, at minimum:
 Each schema MUST include a `contract_version` constant as a SemVer string (for example, `"1.0.0"`),
 expressed in JSON Schema via a `const` value. The `contract_version` value:
 
-- MUST match the `contracts[].contract_version` entry in `docs/contracts/contract_registry.json` for
-  the same `contract_id`.
-- MUST be bumped per the Versioning and compatibility policy in this document when the contract
-  meaningfully changes (new required fields, semantic changes, or validation tightening).
-  Documentation-only edits do not require a bump.
-
-If a schema’s `contract_version` disagrees with the registry entry for that `contract_id`, contract
-validation tooling MUST fail closed (treat as misconfiguration).Each schema MUST include a
-`contract_version` constant as a SemVer string (for example, `"1.0.0"`), expressed in JSON Schema
-via a `const` value. The `contract_version` value:
-
-- MUST match the `contracts[].contract_version` entry in `docs/contracts/contract_registry.json` for
-  the same `contract_id`.
 - MUST be bumped per the Versioning and compatibility policy in this document when the contract
   meaningfully changes (new required fields, semantic changes, or validation tightening).
   Documentation-only edits do not require a bump.
@@ -128,7 +118,8 @@ validation tooling MUST fail closed (treat as misconfiguration).
 
 ### Human-readable schema inventory (non-authoritative)
 
-The following list is for navigation only. The authoritative mapping is `contract_registry.json`.
+The following list is for navigation only. The authoritative mapping is
+`docs/contracts/contract_registry.json`.
 
 - `docs/contracts/manifest.schema.json`
 - `docs/contracts/ground_truth.schema.json`
@@ -150,12 +141,14 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
 - `docs/contracts/report.schema.json`
+- `docs/contracts/range_config.schema.json`
 - `docs/contracts/redaction_profile_set.schema.json`
 - `docs/contracts/telemetry_baseline_profile.schema.json`
 - `docs/contracts/telemetry_validation.schema.json`
 - `docs/contracts/duckdb_conformance_report.schema.json`
 - `docs/contracts/pcap_manifest.schema.json`
 - `docs/contracts/netflow_manifest.schema.json`
+- `docs/contracts/lab_inventory_snapshot.schema.json`
 - `docs/contracts/mapping_profile_input.schema.json`
 - `docs/contracts/mapping_profile_snapshot.schema.json`
 - `docs/contracts/mapping_coverage.schema.json`
@@ -163,6 +156,8 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/bridge_mapping_pack.schema.json`
 - `docs/contracts/bridge_compiled_plan.schema.json`
 - `docs/contracts/bridge_coverage.schema.json`
+- `docs/contracts/threat_intel_indicator.schema.json`
+- `docs/contracts/threat_intel_pack_manifest.schema.json`
 
 See **Contract version constant (normative)** above for the required `contract_version` constant and
 bump rules.
@@ -506,8 +501,8 @@ Handling semantics (normative):
 
 Artifact path requirements (normative):
 
-- `artifact_path` MUST be run-relative (no leading `/`), must not contain `..` segments, and must be
-  normalized to use `/` separators.
+- `artifact_path` MUST be run-relative (no leading `/` and no `runs/<run_id>/` prefix), must not
+  contain `..` segments, and must be normalized to use `/` separators.
 - `artifact_path` MUST refer to a deterministic path defined by the storage formats spec.
 - Within any `evidence_refs` array, entries MUST be sorted deterministically using UTF-8 byte order
   (no locale) by the tuple:
@@ -835,7 +830,7 @@ Stage outcomes (v0.1 baseline expectations):
 | `detection`     | `fail_closed` (default)                                | `detections/detections.jsonl`, `bridge/coverage.json`          | MUST record non-executable rules with stable reasons (compiled plans and coverage).                                |
 | `scoring`       | `fail_closed`                                          | `scoring/summary.json`                                         | A missing or invalid summary is fatal when scoring is enabled.                                                     |
 | `reporting`     | `fail_closed`                                          | `report/**`                                                    | Reporting failures are fatal when reporting is enabled.                                                            |
-| `signing`       | `fail_closed` (when enabled)                           | `signatures/**`                                                | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed.                        |
+| `signing`       | `fail_closed` (when enabled)                           | `security/checksums.txt`,`security/signature.ed25519`          | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed.                        |
 
 ### Ground truth timeline
 

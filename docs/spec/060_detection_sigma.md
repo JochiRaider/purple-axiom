@@ -72,7 +72,7 @@ Deterministic rule loading requirements (normative):
 - Each loaded rule MUST have a non-empty `id`.
 - Rule IDs MUST be unique within the effective loaded ruleset. If duplicate `id` values are
   detected, the detection stage MUST fail closed with stage-level reason code
-  `sigma_ruleset_load_failed` (see ADR-0005).
+  `sigma_ruleset_load_failed` ([ADR-0005: Stage outcomes and failure classification][adr-0005]).
 
 Reserved (v0.2+; requires config schema + reference update before use):
 
@@ -149,8 +149,9 @@ Sigma evaluation is a two-stage process.
 
 ## State machine integration
 
-The detection stage lifecycle is a candidate for explicit state machine modeling per [ADR-0007] to
-improve determinism, observability, and testability.
+The detection stage lifecycle is a candidate for explicit state machine modeling per
+[ADR-0007: State machines for lifecycle semantics][adr-0007] to improve determinism, observability,
+and testability.
 
 This section is **representational (non-normative)**. Lifecycle authority remains:
 
@@ -210,7 +211,7 @@ The `non_executable_reason` object MUST also include a human-readable explanatio
 Non-executable rules do not produce detection instances but are included in bridge coverage
 reporting and contribute to gap classification.
 
-See [ADR-0005](ADR-0005-stage-outcomes-and-failure-classification.md) for stage-level failure
+See [ADR-0005: Stage outcomes and failure classification][adr-0005] for stage-level failure
 semantics.
 
 #### Gap category mapping for non-executable rules (normative):
@@ -542,8 +543,8 @@ The `timeframe` modifier is **out of scope for v0.1**.
 | 2026-01-22 | update            |
 | 2026-01-12 | Formatting update |
 
-[adr-0005]: ADR-0005-stage-outcomes-and-failure-classification.md
-[adr-0007]: ADR-0007-state-machines.md
+[adr-0005]: ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
+[adr-0007]: ../adr/ADR-0007-state-machines.md
 [config-ref]: 120_config_reference.md
 [data-contracts]: 025_data_contracts.md
 [reporting-spec]: 080_reporting.md

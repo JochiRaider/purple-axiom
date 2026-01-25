@@ -1340,7 +1340,21 @@ Failures in this contract MUST be observable in:
 - stage outcomes recorded in the run manifest per the
   [stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
 
-At minimum, the runner MUST emit stable reason codes for these failure classes:
+Reason code scope (normative):
+
+- Stage/substage outcome `reason_code` values emitted in `manifest.stage_outcomes[]` and
+  `logs/health.json` are governed exclusively by ADR-0005.
+- The reason codes listed below are action-level reason codes emitted in per-action
+  lifecycle/phase records and runner evidence. They MUST NOT be emitted as stage/substage
+  outcome reason codes in `logs/health.json` unless the specific code is also present in
+  ADR-0005 for that stage/substage.
+
+When an action-level failure causes the overall runner stage to fail, the runner MUST map it to
+the appropriate ADR-0005 runner stage reason code (for example `prepare_failed`,
+`execute_failed`, `cleanup_invocation_failed`) while preserving the action-level reason code in
+the per-action record.
+
+At minimum, the runner MUST emit stable action-level reason codes for these failure classes:
 
 - `atomic_yaml_not_found`
 - `atomic_yaml_parse_error`
@@ -1370,6 +1384,10 @@ At minimum, the runner MUST emit stable reason codes for these failure classes:
 - `prior_phase_blocked`
 - `cleanup_suppressed`
 - `empty_command`
+
+Note: `unsafe_rerun_blocked` and `invalid_lifecycle_transition` are also valid stage outcome reason
+codes when surfaced via the `runner.lifecycle_enforcement` substage (ADR-0005). All other reason
+codes in the list above are action-level only and MUST NOT be emitted in `logs/health.json`.
 
 ## Verification hooks
 

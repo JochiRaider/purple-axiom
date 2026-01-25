@@ -389,8 +389,13 @@ Common keys:
   - `token_ref` (optional)
 - `audit` (optional)
   - `enabled` (optional, default: true): when enabled, implementations MUST record a deterministic
-    audit transcript into the run bundle (TODO: define artifact paths and schema). See
-    [ADR-0004: Deployment architecture and inter-component communication](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
+    audit transcript into the run bundle at `runs/<run_id>/control/audit.jsonl`.
+    - The audit file MUST be JSONL (one UTF-8 JSON object per line, terminated by `\n`).
+    - Each line MUST validate against the `audit_event` contract
+      (`docs/contracts/audit_event.schema.json`, `contract_version=0.2.0`).
+    - Implementations MUST append and flush the audit event to durable storage before performing any
+      security-sensitive control-plane action and before returning a successful response. See
+      [ADR-0004: Deployment architecture and inter-component communication](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
 
 Notes:
 

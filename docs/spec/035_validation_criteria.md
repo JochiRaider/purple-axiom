@@ -136,10 +136,10 @@ Pack validation before snapshot (normative):
 
 - Before snapshotting, the resolver MUST validate the selected pack directory:
   - Required files exist:
-    - `manifest.json`
-    - `criteria.jsonl`
-  - `manifest.json` MUST validate against the criteria pack manifest schema.
-  - `criteria.jsonl` MUST validate line-by-line against the criteria entry schema.
+    - `criteria/manifest.json`
+    - `criteria/criteria.jsonl`
+  - `criteria/manifest.json` MUST validate against the criteria pack manifest schema.
+  - `criteria/criteria.jsonl` MUST validate line-by-line against the criteria entry schema.
   - The resolver MUST recompute `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` and
     MUST fail closed if any recorded hash differs from the recomputed value.
   - The `criteria_pack_id` and `criteria_pack_version` values recorded inside `manifest.json` MUST
@@ -180,9 +180,33 @@ The run manifest MUST pin the criteria pack identity using version pins under `m
 
 ### Snapshot schema validation (normative)
 
-- `criteria/manifest.json` MUST validate against `criteria_pack_manifest.schema.json`.
-- Each line of `criteria/criteria.jsonl` MUST validate against `criteria_entry.schema.json`.
-- Each line of `criteria/results.jsonl` MUST validate against `criteria_result.schema.json`.
+Snapshot schema validation:
+
+- The snapshot `criteria/manifest.json` MUST validate against the criteria pack manifest contract:
+  - Contract id: `criteria_pack_manifest`
+  - Schema: `docs/contracts/criteria_pack_manifest.schema.json`
+- The snapshot `criteria/criteria.jsonl` MUST validate line-by-line against the criteria entry
+  contract:
+  - Contract id: `criteria_entry`
+  - Schema: `docs/contracts/criteria_entry.schema.json`
+- The snapshot `criteria/results.jsonl` MUST validate line-by-line against the criteria entry
+  contract:
+  - Contract id: `criteria_result`
+  - Schema: `docs/contracts/criteria_result.schema.json`
+- The validation stage MUST fail closed if schema validation fails for runs intended for
+  CI/regression.
+
+Snapshot file-format invariants (normative):
+
+- `criteria/manifest.json` MUST be UTF-8 encoded JSON text.
+- `criteria/criteria.jsonl` MUST be UTF-8 encoded JSON Lines text:
+  - Newlines MUST be `\n` (LF).
+  - The file MUST end with a trailing `\n`.
+  - The file MUST NOT contain blank lines.
+- `criteria/results.jsonl` MUST be UTF-8 encoded JSON Lines text:
+  - Newlines MUST be `\n` (LF).
+  - The file MUST end with a trailing `\n`.
+  - The file MUST NOT contain blank lines.
 
 ### Criteria pack content hash fields (normative)
 
@@ -191,13 +215,14 @@ and MUST NOT be used as a substitute for the version pins:
 
 - `manifest_sha256`
 - `criteria_sha256`
-- `criteria.pack_sha256`
+- `criteria.pack_sha256` (i.e., the JSON path `criteria` → `pack_sha256`)
 
 Definitions (normative):
 
 - `criteria_sha256` MUST equal `sha256_hex(canonical_criteria_jsonl_bytes(criteria.jsonl))`, where
   `canonical_criteria_jsonl_bytes` is produced by:
-  1. Parse `criteria.jsonl` as JSON Lines with no blank lines (each line is one JSON object).
+  1. Parse `criteria/criteria.jsonl` as JSON Lines with no blank lines (each line is one JSON
+     object).
   1. For each line object, serialize using `canonical_json_bytes` (RFC 8785 JCS; UTF-8 bytes).
   1. Join serialized objects with `\n` and append a trailing `\n`.
 - `manifest_sha256` MUST equal `sha256_hex(canonical_json_bytes(manifest_basis))`, where
@@ -469,8 +494,9 @@ manifest under `extensions.runner.execution_definitions.upstreams[]`:
 - `source_ref`: exact git SHA/tag/version or artifact digest used
 - `source_tree_sha256`: tree hash of the execution definitions used (MAY be omitted if unavailable)
 
-If the runner cannot compute `source_tree_sha256`, it MUST follow `validation.evaluation.fail_mode`
-(see below) and the evaluator MUST set drift status to `unknown`.
+If the runner cannot compute `source_tree_sha256`, it MUST omit `source_tree_sha256` from its
+recorded provenance. The criteria evaluator MUST then apply `validation.evaluation.fail_mode` when
+interpreting drift status (see below).
 
 ### Regression comparability requirement (normative)
 
@@ -507,15 +533,27 @@ Verification hooks (normative):
 
 ### Drift detection algorithm (normative)
 
-Before evaluating any actions for a run, the criteria evaluator MUST compute
-`criteria_drift_status`:
+Before evaluating any actions for a run, the criteria evaluator MUST compute a drift status **per
+engine** present in ground truth:
 
 1. Load the selected pack snapshot manifest from the run bundle.
-1. Read the run's runner-recorded provenance for the active engine.
-1. Compare `(engine, source_ref, source_tree_sha256)`:
-   - If all match: `criteria_drift_status = "none"`.
-   - If `source_ref` differs or `source_tree_sha256` differs: `criteria_drift_status = "detected"`.
-   - If either side is missing required provenance: `criteria_drift_status = "unknown"`.
+1. For each engine `E` present in `ground_truth.jsonl` actions:
+   1. Read the pack manifest provenance entry for engine `E` (from
+      `criteria/manifest.json.upstreams[]`).
+   1. Read the runner-recorded provenance for engine `E` (from the run manifest runner extensions).
+   1. Compare `(E, source_ref, source_tree_sha256)`:
+      - If all match: `criteria_drift_status[E] = "none"`.
+      - If `source_ref` differs or `source_tree_sha256` differs:
+        `criteria_drift_status[E] = "detected"`.
+      - If either side is missing required provenance: `criteria_drift_status[E] = "unknown"`.
+
+Interpretation of `"unknown"` (normative):
+
+- If `validation.evaluation.fail_mode = warn_and_skip`:
+  - The evaluator SHOULD proceed, but MUST surface an explicit warning in run outputs.
+- If `validation.evaluation.fail_mode = fail_closed`:
+  - The evaluator MUST treat `"unknown"` as a hard drift gate failure for the affected engine and
+    MUST mark affected actions as skipped deterministically (see “Required behavior on drift”).
 
 ### Required behavior on drift (normative)
 
@@ -531,14 +569,29 @@ When `criteria_drift_status = "detected"`:
 
 Recording drift in results (normative, minimal-impact):
 
+When drift is detected for an action’s engine:
+
 - Each affected `criteria/results.jsonl` line MUST include:
   - `status: "skipped"`
   - `reason_code: "criteria_misconfigured"`
+  - `extensions.criteria.error.error_code: "drift_detected"`
   - an explanation under `extensions.criteria.drift`:
     - `status`: `detected`
     - `engine`
     - `expected_source_ref` and `expected_source_tree_sha256` (from pack manifest)
     - `actual_source_ref` and `actual_source_tree_sha256` (from runner provenance)
+
+When drift status is unknown for an action’s engine:
+
+- If `validation.evaluation.fail_mode = warn_and_skip`:
+  - The evaluator SHOULD proceed, but MUST include:
+    - `extensions.criteria.drift.status: "unknown"`
+- If `validation.evaluation.fail_mode = fail_closed`:
+  - The evaluator MUST mark the action as skipped and MUST include:
+    - `status: "skipped"`
+    - `reason_code: "criteria_misconfigured"`
+    - `extensions.criteria.error.error_code: "drift_unknown"`
+    - `extensions.criteria.drift.status: "unknown"`
 
 When `criteria_drift_status = "unknown"`:
 
@@ -567,13 +620,38 @@ Optional selectors allow more specific matching without changing join keys:
 - `selectors.os`: OS family (`windows`, `linux`, `macos`)
 - `selectors.roles`: array of environment role tokens (example: `["domain_controller"]`,
   `["endpoint"]`)
-- `selectors.executor`: executor type (`atomic`, `caldera`)
+- `selectors.executor`: optional. If present, only matches when the run/action context
+  `selectors.executor` equals this value.
+  - For atomic runs, the recommended vocabulary is the configured atomic executor value (e.g.,
+    `invoke_atomic_red_team`, `atomic_operator`, `other`).
+  - For non-atomic runs, implementations MAY use the runner type (e.g., `caldera`, `custom`) unless
+    a more specific executor identifier is available.
 
-Selector context MUST start from `validation.criteria_pack.entry_selectors` in config:
+### Selector context
 
-- `os`: resolved OS family for the action's target
-- `roles`: resolved roles for the action's target/environment
-- `executor`: selected executor type for this run/action
+Selector context is per-run and per-action evaluation metadata that is not present in the join keys.
+It MUST be derived deterministically from the run manifest and ground truth.
+
+Precedence (normative):
+
+1. If ground truth provides `resolved_target`, derive selector context from it.
+1. Otherwise, fall back to `validation.criteria_pack.entry_selectors` (config-provided defaults).
+
+Selector keys (normative):
+
+- `selectors.os`: the resolved target OS family.
+  - Source (preferred): `ground_truth.jsonl.resolved_target.os`
+  - Allowed values SHOULD align with the lab/scenario OS enum:
+    `windows | linux | macos | bsd | appliance | other`
+- `selectors.roles`: array of resolved target roles.
+  - Source (preferred): `ground_truth.jsonl.resolved_target.role` (single value) projected into a
+    one-element array.
+  - Allowed values SHOULD align with the lab/scenario role enum:
+    `endpoint | server | domain_controller | network | sensor | other`
+- `selectors.executor`: a stable execution backend identifier used to disambiguate criteria entries
+  when the same `(engine, technique_id, engine_test_id)` can be produced by different executors.
+  - Source (recommended): derived from the run configuration (e.g., `runner.type` and, for atomic
+    runs, `runner.atomic.executor`).
 
 Selector matching (normative):
 
@@ -663,7 +741,17 @@ locations in `criteria/results.jsonl`:
 
 ## Criteria entry model
 
-`criteria.jsonl` is JSON Lines; each line is one criteria entry.
+Each line in `criteria/criteria.jsonl` is a complete criteria entry object that MUST validate
+against the `criteria_entry.schema.json`.
+
+Additional pack integrity requirements (normative):
+
+- `entry_id` MUST be unique within a single criteria pack.
+  - If duplicates are present, the evaluator MUST treat the pack as misconfigured and fail closed
+    for CI/regression runs.
+- Within a single criteria entry, each `expected_signals[].signal_id` MUST be unique.
+  - If duplicates are present, the evaluator MUST treat the entry as misconfigured (skipped with
+    `reason_code="criteria_misconfigured"` and `error_code="criteria_entry_invalid"`).
 
 ### Criteria entry (minimum fields)
 
@@ -775,14 +863,16 @@ Counts and verdicts:
 
 Sampling:
 
-- `sample_event_ids` MUST contain up to `max_sample_event_ids` event IDs from matching events.
+- `sample_event_ids` MUST contain up to `validation.evaluation.max_sample_event_ids` event IDs from
+  matching events.
+  - Default: `20` (see config reference).
+  - If an event lacks `metadata.event_id`, it MUST be excluded from `sample_event_ids` sampling, but
+    it MUST still contribute to `matched_count` when it matches.
 - The sample MUST be deterministic:
   - Collect `metadata.event_id` for all matching events where present.
   - De-duplicate event IDs (set semantics).
   - Sort event IDs ascending using bytewise lexicographic order (UTF-8).
   - Take the first N.
-- Events missing `metadata.event_id` MUST still count toward `matched_count` but MUST be omitted
-  from `sample_event_ids`.
 
 Case sensitivity:
 
@@ -813,19 +903,37 @@ Required conformance fixtures (constraint matching):
 A criteria entry may optionally include a `cleanup_verification` object that declares how to verify
 that cleanup reverted key side-effects.
 
-- If `cleanup_verification.enabled=true`, the entry declares cleanup verification checks for the
-  action. The runner MUST execute these checks and record results only when cleanup verification is
-  enabled for the action under the effective operator intent and policy/config gates.
-
-- If cleanup verification is enabled and checks are executed, the runner MUST write a per-action
-  artifact:
-
+- If `cleanup_verification.enabled=true`, the criteria entry declares cleanup verification checks
+  for the runner to execute **if and only if** cleanup verification is enabled for the action by
+  effective operator intent and policy/config gates.
+  - `cleanup_verification.enabled=true` does **not** itself enable cleanup verification; it only
+    declares what to check when verification is enabled elsewhere.
+- Criteria entries MAY include a `cleanup_verification` object:
+  - `enabled` (bool; declares that checks are defined for this entry)
+  - `checks[]` (array of check definitions)
+- When cleanup verification is enabled by operator intent and policy/config gates, the runner MUST
+  write a per-action artifact at:
   - `runner/actions/<action_id>/cleanup_verification.json`
+- Criteria results MUST reference this artifact by `cleanup.results_ref`.
 
-- The criteria results MUST reference this artifact by `cleanup.results_ref`.
+Aggregation mapping into criteria results (normative):
 
-- If cleanup verification is disabled for the action by operator intent or policy/config, the runner
-  MUST NOT execute checks and MUST NOT write `cleanup_verification.json` for the action.
+- If `runner/actions/<action_id>/cleanup_verification.json` exists:
+  - `cleanup.invoked = true`
+  - `cleanup.results_ref = "runner/actions/<action_id>/cleanup_verification.json"`
+  - `cleanup.verification_status` MUST be:
+    - `success` if all check results are `pass`
+    - `failed` if any check result is `fail`
+    - `indeterminate` if no fails exist and at least one check result is `indeterminate`
+    - `skipped` if all check results are `skipped`
+- If `runner/actions/<action_id>/cleanup_verification.json` does not exist:
+  - `cleanup.invoked = false`
+  - `cleanup.results_ref` MUST be omitted
+  - `cleanup.verification_status` MUST be:
+    - `not_applicable` when the matched criteria entry has no `cleanup_verification` (or
+      `enabled=false`)
+    - `skipped` when the matched criteria entry declares `cleanup_verification.enabled=true` but
+      verification was disabled by effective gates
 
 #### Check type: file_absent (minimum semantics)
 
@@ -925,9 +1033,17 @@ Minimum fields for `criteria/results.jsonl` (v0.1; one JSON object per action):
 - `action_key` (required; stable action join key)
 - `criteria_ref` object (required; selection provenance)
 - `status` (`pass` | `fail` | `skipped`)
-- `reason_code` (required when `status=skipped`; omitted otherwise)
-  - This `reason_code` vocabulary is scoped to `criteria/results.jsonl` and is not a stage outcome
-    reason code (ADR-0005).
+- `reason_code` (required when `status = "skipped"`):
+  - a stable, machine-readable token.
+  - minimum required set is:
+    - `criteria_unavailable` (no matching entry)
+    - `criteria_misconfigured` (entry exists but cannot be evaluated deterministically)
+  - recommended additional values (non-breaking; strongly encouraged for reporting/scoring
+    fidelity):
+    - `criteria_disabled` (criteria evaluation disabled by config/policy for this run or action)
+    - `action_not_executed` (runner did not attempt execute; criteria evaluation not applicable)
+    - `action_failed_before_evaluation` (runner attempted execute but failed before a valid
+      evaluation anchor/window could be established)
 - `signals[]` array:
   - MUST be an empty array (`[]`) when `status=skipped`.
   - Otherwise: one element per expected signal with `signal_id`, `status`, `matched_count`,
@@ -987,7 +1103,8 @@ Evidence pointers for reporting (normative intent):
 Deterministic ordering (normative):
 
 - The evaluator MUST emit `criteria/results.jsonl` rows in a deterministic order, sorted by:
-  1. `scenario_id` ascending (UTF-8 byte order, no locale)
+  1. `scenario_id` ascending (UTF-8 byte order), treating a missing `scenario_id` as the empty
+     string (`""`, which sorts before any non-empty value).
   1. `action_id` ascending (UTF-8 byte order, no locale)
 
 ## Design constraints
@@ -1226,6 +1343,75 @@ Verdict rules:
   - Otherwise: fail (`reason_code = present`).
 - Otherwise: pass (`reason_code = ok`).
 
+## Appendix: Criteria pack and evaluation state machines (representational)
+
+This appendix is representational (non-normative). Normative semantics are defined elsewhere in this
+spec (selection, hashing, evaluation, and drift sections). This representation follows the guidance
+for representational state machines in ADR-0007.
+
+Authority references (normative semantics live in):
+
+- “Selection and pinning”
+- “Run bundle snapshot”
+- “Signal evaluation semantics”
+- “Drift detection”
+- ADR-0005 (stage outcomes)
+- ADR-0007 (state machine representation guidance)
+
+### State machine: Criteria pack resolution (run-level)
+
+States:
+
+- `disabled`: validation criteria evaluation is disabled (`validation.enabled=false`).
+- `resolving`: resolver is selecting `(criteria_pack_id, criteria_pack_version)` from configured
+  inputs.
+- `validating`: resolver is validating schema + hashes for the selected pack directory.
+- `snapshotted`: `runs/<run_id>/criteria/{manifest.json,criteria.jsonl}` published successfully.
+- `ready`: snapshot exists and is the sole input used for criteria evaluation.
+- `failed`: resolution/validation/snapshot publish failed (fail_closed) or was skipped
+  (warn_and_skip).
+
+Transitions (high level):
+
+- `disabled` → `resolving` when `validation.enabled=true`.
+- `resolving` → `validating` when a candidate pack directory is selected.
+- `validating` → `snapshotted` when schema + hash validation succeed.
+- `snapshotted` → `ready` when snapshot publish gate completes.
+- Any state → `failed` on deterministic failure (recorded as a validation stage outcome per
+  ADR-0005).
+
+### State machine: Criteria evaluation (per action)
+
+States:
+
+- `pending`: action exists in ground truth; criteria evaluation not yet computed.
+- `selected`: a criteria entry has been selected (or selection failed deterministically).
+- `evaluated_pass`: evaluation completed with `status="pass"`.
+- `evaluated_fail`: evaluation completed with `status="fail"`.
+- `skipped`: evaluation not performed (no matching entry, misconfiguration, drift gate, etc.).
+- `recorded`: a `criteria/results.jsonl` row was emitted.
+
+Transitions:
+
+- `pending` → `selected` on criteria entry selection.
+- `selected` → `evaluated_pass | evaluated_fail` when evaluation executes.
+- `selected` → `skipped` when selection/evaluation is blocked deterministically.
+- `evaluated_pass | evaluated_fail | skipped` → `recorded` when the output row is emitted.
+
+### State machine: Cleanup verification consumption (per action)
+
+States:
+
+- `not_applicable`: no cleanup verification declared for the selected criteria entry.
+- `disabled`: cleanup verification declared but disabled by effective gates; runner artifact absent.
+- `executed_success`: runner artifact exists; all checks pass.
+- `executed_failed`: runner artifact exists; at least one check fails.
+- `executed_indeterminate`: runner artifact exists; no fails but at least one indeterminate.
+- `executed_skipped`: runner artifact exists; all checks skipped.
+
+Mapping to `criteria/results.jsonl.cleanup.verification_status` is defined in “Cleanup verification
+structure”.
+
 ## Key decisions
 
 - Criteria packs are versioned independently and snapshotted into the run bundle.
@@ -1236,9 +1422,11 @@ Verdict rules:
 ## References
 
 - [Data contracts](025_data_contracts.md)
-- [ADR-0001: Version and contract pinning in manifests](../adr/ADR-0001-version-and-contract-pinning.md)
+- [ADR-0001: Project naming and versioning](../adr/ADR-0001-project-naming-and-versioning.md)
 - [ADR-0002: Event identity and provenance](../adr/ADR-0002-event-identity-and-provenance.md)
 - [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
+- [ADR-0007: State machines](../adr/ADR-0007-state-machines.md)
+- [ADR-0008: Threat intel packs](../adr/ADR-0008-threat-intel-packs.md)
 - [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
 - [Telemetry pipeline](040_telemetry_pipeline.md)
 - [Configuration reference](120_config_reference.md)
@@ -1247,5 +1435,5 @@ Verdict rules:
 
 | Date      | Change                                       |
 | --------- | -------------------------------------------- |
-| 1/19/2026 | update                                       |
+| 1/25/2026 | update                                       |
 | TBD       | Style guide migration (no technical changes) |

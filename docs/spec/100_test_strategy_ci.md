@@ -1016,9 +1016,14 @@ Suggested failure messages (non-normative):
 
 Regression gates (configurable thresholds) protect against coverage and performance degradation:
 
-- Technique coverage must not drop more than X relative to baseline
-- Latency percentiles must not exceed Y
-- `missing_telemetry` and `normalization_gap` rates must not exceed Z
+- `technique_coverage_rate` delta (`candidate - baseline`) must not be < -0.0500
+- `detection_latency_p95_seconds` delta (`candidate - baseline`) must not be > +60.000
+- `tier1_field_coverage_pct` delta (`candidate - baseline`) must not be < -0.0500
+- `missing_telemetry_count` delta (`candidate - baseline`) must not be > +2
+- `bridge_gap_mapping_count` delta (`candidate - baseline`) must not be > +5
+
+These thresholds are defined in `080_reporting.md` (“Regression deltas”) and MAY be overridden via
+`reporting.regression.thresholds` (see `120_config_reference.md`).
 
 Regression comparison precondition failures (for example, missing or incompatible baselines) MUST be
 represented as a `warn_and_skip` stage outcome under the reporting regression compare substage

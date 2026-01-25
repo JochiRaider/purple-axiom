@@ -17,6 +17,7 @@ Rows are sorted lexicographically by filename, all in the `docs/contracts/` diec
 
 | Schema file                               | Artifact / contract surface (high-level)                       |
 | ----------------------------------------- | -------------------------------------------------------------- |
+| `audit_event.schema.json`                 | Schema for UI/control plane audit events                       |
 | `bridge_compiled_plan.schema.json`        | Schema for Sigma bridge compiled plan outputs                  |
 | `bridge_coverage.schema.json`             | Schema for Sigma bridge routing/coverage summaries             |
 | `bridge_mapping_pack.schema.json`         | Schema for a serialized bridge mapping pack snapshot           |
@@ -25,6 +26,7 @@ Rows are sorted lexicographically by filename, all in the `docs/contracts/` diec
 | `cleanup_verification.schema.json`        | Schema for cleanup verification results                        |
 | `contract_registry.json`                  | Contract registry mapping contract ids to schemas and bindings |
 | `contract_registry.schema.json`           | Schema for the contract registry file                          |
+| `counters.schema.json`                    | Schema for run-level counters and gauges snapshots             |
 | `criteria_entry.schema.json`              | Schema for a single validation criteria entry                  |
 | `criteria_pack_manifest.schema.json`      | Schema for criteria pack identity and metadata                 |
 | `criteria_result.schema.json`             | Schema for criteria evaluation results                         |

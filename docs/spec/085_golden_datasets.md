@@ -640,23 +640,6 @@ We classify each dataset in the golden catalog into one of:
 
 ## v0.1 Golden dataset catalog (initial)
 
-The following sets are recommended as the initial (“v0.1”) golden dataset catalog. Each entry must
-have a dataset card, reproducible build manifest, and approvals record before being considered
-golden.
-
-| Dataset                                          | Primary coverage                               | License (upstream)  | Provenance / notes (upstream statement)                   | Sensitivity note                                               | Recommended posture                                                   |
-| ------------------------------------------------ | ---------------------------------------------- | ------------------- | --------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------- |
-| GSM8K (openai/gsm8k)                             | Math reasoning regression                      | MIT                 | Created via hired contractors; documented in dataset card | Low expected PII, but scan required (provider card incomplete) | **Public**                                                            |
-| HumanEval (openai/human-eval)                    | Code generation correctness                    | MIT                 | “Hand-Written Evaluation Set”                             | Requires sandboxed code execution                              | **Public**                                                            |
-| MBPP (Muennighoff/mbpp)                          | Code gen (basic Python)                        | CC BY 4.0           | “Manually created from scratch” per dataset card          | Provider states no personal info; still standard scan          | **Public**                                                            |
-| IFEval (google/IFEval)                           | Instruction following (verifiable constraints) | Apache-2.0          | Prompts used in IFEval benchmark                          | Low expected PII; standard scan                                | **Public**                                                            |
-| TruthfulQA (sylinrl/TruthfulQA / truthful_qa_mc) | Truthfulness/hallucination regression          | Apache-2.0          | Benchmark questions + reference answers included          | Content-risk class: misinformation-like topics possible        | **Public** (or **Gated** if policy gates content-risk eval prompts)   |
-| WinoGrande (allenai/winogrande)                  | Commonsense/coreference                        | CC-BY (version TBD) | Crowdsourcing + bias reduction described on project site  | Confirm CC-BY version before public re-host                    | **Gated** until CC-BY version confirmed                               |
-| ARC (allenai/ai2_arc)                            | Science QA regression                          | CC BY-SA 4.0        | Standardized-test science questions                       | Share-alike                                                    | **Gated**                                                             |
-| SQuAD 2.0 (rajpurkar/squad_v2)                   | Extractive QA regression                       | CC BY-SA 4.0        | Crowd Q’s on Wikipedia passages                           | Share-alike                                                    | **Gated**                                                             |
-| BoolQ (google/boolq)                             | Yes/No QA regression                           | CC BY-SA 3.0        | “Naturally occurring” questions                           | PII plausible → scan + mitigation required                     | **Gated**                                                             |
-| MMLU (hendrycks/test or equivalent distribution) | Broad knowledge / multi-domain MCQ             | MIT                 | Repo provides benchmark harness/data                      | Treat as elevated IP/provenance risk; avoid redistribution     | **Gated** (script + manifest preferred; no public re-host by default) |
-
 ## Evidence required to mark a dataset “Golden”
 
 A dataset is not “golden” until the following evidence artifacts exist and are linked from the
@@ -713,37 +696,12 @@ catalog entry:
    - Publish to catalog with the approved posture (public/internal/gated) and enforce access
      controls.
 
-## References (upstream anchors)
-
-- GSM8K dataset card: https://huggingface.co/datasets/openai/gsm8k
-- GSM8K README/license: https://huggingface.co/datasets/openai/gsm8k/blob/main/README.md
-- HumanEval repo: https://github.com/openai/human-eval
-- MBPP dataset card: https://huggingface.co/datasets/Muennighoff/mbpp
-- IFEval dataset card: https://huggingface.co/datasets/google/IFEval
-- TruthfulQA repo: https://github.com/sylinrl/TruthfulQA
-- ARC dataset card: https://huggingface.co/datasets/allenai/ai2_arc
-- SQuAD 2.0 dataset card: https://huggingface.co/datasets/rajpurkar/squad_v2
-- BoolQ dataset card: https://huggingface.co/datasets/google/boolq
-- WinoGrande repo: https://github.com/allenai/winogrande
-- WinoGrande project page: https://winogrande.allenai.org/
-- MMLU repo (hendrycks/test): https://github.com/hendrycks/test
-
 ## TODO
 
 - [ ] Define and implement the **dataset card + build manifest + approvals record schema**
-  (validator + CI checks). ← (deferred per current decision; keep as TODO)
+  (validator + CI checks).
 - [ ] Implement/standardize **gating controls** (ACL groups, acknowledgement/click-through, audit
   logging) for “Gated” datasets.
-- [ ] Run and store **PII scan evidence** for GSM8K and BoolQ; document mitigation plan if any
-  findings.
-- [ ] Confirm **WinoGrande CC-BY version** (and any additional conditions) and update release
-  posture accordingly.
-- [ ] Decide and document the policy for **CC BY-SA datasets** (default: do not public re-host;
-  script + manifest distribution).
-- [ ] Legal review on **MMLU redistribution posture** (default stance: no public re-host;
-  gated/script-only) and document the decision.
-- [ ] Add a “code execution safety” checklist to evaluation harness docs for HumanEval/MBPP
-  (sandboxing, timeouts, resource limits).
 
 ## Future extensions (non-normative)
 

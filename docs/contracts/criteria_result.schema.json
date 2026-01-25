@@ -1,108 +1,214 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://purple-axiom.local/contracts/criteria_result.schema.json",
-  "title": "Purple Axiom Criteria Evaluation Result",
+  "title": "Criteria evaluation result (per line of criteria/results.jsonl)",
+  "description": "Per-action criteria evaluation output. One JSON object per line in criteria/results.jsonl.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "contract_version",
-    "run_id",
-    "scenario_id",
-    "action_id",
-    "action_key",
-    "status",
-    "signals",
-    "cleanup"
-  ],
   "properties": {
     "contract_version": {
-      "const": "0.1.0"
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract schema version. Optional for v0.1 JSONL rows; if present, must equal 0.1.0."
     },
     "run_id": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "#/$defs/run_id"
     },
     "scenario_id": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "#/$defs/id_slug_v1"
     },
     "action_id": {
+      "$ref": "#/$defs/action_id"
+    },
+    "template_id": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Optional (v0.2+ only): stable procedure identity of action template."
     },
     "action_key": {
-      "type": "string",
-      "pattern": "^[A-Fa-f0-9]{64}$"
+      "$ref": "#/$defs/action_key"
     },
     "criteria_ref": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "criteria_pack_id": {
-          "type": "string"
-        },
-        "criteria_pack_version": {
-          "type": "string"
-        },
-        "criteria_entry_id": {
-          "type": "string"
-        }
-      }
+      "$ref": "#/$defs/criteria_ref"
     },
     "status": {
       "type": "string",
       "enum": [
         "pass",
         "fail",
-        "indeterminate",
         "skipped"
-      ],
-      "description": "Criterion evaluation status per spec 035_validation_criteria.md"
+      ]
+    },
+    "reason_code": {
+      "$ref": "#/$defs/reason_code"
     },
     "signals": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "signal_id",
-          "status",
-          "matched_count"
-        ],
-        "properties": {
-          "signal_id": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pass",
-              "fail",
-              "indeterminate",
-              "skipped"
-            ],
-            "description": "Signal evaluation status per spec 035_validation_criteria.md"
-          },
-          "matched_count": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "sample_event_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
+        "$ref": "#/$defs/signal_result"
       }
     },
+    "time_window": {
+      "$ref": "#/$defs/time_window"
+    },
     "cleanup": {
+      "$ref": "#/$defs/cleanup_result"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "required": [
+    "run_id",
+    "action_id",
+    "action_key",
+    "criteria_ref",
+    "status",
+    "signals",
+    "time_window"
+  ],
+  "$defs": {
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "RFC 4122 UUID string in canonical hyphenated form, lowercase hex."
+    },
+    "id_slug_v1": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "not": {
+        "pattern": "--"
+      },
+      "description": "Lowercase ASCII id slug (ADR-0001 id_slug_v1)."
+    },
+    "semver_v1": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "description": "SemVer 2.0.0 string (MAJOR.MINOR.PATCH with optional pre-release/build)."
+    },
+    "action_id": {
+      "type": "string",
+      "pattern": "^(s[1-9][0-9]*|pa_aid_v1_[0-9a-f]{32})$",
+      "description": "Action instance id: v0.1 uses s<positive integer>; v0.2+ uses pa_aid_v1_<32hex>."
+    },
+    "action_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Stable action join key: lowercase hex SHA-256 digest (no prefix)."
+    },
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Stable reason token (snake_case)."
+    },
+    "utc_rfc3339": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$",
+      "format": "date-time",
+      "description": "RFC3339 timestamp in UTC (Z)."
+    },
+    "criteria_ref": {
       "type": "object",
       "additionalProperties": false,
+      "properties": {
+        "criteria_pack_id": {
+          "$ref": "#/$defs/id_slug_v1"
+        },
+        "criteria_pack_version": {
+          "$ref": "#/$defs/semver_v1"
+        },
+        "criteria_entry_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
       "required": [
-        "invoked",
-        "verification_status"
+        "criteria_pack_id",
+        "criteria_pack_version"
       ],
+      "description": "Selection provenance: selected criteria pack identity plus optional entry id."
+    },
+    "signal_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "signal_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail"
+          ]
+        },
+        "matched_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sample_event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "required": [
+        "signal_id",
+        "status",
+        "matched_count",
+        "sample_event_ids"
+      ],
+      "description": "Outcome for one expected signal predicate."
+    },
+    "time_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start_time_utc": {
+          "$ref": "#/$defs/utc_rfc3339"
+        },
+        "end_time_utc": {
+          "$ref": "#/$defs/utc_rfc3339"
+        },
+        "before_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "after_seconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start_time_utc",
+        "end_time_utc",
+        "before_seconds",
+        "after_seconds"
+      ],
+      "description": "Resolved evaluation window applied for this action."
+    },
+    "cleanup_result": {
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "invoked": {
           "type": "boolean"
@@ -110,22 +216,313 @@
         "verification_status": {
           "type": "string",
           "enum": [
-            "pass",
-            "fail",
+            "success",
+            "failed",
             "indeterminate",
             "skipped",
             "not_applicable"
-          ],
-          "description": "Cleanup verification tri-state verdict per spec 035_validation_criteria.md"
+          ]
         },
         "results_ref": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/).*$",
+          "description": "Run-relative artifact pointer (POSIX-style path)."
         }
-      }
+      },
+      "required": [
+        "invoked",
+        "verification_status"
+      ],
+      "description": "Optional cleanup verification summary."
     },
     "extensions": {
       "type": "object",
-      "additionalProperties": true
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": true,
+      "properties": {
+        "criteria": {
+          "$ref": "#/$defs/extensions_criteria"
+        }
+      },
+      "description": "Forward-compatible extension point."
+    },
+    "extensions_criteria": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": [
+            "atomic",
+            "caldera",
+            "custom"
+          ]
+        },
+        "join_keys": {
+          "$ref": "#/$defs/join_keys"
+        },
+        "error": {
+          "$ref": "#/$defs/criteria_error"
+        },
+        "drift": {
+          "$ref": "#/$defs/criteria_drift"
+        },
+        "selection": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "join_keys": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": [
+            "atomic",
+            "caldera",
+            "custom"
+          ]
+        },
+        "technique_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "engine_test_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "engine",
+        "technique_id",
+        "engine_test_id"
+      ]
+    },
+    "criteria_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "error_code": {
+          "type": "string",
+          "enum": [
+            "unsupported_operator",
+            "invalid_predicate",
+            "schema_invalid",
+            "drift_detected",
+            "drift_unknown",
+            "criteria_ref_invalid",
+            "unsupported_selector"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "error_code"
+      ]
+    },
+    "criteria_drift": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "none",
+            "detected",
+            "unknown"
+          ]
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "atomic",
+            "caldera",
+            "custom"
+          ]
+        },
+        "expected_source_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "expected_source_tree_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "actual_source_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "actual_source_tree_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "status"
+      ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "skipped"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "reason_code"
+        ],
+        "properties": {
+          "signals": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "reason_code"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "skipped"
+          },
+          "reason_code": {
+            "const": "criteria_unavailable"
+          }
+        },
+        "required": [
+          "status",
+          "reason_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "criteria_ref": {
+            "anyOf": [
+              {
+                "not": {
+                  "required": [
+                    "criteria_entry_id"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "criteria_entry_id": {
+                    "type": "null"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "extensions": {
+            "properties": {
+              "criteria": {
+                "properties": {
+                  "drift": {
+                    "properties": {
+                      "status": {
+                        "const": "detected"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                },
+                "required": [
+                  "drift"
+                ]
+              }
+            },
+            "required": [
+              "criteria"
+            ]
+          }
+        },
+        "required": [
+          "extensions"
+        ]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "skipped"
+          },
+          "reason_code": {
+            "const": "criteria_misconfigured"
+          }
+        },
+        "required": [
+          "reason_code"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "extensions": {
+            "properties": {
+              "criteria": {
+                "required": [
+                  "error"
+                ]
+              }
+            },
+            "required": [
+              "criteria"
+            ]
+          }
+        },
+        "required": [
+          "extensions"
+        ]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "skipped"
+          },
+          "reason_code": {
+            "const": "criteria_misconfigured"
+          }
+        },
+        "required": [
+          "reason_code"
+        ]
+      }
+    }
+  ]
 }

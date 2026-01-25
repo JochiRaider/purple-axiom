@@ -2,6 +2,14 @@
   "registry_version": "0.1.0",
   "contracts": [
     {
+      "contract_id": "audit_event",
+      "schema_path": "docs/contracts/audit_event.schema.json",
+      "contract_version": "0.2.0",
+      "purpose": "Audit event row for control-plane transcripts (control/audit.jsonl).",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
       "contract_id": "bridge_compiled_plan",
       "schema_path": "docs/contracts/bridge_compiled_plan.schema.json",
       "contract_version": "0.1.0",
@@ -46,6 +54,14 @@
       "schema_path": "docs/contracts/cleanup_verification.schema.json",
       "contract_version": "0.1.0",
       "purpose": "Cleanup verification results per action (runner/actions/<action_id>/cleanup_verification.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "counters",
+      "schema_path": "docs/contracts/counters.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Run-level counters and gauges snapshot (logs/counters.json).",
       "artifact_kind": "run_artifact",
       "format": "json"
     },
@@ -287,6 +303,7 @@
     { "artifact_glob": "bridge/coverage.json", "contract_id": "bridge_coverage", "validation_mode": "json_document" },
     { "artifact_glob": "bridge/mapping_pack_snapshot.json", "contract_id": "bridge_mapping_pack", "validation_mode": "json_document" },
     { "artifact_glob": "bridge/router_table.json", "contract_id": "bridge_router_table", "validation_mode": "json_document" },
+    { "artifact_glob": "control/audit.jsonl", "contract_id": "audit_event", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "criteria/criteria.jsonl", "contract_id": "criteria_entry", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "criteria/manifest.json", "contract_id": "criteria_pack_manifest", "validation_mode": "json_document" },
     { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "validation_mode": "jsonl_lines" },
@@ -296,6 +313,7 @@
     { "artifact_glob": "inputs/threat_intel/indicators.jsonl", "contract_id": "threat_intel_indicator", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "inputs/threat_intel/manifest.json", "contract_id": "threat_intel_pack_manifest", "validation_mode": "json_document" },
     { "artifact_glob": "logs/cache_provenance.json", "contract_id": "cache_provenance", "validation_mode": "json_document" },
+    { "artifact_glob": "logs/counters.json", "contract_id": "counters", "validation_mode": "json_document" },
     { "artifact_glob": "logs/lab_inventory_snapshot.json", "contract_id": "lab_inventory_snapshot", "validation_mode": "json_document" },
     { "artifact_glob": "logs/telemetry_validation.json", "contract_id": "telemetry_validation", "validation_mode": "json_document" },
     { "artifact_glob": "manifest.json", "contract_id": "manifest", "validation_mode": "json_document" },

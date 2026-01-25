@@ -323,7 +323,15 @@ non-browser clients (CLI, automation) can be added later without breaking API sh
 - Request and response bodies MUST be UTF-8 JSON (`application/json; charset=utf-8`) unless
   explicitly noted (artifact/export download endpoints).
 - The API MUST set `Cache-Control: no-store` on all authenticated responses.
-- The API SHOULD set `X-Request-ID` on every response.
+- The API MUST set `X-Request-ID` on every response.
+  - The effective request id MUST be a UUID in canonical lowercase hyphenated form.
+  - If an inbound `X-Request-ID` is present and is a valid UUID, the API MAY adopt it; otherwise it
+    MUST generate a new UUID.
+  - The effective request id MUST be used as `target.request_id` for all audit events emitted while
+    servicing the request.
+  - For endpoints that create or overwrite a durable control request artifact under
+    `runs/<run_id>/control/` (cancel/resume/retry), the artifact `request_id` MUST equal
+    `target.request_id` for the corresponding audit events.
 
 ### Authentication and authorization (normative)
 
@@ -597,17 +605,21 @@ The audit stream MUST include events for:
 
 - authentication: login success/failure, logout, session expiry
 - account admin: create/reset/disable (CLI actions SHOULD also be audited to same log)
-- run verbs: start (verb name), completion (exit code + derived status), cancellation requests,
-  resume/retry decisions
+- run verbs: start (verb name; `action="runs.start"`), completion (`action="runs.complete"`; exit
+  code + derived status), cancellation requests, resume/retry decisions
 - quarantine access toggles
 - artifact reads/downloads (path + allow/deny)
 - export creation (include flags + allow/deny)
 
 ### UI audit event schema (v0.2)
 
+Each JSONL row MUST validate against `docs/contracts/audit_event.schema.json` (contract_id:
+`audit_event`).
+
 Each JSONL row MUST contain at minimum:
 
 - `ts`: RFC3339 timestamp (UTC, with `Z` suffix)
+- `contract_version`: semver string; MUST be `0.2.0`
 - `event_id`: UUID
 - `actor`: object
   - `username` (string)
@@ -618,19 +630,41 @@ Each JSONL row MUST contain at minimum:
   - MUST be dot-separated segments
   - each segment MUST be `lower_snake_case`
   - examples: `auth.login`, `runs.start`, `runs.cancel_requested`, `artifact.read`, `export.create`
-- `target`: object (action-dependent; MAY include `run_id`, `path`, `verb`, `export_id`,
-  `request_id`)
+- `target`: object (action-dependent; MUST include `request_id`; MAY also include `run_id`, `path`,
+  `verb`, `export_id`)
+  - `request_id`: UUID correlation id for the triggering operator action.
+    - For API-originated events, MUST be non-null and MUST match the `X-Request-ID` response header
+      for the triggering request.
+    - For CLI-originated events, MAY be null.
 - `outcome`: enum `allowed | denied | succeeded | failed`
 - `reason_code`: string
   - required when `outcome ∈ {denied, failed}`
   - optional otherwise
   - UI-level reason codes are separate from ADR-0005 stage reason codes.
+- `extensions`: object (optional; reserved for forward-compatible additions)
+
+Audit rows MUST validate against the `audit_event` contract
+(`docs/contracts/audit_event.schema.json`, `contract_version=0.2.0`).
 
 Outcome semantics (normative):
 
 - `allowed | denied` represent an authorization or policy gate decision taken before attempting the
   action.
 - `succeeded | failed` represent completion of an action that was attempted.
+
+Correlation semantics (v0.2 normative):
+
+- Every audit row emitted as part of servicing an Operator API call MUST include the same
+  `target.request_id` as the `X-Request-ID` response header for that call.
+- If an operator action produces both:
+  - a gate decision audit row (`outcome ∈ {allowed, denied}`), and
+  - a completion audit row (`outcome ∈ {succeeded, failed}`), then both audit rows MUST share the
+    same `target.request_id`.
+- For `runs.start`, implementations MUST emit:
+  - a gate decision row (`action="runs.start"`) with `outcome ∈ {allowed, denied}`, and
+  - a completion row (`action="runs.complete"`) with `outcome ∈ {succeeded, failed}`.
+  - Both rows MUST include the same `target.request_id`, and MUST also include `target.run_id` and
+    `target.verb`.
 
 Serialization and determinism (normative):
 
@@ -958,6 +992,8 @@ Minimum required control artifacts:
 `cancel.json` MUST include:
 
 - `request_id`: UUID (generated on the first cancellation request; MUST NOT change on escalation)
+  - This value MUST equal `target.request_id` in the corresponding `runs.cancel_requested` audit
+    rows.
 - `requested_at`: RFC3339 timestamp (time of the first request; MUST NOT change on escalation)
 - `requested_by`: username (or a stable CLI actor string; example: `cli`)
 - `mode`: `graceful | force` (current requested mode; MAY be escalated from graceful→force)
@@ -989,6 +1025,8 @@ Each request file MUST be a single JSON object written to its corresponding path
 Each request object MUST include:
 
 - `request_id`: UUID
+  - This value MUST equal `target.request_id` in the corresponding `runs.resume_retry_requested`
+    audit rows.
 - `requested_at`: RFC3339 timestamp
 - `requested_by`: username (or a stable CLI actor string; example: `cli`)
 - `scope`: `run | stage | action` (v0.2 MUST support `scope="run"`; other scopes are reserved but

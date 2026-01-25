@@ -127,6 +127,7 @@ The following list is for navigation only. The authoritative mapping is
 - `docs/contracts/defense_outcomes.schema.json`
 - `docs/contracts/cache_provenance.schema.json`
 - `docs/contracts/counters.schema.json`
+- `docs/contracts/audit_event.schema.json`
 - `docs/contracts/runner_executor_evidence.schema.json`
 - `docs/contracts/resolved_inputs_redacted.schema.json`
 - `docs/contracts/requirements_evaluation.schema.json`
@@ -429,6 +430,8 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
     threat intel indicators snapshot)
 - `plan/` (v0.2+; compiled plan graph and expansion manifests)
 - `control/` (v0.2+; operator control-plane requests/decisions, when implemented)
+  - `control/audit.jsonl` (v0.2+; deterministic control-plane audit transcript when enabled; see
+    `control_plane.audit.enabled`)
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw_parquet/` (raw telemetry datasets, long-term; see storage formats)
 - `raw/` (evidence-tier blobs and source-native payloads where applicable)

@@ -40,13 +40,19 @@ Purple Axiom v0.1 MUST pin the OCSF schema version to:
 
 Conformance requirements (v0.1):
 
-- Every run MUST record the effective `ocsf_version` used for normalization in run provenance.
-  - Minimum: `normalized/mapping_profile_snapshot.json.ocsf_version`.
-  - RECOMMENDED: also record in `manifest.json` as `normalization.ocsf_version` (see the
-    [data contracts spec](025_data_contracts.md) recommended manifest additions).
+- `manifest.versions.ocsf_version` MUST be the authoritative OCSF version pin for the run.
+- Every run MUST record the effective `ocsf_version` used for normalization in
+  `manifest.versions.ocsf_version`.
+- Producers MAY also record `manifest.normalization.ocsf_version` for compatibility, but consumers
+  MUST treat `manifest.versions.ocsf_version` as authoritative.
+  - If both are present, `manifest.normalization.ocsf_version` MUST equal
+    `manifest.versions.ocsf_version` byte-for-byte.
+- `normalized/mapping_profile_snapshot.json.ocsf_version` MUST be present when
+  `normalized/mapping_profile_snapshot.json` is emitted and MUST equal
+  `manifest.versions.ocsf_version` byte-for-byte.
 - When Sigma-to-OCSF Bridge artifacts are present, the bridge mapping pack MUST declare the same
-  `ocsf_version` as the normalizer output for that run. A mismatch MUST be treated as an
-  incompatible configuration (fail closed).
+  `ocsf_version` as `manifest.versions.ocsf_version`. A mismatch MUST be treated as an incompatible
+  configuration (fail closed).
 
 ## OCSF schema update and migration policy
 
@@ -143,10 +149,12 @@ be driven by the osquery scheduled query name:
   - `process_events` -> Process Activity (`class_uid: 1007`)
   - `file_events` -> File System Activity (`class_uid: 1001`)
   - `socket_events` -> Network Activity (`class_uid: 4001`)
-- v0.1 envelope conventions (osquery):
-  - `metadata.identity_tier = 3`
-  - `metadata.source_event_id = null`
-  - `metadata.time_precision = "s"`
+- v0.1 routing defaults (mapping profile MAY override explicitly):
+  - `process_events` -> Process Activity (`class_uid: 1007`)
+  - `process_etw_events` -> Process Activity (`class_uid: 1007`)
+  - `file_events` -> File System Activity (`class_uid: 1001`)
+  - `ntfs_journal_events` -> File System Activity (`class_uid: 1001`)
+  - `socket_events` -> Network Activity (`class_uid: 4001`)
 
 Unrouted behavior:
 
@@ -163,12 +171,17 @@ Implementation details and conformance fixtures are specified in the
 
 ## Run bundle artifacts
 
-When normalization is enabled and produces an OCSF event store, the normalizer MUST emit:
+When normalization is enabled, the normalizer MUST emit:
 
-- `normalized/ocsf_events/` (Parquet dataset directory) or `normalized/ocsf_events.jsonl` (small
-  fixtures)
 - `normalized/mapping_profile_snapshot.json` (required)
-- `normalized/mapping_coverage.json` (required)
+- `normalized/mapping_coverage.json` (required; MUST be emitted even when zero events are
+  normalized)
+
+When normalization produces an OCSF event store, the normalizer MUST also emit exactly one of:
+
+- `normalized/ocsf_events/` (Parquet dataset directory; MUST include
+  `normalized/ocsf_events/_schema.json`)
+- `normalized/ocsf_events.jsonl` (small fixtures)
 
 ### Deduplication and replay
 
@@ -211,16 +224,24 @@ Requirements (normative):
 
 - MUST validate against `mapping_profile_snapshot.schema.json`.
 - MUST record the pinned `ocsf_version`.
+  - When `manifest.json` is present, `normalized/mapping_profile_snapshot.json.ocsf_version` MUST
+    equal `manifest.versions.ocsf_version` byte-for-byte.
 - MUST include `mapping_profile_id`, `mapping_profile_version`, and `mapping_profile_sha256`.
 - MUST include per-source mapping material hashes as `source_profiles[].mapping_material_sha256`.
 
 Hashing (normative):
 
-- `mapping_material_sha256` MUST be SHA-256 over the canonical JSON serialization of the embedded
-  `mapping_material` object (or, if only `mapping_files[]` are provided, over the canonical JSON
-  list of `{path,sha256}` entries).
-- `mapping_profile_sha256` MUST be SHA-256 over a canonical JSON object containing only stable
-  inputs:
+- All JSON serialized for hashing in this section MUST use the canonical JSON requirements defined
+  in the [data contracts spec](025_data_contracts.md) (RFC 8785, JCS).
+- `mapping_material_sha256` MUST be computed as
+  `sha256_hex(canonical_json_bytes(mapping_material_basis))`, where:
+  - If `mapping_material` is embedded, `mapping_material_basis` is exactly that JSON object.
+  - If only `mapping_files[]` are provided, `mapping_material_basis` is a JSON array of
+    `{path,sha256}` entries sorted by `path` ascending (UTF-8 byte order, no locale) prior to
+    serialization.
+- `mapping_profile_sha256` MUST be computed as
+  `sha256_hex(canonical_json_bytes(mapping_profile_basis))`, where `mapping_profile_basis` is a JSON
+  object containing only stable inputs:
   - `ocsf_version`
   - `mapping_profile_id`
   - `mapping_profile_version`

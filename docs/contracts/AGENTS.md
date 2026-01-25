@@ -7,12 +7,12 @@
 
 ## Navigation entrypoint (required)
 
-- Start with `docs/contracts/index.json` (authoritative contract registry).
+- Start with `docs/contracts/contract_registry.json` (authoritative contract registry).
 
 ## Registry sync (required)
 
 - If any `*.schema.json` is added/removed/renamed:
-  - update `docs/contracts/index.json`, and
+  - update `docs/contracts/contract_registry.json`, and
   - update the contract registry list in `docs/spec/025_data_contracts.md`.
 
 ## Compatibility rules

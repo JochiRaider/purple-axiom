@@ -232,19 +232,19 @@ Verification hooks:
 
 These artifacts are produced by upstream stages and referenced in the report:
 
-| File                               | Purpose                                  | Schema reference                                                    |
-| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
-| `manifest.json`                    | Run-level provenance and outcomes        | [manifest schema](manifest.schema.json)                             |
-| `ground_truth.jsonl`               | Executed actions timeline                | [Scenarios](030_scenarios.md)                                       |
-| `logs/telemetry_validation.json`   | Telemetry validation outcomes            | [Telemetry pipeline](040_telemetry_pipeline.md)                     |
-| `scoring/summary.json`             | Operator-facing metrics rollup           | [summary schema](summary.schema.json)                               |
-| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality             | [bridge coverage schema](bridge_coverage.schema.json)               |
-| `normalized/mapping_coverage.json` | OCSF normalization coverage              | [mapping coverage schema](mapping_coverage.schema.json)             |
-| `criteria/manifest.json`           | Criteria pack snapshot metadata          | [criteria pack manifest schema](criteria_pack_manifest.schema.json) |
-| `criteria/criteria.jsonl`          | Criteria pack snapshot contents          | [Validation criteria](035_validation_criteria.md)                   |
-| `criteria/results.jsonl`           | Per-action criteria outcomes             | [Validation criteria](035_validation_criteria.md)                   |
-| `detections/detections.jsonl`      | Rule hits with matched event references  | [Detection (Sigma)](060_detection_sigma.md)                         |
-| `logs/health.json`                 | Stage outcomes for run status derivation | [ADR-0005](ADR-0005-stage-outcomes-and-failure-classification.md)   |
+| File                               | Purpose                                  | Schema reference                                                                 |
+| ---------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------- |
+| `manifest.json`                    | Run-level provenance and outcomes        | [manifest schema](../contracts/manifest.schema.json)                             |
+| `ground_truth.jsonl`               | Executed actions timeline                | [Scenarios](030_scenarios.md)                                                    |
+| `logs/telemetry_validation.json`   | Telemetry validation outcomes            | [Telemetry pipeline](040_telemetry_pipeline.md)                                  |
+| `scoring/summary.json`             | Operator-facing metrics rollup           | [summary schema](../contracts/summary.schema.json)                               |
+| `bridge/coverage.json`             | Sigma-to-OCSF bridge quality             | [bridge coverage schema](../contracts/bridge_coverage.schema.json)               |
+| `normalized/mapping_coverage.json` | OCSF normalization coverage              | [mapping coverage schema](../contracts/mapping_coverage.schema.json)             |
+| `criteria/manifest.json`           | Criteria pack snapshot metadata          | [criteria pack manifest schema](../contracts/criteria_pack_manifest.schema.json) |
+| `criteria/criteria.jsonl`          | Criteria pack snapshot contents          | [Validation criteria](035_validation_criteria.md)                                |
+| `criteria/results.jsonl`           | Per-action criteria outcomes             | [Validation criteria](035_validation_criteria.md)                                |
+| `detections/detections.jsonl`      | Rule hits with matched event references  | [Detection (Sigma)](060_detection_sigma.md)                                      |
+| `logs/health.json`                 | Stage outcomes for run status derivation | [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)         |
 
 ## Run status summary
 
@@ -1446,21 +1446,20 @@ The reporting stage MUST set exit codes aligned with
 
 ## References
 
-- [Manifest schema](manifest.schema.json)
-- [Summary schema](summary.schema.json)
-- [Bridge coverage schema](bridge_coverage.schema.json)
-- [Mapping coverage schema](mapping_coverage.schema.json)
-- [Criteria pack manifest schema](criteria_pack_manifest.schema.json)
+- [Manifest schema](../contracts/manifest.schema.json)
+- [Summary schema](../contracts/summary.schema.json)
+- [Bridge coverage schema](../contracts/bridge_coverage.schema.json)
+- [Mapping coverage schema](../contracts/mapping_coverage.schema.json)
+- [Criteria pack manifest schema](../contracts/criteria_pack_manifest.schema.json)
 - [Scoring metrics specification](070_scoring_metrics.md)
 - [OCSF field tiers specification](055_ocsf_field_tiers.md)
 - [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md)
-- [ADR-0005: Stage outcomes and failure classification](ADR-0005-stage-outcomes-and-failure-classification.md)
+- [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
 
 ## Changelog
 
-| Date       | Change                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| 2026-01-22 | Specify self-contained, local-only HTML report constraints (Metta-style minimal)           |
-| 2026-01-18 | Codify regression JSON contract and measurement-layer evidence pointers for gaps           |
-| 2026-01-13 | Major revision: added normative requirements, gap taxonomy alignment, per-source breakdown |
-| 2026-01-12 | Formatting update                                                                          |
+| Date       | Change                                                                           |
+| ---------- | -------------------------------------------------------------------------------- |
+| 2026-01-24 | Specify self-contained, local-only HTML report constraints (Metta-style minimal) |
+| 2026-01-22 | Specify self-contained, local-only HTML report constraints (Metta-style minimal) |
+| 2026-01-18 | Codify regression JSON contract and measurement-layer evidence pointers for gaps |

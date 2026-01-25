@@ -150,6 +150,7 @@ The following list is for navigation only. The authoritative mapping is `contrac
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
 - `docs/contracts/report.schema.json`
+- `docs/contracts/redaction_profile_set.schema.json`
 - `docs/contracts/telemetry_baseline_profile.schema.json`
 - `docs/contracts/telemetry_validation.schema.json`
 - `docs/contracts/duckdb_conformance_report.schema.json`
@@ -297,8 +298,9 @@ Minimum fields (normative):
 
 Notes:
 
-- This report is a **debug/operability log** and is not part of long-term signed artifact sets by
-  default (see signing exclusions).
+- This report is a **deterministic evidence log** (Tier 0). When present, it MUST be included in
+  default exports and in `security/checksums.txt` when signing is enabled (see ADR-0009 and the
+  storage formats Tier 0 export classification).
 - Stages MUST still record the stage outcome with a stable `reason_code` per ADR-0005 and
   operability rules.
 
@@ -447,13 +449,29 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `report/` (HTML and JSON report outputs)
   - Regression results (when enabled) are embedded only in `report/report.json` under the
     `regression` object (see `docs/spec/080_reporting.md` for the contract).
-- `logs/` (structured operability summaries and debug logs; not considered long-term storage)
-  - `logs/health.json` (when enabled; see the [operability spec](110_operability.md))
-  - `logs/counters.json` (schema-backed per-run counters and gauges; see the
-    [operability spec](110_operability.md))
-  - `logs/telemetry_validation.json` (when telemetry validation is enabled)
-  - `logs/cache_provenance.json` (schema-backed cache usage provenance)
-  - `logs/contract_validation/` (contract validation failure reports, when emitted)
+- `logs/` (Tier 0 operability surface: deterministic evidence + volatile diagnostics; see ADR-0009)
+  - Deterministic evidence (included in default exports/checksums when present):
+    - `logs/health.json` (when enabled; see the [operability spec](110_operability.md))
+    - `logs/counters.json` (schema-backed per-run counters and gauges; see the
+      [operability spec](110_operability.md))
+    - `logs/telemetry_validation.json` (when telemetry validation is enabled; see the
+      [telemetry pipeline spec](040_telemetry_pipeline.md))
+    - `logs/cache_provenance.json` (when caching is enabled; see the
+      [architecture spec](020_architecture.md))
+    - `logs/lab_inventory_snapshot.json` (canonical lab inventory snapshot; see
+      [lab providers](015_lab_providers.md))
+    - `logs/lab_provider_connectivity.json` (optional provider connectivity canary; see
+      [lab providers](015_lab_providers.md))
+    - `logs/contract_validation/` (publish-gate contract validation reports; see the
+      [architecture spec](020_architecture.md))
+  - Volatile diagnostics (excluded from default exports/checksums):
+    - `logs/run.log` (unstructured operator log; see ADR-0005)
+    - `logs/warnings.jsonl` (optional warning stream; see ADR-0005)
+    - `logs/eps_baseline.json` (optional resource baseline; see the
+      [operability spec](110_operability.md))
+    - `logs/telemetry_checkpoints/` (receiver checkpoint state; see ADR-0002)
+    - `logs/dedupe_index/` (normalization runtime index; see ADR-0002)
+    - `logs/scratch/` (timestamped scratch outputs; non-contracted)
 
 The manifest is the authoritative index for what exists in the bundle and which versions were used.
 
@@ -481,8 +499,8 @@ Handling semantics (normative):
 - `present`: `artifact_path` exists and contains the referenced evidence.
 - `withheld`: `artifact_path` exists but contains a deterministic redaction/placeholder; the
   underlying evidence is intentionally not retained.
-- `quarantined`: `artifact_path` exists but is quarantined (for example, under `unredacted/**`) and
-  MUST NOT be used for scoring/trending outputs.
+- `quarantined`: `artifact_path` exists but is quarantined (for example, under
+  `runs/<run_id>/unredacted/**`) and MUST NOT be used for scoring/trending outputs.
 - `absent`: evidence was expected for this reference but is not present; `artifact_path` SHOULD
   indicate the expected location.
 
@@ -1842,9 +1860,18 @@ run-relative using POSIX separators (`/`). Newlines MUST be `\n` (LF).
 
 `security/checksums.txt` MUST include every file under `runs/<run_id>/` except:
 
-- `logs/**` (volatile)
-- `unredacted/**` (quarantine, if present)
+- `<security.redaction.unredacted_dir>/**` (default: `runs/<run_id>/unredacted/`; quarantine, if
+  present)
 - `.staging/**` (transient publish-gate scratch area)
+- Volatile diagnostics under `logs/` (see ADR-0009 and the storage formats spec Tier 0 taxonomy),
+  including:
+  - `logs/run.log`
+  - `logs/warnings.jsonl`
+  - `logs/eps_baseline.json`
+  - `logs/telemetry_checkpoints/**`
+  - `logs/dedupe_index/**`
+  - `logs/scratch/**`
+  - any other `logs/**` path not explicitly classified as deterministic evidence
 - `security/checksums.txt` and `security/signature.ed25519` (to avoid self-reference)
 
 Inclusion notes (normative):
@@ -1856,7 +1883,8 @@ Inclusion notes (normative):
   - `runner/actions/<action_id>/requirements_evaluation.json`
 - If an evidence-tier artifact is withheld-from-long-term, the deterministic placeholder written at
   the standard path MUST be included in `security/checksums.txt`. Any quarantined/unredacted copies
-  under `unredacted/**` MUST NOT be included (see `090_security_safety.md`, "Redaction").
+  under `runs/<run_id>/unredacted/**` MUST NOT be included (see `090_security_safety.md`,
+  "Redaction").
 - Implementations MUST treat `runner/actions/<action_id>/` as part of the long-term artifact set
   (unless excluded above), including additional contract-defined runner evidence artifacts written
   under that directory.
@@ -2030,6 +2058,18 @@ Normalized events:
   remain in volatile logs and never enter long-term storage.
 - When storing raw telemetry, apply a configurable redaction policy for known sensitive fields
   (credentials, tokens, PII) before promotion into long-term stores.
+- `runs/<run_id>/logs/**` contains a mix of:
+  - volatile operator-local diagnostics (excluded from default export/checksums), and
+  - contract-backed, CI-relevant structured logs (for example `logs/counters.json`,
+    `logs/cache_provenance.json`).
+- Export/share tooling MUST use a per-source redaction profile set (schema:
+  `docs/contracts/redaction_profile_set.schema.json`) to determine disclosure handling and redaction
+  posture for each exported artifact, including contract-backed artifacts under `logs/`.
+  - If a profile set instance is validated as part of a publish-gate or export-gate, it MUST be
+    registered in `docs/contracts/contract_registry.json`.
+  - For contract-backed artifacts, redaction MUST preserve schema validity; if not possible, the
+    artifact MUST be withheld (or kept quarantine-only) with a stable reason code, rather than
+    exporting a schema-invalid file.
 
 ## Validation workflow
 
@@ -2061,7 +2101,8 @@ CI gates should fail closed on contract violations.
 
 ## Changelog
 
-| Date      | Change                                       |
-| --------- | -------------------------------------------- |
-| 1/22/2026 | Add `vagrant` to `lab.provider` enum         |
-| 1/17/2026 | Style guide migration (no technical changes) |
+| Date      | Change                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------- |
+| 1/24/2026 | Clarify `logs/` deterministic evidence vs volatile diagnostics and align signing checksum scope with export policy. |
+| 1/22/2026 | Add `vagrant` to `lab.provider` enum                                                                                |
+| 1/17/2026 | Style guide migration (no technical changes)                                                                        |

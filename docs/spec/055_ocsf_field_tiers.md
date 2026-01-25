@@ -88,17 +88,17 @@ Every emitted normalized event MUST include the following fields.
 
 ### Required metadata fields
 
-| Field                         | Requirement | Notes                                                                                                                                                                                             |
-| ----------------------------- | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `metadata.uid`                |        MUST | OCSF unique event identifier. MUST equal `metadata.event_id`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                          |
-| `metadata.event_id`           |        MUST | Purple Axiom deterministic event identifier (idempotency key). Mirrors `metadata.uid` in OCSF outputs. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md). |
-| `metadata.run_id`             |        MUST | Run identifier (ties to manifest, ground truth, detections).                                                                                                                                      |
-| `metadata.scenario_id`        |        MUST | Scenario identifier (ties to ground truth).                                                                                                                                                       |
-| `metadata.collector_version`  |        MUST | Collector build/version.                                                                                                                                                                          |
-| `metadata.normalizer_version` |        MUST | Normalizer build/version.                                                                                                                                                                         |
-| `metadata.source_type`        |        MUST | Source discriminator (example: `windows_security`, `sysmon`, `osquery`, `auditd`).                                                                                                                |
-| `metadata.source_event_id`    |        MUST | Source-native upstream ID when meaningful; else `null`.                                                                                                                                           |
-| `metadata.identity_tier`      |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                 |
+| Field                         | Requirement | Notes                                                                                                                                                                                                                                        |
+| ----------------------------- | ----------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metadata.uid`                |        MUST | OCSF unique event identifier. MUST equal `metadata.event_id`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                                                                     |
+| `metadata.event_id`           |        MUST | Purple Axiom deterministic event identifier (idempotency key). MUST equal `metadata.uid` in OCSF outputs. Format: `pa:eid:v1:<32 lowercase hex>`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md). |
+| `metadata.run_id`             |        MUST | Run identifier (ties to manifest, ground truth, detections). MUST be an RFC 4122 UUID string in canonical hyphenated form, lowercase hex. See [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md).         |
+| `metadata.scenario_id`        |        MUST | Scenario identifier (ties to ground truth). MUST conform to `id_slug_v1`. See [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md).                                                                         |
+| `metadata.collector_version`  |        MUST | Collector build/version.                                                                                                                                                                                                                     |
+| `metadata.normalizer_version` |        MUST | Normalizer build/version.                                                                                                                                                                                                                    |
+| `metadata.source_type`        |        MUST | Source discriminator (example: `windows_security`, `sysmon`, `osquery`, `auditd`).                                                                                                                                                           |
+| `metadata.source_event_id`    |        MUST | Source-native upstream ID when present; else `null`. MUST be a string when non-null. For `metadata.identity_tier = 3`, this MUST be `null`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).       |
+| `metadata.identity_tier`      |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). This is distinct from the Tier 0/1/2/3/R field tier model. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                 |
 
 #### Provisional network telemetry source types (v0.1)
 
@@ -114,7 +114,7 @@ For v0.1, the following `metadata.source_type` values are reserved for custom ne
 - `suricata_eve` (Suricata EVE flow/session records)
 
 Event identity for these sources is defined in ADR-0002 under “Network flows (provisional)”,
-including a Tier 3 fallback based on 5-tuple plus flow start time.
+including an `identity_tier = 3` fallback based on 5-tuple plus flow start time.
 
 ### Strong recommendations
 
@@ -161,7 +161,7 @@ For each Tier 1 field (or field group) and each in-scope event:
 - A field is **present** if the JSON key exists, its value is not `null`, and it satisfies the
   type-specific rules below.
 - For strings, the value MUST be non-empty after trimming whitespace.
-- For objects, the value may be empty and still counts as present (existence is the pivot\
+- For objects, the value may be empty and still counts as present (existence is the pivot
   requirement).
 - For arrays, the value MUST contain at least one element to count as present.
 - Numeric zero and boolean `false` count as present.
@@ -258,7 +258,7 @@ Purple Axiom treats a small set of pivots as core common because they unlock mos
 | -------------------- | -------------: | --------------------------------------------------------------------------------------------------------------------- |
 | `device.hostname`    |         SHOULD | Stable host identifier when available.                                                                                |
 | `device.uid`         |         SHOULD | Stable host ID when available.                                                                                        |
-| \`device.(ip         |       ips[])\` | SHOULD                                                                                                                |
+| `device.(ip\|ips[])` |         SHOULD | Device IP pivot. Present if either `device.ip` or `device.ips[]` is present (see Tier 1 field set).                   |
 | `actor.user.name`    |         SHOULD | Principal name in the Tier 2 standard user shape (see Tier 2: Standard actor identity shapes).                        |
 | `actor.user.uid`     |         SHOULD | Principal stable identifier (SID/UID) in the Tier 2 standard user shape (see Tier 2: Standard actor identity shapes). |
 | `actor.process.name` |         SHOULD | Process name in the Tier 2 standard process shape (see Tier 2: Standard actor identity shapes).                       |
@@ -280,8 +280,8 @@ Tier 2 families used by the v0.1 MVP normalizer. The authoritative checklist is 
 The matrix:
 
 - Uses rows = `source_type` (for example, Windows Security, Sysmon, osquery, auditd).
-- Uses columns = OCSF field paths (Tier 1 plus selected Tier 2 families: process, network, file,
-  user).
+- Uses columns = OCSF field paths (Tier 1 plus the v0.1 enabled event families defined in "Enabled
+  event families (v0.1 baseline)").
 - Uses cells = `R` / `O` / `N/A` with the following semantics:
   - `R` (required mapping target): the mapping MUST populate the field when an authoritative value
     is present in the raw input or when it is deterministically derived from run context (for
@@ -306,6 +306,100 @@ This section is intentionally framed by **event families** rather than exact cla
 `class_uid` values and shapes vary by pinned OCSF version. The normalizer should implement these as
 mapping profiles per `source_type`.
 
+### Enabled event families (v0.1 baseline)
+
+This section defines the minimal, representative set of **enabled event families** for Purple Axiom
+v0.1. This baseline exists to prevent cross-lab incomparability by fixing the minimum scope for:
+
+- mapping effort (which Tier 2 family minimums are expected),
+- telemetry configuration (which families must be collectable in the lab), and
+- what “coverage” means for scoring and detection evaluation.
+
+#### Baseline set (normative)
+
+For Purple Axiom **v0.1**, the following event families **MUST** be treated as enabled:
+
+1. **Process execution**
+1. **Network connections**
+1. **DNS queries**
+1. **Authentication/logon**
+1. **File writes (selectively)**
+
+Implementations **MAY** additionally enable other families (for example, registry, image/module
+load, EDR “findings”), but those families are **out of scope** for v0.1 baseline comparability
+unless:
+
+1. this section is updated, and
+1. the Mapping coverage matrix column set is updated accordingly, and
+1. CI baselines / golden fixtures are refreshed to reflect the new scope.
+
+#### Mapping and evaluation semantics (normative)
+
+- When events in an enabled family are emitted, mapping profiles **MUST** attempt to populate the
+  Tier 2 minimum objects/fields defined in the corresponding family subsections of this document,
+  subject to authoritative availability in raw input.
+- Mappings **MUST NOT** fabricate Tier 2 fields to satisfy this baseline. If authoritative values
+  are absent, the field **MUST** be absent and the gap **MUST** remain observable via mapping
+  coverage outputs (for example, coverage segmented by `source_type` and `class_uid`).
+- v0.1 scoring and Sigma-based detection evaluation **SHOULD** treat these families as the minimum
+  input surface for “meaningful” evaluation. Runs that do not collect/normalize one or more baseline
+  families will be difficult to compare across labs and will commonly manifest as
+  `missing_telemetry` / `normalization_gap`-shaped outcomes downstream.
+
+#### Telemetry sources (planning guidance; non-normative)
+
+The baseline families are intentionally achievable using common endpoint telemetry (no mandatory
+network sensors).
+
+| Enabled family (v0.1)     | Typical sources / `metadata.source_type`                   | Notes                                                                          |
+| ------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Process execution         | `sysmon`, `osquery`, `auditd`                              | Primary pivot for most endpoint detections and correlations.                   |
+| Network connections       | `sysmon`, host firewall logs, optional flow sensors        | Prefer endpoint connection events in v0.1; pcap/NetFlow are optional/reserved. |
+| DNS queries               | `dns` (DNS client logs / resolver logs), optional `zeek_*` | Treated as its own family to support domain-based detections and correlation.  |
+| Authentication/logon      | `windows_security`, POSIX auth logs, IdP audit logs        | Focus on success/failure + principal identity pivots.                          |
+| File writes (selectively) | `sysmon`, `auditd`, `osquery`                              | High-volume and high-variance unless bounded (see selection policy below).     |
+
+#### File write selection policy (recommended; v0.1)
+
+“File writes (selectively)” is enabled because dropped payloads, staging, and persistence often
+leave file-system evidence, but unconstrained file telemetry can dominate volume and cost.
+
+To bound telemetry volume (and reduce privacy risk), file system collection **SHOULD** be limited
+to:
+
+- create/modify operations (not read),
+- user-writable and common staging locations (for example: Downloads, Temp, Startup, ProgramData),
+  and
+- high-signal extensions (executables and scripts), for example:
+  - `.exe`, `.dll`, `.ps1`, `.bat`, `.cmd`, `.js`, `.vbs`, `.hta`, `.msi`, `.lnk`
+  - archives such as `.zip`, `.7z`, `.rar` when feasible
+
+If a lab applies materially different selection criteria, it **SHOULD** be reflected in the lab’s
+telemetry baseline profile and treated as a comparability-relevant configuration difference.
+
+#### Rationale (coverage; non-normative)
+
+This v0.1 baseline aligns with the Sigma-to-OCSF bridge MVP scope recommendation (process execution,
+network connections, DNS queries, authentication/logon, selective file writes), chosen to cover a
+significant fraction of high-value detection content without exploding scope.
+
+Collectively, these families cover the most common “evidence surfaces” produced by safe technique
+execution scenarios, including execution pivots, download / remote communications, and identity
+pivots.
+
+#### Cost estimates (planning; v0.1)
+
+The table below is intended for planning and tradeoff discussions; actual costs MUST be validated
+using run reporting volume metrics (events by `source_type` / `class_uid`, EPS, and byte rates).
+
+| Family                    | Telemetry volume (relative) | Mapping complexity (relative) | Primary cost drivers / notes                                                                |
+| ------------------------- | --------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| Process execution         | Medium                      | Medium                        | Steady baseline volume; requires consistent actor + process pivots.                         |
+| Network connections       | High                        | Medium                        | Can dominate EPS on active endpoints; consider excluding loopback/noise only if documented. |
+| DNS queries               | Medium                      | Low                           | Generally structured; critical for domain-based detections.                                 |
+| Authentication/logon      | Low–Medium                  | Medium                        | Volume spikes on shared systems; requires consistent outcome semantics.                     |
+| File writes (selectively) | Medium–High                 | High                          | Highly sensitive to selection policy; hashing increases CPU/bytes.                          |
+
 ### Standard actor identity shapes
 
 This section defines a **Tier 2 identity profile** for `actor.user` and `actor.process`. Its purpose
@@ -327,10 +421,25 @@ Normative requirements:
 
 #### `actor.user` (Tier 2 standard user shape)
 
-| Field             | Requirement | Canonicalization and semantics                                                                                                                                                                                                                                                                                                                    |
-| ----------------- | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `actor.user.uid`  |      SHOULD | Stable principal identifier. MUST be a string across platforms to avoid type drift in long-term storage. Windows: MUST be the SID string in canonical `S-1-...` form (no surrounding whitespace). POSIX (Linux/macOS): MUST be the base-10 string representation of the numeric UID, with no leading zeros (except UID `0` represented as `"0"`). |
-| `actor.user.name` |      SHOULD | Human-readable principal name when present in authoritative raw input. Windows: if domain and username are provided separately, SHOULD be rendered as `DOMAIN\user` using a single backslash separator. MUST NOT be synthesized via directory services or local account lookup.                                                                   |
+| Field                     | Requirement | Canonicalization and semantics                                                                                                                                                                                                                                                                                                                               |
+| ------------------------- | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `actor.user.uid`          |      SHOULD | Stable principal identifier. MUST be a string across platforms to avoid type drift in long-term storage. Windows: MUST be the SID string in canonical `S-1-...` form (no surrounding whitespace). POSIX (Linux/macOS): MUST be the base-10 string representation of the numeric UID, with no leading zeros (except UID `0` represented as `"0"`).            |
+| `actor.user.name`         |      SHOULD | Username (no domain prefix/suffix) when present in authoritative raw input. MUST NOT be rendered as `DOMAIN\user` or `user@domain`. Mappings MUST NOT synthesize usernames via directory services or local account lookup. If the authoritative raw input provides only a combined name string, mappings SHOULD apply the deterministic parsing rules below. |
+| `actor.user.domain`       |      SHOULD | Domain / realm / scope when present as a separate authoritative field (preferred) or safely parsed from a combined name string. Windows: typically the `*DomainName` field. POSIX: rarely available; omit unless explicitly present (example: `user@realm`). MUST NOT be derived via environment-dependent lookups (LDAP, `/etc/passwd`, etc.).              |
+| `actor.user.display_name` |         MAY | Presentation-only principal string when the authoritative raw input provides a combined form (example: `DOMAIN\user` or `user@domain`). SHOULD equal the exact raw combined string after trimming. When `actor.user.domain` is derived by parsing a combined name string, mappings SHOULD preserve the original combined form here.                          |
+
+Deterministic parsing rules for combined principal strings (recommended):
+
+- If authoritative raw input provides separate domain and username fields, mappings SHOULD:
+  - set `actor.user.domain` and `actor.user.name` from those fields, and
+  - MAY set `actor.user.display_name` to `DOMAIN\user` (Windows) or `user@domain` (UPN-style) as a
+    presentation helper.
+- If authoritative raw input provides a single combined string and no separate domain field,
+  mappings SHOULD parse only when the format is unambiguous:
+  - `DOMAIN\user` form: if the string matches `^[^\\]+\\[^\\]+$`, split on the first backslash.
+  - `user@domain` form: if the string matches `^[^@\s]+@[^@\s]+$`, split on the first `@`.
+  - Otherwise, set `actor.user.name` to the full trimmed string, omit `actor.user.domain`, and MAY
+    set `actor.user.display_name` to the same string.
 
 Canonical validity checks (recommended, deterministic):
 
@@ -355,6 +464,27 @@ Applicability and absence:
   backfilled from other telemetry sources.
 - When a source does not provide user attribution for those events, `actor.user` MUST be absent and
   MUST NOT be backfilled from other telemetry sources.
+
+#### Verification hooks (actor identity) (normative)
+
+Implementations MUST maintain fixture-backed tests that validate Tier 2 actor identity extraction
+and canonicalization across at least the following telemetry sources:
+
+- Windows Event Log (`metadata.source_type` variants such as `windows_security` or `sysmon`)
+- osquery (`metadata.source_type = "osquery"`)
+- Unix logs (`metadata.source_type = "linux_auditd"` and/or `linux_syslog`)
+
+Each fixture MUST include (1) a representative raw source record (or minimally sufficient parsed
+representation) and (2) the expected normalized OCSF event. The test suite MUST assert:
+
+- `actor.user.name` is username-only; domain/realm is represented in `actor.user.domain` when
+  available or safely parsed.
+- `actor.user.uid` uses Windows SID (Windows) or base-10 UID string (POSIX) and is not populated via
+  environment-dependent lookup.
+- When a combined principal string is parsed, the original combined string is preserved in
+  `actor.user.display_name`.
+
+Suggested fixture location: `tests/fixtures/normalization/actor_identity/` (new).
 
 ### Process and execution activity
 
@@ -537,10 +667,10 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
   "time": 1736035200123,
   "class_uid": 1001,
   "metadata": {
-    "uid": "4b2d3f3f6b7b2a1c",
-    "event_id": "4b2d3f3f6b7b2a1c",
-    "run_id": "run_2026-01-04T17-00-00Z",
-    "scenario_id": "scenario.atomic.t1059",
+    "uid": "pa:eid:v1:4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d",
+    "event_id": "pa:eid:v1:4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d",
+    "run_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "scenario_id": "atomic-t1059",
     "collector_version": "collector@0.1.0",
     "normalizer_version": "normalizer@0.1.0",
     "source_type": "sysmon",
@@ -563,10 +693,10 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
   "category_uid": 1,
   "severity_id": 2,
   "metadata": {
-    "uid": "4b2d3f3f6b7b2a1c",
-    "event_id": "4b2d3f3f6b7b2a1c",
-    "run_id": "run_2026-01-04T17-00-00Z",
-    "scenario_id": "scenario.atomic.t1059",
+    "uid": "pa:eid:v1:4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d",
+    "event_id": "pa:eid:v1:4b2d3f3f6b7b2a1c9a1d2c3b4a5f6e7d",
+    "run_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "scenario_id": "atomic-t1059",
     "collector_version": "collector@0.1.0",
     "normalizer_version": "normalizer@0.1.0",
     "source_type": "sysmon",
@@ -581,7 +711,7 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
     "ips": ["10.0.0.10"]
   },
   "actor": {
-    "user": { "name": "alice", "uid": "S-1-5-21-..." },
+    "user": { "name": "alice", "uid": "S-1-5-21-1111111111-2222222222-3333333333-1001" },
     "process": { "name": "powershell.exe", "pid": 4242 }
   },
   "raw": {
@@ -594,10 +724,10 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
 
 ## Open items
 
-- Confirm the Tier 2 standard actor identity shapes match the pinned OCSF version/profile field
-  paths (and update field names if the pin changes).
+- Add fixture-backed actor identity vectors (Windows Event Log, osquery, Unix logs) that pin the
+  parsing/canonicalization rules for `actor.user.{name,domain,uid,display_name}` and
+  `actor.process.{pid,name,path,cmd_line}`.
 - Define per-source redaction profiles and automated tests for raw retention.
-- Enumerate the initial enabled event families for v0.1 (driven by scenario set).
 
 ## Key decisions
 
@@ -616,6 +746,7 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
 
 - [OCSF normalization specification](050_normalization_ocsf.md)
 - [Scoring metrics](070_scoring_metrics.md)
+- [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md)
 - [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md)
 - [Mapping coverage matrix](../mappings/coverage_matrix.md)
 
@@ -623,4 +754,5 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
 
 | Date       | Change                                                                  |
 | ---------- | ----------------------------------------------------------------------- |
+| 2026-01-24 | update                                                                  |
 | 2026-01-12 | Migrated to repository Markdown style guide (structure and formatting). |

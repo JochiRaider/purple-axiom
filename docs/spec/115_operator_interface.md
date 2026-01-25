@@ -768,9 +768,12 @@ All artifact serving endpoints MUST:
 Exports MUST follow the orchestrator `export` verb semantics:
 
 - default exclusions: the quarantine directory (`unredacted/` by default;
-  `security.redaction.unredacted_dir` when configured), `.staging/`, and binary evidence
+  `security.redaction.unredacted_dir` when configured), `.staging/`, volatile diagnostics under
+  `runs/<run_id>/logs/` (see ADR-0009), and binary evidence
 - quarantine inclusion requires explicit `include_quarantine: true` plus confirmation prompt plus
   audit event
+- volatile diagnostics inclusion (if implemented) requires explicit
+  `include_volatile_diagnostics: true` plus confirmation prompt plus audit event
 - binary evidence inclusion requires explicit `include_binary_evidence: true` plus confirmation
   prompt plus audit event
 
@@ -1306,5 +1309,6 @@ that adopt it:
 
 | Date       | Change                                                                                                                                                                                                                                                                                                      |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-01-24 | Exclude volatile diagnostics under `runs/<run_id>/logs/` from default exports; align with ADR-0009.                                                                                                                                                                                                         |
 | 2026-01-22 | Added explicit workspace layout, introduced a minimal Operator API section, fixed artifact extension allowlist to include `.log` and YAML, expanded artifact allowlist to include `plan/` and `control/`, and made resume/retry request/decision lifecycle fully observable with durable request artifacts. |
 | 2026-01-21 | Initial draft defining web Operator Interface, LAN reverse-proxy profile, local auth, audit logging, artifact serving constraints, and explicit cancellation/resume/retry state machines.                                                                                                                   |

@@ -56,7 +56,8 @@ Non-canonical forms:
 - The normalizer MUST treat `calendarTime` as non-authoritative and MUST NOT use it for identity or
   ordering.
 - If an observation timestamp is available from ingestion, the normalizer MAY record it as
-  `metadata.observed_time`, but `metadata.event_id` MUST NOT incorporate `metadata.observed_time`.
+  `metadata.ingest_time_utc` (RFC3339 UTC string), but `metadata.event_id` MUST NOT incorporate
+  `metadata.ingest_time_utc`.
 
 ## Raw staging in the run bundle
 
@@ -94,8 +95,13 @@ receivers:
     include:
       # Linux default (package dependent)
       - /var/log/osquery/osqueryd.results.log
+      # Include common numeric-suffix rotations (plain NDJSON). Extend if your catch-up window needs more history.
+      - /var/log/osquery/osqueryd.results.log.[0-9]
+      - /var/log/osquery/osqueryd.results.log.[0-9][0-9]
       # Windows example (explicit is strongly preferred)
       - C:\\ProgramData\\osquery\\log\\osqueryd.results.log
+      - C:\\ProgramData\\osquery\\log\\osqueryd.results.log.[0-9]
+      - C:\\ProgramData\\osquery\\log\\osqueryd.results.log.[0-9][0-9]
     start_at: beginning
     include_file_path: true
     # Required for durable offset tracking across restarts; see telemetry pipeline spec "Checkpointing and replay semantics"
@@ -104,28 +110,30 @@ receivers:
       # Preserve the original line before parsing (useful for forensic review and parse-error handling).
       - type: copy
         from: body
-        to: attributes.log.record.original
+        to: attributes["log.record.original"]
       # Parse JSON. If parsing fails, DO NOT drop the record; send it onward as an unstructured log entry.
+      # Be explicit about the parse destination to keep downstream field moves/copies stable.
       - type: json_parser
         parse_from: body
+        parse_to: attributes
         on_error: send
-      # Move key fields into a stable attribute namespace for routing and identity.
-      # If fields are missing (for example, parse failure), DO NOT drop the record.
-      - type: move
+      # Copy (do not move) key fields into a stable namespace for routing/identity while preserving
+      # the original NDJSON field names (`name`, `action`) for telemetry baseline-profile matching.
+      - type: copy
         from: attributes.name
-        to: attributes.osquery.query_name
+        to: attributes["osquery.query_name"]
         on_error: send_quiet
-      - type: move
+      - type: copy
         from: attributes.hostIdentifier
-        to: attributes.osquery.host_identifier
+        to: attributes["osquery.host_identifier"]
         on_error: send_quiet
-      - type: move
+      - type: copy
         from: attributes.unixTime
-        to: attributes.osquery.unix_time
+        to: attributes["osquery.unix_time"]
         on_error: send_quiet
-      - type: move
+      - type: copy
         from: attributes.action
-        to: attributes.osquery.action
+        to: attributes["osquery.action"]
         on_error: send_quiet
 ```
 
@@ -149,6 +157,30 @@ be recorded.
   files).
 - If unreadable rotated segments lead to missing results, the validator MUST record the gap as a
   telemetry failure (not silently ignored).
+
+### Telemetry validation gates (baseline profile and continuity)
+
+This section does not introduce new osquery semantics. It makes the osquery ingestion path
+explicitly compatible with telemetry-stage gates defined in the telemetry pipeline and stage-outcome
+ADRs.
+
+Baseline profile gate (fail closed when enabled):
+
+- When `telemetry.baseline_profile.enabled=true`, the telemetry validator evaluates
+  `runs/<run_id>/inputs/telemetry_baseline_profile.json` and emits a health substage outcome with
+  `stage="telemetry.baseline_profile"`.
+- For `source_type=osquery`, baseline signal matching uses the osquery NDJSON fields `name`
+  (required) and `action` (optional). Therefore, ingestion/staging SHOULD preserve these fields (or
+  preserve their semantics deterministically if renamed in an intermediate store).
+
+File-tailed crash/restart + rotation continuity (required when osquery is enabled):
+
+- When osquery (or any file-tailed source) is enabled, telemetry validation MUST perform a
+  crash/restart and rotation continuity test and record results in
+  `runs/<run_id>/logs/telemetry_validation.json` under `assets[].file_tailed_continuity_test`
+  (including `loss_pct` and `dup_pct`).
+- In CI (R-01), the continuity test asserts `loss_pct == 0` across a window spanning rotation and a
+  crash boundary; duplication is acceptable but must be measured and reported as `dup_pct`.
 
 ### Required exporter tagging
 
@@ -453,5 +485,6 @@ A v0.1 implementation MUST satisfy:
 
 | Date      | Change                                       |
 | --------- | -------------------------------------------- |
+| 1/24/2026 | update                                       |
 | 1/18/2026 | spec update                                  |
 | TBD       | Style guide migration (no technical changes) |

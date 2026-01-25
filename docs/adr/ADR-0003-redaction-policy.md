@@ -751,6 +751,40 @@ Canonical JSON (normative):
 - The effective policy object MUST satisfy RFC 8785 constraints (I-JSON subset) before
   canonicalization.
 
+### Export/share redaction profile sets (normative)
+
+The redaction policy defined in this ADR specifies *how* to redact. Export/share tooling also needs
+a deterministic answer for *what posture to apply per source* to avoid both under-redaction
+(leakage) and over-redaction (loss of evidence). That per-source posture is defined by a **redaction
+profile set**.
+
+Schema:
+
+- `docs/contracts/redaction_profile_set.schema.json`
+
+If an implementation validates profile set instances at runtime (publish-gate or export-gate), it
+MUST register the contract in `docs/contracts/contract_registry.json` and validate instances against
+this schema.
+
+Normative requirements:
+
+- Export/share tooling MUST select and apply a redaction profile set for any shareable bundle it
+  produces.
+- A profile set MUST be evaluated deterministically per artifact using run-relative evidence
+  selectors (exact `artifact_paths[]`, `artifact_globs[]`, and/or normalized `metadata.source_type`
+  for OCSF).
+- For artifacts that are contract-backed (including contract-backed artifacts under
+  `runs/<run_id>/logs/**`), redaction MUST preserve schema validity:
+  - Redaction MUST NOT change JSON structure (keys, arrays, and non-string types) for schema-backed
+    JSON artifacts.
+  - If post-redaction contract validation fails, export/share tooling MUST fail closed for that
+    artifact by withholding it (or keeping it quarantine-only) and recording a stable reason code.
+- A profile set MUST include an explicit `default_fallback` profile for unmatched artifacts; the
+  default fallback MUST be conservative (withhold or quarantine-only) for evidence-tier artifacts.
+
+This mechanism is additive: it does not redefine the `pa.redaction_policy.v1` format; it defines how
+a given export/share operation must apply the policy per source and per artifact class.
+
 ## Test vectors
 
 CI MUST include fixture-based tests that validate:

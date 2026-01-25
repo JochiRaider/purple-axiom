@@ -82,6 +82,14 @@
       "format": "jsonl"
     },
     {
+      "contract_id": "defense_outcomes",
+      "schema_path": "docs/contracts/defense_outcomes.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Defense outcomes model (embedded in report extensions).",
+      "artifact_kind": "other",
+      "format": "json"
+    },
+    {
       "contract_id": "detection_instance",
       "schema_path": "docs/contracts/detection_instance.schema.json",
       "contract_version": "0.1.0",
@@ -178,6 +186,14 @@
       "format": "yaml"
     },
     {
+      "contract_id": "redaction_profile_set",
+      "schema_path": "docs/contracts/redaction_profile_set.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Redaction profile set for export/share tooling.",
+      "artifact_kind": "other",
+      "format": "json"
+    },
+    {
       "contract_id": "report.schema",
       "schema_path": "docs/contracts/report.schema.json",
       "contract_version": "0.1.0",
@@ -234,6 +250,14 @@
       "format": "json"
     },
     {
+      "contract_id": "telemetry_baseline_profile",
+      "schema_path": "docs/contracts/telemetry_baseline_profile.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Telemetry baseline profile input (inputs/telemetry_baseline_profile.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
       "contract_id": "telemetry_validation",
       "schema_path": "docs/contracts/telemetry_validation.schema.json",
       "contract_version": "0.1.0",
@@ -252,6 +276,7 @@
     { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "inputs/telemetry_baseline_profile.json", "contract_id": "telemetry_baseline_profile", "validation_mode": "json_document" },
     { "artifact_glob": "logs/cache_provenance.json", "contract_id": "cache_provenance", "validation_mode": "json_document" },
     { "artifact_glob": "logs/telemetry_validation.json", "contract_id": "telemetry_validation", "validation_mode": "json_document" },
     { "artifact_glob": "manifest.json", "contract_id": "manifest", "validation_mode": "json_document" },

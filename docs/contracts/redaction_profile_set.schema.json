@@ -1,0 +1,385 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purple-axiom.local/schemas/redaction_profile_set.schema.json",
+  "title": "Redaction profile set (export/share)",
+  "description": "Schema for a per-source redaction profile set used by export/share tooling to safely disclose evidence without leaking secrets or PII.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "schema_version",
+    "profile_set_id",
+    "profile_set_version",
+    "generated_at_utc",
+    "posture",
+    "profiles"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0",
+      "description": "Schema contract version constant (SemVer)."
+    },
+    "schema_version": {
+      "const": "pa:redaction_profile_set:v1",
+      "description": "Stable schema identifier for redaction profile sets."
+    },
+    "profile_set_id": {
+      "$ref": "#/$defs/id_slug",
+      "description": "Operator-meaningful identifier for this profile set."
+    },
+    "profile_set_version": {
+      "$ref": "#/$defs/semver",
+      "description": "SemVer for the profile set content."
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "description": "RFC 3339 timestamp in UTC (must end in 'Z')."
+    },
+    "posture": {
+      "type": "string",
+      "enum": [
+        "internal",
+        "restricted",
+        "public"
+      ],
+      "description": "Disclosure posture for which this profile set is intended."
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 4096,
+      "description": "Free-form notes; MUST NOT include secrets."
+    },
+    "profiles": {
+      "type": "object",
+      "description": "Map of profile key -> per-source redaction behavior.",
+      "propertyNames": {
+        "$ref": "#/$defs/profile_key"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/profile"
+      },
+      "required": [
+        "runner_transcripts",
+        "runner_terminal_cast",
+        "runner_structured_evidence",
+        "telemetry_windows_eventlog",
+        "telemetry_windows_sysmon",
+        "telemetry_linux_auditd",
+        "telemetry_linux_syslog",
+        "telemetry_osquery",
+        "contract_logs",
+        "default_fallback"
+      ]
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "id_slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+      "description": "Lowercase identifier: starts with a letter; then letters, digits, underscore."
+    },
+    "profile_key": {
+      "type": "string",
+      "enum": [
+        "runner_transcripts",
+        "runner_terminal_cast",
+        "runner_structured_evidence",
+        "telemetry_windows_eventlog",
+        "telemetry_windows_sysmon",
+        "telemetry_linux_auditd",
+        "telemetry_linux_syslog",
+        "telemetry_osquery",
+        "contract_logs",
+        "default_fallback"
+      ],
+      "description": "Closed set of v0.1 baseline profile keys."
+    },
+    "run_relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*\\0)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/@=+\\-]+(?:/[A-Za-z0-9._/@=+\\-]+)*$",
+      "description": "Run-relative POSIX path with no backslashes and no '..' segments."
+    },
+    "run_relative_glob": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*\\0)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/@=+\\-\\*\\?\\[\\]\\{\\}!,]+(?:/[A-Za-z0-9._/@=+\\-\\*\\?\\[\\]\\{\\}!,]+)*$",
+      "description": "Run-relative POSIX glob pattern with no backslashes and no '..' segments."
+    },
+    "structured_target_path": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 256,
+      "pattern": "^\\$(?:\\.[A-Za-z_][A-Za-z0-9_]*|\\[[0-9]+\\]|\\[\\*\\])+$",
+      "description": "Restricted JSONPath subset (same dialect as ADR-0003 structured.target_paths[])."
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "match",
+        "export",
+        "redaction"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "match": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "match_all": {
+              "type": "boolean",
+              "default": false,
+              "description": "If true, this profile matches any artifact not matched by a more specific profile."
+            },
+            "artifact_paths": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/run_relative_path"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Exact run-relative artifact paths."
+            },
+            "artifact_globs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/run_relative_glob"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Run-relative glob patterns."
+            },
+            "ocsf_source_types": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id_slug"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Allowed values for OCSF `metadata.source_type` when matching normalized events."
+            },
+            "content_kinds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "json",
+                  "jsonl",
+                  "parquet",
+                  "asciicast_v2",
+                  "binary"
+                ]
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Content kind discriminator used by export tooling."
+            },
+            "contract_backed": {
+              "type": "boolean",
+              "description": "True when the matched artifacts are contract-backed and must remain schema-valid after redaction."
+            }
+          },
+          "anyOf": [
+            {
+              "properties": {
+                "match_all": {
+                  "const": true
+                }
+              },
+              "required": [
+                "match_all"
+              ]
+            },
+            {
+              "required": [
+                "artifact_paths"
+              ]
+            },
+            {
+              "required": [
+                "artifact_globs"
+              ]
+            },
+            {
+              "required": [
+                "ocsf_source_types"
+              ]
+            }
+          ]
+        },
+        "export": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "handling"
+          ],
+          "properties": {
+            "handling": {
+              "type": "string",
+              "enum": [
+                "include_redacted",
+                "include_as_is",
+                "withhold",
+                "quarantine_only",
+                "exclude"
+              ],
+              "description": "How export/share tooling must treat artifacts matched by this profile."
+            },
+            "reason_code": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "description": "Stable reason code when handling is withhold/quarantine/exclude."
+            },
+            "must_preserve_contract_validity": {
+              "type": "boolean",
+              "default": true,
+              "description": "If true and contract_backed=true, post-redaction schema validation is required and failures must trigger withholding."
+            }
+          }
+        },
+        "redaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "inherit_effective_policy",
+                "force_redact",
+                "no_redact"
+              ],
+              "description": "Whether to inherit the run's effective policy, force redaction, or disable redaction for this profile."
+            },
+            "pii_mode": {
+              "type": "string",
+              "enum": [
+                "inherit",
+                "force_on",
+                "force_off"
+              ],
+              "default": "inherit",
+              "description": "How to apply PII redaction relative to the effective policy."
+            },
+            "pii_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "email",
+                  "ipv4",
+                  "ipv6",
+                  "hostname",
+                  "username",
+                  "sid",
+                  "mac",
+                  "domain",
+                  "uri_userinfo"
+                ]
+              },
+              "uniqueItems": true,
+              "description": "Optional allowlist of PII field classes to treat as in-scope when pii_mode=force_on."
+            },
+            "structured_mode": {
+              "type": "string",
+              "enum": [
+                "inherit",
+                "force_on",
+                "force_off"
+              ],
+              "default": "inherit",
+              "description": "How to apply structured redaction relative to the effective policy."
+            },
+            "structured_target_paths": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/structured_target_path"
+              },
+              "uniqueItems": true,
+              "description": "Additional structured target paths to redact when structured_mode=force_on."
+            },
+            "require_post_checks": {
+              "type": "boolean",
+              "default": true,
+              "description": "If true, post-checks must be applied and any match must fail closed per ADR-0003."
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "contract_backed": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "contract_backed"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "export": {
+                "properties": {
+                  "must_preserve_contract_validity": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "export": {
+                "properties": {
+                  "handling": {
+                    "enum": [
+                      "withhold",
+                      "quarantine_only",
+                      "exclude"
+                    ]
+                  }
+                },
+                "required": [
+                  "handling"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "export": {
+                "required": [
+                  "reason_code"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

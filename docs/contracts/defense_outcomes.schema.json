@@ -5,12 +5,17 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "contract_version",
     "taxonomy_version",
     "outcome_precedence",
     "summary",
     "by_technique"
   ],
   "properties": {
+    "contract_version": {
+      "const": "0.1.0",
+      "description": "Schema contract version constant (SemVer)."
+    },
     "taxonomy_version": {
       "type": "string",
       "const": "pa.defense_outcomes.v1"

@@ -2,6 +2,16 @@
 title: Sigma-to-OCSF bridge
 description: Defines the routing, aliasing, and backend adapter contract for executing Sigma over OCSF.
 status: draft
+category: spec
+tags: [bridge, sigma, ocsf]
+related:
+  - 060_detection_sigma.md
+  - 050_normalization_ocsf.md
+  - ADR-0002-event-identity-and-provenance.md
+  - 070_scoring_metrics.md
+  - 025_data_contracts.md
+  - ADR-0005-stage-outcomes-and-failure-classification.md
+  - ADR-0007-state-machines.md
 ---
 
 # Sigma-to-OCSF bridge
@@ -84,7 +94,8 @@ Each filter object MUST have:
 - `path` (string): dot-delimited OCSF field path (examples: `metadata.source_type`, `raw.channel`,
   `raw.provider`)
 - `op` (string): one of `eq | neq | in | nin | exists | contains | prefix | suffix | regex`
-- `value` (any): required for all operators except `exists` (see semantics)
+- `value` (any): required for all operators except `exists`
+  - For `op=exists`, `value` MAY be omitted (defaults to `true`); if provided, it MUST be a boolean.
 - `notes` (string, optional)
 
 #### Semantics (normative)
@@ -623,6 +634,7 @@ scoring impact.
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                                                                                  |
+| ---------- | ------------------------------------------------------------------------------------------------------- |
+| 2026-01-24 | Clarify routing determinism, filter semantics, timeframe handling, and bridge artifact/provenance rules |
+| 2026-01-12 | Formatting update                                                                                       |

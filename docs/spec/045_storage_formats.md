@@ -158,6 +158,52 @@ Purpose:
 - CI-facing evidence surfaces (stage outcomes, validation summaries), distinct from Tier 1 evidence
   and Tier 2 analytics datasets.
 
+#### Tier 0 export classification: deterministic evidence vs volatile diagnostics (normative)
+
+`runs/<run_id>/logs/` is intentionally a mixed directory. It contains:
+
+- **Deterministic evidence**: small, structured artifacts required for reproducibility, CI gating,
+  and deterministic failure triage. Deterministic evidence artifacts:
+  - MUST be redaction-safe by construction (MUST NOT contain plaintext secrets).
+  - MUST be included in default exports.
+  - MUST be included in `security/checksums.txt` when signing is enabled (see the data contracts
+    specification and ADR-0009).
+- **Volatile diagnostics**: operator-local debug logs and runtime state (checkpoint databases,
+  scratch files) that are not required for reproducibility and may contain environment-specific or
+  sensitive information. Volatile diagnostics:
+  - MUST be excluded from default exports.
+  - MUST be excluded from `security/checksums.txt`.
+
+Fail-closed rule (normative):
+
+- Any artifact under `logs/` that is not explicitly classified as deterministic evidence below MUST
+  be treated as volatile diagnostics.
+
+Deterministic evidence under `logs/` (included in default export + checksums when present):
+
+| Path (run-relative)                   | Format | Rationale                                                                                     |
+| ------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `logs/health.json`                    | JSON   | Stage outcomes are the authoritative input to run status derivation and CI gating (ADR-0005). |
+| `logs/telemetry_validation.json`      | JSON   | Deterministic telemetry validation summary and gap classification input (when enabled).       |
+| `logs/counters.json`                  | JSON   | Run-scoped counters used for operability and deterministic triage (see operability spec).     |
+| `logs/cache_provenance.json`          | JSON   | Cache usage provenance; required for reproducible cache-aware triage (when caching enabled).  |
+| `logs/lab_inventory_snapshot.json`    | JSON   | Canonical lab inventory snapshot for reproducibility and diffability (lab provider output).   |
+| `logs/lab_provider_connectivity.json` | JSON   | Provider connectivity canary evidence (optional when implemented; MUST NOT contain secrets).  |
+| `logs/contract_validation/**`         | JSON   | Deterministic contract validation reports emitted on publish-gate failures.                   |
+
+Volatile diagnostics under `logs/` (excluded from default export + checksums):
+
+| Path (run-relative)             | Format | Rationale                                                                                                |
+| ------------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| `logs/run.log`                  | text   | Unstructured operator log; may contain environment-specific strings and MUST NOT be exported by default. |
+| `logs/warnings.jsonl`           | JSONL  | Warning stream for operator visibility; not required for reproducibility.                                |
+| `logs/eps_baseline.json`        | JSON   | Performance/resource baseline measurements; inherently environment-dependent and not used for scoring.   |
+| `logs/telemetry_checkpoints/**` | files  | Receiver checkpoint state; runtime-only and restart-oriented.                                            |
+| `logs/dedupe_index/**`          | files  | Normalization dedupe runtime index; runtime-only and restart-oriented.                                   |
+| `logs/scratch/**`               | files  | Timestamped scratch outputs; explicitly non-contracted.                                                  |
+
+Cross-reference (non-normative): ADR-0009 defines export and signing behavior for these classes.
+
 ### Tier 1: Evidence (source-native)
 
 Location:
@@ -819,7 +865,7 @@ high-fidelity Windows artifacts when needed.
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-21 | update            |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                                                                  |
+| ---------- | --------------------------------------------------------------------------------------- |
+| 2026-01-24 | Clarify `logs/` export classification (deterministic evidence vs volatile diagnostics). |
+| 2026-01-21 | update                                                                                  |

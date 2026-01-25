@@ -45,11 +45,16 @@ Scenario safety interaction (normative):
 ## Definitions
 
 - **standard long-term artifact locations**: Default-exported run-bundle paths (Tier 1 evidence +
-  Tier 2 analytics), excluding `runs/<run_id>/logs/**` (volatile logs) and the quarantine directory.
+  Tier 2 analytics) plus deterministic evidence under `runs/<run_id>/logs/` (as defined by
+  ADR-0009), excluding volatile logs, `.staging/**`, and the quarantine directory.
+- **logs/\*.json evidence allowlist** (normative, v0.1): The subset of schema-backed artifacts under
+  `runs/<run_id>/logs/` that MUST be treated as standard long-term artifacts (included in default
+  export and in `security/checksums.txt` when signing is enabled; see `025_data_contracts.md`,
+  "Long-term artifact selection for checksumming").
 - **quarantine directory**: `runs/<run_id>/<security.redaction.unredacted_dir>` used only when
   unredacted evidence storage is explicitly permitted (default: `runs/<run_id>/unredacted/`).
 - **volatile logs**: Operator-local diagnostics excluded from default export/checksums (for example
-  process stdout/stderr and `runs/<run_id>/logs/**`).
+  process stdout/stderr and any `runs/<run_id>/logs/**` content not in the allowlist above).
 - **redacted-safe**: Satisfies the effective redaction policy and post-checks (see
   [ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md)).
 - **evidence-tier artifact**: Tier 1 evidence artifacts governed by redaction/withhold/quarantine
@@ -498,7 +503,7 @@ Normative requirements:
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-20 | update            |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| 2026-01-24 | Clarify that `logs/` contains both deterministic evidence (exported/checksummed) and volatile diagnostics (excluded). |
+| 2026-01-12 | Formatting update                                                                                                     |

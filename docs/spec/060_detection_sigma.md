@@ -53,8 +53,26 @@ Rule selection MAY be constrained via configuration (see the
 v0.1 supported selection inputs:
 
 - `detection.sigma.rule_paths`: directories/files containing Sigma YAML.
-- `detection.sigma.rule_set_version`: pinned rule set identifier for reporting/regression joins.
+- `detection.sigma.rule_set_version`: pinned rule set version for reporting/regression joins.
 - `detection.sigma.limits.max_rules`: optional hard cap on the number of rules loaded.
+
+Deterministic rule loading requirements (normative):
+
+- Implementations MUST discover rule files deterministically:
+  - Treat `detection.sigma.rule_paths[]` as an ordered list.
+  - For a directory entry at index `i`, recursively include files ending in `.yml` or `.yaml`.
+  - For a file entry at index `i`, include only that file.
+  - For each included file, define `ruleset_path` deterministically:
+    - directory entry: the file path relative to the directory root
+    - file entry: the basename of the file
+    - in both cases: separators MUST be normalized to `/`
+  - Before parsing/loading, the discovered file list MUST be sorted by the stable key tuple:
+    1. `i` ascending
+    1. `ruleset_path` ascending (UTF-8 bytewise lexical ordering, no locale)
+- Each loaded rule MUST have a non-empty `id`.
+- Rule IDs MUST be unique within the effective loaded ruleset. If duplicate `id` values are
+  detected, the detection stage MUST fail closed with stage-level reason code
+  `sigma_ruleset_load_failed` (see ADR-0005).
 
 Reserved (v0.2+; requires config schema + reference update before use):
 
@@ -75,7 +93,8 @@ The detection engine MUST:
 - Extract technique IDs from tags matching the pattern `attack\.t\d{4}(?:\.\d{3})?`
   (case-insensitive).
 - Normalize extracted IDs to uppercase (example: `attack.t1059.001` → `T1059.001`).
-- Populate `technique_ids` in detection instances as a deduplicated, sorted array.
+- Populate `technique_ids` in detection instances as a deduplicated array sorted ascending using
+  bytewise UTF-8 lexical ordering (no locale).
 
 ### Sub-technique handling
 
@@ -108,14 +127,18 @@ Rules without valid ATT&CK tags:
 Sigma evaluation is a two-stage process.
 
 1. **Compile (bridge-aware)**
-   - Select a bridge mapping pack (router + field aliases).
+   - Select a bridge mapping pack (router + field aliases) per `detection.sigma.bridge.mapping_pack`
+     and `detection.sigma.bridge.mapping_pack_version`.
    - Route the rule: `logsource` to an OCSF class filter (and optional producer/source predicates
      via `filters[]` OCSF filter objects).
    - Rewrite Sigma field references to OCSF JSONPaths (or backend-native column expressions).
+     - If a rule requires `raw.*`, behavior is governed by
+       `detection.sigma.bridge.raw_fallback_enabled` and MAY render the rule non-executable with
+       reason code `raw_fallback_disabled`.
    - Produce a backend plan:
      - Batch: SQL over Parquet (`duckdb_sql` MUST be the v0.1 default when
        `detection.sigma.bridge.backend` is omitted).
-     - Streaming: expression plan over in-memory or stream processors.
+     - Streaming: reserved (v0.2+).
 1. **Evaluate**
    - Execute the plan over the run's OCSF event store.
    - Emit `detection_instance` rows for each match group.
@@ -145,6 +168,8 @@ Representational stage lifecycle (v0.1):
 Representational per-rule lifecycle (v0.1; within the stage):
 
 - `loaded` → `compiled(executable=true)` → `evaluated`
+- `loaded` → `compiled(executable=true)` → `evaluated(error)` (recorded as non-executable with
+  `non_executable_reason.reason_code: "backend_eval_error"`)
 - `loaded` → `compiled(executable=false)` (non-executable; recorded in `bridge/compiled_plans/`)
 
 Observable anchors (run bundle):
@@ -157,9 +182,11 @@ Observable anchors (run bundle):
 
 ## Non-executable rules
 
-A rule is classified as **non-executable** when the bridge cannot produce a valid backend plan.
-Non-executable rules are recorded in `bridge/compiled_plans/<rule_id>.plan.json` with
-`executable: false` and a stable `non_executable_reason.reason_code`.
+A rule is classified as **non-executable** when the bridge cannot (a) compile it into a valid
+backend plan, or (b) execute the compiled plan to completion for the current run. Non-executable
+rules are recorded in `bridge/compiled_plans/<rule_id>.plan.json` with `executable: false` and a
+stable `non_executable_reason.reason_code` (including runtime evaluation failures such as
+`backend_eval_error`).
 
 The `non_executable_reason` object MUST also include a human-readable explanation.
 
@@ -274,6 +301,8 @@ Each detection instance includes:
   - Timestamp values MUST be derived from matched event-time, not ingest-time.
 - Each detection instance MUST sort `matched_event_ids` using bytewise UTF-8 lexical ordering
   (case-sensitive, no locale).
+- If present, each detection instance MUST sort `technique_ids` using bytewise UTF-8 lexical
+  ordering (case-sensitive, no locale).
 - The file MUST be ordered deterministically by the following stable key tuple (bytewise UTF-8
   lexical ordering for all string comparisons):
   1. `rule_id` ascending

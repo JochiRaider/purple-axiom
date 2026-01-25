@@ -554,5 +554,3 @@ Reference implementation (optional):
 | 2026-01-24 | Align match-key precedence; reserve API providers for v0.3+; align config defaults; add addressability canary |
 | 2026-01-22 | Add optional Vagrant provider reference workflow                                                              |
 | 2026-01-19 | Add `vars` to inventory snapshot; align enums + hashing/encoding; clarify publish + security                  |
-| 2026-01-14 | Align outcomes, publish gates, and snapshot determinism rules                                                 |
-| 2026-01-12 | Formatting update                                                                                             |

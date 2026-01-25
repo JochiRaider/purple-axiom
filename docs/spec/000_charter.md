@@ -22,6 +22,19 @@ Each stage reads inputs from the run bundle and publishes outputs back into the 
 filesystem is the inter-stage contract boundary). Core stages MUST NOT require service-to-service
 RPC in v0.1.
 
+Conformance anchors (v0.1):
+
+- **Run bundle root:** `runs/<run_id>/` (the run directory name MUST equal the run id recorded in
+  `manifest.json`).
+- **Run lock (outside the bundle):** the orchestrator acquires `runs/.locks/<run_id>.lock` before
+  creating or mutating `runs/<run_id>/`.
+- **Stage staging root:** stages write to `runs/<run_id>/.staging/<stage_id>/` and MUST publish by
+  atomic rename/move into final run-bundle paths after publish-gate validation.
+- **Stage identifiers vs output directories:** stage identifiers appear in stage outcomes
+  (`manifest.json` and `logs/health.json` when enabled) and do not necessarily match output
+  directory names (for example, stage `reporting` publishes under `report/`, and stage `signing`
+  publishes under `security/`).
+
 Stages MUST publish via deterministic filesystem semantics: write into a staging location, validate
 contract-backed outputs at the publish gate, then atomically publish into the run bundle. A stage is
 considered complete only when its outcome is recorded in the run manifest (and in `logs/health.json`
@@ -31,6 +44,14 @@ Run-level status is recorded in `manifest.json` as `success | partial | failed`.
 means artifacts are mechanically usable but one or more quality gates and/or warn-and-skip failures
 occurred; `failed` means the run is not mechanically usable (including fail-closed stage failures or
 missing required artifacts).
+
+Status derivation note (v0.1):
+
+- `manifest.status` MUST be derivable solely from recorded stage (and dotted substage) outcomes so
+  run status is mechanically explainable without inspecting stage-specific artifacts.
+- Any quality gate that degrades a run (for example, thresholds and/or regression comparability)
+  MUST be recorded as a `warn_and_skip` failure on an appropriate stage or dotted substage so that
+  `manifest.status` derivation remains purely outcome-driven.
 
 The stable stage identifiers are:
 
@@ -128,6 +149,11 @@ outcomes, including:
 - Optional signing as a stage with explicit failure semantics and deterministic signature metadata.
 - Contract registry and publish-gate validation as the mechanism that makes the run bundle layout
   and artifact schemas mechanically enforceable.
+- Plan cardinality note (v0.1):
+  - The canonical v0.1 plan shape is a single Atomic action resolved to exactly one target asset
+    (1:1 action↔target).
+  - Multi-action plan graphs and multi-target expansion/matrix semantics are reserved for v0.2+ and
+    are intentionally out of scope for v0.1.
 
 This stage model and the minimum published output paths are specified in the
 [deployment architecture ADR](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md).
@@ -183,6 +209,17 @@ minimum:
     [reporting specification](080_reporting.md).
 - **Optional signing artifacts** (when enabled): `security/**` with deterministic signature metadata
   and checksums. See ADR-0004 and the security/safety spec.
+
+Notes on required artifact paths (v0.1):
+
+- **Inventory snapshot canonical path:** `logs/lab_inventory_snapshot.json` is the run-scoped
+  resolved inventory artifact retained with the run bundle and referenced (and hashed) in
+  `manifest.json`.
+- **Run counters (operability + CI):** `logs/counters.json` is the stable per-run counters and
+  gauges surface used for deterministic triage and CI assertions.
+- **Run timeline (reporting):** `report/run_timeline.md` is a deterministic, human-readable run
+  chronology derived from `manifest.json` and `ground_truth.jsonl` (UTC), intended as an
+  operator-friendly single-file summary and export anchor.
 
 Run bundle stage model, publish semantics, and minimum output paths are defined in ADR-0004. Run
 status derivation and stage outcome semantics are defined in ADR-0005 and the data contracts spec.
@@ -247,6 +284,12 @@ Purple Axiom v0.1 is considered "done" when:
   `ground_truth.jsonl`, `normalized/**`, `detections/detections.jsonl`, `scoring/summary.json`,
   `report/report.json`, `report/thresholds.json`, and `logs/telemetry_validation.json`), and missing
   required artifacts are treated as contract failures (fail closed).
+- The “at minimum” artifact list above is a convenience summary and is non-exhaustive; the
+  authoritative minimum outputs are defined per-stage and enforced via publish-gate validation.
+  - For avoidance of doubt in v0.1, reportable runs also require `logs/lab_inventory_snapshot.json`,
+    `logs/counters.json`, and `report/run_timeline.md`.
+  - The detection stage’s minimum output surface also includes `bridge/**` (including
+    `bridge/coverage.json`) for reproducibility and downstream reporting inputs.
 - Run status and CI signaling are consistent and mechanical:
   - `manifest.status` is derived per the data contracts spec as `success | partial | failed`, and
   - reporting exit codes align to `success=0`, `partial=10`, `failed=20`. See the reporting spec and
@@ -310,9 +353,10 @@ Normative or orienting references for v0.1:
 
 ## Changelog
 
-| Date       | Change                                                                                                                |
-| ---------- | --------------------------------------------------------------------------------------------------------------------- |
-| 2026-01-19 | Align charter with publish-gate validation, manifest/status semantics, thresholds/regression, and expanded references |
-| 2026-01-17 | Add bridge artifacts to MVP outcomes; expand references section                                                       |
-| 2026-01-13 | Expand charter to reflect current v0.1 stage model, safety, operability                                               |
-| 2026-01-12 | Formatting update                                                                                                     |
+| Date       | Change                                                                                                                                                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-01-24 | Clarify run-bundle anchors (lock + staging), make status derivation/quality-gate representation explicit, and enumerate `logs/lab_inventory_snapshot.json`, `logs/counters.json`, and `report/run_timeline.md` as v0.1 artifacts |
+| 2026-01-19 | Align charter with publish-gate validation, manifest/status semantics, thresholds/regression, and expanded references                                                                                                            |
+| 2026-01-17 | Add bridge artifacts to MVP outcomes; expand references section                                                                                                                                                                  |
+| 2026-01-13 | Expand charter to reflect current v0.1 stage model, safety, operability                                                                                                                                                          |
+| 2026-01-12 | Formatting update                                                                                                                                                                                                                |

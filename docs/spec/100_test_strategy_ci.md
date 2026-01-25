@@ -4,9 +4,19 @@ description: Defines the unit, integration, and CI gating expectations for deter
 status: draft
 category: spec
 related:
-  - 065_sigma_to_ocsf_bridge.md
-  - 110_operability.md
+  - 020_architecture.md
+  - 025_data_contracts.md
+  - 030_scenarios.md
+  - 032_atomic_red_team_executor_integration.md
+  - 035_validation_criteria.md
   - 040_telemetry_pipeline.md
+  - 050_normalization_ocsf.md
+  - 065_sigma_to_ocsf_bridge.md
+  - 080_reporting.md
+  - 110_operability.md
+  - ../../SUPPORTED_VERSIONS.md
+  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
+  - ../adr/ADR-0007-state-machines.md
 ---
 
 # Test strategy and CI
@@ -27,6 +37,22 @@ conformance validates that all pipeline stages use pinned dependency versions an
 conforming to pinned schemas. Third, regression protection detects coverage drops, performance
 degradation, and semantic drift before they reach production.
 
+### Determinism primitives (normative for tests)
+
+- `canonical_json_bytes(x)`: RFC 8785 JSON Canonicalization Scheme (JCS), UTF-8 bytes.
+- `sha256_hex(bytes)`: lowercase hex SHA-256 digest of `bytes`.
+- Any `*_jcs_sha256` value in this spec MUST mean: `sha256_hex(canonical_json_bytes(<json value>))`.
+- For criteria JSONL hashing, `canonical_criteria_jsonl_bytes(...)` MUST follow the validation
+  criteria spec (JCS per-line, join with `\n`, trailing `\n`).
+
+### Reason code scope (normative)
+
+- Stage/substage outcomes (`runs/<run_id>/logs/health.json`): `reason_code` values MUST be drawn
+  from ADR-0005 (unknown codes MUST NOT be emitted without updating ADR-0005).
+- Artifact-level reason codes (for example inside `ground_truth.jsonl`,
+  `requirements_evaluation.json`, `state_reconciliation_report.json`) are governed by their contract
+  schemas and may include additional stable tokens.
+
 ## Scope
 
 This document covers:
@@ -35,12 +61,15 @@ This document covers:
 - Integration test fixtures and harnesses
 - CI gate definitions and failure semantics
 - Recommended CI workflow patterns
+- Conformance tests for lifecycle/state-machine semantics defined elsewhere (runner action
+  lifecycle, telemetry checkpointing/rotation, reporting regression-compare substages)
 
 This document does NOT cover:
 
 - Implementation details of specific test frameworks
 - Manual QA procedures
 - Performance benchmarking beyond latency regression gates
+- Authoritative definitions of lifecycle/state machines (see ADR-0007 and the owning stage specs)
 
 ## Unit tests
 
@@ -86,6 +115,10 @@ keys, no anchors/aliases/merge keys), routing MUST be overlap-free, and
 `normalized/mapping_profile_snapshot.json` MUST include hashes for the complete mapping material
 boundary defined by the
 [OCSF mapping profile authoring guide](../mappings/ocsf_mapping_profile_authoring_guide.md).
+`normalized/mapping_profile_snapshot.json` MUST validate against
+`mapping_profile_snapshot.schema.json` and MUST include, at minimum: `mapping_profile_id`,
+`mapping_profile_version`, `mapping_profile_sha256`, and `ocsf_version` (see data contracts:
+“Normalization mapping profile snapshot”).
 
 OCSF schema regression tests validate that representative normalized fixtures MUST validate against
 the pinned OCSF version used by v0.1.
@@ -95,10 +128,15 @@ the pinned OCSF version used by v0.1.
 Ground truth schema tests MUST validate representative fixtures against the pinned
 `ground_truth.schema.json`, including lifecycle and idempotence fields:
 
-- Fixtures MUST include `idempotence` and a `lifecycle.phases[]` array containing all four phases:
-  - `prepare`, `execute`, `revert`, `teardown`.
-- Phase records MUST be ordered and MUST include `started_at_utc`, `ended_at_utc`, and
-  `phase_outcome`.
+- Fixtures MUST include `idempotence` and a `lifecycle.phases[]` array containing all four phases in
+  order: `prepare`, `execute`, `revert`, `teardown`.
+- Each phase record MUST include:
+  - `phase` (`prepare|execute|revert|teardown`)
+  - `phase_outcome` (`success|failed|skipped`)
+  - `started_at_utc`, `ended_at_utc`
+  - `reason_code` (required when `phase_outcome` is not `success`)
+- Phases that are not attempted MUST be represented explicitly as `phase_outcome=skipped` with a
+  stable `reason_code` (example: `cleanup_suppressed` when `plan.cleanup=false`).
 - The fixture suite MUST include at least one failure case where `revert` or `teardown` is `failed`
   and is surfaced deterministically in runner-stage outcomes and reporting inputs.
 
@@ -117,9 +155,13 @@ next, then NULL if none exist).
 The same fixture MUST assert lifecycle conformance:
 
 - Ground truth MUST include `idempotence` and `lifecycle.phases[]`.
-- `lifecycle.phases[]` MUST be in phase order and MUST include `prepare` and `execute`.
-- When cleanup verification is enabled, `teardown` MUST include a stable reference to
-  `runner/actions/<action_id>/cleanup_verification.json` and reflect the aggregate outcome.
+- `lifecycle.phases[]` MUST be in lifecycle order and MUST include all four phases: `prepare`,
+  `execute`, `revert`, `teardown`.
+  - Phases that are not attempted MUST be recorded as `phase_outcome=skipped` with a stable
+    `reason_code`.
+- When cleanup verification is enabled and the artifact exists, the `teardown` phase evidence MUST
+  include a stable pointer to `runner/actions/<action_id>/cleanup_verification.json` consistent with
+  the ground-truth phase evidence attachment rules.
 
 ### Sigma compilation (bridge)
 
@@ -160,7 +202,7 @@ validate that:
 - the artifact validates against `resolved_inputs_redacted.schema.json`, and
 - `runner/actions/<action_id>/resolved_inputs_redacted.json.resolved_inputs_sha256` equals the
   corresponding ground truth `parameters.resolved_inputs_sha256` value, and
-- that value equals `sha256_hex(RFC8785_JCS_bytes(resolved_inputs_redacted))`.
+- that value equals `"sha256:" + sha256_hex(canonical_json_bytes(resolved_inputs_redacted))`.
 
 Requirements gating fixtures under `tests/fixtures/runner/requirements/` validate deterministic
 evaluation and deterministic skip semantics when declared requirements are unmet.
@@ -191,21 +233,21 @@ The fixture set MUST include at least:
     - The action is skipped and `runner/actions/<action_id>/requirements_evaluation.json` is
       emitted.
     - The requirement result list MUST include an item for each evaluated requirement and MUST be
-      ordered deterministically by the stable sort key `(category, token)`.
+      ordered deterministically by the stable sort key `(kind, key)`.
     - The action-level `reason_code` MUST be selected deterministically from the first unmet
       requirement result after applying the same stable sort key. The mapping MUST be:
       - `platform` -> `unsupported_platform`
       - `privilege` -> `insufficient_privileges`
-      - `tool` -> `missing_tool` (Example: if the first unmet result has `category=platform`, then
+      - `tool` -> `missing_tool` (Example: if the first unmet result has `kind=platform`, then
         `reason_code` MUST be `unsupported_platform`.)
 
 For each fixture, the runner requirements implementation MUST:
 
 - Emit `runner/actions/<action_id>/requirements_evaluation.json` with deterministic ordering of
   requirement result items.
-  - Requirement result arrays MUST be ordered by a stable sort key: `(category, token)` where
-    `category` is one of `platform | privilege | tool` and `token` is the evaluated value (OS
-    family, privilege level, or tool token).
+  - Requirement result arrays MUST be ordered by a stable sort key: `(kind, key)` where `kind` is
+    one of `platform | privilege | tool` and `key` is the stable evaluated token (OS family,
+    privilege level, or tool token).
 - In the test harness, compute a stable hash over the evaluation content (RECOMMENDED:
   `requirements_eval_jcs_sha256` over RFC 8785 JCS canonicalized JSON) and assert the hash is
   identical across repeated runs with identical inputs and probe snapshots.
@@ -400,8 +442,11 @@ The fixture set MUST include at least:
       attempt (success or failure), consistent with runner contracts.
     - The marker value conforms to the v0.1 format defined in data contracts.
 
-For this fixture, the harness SHOULD compute `marker_value_sha256 = sha256(utf8(marker_value))` and
-assert it is identical across repeated runs with identical inputs.
+For this fixture, the harness SHOULD compute
+`marker_value_sha256 = sha256_hex(UTF-8 bytes of marker_value)` and assert it is identical across
+repeated runs with identical inputs.
+
+#### State reconciliation fixtures (required)
 
 The fixture set MUST include at least:
 
@@ -417,7 +462,7 @@ The fixture set MUST include at least:
       - `runner_state_reconciliation_repairs_failed_total == 0`
       - `runner_state_reconciliation_repair_blocked_total == 0`
     - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
-      `status="failed"` and `reason_code="drift_detected"`.
+      `status="success"` and MUST omit `reason_code`.
 
 - `record_absent_reality_present`:
 
@@ -487,8 +532,6 @@ The fixture set MUST include at least:
 
 For each fixture, the runner reconciliation implementation MUST:
 
-- Emit `runner/actions/<action_id>/state_reconciliation_report.json` with deterministic item
-  ordering as specified in the data contracts.
 - Emit `runs/<run_id>/logs/health.json` with a deterministic `health.json.stages[]` entry for
   reconciliation:
   - `stage="runner.state_reconciliation"` MUST be present for every fixture run where reconciliation
@@ -496,8 +539,12 @@ For each fixture, the runner reconciliation implementation MUST:
   - When `state_reconciliation_report.status=drift_detected`, `health` MUST record `status="failed"`
     and `reason_code="drift_detected"`.
   - When `state_reconciliation_report.status=clean`, `health` MUST record `status="success"` and
-    `reason_code="clean"`.
-- Emit stable reconciliation counters for determinism and operability:
+    MUST omit `reason_code`.
+- Emit stable reconciliation counters for determinism and operability (required set):
+  - `runner_state_reconciliation_items_total`
+  - `runner_state_reconciliation_drift_detected_total`
+  - `runner_state_reconciliation_clean_total`
+  - `runner_state_reconciliation_error_total`
   - `runner_state_reconciliation_repairs_attempted_total`
   - `runner_state_reconciliation_repairs_succeeded_total`
   - `runner_state_reconciliation_repairs_failed_total`
@@ -509,8 +556,9 @@ For each fixture, the runner reconciliation implementation MUST:
 ### Criteria evaluation
 
 Criteria pack versioning tests validate that
-`criteria/packs/<pack_id>/<pack_version>/manifest.json.pack_version` MUST match the directory
-`pack_version`. If multiple search paths contain the same `(pack_id, pack_version)`, CI MUST fail
+`criteria/packs/<pack_id>/<pack_version>/manifest.json.criteria_pack_id` MUST match `<pack_id>` and
+`criteria/packs/<pack_id>/<pack_version>/manifest.json.criteria_pack_version` MUST match
+`<pack_version>`. If multiple search paths contain the same `(pack_id, pack_version)`, CI MUST fail
 unless the pack snapshots are byte-identical (manifest plus criteria content hashes match).
 
 Criteria drift detection tests validate that given a criteria pack manifest upstream with
@@ -605,8 +653,28 @@ The baseline comparison fixture set MUST include at least:
       - `status="failed"`
       - `fail_mode="warn_and_skip"`
       - `reason_code="baseline_missing"`
-    - Regression deltas MUST be absent or empty per the `report/report.json.regression` semantics.
+    - The report MUST represent the regression section as **indeterminate** and MUST keep deltas
+      empty:
+      - `report/report.json.regression.comparability.status="indeterminate"`
+      - `report/report.json.regression.comparability.reason_code="baseline_missing"`
+      - `report/report.json.regression.deltas[]` MUST be an empty array.
     - Stage outcome reason codes remain authoritative for `baseline_missing` handling.
+
+- `baseline_present_incompatible`
+
+  - Input:
+    - Enable regression comparison and provide a baseline run bundle, but intentionally introduce an
+      incompatibility (example: `manifest.versions.ocsf_version` mismatch vs the current run).
+  - Expected:
+    - `runs/<run_id>/logs/health.json` MUST include:
+      - `stage="reporting.regression_compare"`
+      - `status="failed"`
+      - `fail_mode="warn_and_skip"`
+      - `reason_code="baseline_incompatible"`
+    - The report MUST represent the regression section as **indeterminate**:
+      - `report/report.json.regression.comparability.status="indeterminate"`
+      - `report/report.json.regression.comparability.reason_code="baseline_incompatible"`
+      - `report/report.json.regression.deltas[]` MUST be an empty array.
 
 The measurement contract fixture set MUST include at least:
 
@@ -654,10 +722,10 @@ and at least one event containing binary-like payload data.
 #### Windows Event Log raw-mode conformance
 
 This test validates the collector plus validator integration. Use an OTel collector config where
-every enabled `windowseventlog/*` receiver sets `raw: true`. Inject a canary event and assert the
-captured payload begins with `<Event` and MUST NOT contain `<RenderingInfo>`. The validator MUST
-record the outcome as `health.json` stage `telemetry.windows_eventlog.raw_mode` (see the
-[operability specification](110_operability.md)).
+every enabled `windowseventlog/*` receiver sets `raw: true` and `suppress_rendering_info: true`.
+Inject a canary event and assert the captured payload begins with `<Event` and MUST NOT contain
+`<RenderingInfo>`. The validator MUST record the outcome as `health.json` stage
+`telemetry.windows_eventlog.raw_mode` (see the [operability specification](110_operability.md)).
 
 #### Windows Event Log failure modes
 
@@ -803,24 +871,38 @@ The fixture set MUST include at least:
 
 ### Version conformance
 
-Pinned-version consistency checks (fail closed) validate that `manifest.normalization.ocsf_version`
-(when present), `mapping_profile_snapshot.ocsf_version`, and bridge mapping pack `ocsf_version`
-(when present) MUST match.
+Pinned-version consistency checks (fail closed) validate that canonical pins under
+`manifest.versions.*` match any mirrored pin fields in produced artifacts (when present). For
+example, the pinned OCSF version MUST be consistent across:
+
+- `manifest.versions.ocsf_version` (canonical)
+- `normalized/mapping_profile_snapshot.json.ocsf_version`
+- bridge mapping pack snapshot `ocsf_version` (when present)
 
 External dependency version matrix (fail closed; v0.1) requires CI MUST run the integration and
 "golden run" fixtures using the pinned dependency versions in the
-[supported versions reference](../../SUPPORTED_VERSIONS.md). CI MUST fail if any runtime dependency
-version differs from the pins for an enabled stage.
+[supported versions reference](../../SUPPORTED_VERSIONS.md). CI MUST fail if any enabled runtime
+dependency version differs from the pins.
 
-The minimum pinned set for v0.1:
+Selected determinism-critical pins for v0.1 (excerpt; the supported versions reference is
+authoritative):
 
 | Dependency                      | Version |
 | ------------------------------- | ------- |
 | OpenTelemetry Collector Contrib | 0.143.1 |
 | pySigma                         | 1.1.0   |
+| pySigma-pipeline-ocsf           | 0.1.1   |
 | DuckDB                          | 1.4.3   |
+| pyarrow                         | 22.0.0  |
+| jsonschema                      | 4.26.0  |
 | osquery                         | 5.14.1  |
 | OCSF schema                     | 1.7.0   |
+| PowerShell                      | 7.4.6   |
+| DSC                             | 3.1.2   |
+| asciinema                       | 2.4.0   |
+
+CI SHOULD also enforce the pinned toolchain versions listed in the supported versions reference
+(Python, uv, pytest, ruff, pyright) to reduce non-deterministic test behavior.
 
 ### Determinism gates
 
@@ -866,6 +948,69 @@ Cross-artifact invariants enforce consistency across pipeline outputs:
 - When `operability.health.emit_health_files=true`, `runs/<run_id>/logs/health.json` MUST exist and
   MUST satisfy the minimum schema in the [operability specification](110_operability.md) ("Health
   files (normative, v0.1)")
+- Health outcome registry conformance (fail closed):
+  - Each `health.json.stages[].stage` value MUST be a valid stage or substage identifier (dotted
+    substages allowed) consistent with the architecture specification.
+  - Each `health.json.stages[].reason_code` value (when present) MUST be drawn from ADR-0005 for the
+    corresponding stage/substage; unknown reason codes MUST fail CI.
+
+### Export and checksums scope
+
+The run bundle `logs/` directory is intentionally mixed: it contains both deterministic evidence and
+volatile diagnostics. Default export and signing/checksum scope MUST follow the Tier 0 taxonomy
+defined by the storage formats spec and ADR-0009.
+
+CI MUST enforce, at minimum:
+
+- Deterministic evidence under `logs/` is included in:
+  - default export manifests (when export is implemented), and
+  - `security/checksums.txt` (when signing is enabled).
+- Volatile diagnostics under `logs/` are excluded from both.
+
+Fixture set (normative):
+
+- `export_scope_logs_classification` (signing + export allowlist)
+  - Provide a minimal run bundle tree containing both deterministic evidence logs and volatile
+    diagnostics logs:
+    - deterministic evidence:
+      - `logs/health.json`
+      - `logs/counters.json`
+      - `logs/telemetry_validation.json`
+      - `logs/cache_provenance.json`
+      - `logs/lab_inventory_snapshot.json`
+      - `logs/contract_validation/runner.json`
+    - volatile diagnostics:
+      - `logs/run.log`
+      - `logs/warnings.jsonl`
+      - `logs/eps_baseline.json`
+      - `logs/telemetry_checkpoints/state.db`
+      - `logs/dedupe_index/ocsf_events.duckdb`
+      - `logs/scratch/tmp.txt`
+    - quarantine example:
+      - `unredacted/runner/actions/s1/stdout.txt`
+    - publish-gate scratch example:
+      - `.staging/tmp.bin`
+
+Assertions (normative):
+
+- Signing scope (when signing is enabled):
+
+  - Generate `security/checksums.txt` per `025_data_contracts.md`.
+  - Assert `security/checksums.txt` includes all deterministic evidence files under `logs/` above.
+  - Assert `security/checksums.txt` excludes all volatile diagnostics paths above.
+  - Assert `security/checksums.txt` excludes the quarantine directory and `.staging/`.
+
+- Export scope (when export is implemented):
+
+  - Export with default flags (no quarantine, no binary evidence, no volatile diagnostics).
+  - Assert the resulting `export_manifest.json` includes deterministic evidence under `logs/`.
+  - Assert the resulting `export_manifest.json` excludes volatile diagnostics under `logs/`, the
+    quarantine directory, and `.staging/`.
+
+Suggested failure messages (non-normative):
+
+- `FAIL export_scope: volatile diagnostics leaked into export: <path>`
+- `FAIL signing_scope: deterministic evidence missing from checksums: <path>`
 
 ### Regression gates
 
@@ -886,10 +1031,32 @@ The recommended CI workflow proceeds through six stages:
 
 1. Resolve lab inventory (provider or fixture)
 1. Execute scenario suite (runner)
-1. Collect and normalize telemetry (OTel to OCSF)
-1. Evaluate detections (Sigma) and score gaps
-1. Produce report plus machine-readable summary
-1. Compare to baseline and fail the pipeline when thresholds are violated
+1. Collect telemetry (OTel) and validate telemetry health gates
+1. Normalize telemetry to OCSF (normalization)
+1. Evaluate criteria (validation), evaluate detections (Sigma), and score gaps (scoring)
+1. Produce report plus machine-readable summary, then compare to baseline and fail when thresholds
+   are violated (reporting + reporting.regression_compare)
+
+## State machine integration notes (v0.1)
+
+This spec’s fixtures act as conformance tests for lifecycle/state machines whose authoritative
+definitions live outside this document:
+
+- Runner action lifecycle state machine:
+  - Authority: scenario model + runner/executor integration + runner lifecycle guard semantics.
+  - Conformance fixtures: `tests/fixtures/runner/lifecycle/`, requirements gating, unsafe rerun
+    blocking, invalid transition blocking.
+- Runner reconciliation lifecycle:
+  - Authority: data contracts (state reconciliation report ordering) + operability (health +
+    counters).
+  - Conformance fixtures: `tests/fixtures/runner/state_reconciliation/`.
+- Reporting regression compare lifecycle:
+  - Authority: reporting spec regression semantics + ADR-0005 substage outcomes.
+  - Conformance fixtures: baseline present/identical, baseline intentional change, baseline missing,
+    baseline incompatible.
+
+When adding a new stateful lifecycle that needs deterministic conformance, document the state
+machine using the ADR-0007 template and add fixture-driven conformance tests here.
 
 ## Key decisions
 
@@ -913,8 +1080,8 @@ The recommended CI workflow proceeds through six stages:
 
 ## Changelog
 
-| Date       | Change                           |
-| ---------- | -------------------------------- |
-| 2026-01-13 | new feature                      |
-| 2026-01-13 | Style guide conformance reformat |
-| 2026-01-12 | Formatting update                |
+| Date       | Change                                                                                                      |
+| ---------- | ----------------------------------------------------------------------------------------------------------- |
+| 2026-01-24 | Add regression tests for export/checksum scope of `logs/` (deterministic evidence vs volatile diagnostics). |
+| 2026-01-13 | Style guide conformance reformat                                                                            |
+| 2026-01-12 | Formatting update                                                                                           |

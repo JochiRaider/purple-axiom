@@ -534,6 +534,10 @@ gating and score computation.
 
 ### Reason code to gap category mapping (normative)
 
+Input is the `(reason_domain, reason_code)` pair.
+
+- For v0.1, this mapping applies to `reason_domain="bridge_compiled_plan"` only.
+
 The scoring stage MUST map compiled plan `non_executable_reason.reason_code` values to gap
 categories as follows:
 

@@ -584,8 +584,8 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
      Unknown stage-outcome reason codes are forbidden.
    - Stage/substage outcomes MUST NOT emit `reason_domain`. The outcome domain is implicit as
      `stage_outcome` and its reason-code catalog is scoped by ADR-0005.
-   - Any non-stage artifact that emits a `reason_code` field MUST also emit a sibling `reason_domain`
-     field:
+   - Any non-stage artifact that emits a `reason_code` field MUST also emit a sibling
+     `reason_domain` field:
      - Pairing rule: `reason_domain` MUST be present iff `reason_code` is present.
      - Contract alignment: for contract-backed artifacts, `reason_domain` MUST equal the artifact
        schema’s `contract_id` (see `docs/contracts/contract_registry.json`).

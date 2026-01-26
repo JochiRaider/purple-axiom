@@ -134,7 +134,7 @@ Sigma evaluation is a two-stage process.
    - Rewrite Sigma field references to OCSF JSONPaths (or backend-native column expressions).
      - If a rule requires `raw.*`, behavior is governed by
        `detection.sigma.bridge.raw_fallback_enabled` and MAY render the rule non-executable with
-       reason code `raw_fallback_disabled`.
+       reason code `raw_fallback_disabled` and reason domain `bridge_compiled_plan`.
    - Produce a backend plan:
      - Batch: SQL over Parquet (`duckdb_sql` MUST be the v0.1 default when
        `detection.sigma.bridge.backend` is omitted).
@@ -186,8 +186,8 @@ Observable anchors (run bundle):
 A rule is classified as **non-executable** when the bridge cannot (a) compile it into a valid
 backend plan, or (b) execute the compiled plan to completion for the current run. Non-executable
 rules are recorded in `bridge/compiled_plans/<rule_id>.plan.json` with `executable: false` and a
-stable `non_executable_reason.reason_code` (including runtime evaluation failures such as
-`backend_eval_error`).
+stable `non_executable_reason.reason_code` and `non_executable_reason.reason_domain` MUST equal
+`bridge_compiled_plan`. (including runtime evaluation failures such as `backend_eval_error`).
 
 The `non_executable_reason` object MUST also include a human-readable explanation.
 

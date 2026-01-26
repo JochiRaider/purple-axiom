@@ -52,6 +52,8 @@ degradation, and semantic drift before they reach production.
 - Artifact-level reason codes (for example inside `ground_truth.jsonl`,
   `requirements_evaluation.json`, `state_reconciliation_report.json`) are governed by their contract
   schemas and may include additional stable tokens.
+  - Any artifact-level `reason_code` field MUST be paired with `reason_domain`.
+  - For contract-backed artifacts, `reason_domain` MUST equal the artifact schema `contract_id`.
 
 ## Scope
 
@@ -101,7 +103,8 @@ Linux event identity basis tests use auditd/journald/syslog fixture vectors cove
 - Placeholder determinism fixtures (required):
   - Golden fixtures for both JSON and text placeholders that assert byte-for-byte stable
     serialization (JSON uses RFC 8785 canonical JSON), and required field emission (`reason_code`
-    always present; `sha256` present only when allowed).
+    always present; `reason_domain` MUST equal `artifact_placeholder`;`sha256` present only when
+    allowed).
   - Vectors that explicitly validate `sha256` omission for secret-containing / post-check matches,
     and inclusion when the effective redaction policy permits it.
 - Required: byte-for-byte determinism of placeholders and truncation output.
@@ -136,7 +139,8 @@ Ground truth schema tests MUST validate representative fixtures against the pinn
   - `started_at_utc`, `ended_at_utc`
   - `reason_code` (required when `phase_outcome` is not `success`)
 - Phases that are not attempted MUST be represented explicitly as `phase_outcome=skipped` with a
-  stable `reason_code` (example: `cleanup_suppressed` when `plan.cleanup=false`).
+  stable `reason_domain="ground_truth"` and `reason_code` (example: `cleanup_suppressed` when
+  `plan.cleanup=false`).
 - The fixture suite MUST include at least one failure case where `revert` or `teardown` is `failed`
   and is surfaced deterministically in runner-stage outcomes and reporting inputs.
 
@@ -212,18 +216,21 @@ The fixture set MUST include at least:
 - `unmet_admin_privilege`:
   - Input: scenario declares `plan.requirements.privilege=admin`.
   - Probe snapshot: target privilege probe indicates the runner context is not admin.
-  - Expected: action is skipped with deterministic `reason_code=insufficient_privileges` and
+  - Expected: action is skipped with deterministic `reason_domain="ground_truth"` and
+    `reason_code=insufficient_privileges` and
     `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
 - `wrong_os`:
   - Input: scenario declares `plan.requirements.platform.os=["windows"]`.
   - Probe snapshot: target OS family probe indicates `linux`.
-  - Expected: action is skipped with deterministic `reason_code=unsupported_platform` and
-    `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
+  - Expected: action is skipped with deterministic `reason_domain="ground_truth"` and
+    `reason_code=unsupported_platform` and `runner/actions/<action_id>/requirements_evaluation.json`
+    is emitted.
 - `missing_tool`:
   - Input: scenario declares `plan.requirements.tools=["powershell"]`.
   - Probe snapshot: tool/capability probe indicates `powershell` is unavailable.
-  - Expected: action is skipped with deterministic `reason_code=missing_tool` and
-    `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
+  - Expected: action is skipped with deterministic `reason_domain="ground_truth"` and
+    `reason_code=missing_tool` and `runner/actions/<action_id>/requirements_evaluation.json` is
+    emitted.
 - `multiple_requirements_mixed_order`:
   - Input: scenario declares multiple requirements in a non-sorted declaration order (example:
     privilege=admin, platform.os=["windows"], tools=["powershell"]).
@@ -308,6 +315,9 @@ The fixture set MUST include at least:
 State reconciliation fixtures under `tests/fixtures/runner/state_reconciliation/` validate
 deterministic environment drift reporting (distinct from baseline drift in evaluator and conformance
 harnesses).
+
+- Any reconciliation item with `status="unknown"` or `status="skipped"` MUST include
+  `reason_domain="state_reconciliation_report"` and `reason_code`.
 
 Idempotence and lifecycle enforcement fixtures under `tests/fixtures/runner/lifecycle/` validate
 deterministic re-run safety behavior and lifecycle phase transition guards.

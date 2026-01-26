@@ -626,7 +626,7 @@ Common keys:
       `criteria/results.jsonl` MUST cause the criteria stage outcome to be `failed`.
     - `warn_and_skip`: evaluator MUST still emit `criteria/results.jsonl` rows for all selected
       actions; actions that cannot be evaluated MUST be marked `status: "skipped"` with a stable
-      `reason_code`.
+      `reason_domain="criteria_result"` and `reason_code`.
 
 Notes:
 
@@ -661,14 +661,14 @@ Common keys:
       - `fail_closed`: bridge/backend errors that prevent evaluating enabled rules (routing,
         compilation, backend execution) MUST cause the detection stage outcome to be `failed`.
       - `warn_and_skip`: such errors MUST be recorded; affected rules MUST be marked non-executable
-        with a stable `reason_code`. The detection stage outcome SHOULD be `success` unless the
-        stage cannot produce outputs at all.
+        with a stable `reason_domain="bridge_compiled_plan"` and `reason_code`. The detection stage
+        outcome SHOULD be `success` unless the stage cannot produce outputs at all.
     - `raw_fallback_enabled` (default: true)
     - Controls whether rules may reference `raw.*` per the
       [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md) ("Fallback policy
       (raw.\*)").
     - When `false`, any rule requiring `raw.*` MUST be marked non-executable with
-      `reason_code: "raw_fallback_disabled"`.
+      `reason_domain="bridge_compiled_plan"` and `reason_code: "raw_fallback_disabled"`.
     - When `true`, any fallback use MUST be accounted for via `extensions.bridge.fallback_used=true`
       in detection outputs.
     - `compile_cache_dir` (optional): path for cached compiled plans keyed by (rule hash, mapping
@@ -853,9 +853,9 @@ Common keys:
       `indeterminate_reason: "taxonomy_mismatch"` (see `070_scoring_metrics.md`).
 - `requirements` (optional)
   - `detail_level` (default: `reason_codes_only`): `reason_codes_only | include_sensitive_details`
-    - `reason_codes_only`: reports MUST include only stable `reason_code` tokens and aggregate
-      counts for unmet requirements. Reports MUST NOT include detailed tool strings, dependency
-      command fragments, or privilege descriptors beyond coarse enums.
+    - `reason_codes_only`: reports MUST include only stable `(reason_domain, reason_code)` tokens
+      and aggregate counts for unmet requirements. Reports MUST NOT include detailed tool strings,
+      dependency command fragments, or privilege descriptors beyond coarse enums.
     - `include_sensitive_details`: reports MAY include the `requirements.results[]` `key` values and
       related detail fields from `runner/actions/*/requirements_evaluation.json`, subject to the
       report redaction policy and the pipeline redaction/quarantine rules.

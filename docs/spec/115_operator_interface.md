@@ -366,6 +366,7 @@ When returning an error status (4xx/5xx), the API MUST return a JSON body of the
 
 - `reason_code` MUST be `lower_snake_case` and is UI-level (separate from ADR-0005 stage reason
   codes).
+- `reason_domain` (string): MUST equal `operator_interface`.
 - `message` MUST be safe for operator display and MUST NOT disclose quarantined path contents or
   other\
   sensitive information.
@@ -637,6 +638,7 @@ Each JSONL row MUST contain at minimum:
       for the triggering request.
     - For CLI-originated events, MAY be null.
 - `outcome`: enum `allowed | denied | succeeded | failed`
+- `reason_domain` (string; required when `reason_code` is present; MUST equal `audit_event`)
 - `reason_code`: string
   - required when `outcome ∈ {denied, failed}`
   - optional otherwise

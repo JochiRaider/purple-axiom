@@ -279,6 +279,7 @@ Schema-aware placeholder pattern (normative):
 Required placeholder fields (normative):
 
 - `reason_code` is REQUIRED and MUST be a stable `lower_snake_case` token.
+- `reason_domain` is REQUIRED and MUST be a `artifact_placeholder`.
 - `sha256` is REQUIRED when permitted by the effective redaction policy for the underlying content
   class; it MUST be omitted when not permitted.
 
@@ -287,6 +288,7 @@ Placeholder JSON object (normative, `pa.placeholder.v1`):
 - `placeholder.placeholder_version` MUST be `pa.placeholder.v1`
 - `placeholder.handling` MUST be `withheld` or `quarantined`
 - `placeholder.reason_code` MUST be present
+- `placeholder.reason_domain` MUST be present
 - `placeholder.sha256` MAY be present only when permitted; format MUST be
   `sha256:<64 lowercase hex>`
 
@@ -418,8 +420,8 @@ Normative requirements:
 
 - The side-effect ledger MUST be stored at `runner/actions/<action_id>/side_effect_ledger.json`.
 - Side-effect entries MUST avoid storing raw secrets. If a side-effect involves secret material, the
-  entry MUST record `reason_code` only, and MAY include a redacted-safe `sha256` only when allowed
-  by the effective redaction policy.
+  entry MUST record `reason_domain="side_effect_ledger"` and `reason_code` only, and MAY include a
+  redacted-safe `sha256` only when allowed by the effective redaction policy.
 - If the pipeline determines the side-effect ledger cannot be made redacted-safe:
   - The pipeline MUST NOT store that content in the standard long-term artifact locations.
   - Implementations MAY write the unredacted content under the run's configured quarantine directory

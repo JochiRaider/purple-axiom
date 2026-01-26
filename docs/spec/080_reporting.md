@@ -286,8 +286,15 @@ Normative coupling:
 
 ### Status degradation reasons
 
-When status is `partial` or `failed`, the report MUST enumerate the contributing factors. Common
-degradation reasons include:
+When status is `partial` or `failed`, the report MUST enumerate the contributing factors.
+
+Normative JSON detail (report schema):
+
+- `report/report.json.status_reason_details[]` entries MUST include:
+  - `reason_domain` (string; MUST equal `report.schema`)
+  - `reason_code` (string)
+
+Common degradation reasons include:
 
 | Reason code                          | Gate type     | Description                                                    |
 | ------------------------------------ | ------------- | -------------------------------------------------------------- |
@@ -468,7 +475,8 @@ Required content:
     - `action_id` (and action name when available)
     - `technique_id`
     - `derived_outcome`
-    - `tool_outcomes[]` (tool_kind, tool_id, outcome, reason_code)
+    - `tool_outcomes[]` (tool_kind, tool_id, outcome, reason_domain, reason_code)
+      - `reason_domain` MUST equal `defense_outcomes` when `reason_code` is present.
     - evidence references (criteria result row and/or marker result row; detection evidence when
       alerted)
 
@@ -668,13 +676,14 @@ Required content:
 
 Required content:
 
-- Aggregate unmet requirement counts by `reason_code`:
-  - `unsupported_platform`
-  - `insufficient_privileges`
-  - `missing_tool`
+- Aggregate unmet requirement counts by `(reason_domain, reason_code)`:
+  - `requirements_evaluation` + `unsupported_platform`
+  - `requirements_evaluation` + `insufficient_privileges`
+  - `requirements_evaluation` + `missing_tool`
 - Affected actions table (limit 50) including:
   - `action_id` and technique ID (and action name when available)
-  - primary unmet `reason_code` (one of the above)
+  - primary unmet `reason_domain` and `reason_code` (one of the above, domain MUST be
+    `requirements_evaluation`)
   - Evidence reference: link to `runner/actions/<action_id>/requirements_evaluation.json`
   - Evidence handling note: `present | withheld | quarantined`
 - Narrative integration (normative):
@@ -723,6 +732,7 @@ Required content:
   - `check_id` (when `source=cleanup_verification`) or `ledger_seq` (when
     `source=side_effect_ledger`)
   - `status` (`match | mismatch | unknown | skipped`)
+  - `reason_domain`
   - `reason_code`
   - Evidence reference: link to `runner/actions/<action_id>/state_reconciliation_report.json`
 
@@ -792,6 +802,7 @@ Presence rules (normative):
 - If `reporting.regression.enabled=true` but baseline resolution or comparison fails, the report
   JSON MUST still include `report/report.json.regression` in an indeterminate form:
   - `comparability.status` MUST be `indeterminate`.
+  - `comparability.reason_domain` MUST equal `report.schema`.
   - `comparability.reason_code` MUST be one of
     `baseline_missing | baseline_incompatible | regression_compare_failed`.
   - `deltas[]` MUST be an empty array (`[]`).
@@ -810,6 +821,7 @@ Required fields:
     when unavailable)
 - `comparability`:
   - `status` (string): `comparable | warning | indeterminate`
+  - `reason_domain` (string; required when `status=indeterminate`; MUST equal `report.schema`)
   - `reason_code` (string; required when `status=indeterminate`):
     `baseline_missing | baseline_incompatible | regression_compare_failed`
   - `policy` (object; REQUIRED when `report/report.json.regression` is present):

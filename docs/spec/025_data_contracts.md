@@ -926,13 +926,13 @@ Requirements and environment assumptions (normative; when evaluated):
     template-derived requirements (when applicable).
   - `evaluation` (string enum): `satisfied | unsatisfied | unknown`.
   - `results` (array): one row per evaluated requirement check. Each result MUST include:
-      - `kind` (string enum): `platform | privilege | tool`
-      - `key` (string): stable token (example: `windows`, `admin`, `powershell`)
-      - `status` (string enum): `satisfied | unsatisfied | unknown`
-      - `reason_domain` (string): stable reason namespace identifier
-        - MUST equal `requirements_evaluation`
-      - `reason_code` (string): stable reason token (scoped by `reason_domain`). Minimum set:
-        `unsupported_platform`, `insufficient_privileges`, `missing_tool`, `requirement_unknown`.
+    - `kind` (string enum): `platform | privilege | tool`
+    - `key` (string): stable token (example: `windows`, `admin`, `powershell`)
+    - `status` (string enum): `satisfied | unsatisfied | unknown`
+    - `reason_domain` (string): stable reason namespace identifier
+      - MUST equal `requirements_evaluation`
+    - `reason_code` (string): stable reason token (scoped by `reason_domain`). Minimum set:
+      `unsupported_platform`, `insufficient_privileges`, `missing_tool`, `requirement_unknown`.
 - `requirements.declared` MUST be canonicalized:
   - any arrays (example: `platform.os`, `tools`) MUST be lowercased, de-duplicated, and sorted
     lexicographically.
@@ -971,8 +971,10 @@ Re-run safety and refusal recording (normative):
   - `reason_domain="ground_truth"`, and `reason_code="unsafe_rerun_blocked"`.
 - If `plan.cleanup=false` (or an equivalent operator-intent control) suppresses cleanup behavior for
   an action instance, the runner MUST record:
-  - `revert.phase_outcome="skipped"` with `reason_domain="ground_truth"` and `reason_code="cleanup_suppressed"`, and
-  - `teardown.phase_outcome="skipped"` with `reason_domain="ground_truth"` and `reason_code="cleanup_suppressed"`.
+  - `revert.phase_outcome="skipped"` with `reason_domain="ground_truth"` and
+    `reason_code="cleanup_suppressed"`, and
+  - `teardown.phase_outcome="skipped"` with `reason_domain="ground_truth"` and
+    `reason_code="cleanup_suppressed"`.
   - When suppressed, `teardown.evidence` MUST NOT reference `cleanup_verification.json` (because it
     MUST NOT be produced).
 - If a runner performs multiple `execute` attempts within a single action instance (retry behavior),
@@ -1239,7 +1241,8 @@ Key semantics:
   matching events, sample event_ids, query plans used).
 - The evaluator MUST emit exactly one result row per selected ground truth action.
   - If an action cannot be evaluated (missing telemetry, mapping gaps, executor error, and so on),
-    the evaluator MUST emit `status=skipped` and MUST set a stable `reason_domain="criteria_result"` and `reason_code`.
+    the evaluator MUST emit `status=skipped` and MUST set a stable `reason_domain="criteria_result"`
+    and `reason_code`.
 - The evaluator MUST NOT suppress results silently; skipped actions MUST remain visible in the
   output.
 
@@ -1302,7 +1305,9 @@ Rationale: consistent joins and deterministic provenance without depending on fi
 - The runner MUST copy `requirements.declared`, `requirements.evaluation`, and
   `requirements.results[]` into the corresponding ground truth row so reporting and scoring can
   explain skipped/failed actions without consulting runner-internal logs.
-  - Each row for `requirements.results[]` MUST include `reason_domain="requirements_evaluation"` when `reason_code` is present.
+  - Each row for `requirements.results[]` MUST include `reason_domain="requirements_evaluation"`
+    when `reason_code` is present.
+
 #### Resolved inputs evidence (optional; schema-backed)
 
 Purpose: Provide a redaction-safe, machine-readable view of the resolved inputs basis used for
@@ -1347,8 +1352,8 @@ Normative requirements:
   - If a side effect spans multiple lifecycle phases, the runner MUST emit one entry per phase (do
     not reuse a single entry across phases).
   - Optional failure annotation (normative):
-      - If an entry includes `reason_code`, it MUST also include `reason_domain`.
-      - When present, `reason_domain` MUST equal `side_effect_ledger`.
+    - If an entry includes `reason_code`, it MUST also include `reason_domain`.
+    - When present, `reason_domain` MUST equal `side_effect_ledger`.
 - Recovery write-ahead requirement:
   - Before performing any external or target-mutating side effect, the runner MUST append the
     corresponding ledger entry and MUST flush it to durable storage.

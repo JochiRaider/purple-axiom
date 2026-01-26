@@ -707,6 +707,10 @@ At a minimum, the following mappings MUST apply:
 - Backend compiler exception -> backend_compile_error
 - Backend evaluation error -> backend_eval_error
 
+All non-executable classifications MUST be recorded as a `(reason_domain, reason_code)` pair:
+
+- `reason_domain` MUST equal `bridge_compiled_plan`.
+
 ## Bridge artifacts in the run bundle
 
 When Sigma evaluation is enabled, the bridge MUST emit a contract-validated set of artifacts under

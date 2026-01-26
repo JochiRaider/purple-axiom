@@ -252,8 +252,8 @@ When synthetic correlation marker emission is enabled (normative requirements):
 - The runner MUST record the emission attempt as evidence:
   - it MUST append an `execute`-phase side-effect ledger entry describing the marker emission
     attempt before attempting emission, and
-  - it MUST record whether emission was `success` or `failed` with a stable `reason_domain="side_effect_ledger"`, and `reason_code` when
-    failed.
+  - it MUST record whether emission was `success` or `failed` with a stable
+    `reason_domain="side_effect_ledger"`, and `reason_code` when failed.
 
 ### Side-effect ledger population (normative, v0.1 minimum)
 
@@ -324,7 +324,8 @@ Minimum v0.1 scope (normative):
 - The runner MAY include additional reconciliation items derived from other ledger entries when the
   probe target is unambiguous and probing is permitted by policy.
 - For any ledger-derived item that cannot be probed deterministically, the runner MUST emit the item
-  with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable `reason_domain="state_reconciliation_report"` and `reason_code`.
+  with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable
+  `reason_domain="state_reconciliation_report"` and `reason_code`.
 
 ## Atomic YAML parsing
 
@@ -879,7 +880,8 @@ Config policy:
 - `runner.atomic.requirements.fail_mode`:
   - `fail_closed` (default): unknown requirement checks MUST be treated as unsatisfied for gating.
   - `warn_and_skip`: unknown requirement checks MUST remain `unknown` in evidence, but the action
-    MUST still be skipped with `reason_domain="requirements_evaluation"` and `reason_code=requirement_unknown`.
+    MUST still be skipped with `reason_domain="requirements_evaluation"` and
+    `reason_code=requirement_unknown`.
 
 Evidence requirements (v0.1):
 
@@ -925,7 +927,8 @@ Reason code mapping (minimum; deterministic):
 
 - Determine the action-level `prepare.reason_code` by selecting the first requirement result (after
   deterministic ordering) whose `status != satisfied`:
-  - If `status=unknown`, use `reason_domain="requirements_evaluation"` and `reason_code=requirement_unknown`.
+  - If `status=unknown`, use `reason_domain="requirements_evaluation"` and
+    `reason_code=requirement_unknown`.
   - Else map `kind` to a reason code:
     - `platform` -> `unsupported_platform`
     - `privilege` -> `insufficient_privileges`
@@ -1221,8 +1224,10 @@ Rules:
 - If `plan.cleanup = false` OR `runner.atomic.cleanup.invoke = false`, the runner MUST:
 
   - skip cleanup command invocation
-  - record `revert` phase as skipped with `reason_domain="ground_truth"` and `reason_code = cleanup_suppressed`
-  - record `teardown` phase as skipped with `reason_domain="ground_truth"` and `reason_code = cleanup_suppressed`
+  - record `revert` phase as skipped with `reason_domain="ground_truth"` and
+    `reason_code = cleanup_suppressed`
+  - record `teardown` phase as skipped with `reason_domain="ground_truth"` and
+    `reason_code = cleanup_suppressed`
   - MUST NOT emit `cleanup_verification.json` for the action
 
 - If cleanup is enabled and a cleanup command is present, the runner MUST:
@@ -1241,8 +1246,8 @@ Rules:
   `reason_code = cleanup_command_missing`.
 
 - If `execute` was not attempted, the runner MUST NOT attempt cleanup and MUST record `revert` as
-  `phase_outcome=skipped` with `reason_domain="ground_truth"` and `reason_code = prior_phase_blocked` (not
-  `invalid_lifecycle_transition`).
+  `phase_outcome=skipped` with `reason_domain="ground_truth"` and
+  `reason_code = prior_phase_blocked` (not `invalid_lifecycle_transition`).
 
 When `runner.atomic.cleanup.invoke: true`:
 

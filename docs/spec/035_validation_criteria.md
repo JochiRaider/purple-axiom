@@ -734,8 +734,8 @@ locations in `criteria/results.jsonl`:
   `criteria_ref.criteria_entry_id` or set it to JSON null.
 - **Invalid predicate or unsupported operator**: when a selected criteria entry cannot be evaluated
   due to pack misconfiguration, the evaluator MUST emit `status = "skipped"` and
-  `reason_code = "criteria_misconfigured"` and MUST record a stable error token under
-  `extensions.criteria.error.error_code`.
+  `reason_domain="criteria_result"` and `reason_code = "criteria_misconfigured"` and MUST record a
+  stable error token under `extensions.criteria.error.error_code`.
 - These fixtures are distinct from criteria drift detection fixtures (drift detection is validated
   separately and MUST remain distinct from the above cases).
 
@@ -997,6 +997,7 @@ Required evidence recording (normative):
   `runner/actions/<action_id>/cleanup_verification.json` that includes, per check:
   - `check_id`, `type`, `target` (echoed), `status` (`pass`, `fail`, `indeterminate`, `skipped`)
   - `reason_code` (string; required for all statuses)
+  - `reason_domain` (string; required when status != `passed`; MUST equal `cleanup_verification`)
   - `attempts` (int), `elapsed_ms` (int)
   - `observed_error` (string or int) when `status = indeterminate` (OS-native error code or errno)
   - `observed_kind` (optional string) when `status = fail` (implementation-defined, but stable)
@@ -1073,8 +1074,9 @@ evidence where needed; they MUST NOT replace the version pins.
 
 Failure classification and reason codes (normative):
 
-- When `status = "skipped"`, the evaluator MUST set `reason_code` to a stable token. The minimum
-  required set is:
+- When `status = "skipped"`, the evaluator MUST set `reason_domain` and `reason_code` to a stable
+  token. The minimum required set is:
+  - `reason_domain` MUST equal `criteria_result`.
   - `criteria_unavailable`: no criteria entry matched the action join keys.
   - `criteria_misconfigured`: criteria evaluation cannot be trusted (example: drift detected,
     invalid predicate, unsupported operator, schema invalid).

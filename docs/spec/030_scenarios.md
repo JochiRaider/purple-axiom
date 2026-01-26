@@ -174,8 +174,10 @@ Cleanup suppression (policy, not an error):
 - If effective `plan.cleanup=false`, the runner MUST NOT attempt `revert` or cleanup-dependent
   `teardown` work for the action.
 - Ground truth MUST record:
-  - `revert.phase_outcome=skipped` with `reason_domain="ground_truth"` and `reason_code=cleanup_suppressed`, and
-  - `teardown.phase_outcome=skipped` with `reason_domain="ground_truth"` and `reason_code=cleanup_suppressed`.
+  - `revert.phase_outcome=skipped` with `reason_domain="ground_truth"` and
+    `reason_code=cleanup_suppressed`, and
+  - `teardown.phase_outcome=skipped` with `reason_domain="ground_truth"` and
+    `reason_code=cleanup_suppressed`.
 
 Teardown behavior:
 
@@ -223,7 +225,8 @@ Ground truth MUST record (minimum):
   - Additional retry records (v0.2+) MUST follow the data contracts rules (additional `execute`
     and/or `revert` records with monotonic `attempt_ordinal`).
   - Each phase MUST include `started_at_utc`, `ended_at_utc`, and `phase_outcome`.
-  - If `phase_outcome` is `failed` or `skipped`, the phase MUST include `reason_domain` and `reason_code`.
+  - If `phase_outcome` is `failed` or `skipped`, the phase MUST include `reason_domain` and
+    `reason_code`.
   - `reason_domain` (string; required when not `success`; MUST equal `ground_truth`)
 - `extensions.synthetic_correlation_marker` (when synthetic marker emission is enabled and `execute`
   was attempted).
@@ -288,8 +291,9 @@ v0.1 repair handling (normative):
 - If a scenario requests `policy=repair` but repair is not enabled/supported (for example,
   `runner.atomic.state_reconciliation.allow_repair=false`), the runner MUST:
   - perform reconciliation probes in observe-only mode, and
-  - record the blocked intent deterministically in the reconciliation report (SHOULD be per-item 
-    `reason_domain="state_reconciliation_report"` and `reason_code="repair_blocked"` for affected items), and
+  - record the blocked intent deterministically in the reconciliation report (SHOULD be per-item
+    `reason_domain="state_reconciliation_report"` and `reason_code="repair_blocked"` for affected
+    items), and
   - surface drift via reconciliation outputs (do not downgrade/omit drift because repair was
     blocked).
 

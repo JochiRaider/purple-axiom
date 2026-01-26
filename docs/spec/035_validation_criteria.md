@@ -66,8 +66,8 @@ Normative requirements:
 
 ### Immutability and change discipline
 
-- A released pack version (a concrete `<criteria_pack_id>/<criteria_pack_version>/` directory) MUST be treated as
-  immutable.
+- A released pack version (a concrete `<criteria_pack_id>/<criteria_pack_version>/` directory) MUST
+  be treated as immutable.
 - Editing `criteria.jsonl` or `manifest.json` in-place for an already released version SHOULD NOT be
   done.
 - Any change that affects evaluation semantics MUST produce a new `criteria_pack_version`.
@@ -150,7 +150,8 @@ MUST NOT be used as a substitute for the version pins (`manifest.versions.criter
 
 ### Recommended source control practice (non-normative)
 
-- The repo MAY tag pack releases (example tag pattern: `criteria/<criteria_pack_id>/<criteria_pack_version>`).
+- The repo MAY tag pack releases (example tag pattern:
+  `criteria/<criteria_pack_id>/<criteria_pack_version>`).
 - CI SHOULD prevent changes to existing released pack version directories.
 
 ## Run bundle snapshot
@@ -259,8 +260,8 @@ To make drift detection implementable and testable without heuristic parsing:
 
 1. Criteria pack manifest provenance (pack authoring time).
 
-- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json` MUST record, for each supported engine, an
-  upstream provenance record:
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json` MUST record, for each
+  supported engine, an upstream provenance record:
   - `upstreams[]` array, each element:
     - `engine` (string: `atomic`, `caldera`, `custom`)
     - `source_ref` (string; a stable revision identifier)

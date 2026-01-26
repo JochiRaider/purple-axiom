@@ -607,7 +607,8 @@ Common keys:
       - For CI/regression runs, `criteria_pack_version` SHOULD be set explicitly.
     - If `criteria_pack_version` is omitted:
       - The implementation MUST resolve a version deterministically using SemVer ordering:
-        1. Enumerate available `<criteria_pack_id>/<criteria_pack_version>/` directories across `paths`.
+        1. Enumerate available `<criteria_pack_id>/<criteria_pack_version>/` directories across
+           `paths`.
         1. Parse candidate versions as SemVer.
         1. Select the highest SemVer version.
         1. If no candidates parse as SemVer, fail closed.

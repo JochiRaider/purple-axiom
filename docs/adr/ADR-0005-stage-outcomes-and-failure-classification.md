@@ -249,7 +249,7 @@ These reason codes MAY be used for any stage.
 | `storage_io_error`                   | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                                                                                                  |
 | `blocked_by_upstream_failure`        | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                                                                                                    |
 | `threat_intel_pack_not_found`        | FATAL    | Threat intelligence pack requested but not found (resolved directory missing and/or required files absent).                                                                        |
-| `threat_intel_pack_ambiguous`        | FATAL    | Multiple sources match the same `(criteria_pack_id, criteria_pack_version)` but differ in content; selection is ambiguous.                                                                           |
+| `threat_intel_pack_ambiguous`        | FATAL    | Multiple sources match the same `(criteria_pack_id, criteria_pack_version)` but differ in content; selection is ambiguous.                                                         |
 | `threat_intel_pack_invalid`          | FATAL    | Threat intelligence pack failed validation (schema invalid, hash mismatch, or indicators JSONL parse/validation failure).                                                          |
 | `threat_intel_snapshot_inconsistent` | FATAL    | Existing `inputs/threat_intel/` snapshot does not match resolved pins/hashes and would break reproducibility.                                                                      |
 
@@ -259,13 +259,13 @@ Default `fail_mode`: `fail_closed`
 
 #### FATAL reason codes
 
-| Reason code                    | Severity | Description                                                                     |
-| ------------------------------ | -------- | ------------------------------------------------------------------------------- |
-| `inventory_resolution_failed`  | FATAL    | Provider inventory cannot be resolved (missing file, parse error, API failure). |
-| `asset_id_collision`           | FATAL    | Duplicate `asset_id` detected in resolved inventory.                            |
-| `invalid_inventory_format`     | FATAL    | Inventory artifact does not conform to declared `format`.                       |
-| `provider_api_error`           | FATAL    | Provider API returned an error or timeout (when provider is API-based, reserved for v0.3+).         |
-| `unstable_asset_id_resolution` | FATAL    | Resolved `asset_id` set is non-deterministic across retries.                    |
+| Reason code                    | Severity | Description                                                                                 |
+| ------------------------------ | -------- | ------------------------------------------------------------------------------------------- |
+| `inventory_resolution_failed`  | FATAL    | Provider inventory cannot be resolved (missing file, parse error, API failure).             |
+| `asset_id_collision`           | FATAL    | Duplicate `asset_id` detected in resolved inventory.                                        |
+| `invalid_inventory_format`     | FATAL    | Inventory artifact does not conform to declared `format`.                                   |
+| `provider_api_error`           | FATAL    | Provider API returned an error or timeout (when provider is API-based, reserved for v0.3+). |
+| `unstable_asset_id_resolution` | FATAL    | Resolved `asset_id` set is non-deterministic across retries.                                |
 
 #### NON-FATAL reason codes (substage: `lab_provider.connectivity`)
 
@@ -285,24 +285,24 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 
 #### FATAL reason codes
 
-| Reason code                    | Severity | Description                                                                             |
-| ------------------------------ | -------- | --------------------------------------------------------------------------------------- |
-| `target_connection_address_missing` | FATAL    | `target_asset_id` is missing or not found in `logs/lab_inventory_snapshot.json`.                                 |
-| `unstable_asset_id_resolution` | FATAL    | `target_asset_id` cannot be resolved deterministically.                                 |
-| `plan_type_reserved`           | FATAL    | Plan type is reserved and not supported in this version.                                |
-| `interactive_prompt_blocked`         | FATAL    | Runner received an interactive user prompt.                       |
-| `plan_expansion_limit`         | FATAL    | Plan expansion exceeded configured limits; runner refused to execute the expanded plan. |
-| `invalid_posture_mode`         | FATAL    | `posture.mode` is present but not one of the allowed enum values.                       |
-| `executor_not_found`           | FATAL    | Required executor binary/module is missing.                                             |
-| `ground_truth_write_failed`    | FATAL    | Cannot write `ground_truth.jsonl`.                                                      |
-| `action_key_collision`         | FATAL    | Duplicate `action_key` within the run.                                                  |
-| `invalid_lifecycle_transition` | FATAL    | Runner detected an invalid lifecycle transition request (contract violation).           |
-| `unsafe_rerun_blocked`         | FATAL    | Runner refused to re-execute a non-idempotent action without successful `revert`.       |
-| `cleanup_invocation_failed`    | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure).               |
-| `prepare_failed`               | FATAL    | One or more actions failed during lifecycle `prepare`.                                  |
-| `execute_failed`               | FATAL    | One or more actions failed during lifecycle `execute`.                                  |
-| `revert_failed`                | FATAL    | One or more actions failed during lifecycle `revert`.                                   |
-| `teardown_failed`              | FATAL    | One or more actions failed during lifecycle `teardown`.                                 |
+| Reason code                         | Severity | Description                                                                             |
+| ----------------------------------- | -------- | --------------------------------------------------------------------------------------- |
+| `target_connection_address_missing` | FATAL    | `target_asset_id` is missing or not found in `logs/lab_inventory_snapshot.json`.        |
+| `unstable_asset_id_resolution`      | FATAL    | `target_asset_id` cannot be resolved deterministically.                                 |
+| `plan_type_reserved`                | FATAL    | Plan type is reserved and not supported in this version.                                |
+| `interactive_prompt_blocked`        | FATAL    | Runner received an interactive user prompt.                                             |
+| `plan_expansion_limit`              | FATAL    | Plan expansion exceeded configured limits; runner refused to execute the expanded plan. |
+| `invalid_posture_mode`              | FATAL    | `posture.mode` is present but not one of the allowed enum values.                       |
+| `executor_not_found`                | FATAL    | Required executor binary/module is missing.                                             |
+| `ground_truth_write_failed`         | FATAL    | Cannot write `ground_truth.jsonl`.                                                      |
+| `action_key_collision`              | FATAL    | Duplicate `action_key` within the run.                                                  |
+| `invalid_lifecycle_transition`      | FATAL    | Runner detected an invalid lifecycle transition request (contract violation).           |
+| `unsafe_rerun_blocked`              | FATAL    | Runner refused to re-execute a non-idempotent action without successful `revert`.       |
+| `cleanup_invocation_failed`         | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure).               |
+| `prepare_failed`                    | FATAL    | One or more actions failed during lifecycle `prepare`.                                  |
+| `execute_failed`                    | FATAL    | One or more actions failed during lifecycle `execute`.                                  |
+| `revert_failed`                     | FATAL    | One or more actions failed during lifecycle `revert`.                                   |
+| `teardown_failed`                   | FATAL    | One or more actions failed during lifecycle `teardown`.                                 |
 
 - Multi-target iteration (matrix plans) is reserved for v0.2; v0.1 enforces 1:1 action-target
   resolution.

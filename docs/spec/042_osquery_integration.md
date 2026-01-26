@@ -169,9 +169,10 @@ Baseline profile gate (fail closed when enabled):
 - When `telemetry.baseline_profile.enabled=true`, the telemetry validator evaluates
   `runs/<run_id>/inputs/telemetry_baseline_profile.json` and emits a health substage outcome with
   `stage="telemetry.baseline_profile"`.
-- For `source_type=osquery`, baseline signal matching uses the osquery NDJSON fields `name`
-  (required) and `action` (optional). Therefore, ingestion/staging SHOULD preserve these fields (or
-  preserve their semantics deterministically if renamed in an intermediate store).
+- For `source_type=osquery` (identity source type; see ADR-0002), baseline signal matching uses the
+  osquery NDJSON fields `name` (required) and `action` (optional). Therefore, ingestion/staging
+  SHOULD preserve these fields (or preserve their semantics deterministically if renamed in an
+  intermediate store).
 
 File-tailed crash/restart + rotation continuity (required when osquery is enabled):
 

@@ -97,8 +97,8 @@ Plan types (evolution path):
 
 Notes:
 
-- A “Caldera operation” maps to `plan.type=campaign` (reserved; not supported in v0.1).
-- “Mixed plan” is not a distinct `plan.type`; it is a composition style expressed as a `campaign`
+- A "Caldera operation" maps to `plan.type=campaign` (reserved; not supported in v0.1).
+- "Mixed plan" is not a distinct `plan.type`; it is a composition style expressed as a `campaign`
   plan composed of atomic nodes (reserved; not supported in v0.1).
 - Multi-action plans produce multiple `action_id` entries within a single `run_id` (v0.2+).
 - See [ADR-0006](../adr/ADR-0006-plan-execution-model.md) for architectural rationale.
@@ -159,7 +159,7 @@ Prerequisite scope (per-action vs shared, normative):
 - A phase MAY be `skipped` when it is not applicable, is blocked by an earlier phase outcome, or is
   suppressed by operator intent (for example `plan.cleanup=false`).
 - A lifecycle phase that is not attempted MUST be recorded as `phase_outcome=skipped` with a stable
-  `reason_code` (see data contracts).
+  `reason_domain="ground_truth"` and `reason_code` (see data contracts).
 
 Gating:
 
@@ -167,15 +167,15 @@ Gating:
   - If `prepare.phase_outcome` is `failed` or `skipped`, `execute` MUST be recorded as `skipped`.
 - `revert` MUST NOT be attempted unless `execute` was attempted.
   - If `execute` was not attempted and cleanup is otherwise enabled, `revert` MUST be recorded as
-    `skipped` with `reason_code=prior_phase_blocked`.
+    `skipped` with `reason_domain="ground_truth"` and `reason_code=prior_phase_blocked`.
 
 Cleanup suppression (policy, not an error):
 
 - If effective `plan.cleanup=false`, the runner MUST NOT attempt `revert` or cleanup-dependent
   `teardown` work for the action.
 - Ground truth MUST record:
-  - `revert.phase_outcome=skipped` with `reason_code=cleanup_suppressed`, and
-  - `teardown.phase_outcome=skipped` with `reason_code=cleanup_suppressed`.
+  - `revert.phase_outcome=skipped` with `reason_domain="ground_truth"` and `reason_code=cleanup_suppressed`, and
+  - `teardown.phase_outcome=skipped` with `reason_domain="ground_truth"` and `reason_code=cleanup_suppressed`.
 
 Teardown behavior:
 
@@ -223,7 +223,8 @@ Ground truth MUST record (minimum):
   - Additional retry records (v0.2+) MUST follow the data contracts rules (additional `execute`
     and/or `revert` records with monotonic `attempt_ordinal`).
   - Each phase MUST include `started_at_utc`, `ended_at_utc`, and `phase_outcome`.
-  - If `phase_outcome` is `failed` or `skipped`, the phase MUST include `reason_code`.
+  - If `phase_outcome` is `failed` or `skipped`, the phase MUST include `reason_domain` and `reason_code`.
+  - `reason_domain` (string; required when not `success`; MUST equal `ground_truth`)
 - `extensions.synthetic_correlation_marker` (when synthetic marker emission is enabled and `execute`
   was attempted).
 - `evidence_refs[]` (when external evidence artifacts exist) using deterministic, stable artifact
@@ -238,8 +239,8 @@ The runner MUST persist:
   (deterministic YAML parsing, input resolution, prerequisites handling, transcript capture, cleanup
   invocation, and cleanup verification).
 
-- Runner evidence artifacts under `runner/` MUST include, at minimum (see data contracts “Runner
-  evidence”):
+- Runner evidence artifacts under `runner/` MUST include, at minimum (see data contracts "Runner
+  evidence"):
 
   Per-action (under `runner/actions/<action_id>/`):
 
@@ -287,8 +288,8 @@ v0.1 repair handling (normative):
 - If a scenario requests `policy=repair` but repair is not enabled/supported (for example,
   `runner.atomic.state_reconciliation.allow_repair=false`), the runner MUST:
   - perform reconciliation probes in observe-only mode, and
-  - record the blocked intent deterministically in the reconciliation report (per-item `reason_code`
-    SHOULD be `repair_blocked` for affected items), and
+  - record the blocked intent deterministically in the reconciliation report (SHOULD be per-item 
+    `reason_domain="state_reconciliation_report"` and `reason_code="repair_blocked"` for affected items), and
   - surface drift via reconciliation outputs (do not downgrade/omit drift because repair was
     blocked).
 
@@ -563,6 +564,7 @@ Fields (per line):
     - `phase` (`prepare|execute|revert|teardown`)
     - `attempt_ordinal` (int; optional; present for retries; monotonic for a given phase)
     - `phase_outcome` (`success|failed|skipped`)
+    - `reason_domain` (string; required when not `success`; MUST equal `ground_truth`)
     - `reason_code` (string; required when not `success`)
     - `started_at_utc`, `ended_at_utc` (ISO-8601 UTC)
     - `evidence` (object; optional pointers to artifacts under `runner/actions/<action_id>/...`)
@@ -671,9 +673,9 @@ Ground truth is emitted as JSONL, one action per line.
     },
     "evaluation": "satisfied",
     "results": [
-      { "kind": "platform", "key": "windows", "status": "satisfied", "reason_code": "satisfied" },
-      { "kind": "privilege", "key": "admin", "status": "satisfied", "reason_code": "satisfied" },
-      { "kind": "tool", "key": "powershell", "status": "satisfied", "reason_code": "satisfied" }
+      { "kind": "platform", "key": "windows", "status": "satisfied", "reason_domain": "requirements_evaluation", "reason_code": "satisfied" },
+      { "kind": "privilege", "key": "admin", "status": "satisfied", "reason_domain": "requirements_evaluation", "reason_code": "satisfied" },
+      { "kind": "tool", "key": "powershell", "status": "satisfied", "reason_domain": "requirements_evaluation", "reason_code": "satisfied" }
     ]
   },
   "idempotence": "unknown",
@@ -826,7 +828,7 @@ spec. Guards are expressed in terms of the phase outcomes recorded in ground tru
 
 If an implementation is asked to force an invalid lifecycle ordering or to re-run a `non_idempotent`
 action unsafely, this spec requires that the lifecycle evidence surfaces stable enforcement reason
-codes:
+codes (emitted in lifecycle phase records with `reason_domain="ground_truth"`):
 
 - `invalid_lifecycle_transition`
 - `unsafe_rerun_blocked`

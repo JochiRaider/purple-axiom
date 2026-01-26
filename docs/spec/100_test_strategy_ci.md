@@ -753,7 +753,7 @@ The fixture set under `tests/fixtures/reporting/defense_outcomes/` MUST include 
 
   - Input:
 
-    - `runner/ground_truth.jsonl` contains at least 5 actions spanning:
+    - `ground_truth.jsonl` contains at least 5 actions spanning:
       - executed + detection present
       - executed + telemetry present + no detection
       - executed + telemetry absent
@@ -858,13 +858,14 @@ fail-closed (blocking) or configurable (threshold-based).
 Schema validation of produced OCSF events ensures all normalized events conform to the pinned OCSF
 schema.
 
-Schema validation of effective configuration validates `range.yaml` against
+Schema validation of effective configuration validates `inputs/range.yaml` against
 `docs/contracts/range_config.schema.json`.
 
 The fixture set MUST include at least:
 
 - `range_config_gap_taxonomy_invalid_token_rejected` (fail closed)
-  - Provide a `range.yaml` fixture that includes a non-canonical `scoring.gap_taxonomy[]` token.
+  - Provide a `inputs/range.yaml` fixture that includes a non-canonical `scoring.gap_taxonomy[]`
+    token.
   - Assert schema validation fails closed.
   - Assert the failure output identifies the invalid token location deterministically (for example,
     a JSON pointer or dotted path to the array element).
@@ -931,8 +932,8 @@ The fixture set MUST include at least:
     `runs/<run_id>/logs/contract_validation/runner.json`.
   - Assert the contract validation report contains an error with:
     - `artifact_relpath` matching the offending path
-    - `error_code = "timestamped_filename_disallowed"` (stable reason code for this class of
-      failure)
+    - `error_code = "timestamped_filename_disallowed"` (stable error code for this class of
+      violation)
 
 Report generation sanity checks validate that reports render without errors.
 
@@ -983,7 +984,7 @@ Fixture set (normative):
       - `logs/run.log`
       - `logs/warnings.jsonl`
       - `logs/eps_baseline.json`
-      - `logs/telemetry_checkpoints/state.db`
+      - `logs/telemetry_checkpoints/**`
       - `logs/dedupe_index/ocsf_events.duckdb`
       - `logs/scratch/tmp.txt`
     - quarantine example:

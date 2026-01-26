@@ -132,7 +132,7 @@ Evaluator sandbox contract (minimal, testable; normative v0.1):
   pinned (versioned) and hashed before evaluation.
 - File system access MUST be constrained:
   - read-only: the run bundle inputs required for evaluation and the pinned rule pack directory
-  - write-only: evaluator outputs under the run bundle (for example `criteria/` or `detection/`)
+  - write-only: evaluator outputs under the run bundle (for example `criteria/` or `detections/`)
 - Sandbox violations MUST be treated as deterministic failures (fail closed).
 
 Evaluators SHOULD not require network access. If network access is required for rule retrieval, it

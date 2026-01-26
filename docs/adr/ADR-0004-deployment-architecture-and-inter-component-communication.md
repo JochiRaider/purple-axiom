@@ -124,17 +124,17 @@ observable contract is the filesystem.
 
 Minimum v0.1 IO boundaries:
 
-| Stage           | Minimum inputs                                                                                | Minimum outputs (published paths)                                                                                                       |
-| --------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `lab_provider`  | run configuration, provider inputs                                                            | inventory snapshot artifact (referenced by manifest)                                                                                    |
-| `runner`        | inventory snapshot, scenario plan                                                             | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; \[v0.2+: `plan/**`\]                                                    |
-| `telemetry`     | inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)       | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)                  |
-| `normalization` | `raw_parquet/**`, mapping profiles                                                            | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                         |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                 | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                           |
-| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                        | `bridge/**`, `detections/detections.jsonl`                                                                                              |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                         | `scoring/summary.json`                                                                                                                  |
-| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, manifest, `inputs/**` (when regression enabled) | `report/**` (MUST include `report/report.json` and `report/thresholds.json`; HTML and other supplemental artifacts MAY also be emitted) |
-| `signing`       | finalized manifest, selected artifacts                                                        | `security/**` (checksums, signature, public key)                                                                                        |
+| Stage           | Minimum inputs                                                                                                                       | Minimum outputs (published paths)                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `lab_provider`  | run configuration, provider inputs                                                                                                   | inventory snapshot artifact (referenced by manifest)                                                                                    |
+| `runner`        | inventory snapshot, scenario plan                                                                                                    | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; \[v0.2+: `plan/**`\]                                                    |
+| `telemetry`     | inventory snapshot, `inputs/range.yaml`, `inputs/scenario.yaml`, `ground_truth.jsonl` lifecycle timestamps (plus configured padding) | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)                  |
+| `normalization` | `raw_parquet/**`, mapping profiles                                                                                                   | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                         |
+| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                                                        | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                           |
+| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                                               | `bridge/**`, `detections/detections.jsonl`                                                                                              |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                                                | `scoring/summary.json`                                                                                                                  |
+| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, manifest, `inputs/**` (when regression enabled)                                        | `report/**` (MUST include `report/report.json` and `report/thresholds.json`; HTML and other supplemental artifacts MAY also be emitted) |
+| `signing`       | finalized manifest, selected artifacts                                                                                               | `security/**` (checksums, signature, public key)                                                                                        |
 
 Note: This table defines the minimum published paths for v0.1 stage boundaries. Stages MAY emit
 additional artifacts, but MUST NOT weaken determinism guarantees or change the meaning of the paths
@@ -227,7 +227,8 @@ Orchestrator (one-shot, run host)
   |
   |-- acquire run lock (exclusive writer; runs/.locks/<run_id>.lock)
   |-- create runs/<run_id>/ (staging allowed)
-  |-- write initial manifest skeleton (run metadata, config hashes)
+  |-- write initial manifest.json skeleton (run metadata, toolchain versions, config hashes)
+  |-- materialize/pin operator inputs into `runs/<run_id>/inputs/` (at minimum `inputs/range.yaml` and `inputs/scenario.yaml`)
   |
   |-- [lab_provider] resolve inventory snapshot -> publish inventory artifact -> record stage outcome
   |

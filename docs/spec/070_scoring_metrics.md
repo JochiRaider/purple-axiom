@@ -67,7 +67,7 @@ precedence-reduction over the tool outcomes (plus any explicit override, if pres
 
 Inputs (authoritative, in priority order where applicable):
 
-- `runner/ground_truth.jsonl` for action execution status and technique attribution.
+- `ground_truth.jsonl` for action execution status and technique attribution.
 - `criteria/results.jsonl` for telemetry presence when available (preferred).
 - Synthetic correlation marker observability (if enabled) MAY be used as a fallback telemetry
   signal.

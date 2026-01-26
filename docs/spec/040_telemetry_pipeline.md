@@ -29,7 +29,8 @@ stable processing spine, in order:
 
 1. **Classify** the record:
    - derive `asset_id` using the asset identification mechanism selected for the run, and
-   - set a stable `source_type` (for example `windows_eventlog` or `osquery`).
+   - set a stable `identity_source_type` (for example `windows_eventlog` or `osquery`; see ADR-0002;
+     do not confuse with `metadata.source_type`).
 1. **Acquire** the canonical raw payload:
    - for Windows Event Log, derive `raw_event_xml` using the deterministic acquisition algorithm
      defined in this document, and
@@ -693,9 +694,11 @@ When `telemetry.baseline_profile.enabled=true`:
      - `tags_all`: all present in asset `tags`
      - `tags_any`: at least one present in asset `tags`
    - If no profiles match an asset, the gate MUST fail with `reason_code=baseline_profile_not_met`.
-   - For `source_type=windows_eventlog`, signal matching MUST use `<System>` fields extracted from
-     raw XML (`Channel`, optional `Provider/@Name`, optional `EventID`).
-   - For `source_type=osquery`, signal matching MUST use NDJSON fields (`name`, optional `action`).
+   - For `source_type=windows_eventlog` (identity source type; see ADR-0002), signal matching MUST
+     use `<System>` fields extracted from raw XML (`Channel`, optional `Provider/@Name`, optional
+     `EventID`).
+   - For `source_type=osquery` (identity source type; see ADR-0002), signal matching MUST use NDJSON
+     fields (`name`, optional `action`).
 1. Failure semantics (all fail-closed):
    - Missing/unreadable profile: `reason_code=baseline_profile_missing`
    - Contract/schema invalid: `reason_code=baseline_profile_invalid`
@@ -706,8 +709,8 @@ When `telemetry.baseline_profile.enabled=true`:
 
 ### Determinism
 
-1. Restart the collector mid-stream; confirm no schema changes and that downstream `event_id`
-   generation remains stable.
+1. Restart the collector mid-stream; confirm no schema changes and that downstream
+   `metadata.event_id` generation remains stable.
 1. Simulate checkpoint loss by deleting or moving the collector checkpoint directory, then restart;
    confirm events may replay into the raw store and downstream dedupe preserves uniqueness by
    `metadata.event_id`.

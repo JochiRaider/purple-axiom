@@ -78,8 +78,13 @@ to `runs/<run_id>/`).
 - Orchestrator entrypoints (range lifecycle verbs) are in scope as an interface surface when
   exposed:
   - `simulate` performs the canonical v0.1 stage sequence.
-  - `build`, `replay`, `export`, and `destroy` are permitted entrypoints (as defined in the
-    architecture spec) but are not required to be implemented for v0.1 completeness.
+  - `build` semantics are REQUIRED for v0.1 compliance to ensure deterministic run initialization
+    (input pinning and `manifest.json` creation). If `build` is not exposed as a separate operator
+    command, the orchestrator MUST execute the `build` semantics implicitly as the first step of
+    `simulate`.
+  - `replay`, `export`, and `destroy` are permitted entrypoints (as defined in the architecture
+    spec) but are not required to be implemented for v0.1 completeness. `destroy` is RECOMMENDED
+    when lab providers provision or mutate lab resources.
 - Contract-backed run bundles:
   - A manifest-driven run bundle layout, with deterministic hashing and provenance fields.
   - Publish-gate contract validation for contract-backed artifacts, with deterministic validation

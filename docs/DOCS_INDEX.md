@@ -1,7 +1,7 @@
 # Docs index
 
-This file is a high-level navigation aid for the `docs/` directory to help agents and humans
-locate authoritative information without loading the full tree.
+This file is a high-level navigation aid for the `docs/` directory to help agents and humans locate
+authoritative information without loading the full tree.
 
 ## Entrypoints (open these first, if needed)
 
@@ -13,13 +13,13 @@ locate authoritative information without loading the full tree.
 
 ## Sub-index map
 
-| Index file                            | Domain          | Purpose                                                             |
-| ------------------------------------- | --------------- | ------------------------------------------------------------------- |
-| `docs/adr/ADR_INDEX.md`               | Decisions       | Context and history of architectural choices (ADRs)                 |
-| `docs/contracts/CONTRACTS_INDEX.md`   | Contracts       | JSON Schemas and contract registry for validation of artifacts      |
-| `docs/mappings/MAPPINGS_DOC_INDEX.md` | Mappings        | Mapping specs and coverage expectations per `source_type`           |
-| `docs/research/RESEARCH_INDEX.md`     | Research        | Exploratory reports and conformance studies (non-normative)         |
-| `docs/spec/SPEC_INDEX.md`             | Specifications  | Normative requirements, architecture, data flows, and configuration |
+| Index file                            | Domain         | Purpose                                                             |
+| ------------------------------------- | -------------- | ------------------------------------------------------------------- |
+| `docs/adr/ADR_INDEX.md`               | Decisions      | Context and history of architectural choices (ADRs)                 |
+| `docs/contracts/CONTRACTS_INDEX.md`   | Contracts      | JSON Schemas and contract registry for validation of artifacts      |
+| `docs/mappings/MAPPINGS_DOC_INDEX.md` | Mappings       | Mapping specs and coverage expectations per `source_type`           |
+| `docs/research/RESEARCH_INDEX.md`     | Research       | Exploratory reports and conformance studies (non-normative)         |
+| `docs/spec/SPEC_INDEX.md`             | Specifications | Normative requirements, architecture, data flows, and configuration |
 
 ## Directory Guide
 
@@ -30,8 +30,7 @@ locate authoritative information without loading the full tree.
 - `docs/contracts/`: CI-enforced data structures.
   - Modifying JSON outputs, validating data formats, or checking schema compatibility.
 - `docs/mappings/`: Mapping references and completeness checklists.
-  - Implementing or reviewing normalization mappings; adding CI coverage for "mapping
-    completeness".
+  - Implementing or reviewing normalization mappings; adding CI coverage for "mapping completeness".
 - `docs/research/`: Transient or exploratory documents.
   - Investigating performance experiments or reliability studies.
 

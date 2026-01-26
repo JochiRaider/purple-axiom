@@ -539,8 +539,10 @@ Additional normative checks:
     deterministically.
 - outbound egress deny posture enforcement (required when effective outbound policy is denied):
   - The validator MUST compute `effective_allow_outbound` as the logical AND of:
-    - `scenario.safety.allow_network`, and
-    - `security.network.allow_outbound` from `range.yaml`.
+    - `scenario.safety.allow_network`(from the pinned scenario definition snapshot under
+      `inputs/scenario.yaml`), and
+    - `security.network.allow_outbound` from the pinned range configuration snapshot under
+      `inputs/range.yaml`.
   - When `effective_allow_outbound=false`, the validator MUST run a TCP connect canary from the
     target asset to `security.network.egress_canary`.
     - The canary MUST be considered enabled when `security.network.egress_canary.required_on_deny`

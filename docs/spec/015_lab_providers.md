@@ -52,7 +52,7 @@ Recommended path:
 
 - `runs/<run_id>/logs/lab_inventory_snapshot.json`
 
-#### Inventory snapshot schema: `lab_inventory_snapshot_v1`
+#### Inventory snapshot schema: `lab_inventory_snapshot`
 
 The inventory snapshot artifact (`lab_inventory_snapshot.json`) MUST be a JSON object with:
 
@@ -104,10 +104,9 @@ Contract validation:
 
 - The published snapshot MUST be validated at the publish gate using the local contract registry
   (`docs/contracts/contract_registry.json`) as defined in the data contracts specification.
-- TODO (repo): add a JSON Schema contract for this artifact and register it in the contract registry
-  (recommended contract id: `lab_inventory_snapshot_v1`; recommended schema file:
-  `docs/contracts/lab_inventory_snapshot.schema.json`).
-- Regardless of schema availability, implementations MUST validate the invariants above as a publish
+- The published snapshot MUST validate against the `lab_inventory_snapshot` contract
+  (`docs/contracts/lab_inventory_snapshot.schema.json`).
+- In addition to schema validation, implementations MUST validate the invariants above as a publish
   gate before atomically publishing the snapshot into the run bundle.
 
 Retention semantics:
@@ -147,8 +146,8 @@ Normative requirements:
   IDs, incremental inventory indexes, or dynamically allocated VM IDs).
 - A provider implementation MUST resolve all targets to a stable `asset_id` namespace. This
   typically means one of:
-  - the operator defines `lab.assets` (with stable `asset_id`) in `range.yaml`, and the provider
-    enriches those entries with `hostname`, `ip`, and `provider_asset_ref`, or
+  - the operator defines `lab.assets` (with stable `asset_id`) in `inputs/range.yaml`, and the
+    provider enriches those entries with `hostname`, `ip`, and `provider_asset_ref`, or
   - the provider maintains an explicit, persisted mapping from provider-native identifiers to stable
     `asset_id` values.
 - If a provider cannot produce stable `asset_id` values for the resolved targets, it MUST fail
@@ -522,7 +521,7 @@ Reference implementation (optional):
 
 ## Manual
 
-- Inline `lab.assets` in `range.yaml`.
+- Inline `lab.assets` in `inputs/range.yaml`.
 - No external dependencies.
 
 ## Security requirements

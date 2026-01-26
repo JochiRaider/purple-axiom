@@ -27,10 +27,10 @@ ______________________________________________________________________
 
 In scope `source_type` rows (v0.1 MVP):
 
-- Windows Security (Windows Event Log: Security channel)
-- Sysmon
-- osquery
-- auditd
+- `windows-security` (Windows Event Log: Security channel; `metadata.source_type`)
+- `windows-sysmon` (Sysmon; `metadata.source_type`)
+- `osquery` (`metadata.source_type`)
+- `auditd` (`metadata.source_type`)
 
 Out of scope for this v0.1 matrix:
 
@@ -113,12 +113,12 @@ Notes:
   - If only a single IP is known, emitting `device.ip` alone is permitted, but CI conformance checks
     **SHOULD** treat `device.ip` as satisfying the IP pivot requirement.
 
-| source_type      | category_uid | type_uid | severity_id | device.hostname | device.uid | device.(ip\|ips[]) | actor.user.name | actor.user.uid | actor.process.name | actor.process.pid | message | observables[] |
-| ---------------- | ------------ | -------- | ----------- | --------------- | ---------- | ------------------ | --------------- | -------------- | ------------------ | ----------------- | ------- | ------------- |
-| Windows Security | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | R[U]            | R[U]           | O[P]               | O[P]              | O       | O             |
-| Sysmon           | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | O[U]           | R[P]               | R[P]              | O       | O             |
-| osquery          | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | O[U]           | R[P]               | R[P]              | O       | O             |
-| auditd           | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | R[U]           | O[P]               | R[P]              | O       | O             |
+| metadata.source_type | category_uid | type_uid | severity_id | device.hostname | device.uid | device.(ip\|ips[]) | actor.user.name | actor.user.uid | actor.process.name | actor.process.pid | message | observables[] |
+| -------------------- | ------------ | -------- | ----------- | --------------- | ---------- | ------------------ | --------------- | -------------- | ------------------ | ----------------- | ------- | ------------- |
+| windows-security     | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | R[U]            | R[U]           | O[P]               | O[P]              | O       | O             |
+| windows-sysmon       | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | O[U]           | R[P]               | R[P]              | O       | O             |
+| osquery              | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | O[U]           | R[P]               | R[P]              | O       | O             |
+| auditd               | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | R[U]           | O[P]               | R[P]              | O       | O             |
 
 Tier 1 rationale notes (per row):
 
@@ -156,12 +156,12 @@ To keep CI implementable, Tier 2 is expressed as a small set of family-specific 
 
 ### Tier 2A authentication and authorization for Windows Security
 
-| source_type      | actor.user.name | actor.user.uid | status_id | src_endpoint.ip | src_endpoint.port | target.user.name | target.user.uid |
-| ---------------- | --------------- | -------------- | --------: | --------------- | ----------------- | ---------------- | --------------- |
-| Windows Security | R[U]            | R[U]           |      R[C] | O[N]            | O[N]              | O[U]             | O[U]            |
-| Sysmon           | N/A             | N/A            |       N/A | N/A             | N/A               | N/A              | N/A             |
-| osquery          | N/A             | N/A            |       N/A | N/A             | N/A               | N/A              | N/A             |
-| auditd           | O[U]            | R[U]           |      O[C] | N/A             | N/A               | N/A              | N/A             |
+| metadata.source_type | actor.user.name | actor.user.uid | status_id | src_endpoint.ip | src_endpoint.port | target.user.name | target.user.uid |
+| -------------------- | --------------- | -------------- | --------: | --------------- | ----------------- | ---------------- | --------------- |
+| windows-security     | R[U]            | R[U]           |      R[C] | O[N]            | O[N]              | O[U]             | O[U]            |
+| windows-sysmon       | N/A             | N/A            |       N/A | N/A             | N/A               | N/A              | N/A             |
+| osquery              | N/A             | N/A            |       N/A | N/A             | N/A               | N/A              | N/A             |
+| auditd               | O[U]            | R[U]           |      O[C] | N/A             | N/A               | N/A              | N/A             |
 
 Notes:
 
@@ -174,12 +174,12 @@ Notes:
 
 ### Tier 2B process and execution activity for Windows Security, Sysmon, osquery, and auditd
 
-| source_type      | activity_id | actor.process.name | actor.process.pid | actor.process.cmd_line | actor.process.parent_process.pid | actor.user.uid | actor.user.name |
-| ---------------- | ----------- | ------------------ | ----------------- | ---------------------- | -------------------------------- | -------------- | --------------- |
-| Windows Security | R[C]        | O[P]               | O[P]              | O[P]                   | O[P]                             | R[U]           | R[U]            |
-| Sysmon           | R[C]        | R[P]               | R[P]              | R[P]                   | R[P]                             | O[U]           | O[U]            |
-| osquery          | R[C]        | R[P]               | R[P]              | R[P]                   | O[P]                             | O[U]           | O[U]            |
-| auditd           | R[C]        | O[P]               | R[P]              | O[P]                   | O[P]                             | R[U]           | O[U]            |
+| metadata.source_type | activity_id | actor.process.name | actor.process.pid | actor.process.cmd_line | actor.process.parent_process.pid | actor.user.uid | actor.user.name |
+| -------------------- | ----------- | ------------------ | ----------------- | ---------------------- | -------------------------------- | -------------- | --------------- |
+| windows-security     | R[C]        | O[P]               | O[P]              | O[P]                   | O[P]                             | R[U]           | R[U]            |
+| windows-sysmon       | R[C]        | R[P]               | R[P]              | R[P]                   | R[P]                             | O[U]           | O[U]            |
+| osquery              | R[C]        | R[P]               | R[P]              | R[P]                   | O[P]                             | O[U]           | O[U]            |
+| auditd               | R[C]        | O[P]               | R[P]              | O[P]                   | O[P]                             | R[U]           | O[U]            |
 
 Notes:
 
@@ -195,12 +195,12 @@ Notes:
 
 ### Tier 2C network and connection activity for Sysmon and osquery
 
-| source_type      | src_endpoint.ip | src_endpoint.port | dst_endpoint.ip | dst_endpoint.port |
-| ---------------- | --------------- | ----------------- | --------------- | ----------------- |
-| Windows Security | N/A             | N/A               | N/A             | N/A               |
-| Sysmon           | R[N]            | R[N]              | R[N]            | R[N]              |
-| osquery          | R[N]            | O[N]              | R[N]            | O[N]              |
-| auditd           | O[N]            | O[N]              | O[N]            | O[N]              |
+| metadata.source_type | src_endpoint.ip | src_endpoint.port | dst_endpoint.ip | dst_endpoint.port |
+| -------------------- | --------------- | ----------------- | --------------- | ----------------- |
+| windows-security     | N/A             | N/A               | N/A             | N/A               |
+| windows-sysmon       | R[N]            | R[N]              | R[N]            | R[N]              |
+| osquery              | R[N]            | O[N]              | R[N]            | O[N]              |
+| auditd               | O[N]            | O[N]              | O[N]            | O[N]              |
 
 Notes:
 
@@ -211,12 +211,12 @@ Notes:
 
 ### Tier 2D file system activity for Sysmon, osquery, and auditd
 
-| source_type      | file.name | file.parent_folder | file.path | actor.process.pid | actor.process.name | actor.user.uid |
-| ---------------- | --------: | -----------------: | --------: | ----------------: | -----------------: | -------------: |
-| Windows Security |      O[F] |               O[F] |      O[F] |              O[P] |               O[P] |           O[U] |
-| Sysmon           |      R[F] |               R[F] |      R[F] |              R[P] |               R[P] |           O[U] |
-| osquery          |      R[F] |               R[F] |      O[F] |               N/A |                N/A |           O[U] |
-| auditd           |      R[F] |               O[F] |      O[F] |              R[P] |               O[P] |           R[U] |
+| metadata.source_type | file.name | file.parent_folder | file.path | actor.process.pid | actor.process.name | actor.user.uid |
+| -------------------- | --------: | -----------------: | --------: | ----------------: | -----------------: | -------------: |
+| windows-security     |      O[F] |               O[F] |      O[F] |              O[P] |               O[P] |           O[U] |
+| windows-sysmon       |      R[F] |               R[F] |      R[F] |              R[P] |               R[P] |           O[U] |
+| osquery              |      R[F] |               R[F] |      O[F] |               N/A |                N/A |           O[U] |
+| auditd               |      R[F] |               O[F] |      O[F] |              R[P] |               O[P] |           R[U] |
 
 Notes:
 

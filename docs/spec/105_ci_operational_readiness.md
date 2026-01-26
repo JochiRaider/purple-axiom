@@ -254,6 +254,119 @@ Security posture for CI artifacts:
   `security.redaction.unredacted_dir`) MUST be excluded from default CI artifact publication unless
   an operator explicitly intends to retain unredacted evidence.
 
+### CI matrix contract
+
+A "CI matrix" is a CI job strategy that executes multiple independent v0.1 runs (matrix cells) with
+controlled variation across a declared set of input dimensions (matrix axes), then aggregates the
+resulting artifacts to answer questions such as:
+
+- Fixed tests, many detections: hold scenarios and telemetry constant while varying detection
+  content (rule sets, and optionally mapping packs) to measure detection effectiveness deltas.
+- Fixed detections, many tests: hold detections constant while varying scenarios/criteria to measure
+  test suite coverage and stability.
+- Regression: compare a candidate run to a baseline run under a pinned, comparable input set to
+  detect drift in the regression-comparable metric surface.
+
+v0.1 does not introduce a new "matrix execution" subsystem. A matrix runner is an external harness
+(CI workflow, Make target, etc.) that invokes the orchestrator once per matrix cell and treats each
+cell as a normal v0.1 run bundle (`runs/<run_id>/...`).
+
+#### Terminology
+
+- **Matrix runner**: external driver that launches one orchestrator run per cell, collects run
+  bundles, and (optionally) performs cross-run aggregation.
+- **Matrix cell**: exactly one v0.1 run bundle identified by a distinct `run_id`.
+- **Matrix axis**: a single dimension the matrix runner varies across cells (for example,
+  `rule_set_version`).
+- **Regression cohort**: the set of runs that share a regression-comparable pin set (see below).
+  Only runs within the same cohort are eligible for meaningful baseline-to-candidate regression
+  deltas.
+
+#### Allowed axes (what may vary)
+
+A matrix runner MAY vary any of the following axes across cells. Each axis MUST be captured as an
+effective value in a contracted run artifact so that aggregation is deterministic and explainable.
+
+| Axis (concept)                                             | Authoritative recording location                                                                              | Regression deltas when this axis varies?                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Scenario (`scenario_id`/`scenario_version`)                | `runs/<run_id>/manifest.json.versions.scenario_*`                                                             | No. MUST be pinned for reporting regression.                     |
+| Rule set (`rule_set_id`/`rule_set_version`)                | `runs/<run_id>/manifest.json.versions.rule_set_*`                                                             | No. MUST be pinned for reporting regression.                     |
+| Mapping pack (`mapping_pack_id`/`mapping_pack_version`)    | `runs/<run_id>/manifest.json.versions.mapping_pack_*`                                                         | Only if pinned, or if drift is explicitly allowed by policy.     |
+| Criteria pack (`criteria_pack_id`/`criteria_pack_version`) | `runs/<run_id>/manifest.json.versions.criteria_pack_*`                                                        | No. MUST be pinned for reporting regression.                     |
+| OCSF version (`ocsf_version`)                              | `runs/<run_id>/manifest.json.versions.ocsf_version`                                                           | No. MUST be pinned for reporting regression.                     |
+| Pipeline version (`pipeline_version`)                      | `runs/<run_id>/manifest.json.versions.pipeline_version`                                                       | No. MUST be pinned for reporting regression.                     |
+| Range config hash (best-effort)                            | `runs/<run_id>/manifest.json.inputs.range_yaml_sha256` (optional)                                             | Yes, but SHOULD be pinned to reduce noise.                       |
+| Gate thresholds / regression policy                        | `runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json.regression.comparability.policy` | Metrics comparable; gate decisions not comparable unless pinned. |
+
+Notes (normative):
+
+- If an axis value is not recorded in the run bundle, the matrix runner MUST treat the run as
+  ineligible for deterministic trending and reporting regression.
+- Environment-derived values (hostnames, absolute paths, wall-clock timestamps) MUST NOT be treated
+  as axes or join keys for reporting regression (see ADR-0001).
+
+#### What MUST be pinned for meaningful reporting regression
+
+A reporting regression comparison is the reporting-stage baseline-to-candidate comparison recorded
+in `runs/<run_id>/report/report.json.regression` (see `080_reporting.md` and
+`070_scoring_metrics.md`). A matrix runner MUST treat `report/report.json.regression.comparability`
+as the authoritative statement of whether reporting regression deltas are meaningful.
+
+To keep reporting regression meaningful (that is, to allow `comparability.status` to be `comparable`
+or `warning` rather than `indeterminate`), the matrix runner MUST ensure that baseline and candidate
+runs are in the same regression cohort:
+
+- The reporting regression comparability key set in `080_reporting.md` MUST match byte-for-byte
+  across baseline and candidate, with the only allowed exception being mapping pack version drift
+  when the candidate explicitly enables
+  `report/report.json.regression.comparability.policy.allow_mapping_pack_version_drift=true` and the
+  resulting `comparability.status` is `warning`.
+- `inputs.range_yaml_sha256` is OPTIONAL and non-fatal; when present in both runs it SHOULD match. A
+  mismatch MUST be treated as a noise indicator and MUST surface as at least `warning`
+  comparability.
+
+If `comparability.status` is `indeterminate`, a matrix runner MUST NOT treat the absence of deltas
+as "no change". It MUST treat the regression delta surface (`deltas[]`) as non-authoritative for
+cross-run comparison in that case.
+
+#### Benchmark comparisons (non-regression)
+
+Matrix comparisons where one or more MUST-match reporting regression pins are intentionally varied
+(for example, testing a new `rule_set_version` against a fixed scenario) are benchmarks, not
+reporting regression.
+
+A matrix runner MAY compute benchmark comparisons from per-run artifacts such as
+`scoring/summary.json`, but MUST NOT present benchmark deltas as
+`report/report.json.regression.deltas[]`, and MUST label such comparisons as non-regression (not
+reporting regression comparable by definition).
+
+#### Matrix runner artifact retention (cross-run analysis)
+
+In addition to the minimum CI evidence surface listed above, a matrix runner that intends to perform
+cross-run analysis (reporting regression or benchmark) MUST retain, for every matrix cell, the
+contracted artifacts required to recompute comparable metrics and to attribute gaps
+deterministically:
+
+- `runs/<run_id>/scoring/summary.json`
+- `runs/<run_id>/normalized/mapping_coverage.json`
+- `runs/<run_id>/bridge/coverage.json` (when the Sigma-to-OCSF bridge is enabled)
+- `runs/<run_id>/detections/detections.jsonl` (when Sigma evaluation is enabled)
+- `runs/<run_id>/criteria/manifest.json` and `runs/<run_id>/criteria/results.jsonl` (when criteria
+  evaluation is enabled)
+
+When reporting regression is enabled for a cell, the matrix runner MUST also retain:
+
+- `runs/<run_id>/inputs/baseline_run_ref.json`
+- `runs/<run_id>/inputs/baseline/manifest.json` (when present)
+
+Retention posture (normative):
+
+- Retained matrix artifacts MUST obey the security/redaction posture described above and in
+  ADR-0009. Quarantined/unredacted evidence directories MUST NOT be published by default.
+- For large analytics datasets (`raw_parquet/**`, `normalized/**`), CI MAY omit the data from
+  default retention to control artifact size, but SHOULD retain it for benchmark campaigns where
+  deeper triage is expected.
+
 ## State machine representation
 
 This state machine is an illustrative CI orchestration view only. It does not define or constrain

@@ -159,7 +159,7 @@ For a run to be eligible for inclusion in a dataset release, it MUST:
 - include a normalized OCSF event store (`normalized/ocsf_events/`) when any task uses normalized
   events as features.
 
-If the dataset build is configured to include detection/scoring-derived labels, the run MUST also
+If the dataset build is configured to include detection or scoring-derived labels, the run MUST also
 include the corresponding contracted artifacts (`detections/…`, `scoring/…`) or the build MUST fail
 closed unless explicitly configured to skip those runs.
 

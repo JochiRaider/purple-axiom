@@ -115,12 +115,18 @@ The orchestrator MAY expose a small set of stable **range lifecycle verbs** that
 operators and CI drive the pipeline. Verbs are orchestrator entrypoints that map to a deterministic
 subset of stages and to deterministic run-bundle side effects.
 
+For v0.1 compliance, the orchestrator MUST perform deterministic run initialization ("build
+semantics") for every run. Implementations MAY expose this as a distinct `build` verb; otherwise,
+`simulate` MUST execute the same build semantics as its first step.
+
 Common invariants (normative, v0.1):
 
 - Every verb invocation MUST target exactly one run bundle (`runs/<run_id>/`) and MUST acquire the
   run lock (atomic create of `runs/.locks/<run_id>.lock` per
   [ADR-0004: Deployment architecture and inter-component communication][adr-0004]) before creating
   or mutating any run bundle artifacts (including `manifest.json`).
+- Materialize/pin operator inputs under `runs/<run_id>/inputs/` (at minimum `inputs/range.yaml` and
+  `inputs/scenario.yaml`) before running the first stage.
 - Any verb that executes one or more stages MUST record stage outcomes in `manifest.json` per
   [ADR-0005: Stage outcomes and failure classification][adr-0005]. When health files are enabled
   (`operability.health.emit_health_files=true`), it MUST also record the same ordered outcomes in
@@ -134,7 +140,15 @@ Verb definitions (v0.1):
 - `build`
 
   - Stages executed: `lab_provider`.
-  - Intent: initialize the run bundle skeleton and produce an inventory snapshot.
+  - Intent: initialize the run bundle skeleton, materialize/pin operator inputs under
+    `runs/<run_id>/inputs/`, and produce an inventory snapshot.
+  - Build-time input ingestion (normative, v0.1):
+    - The orchestrator MUST materialize the effective inputs used for the run into the run bundle
+      as:
+      - `inputs/range.yaml` (range configuration snapshot)
+      - `inputs/scenario.yaml` (scenario definition snapshot)
+    - These inputs MUST be treated as read-only by all stages. Implementations MUST NOT mutate these
+      snapshots after `build` completes.
   - MUST NOT execute scenario actions or collect telemetry.
 
 - `simulate`
@@ -262,32 +276,32 @@ what exists in the bundle.
 
 Normative top-level entries (run-relative):
 
-| Path                               | Purpose                                                                          |
-| ---------------------------------- | -------------------------------------------------------------------------------- |
-| `manifest.json`                    | Authoritative run index and provenance pins                                      |
-| `inputs/`                          | Operator-supplied run inputs (read-only) and regression baseline references      |
-| `inputs/baseline/`                 | Baseline run snapshot materialization (regression; optional but recommended)     |
-| `inputs/baseline_run_ref.json`     | Baseline selection and resolution record (regression; required when enabled)     |
-| `ground_truth.jsonl`               | Append-only action timeline (what was attempted)                                 |
-| `runner/`                          | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)      |
-| `runner/principal_context.json`    | Run-level runner evidence (principal/execution context; when enabled)            |
-| `raw_parquet/`                     | Raw telemetry datasets (Parquet)                                                 |
-| `raw/`                             | Evidence-tier payloads and source-native blobs (when enabled)                    |
-| `normalized/`                      | OCSF-normalized event store and mapping coverage                                 |
-| `criteria/`                        | Criteria pack snapshot and evaluation results                                    |
-| `bridge/`                          | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)         |
-| `detections/`                      | Detection output artifacts                                                       |
-| `scoring/`                         | Scoring summaries and metrics                                                    |
-| `report/`                          | Report outputs (required: `report/report.json`, `report/thresholds.json`)        |
-| `logs/`                            | Operability summaries and debug logs; not considered long-term storage           |
-| `logs/health.json`                 | Stage/substage outcomes mirror (when enabled; see operability)                   |
-| `logs/telemetry_validation.json`   | Telemetry validation evidence (when validation enabled)                          |
-| `logs/lab_inventory_snapshot.json` | Inventory snapshot produced by `lab_provider` (referenced by manifest)           |
-| `logs/contract_validation/`        | Contract validation reports by stage (emitted on validation failure)             |
-| `logs/cache_provenance.json`       | Cache provenance and determinism logs (when caching is enabled)                  |
-| `security/`                        | Integrity artifacts when signing is enabled                                      |
-| `unredacted/`                      | Quarantined sensitive artifacts (when enabled); excluded from default disclosure |
-| `plan/`                            | [v0.2+] Plan expansion and execution artifacts                                   |
+| Path                               | Purpose                                                                                       |
+| ---------------------------------- | --------------------------------------------------------------------------------------------- |
+| `manifest.json`                    | Authoritative run index and provenance pins                                                   |
+| `inputs/`                          | Pinned run inputs (read-only; materialized during `build`) and regression baseline references |
+| `inputs/baseline/`                 | Baseline run snapshot materialization (regression; optional but recommended)                  |
+| `inputs/baseline_run_ref.json`     | Baseline selection and resolution record (regression; required when enabled)                  |
+| `ground_truth.jsonl`               | Append-only action timeline (what was attempted)                                              |
+| `runner/`                          | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)                   |
+| `runner/principal_context.json`    | Run-level runner evidence (principal/execution context; when enabled)                         |
+| `raw_parquet/`                     | Raw telemetry datasets (Parquet)                                                              |
+| `raw/`                             | Evidence-tier payloads and source-native blobs (when enabled)                                 |
+| `normalized/`                      | OCSF-normalized event store and mapping coverage                                              |
+| `criteria/`                        | Criteria pack snapshot and evaluation results                                                 |
+| `bridge/`                          | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)                      |
+| `detections/`                      | Detection output artifacts                                                                    |
+| `scoring/`                         | Scoring summaries and metrics                                                                 |
+| `report/`                          | Report outputs (required: `report/report.json`, `report/thresholds.json`)                     |
+| `logs/`                            | Operability summaries and debug logs; not considered long-term storage                        |
+| `logs/health.json`                 | Stage/substage outcomes mirror (when enabled; see operability)                                |
+| `logs/telemetry_validation.json`   | Telemetry validation evidence (when validation enabled)                                       |
+| `logs/lab_inventory_snapshot.json` | Inventory snapshot produced by `lab_provider` (referenced by manifest)                        |
+| `logs/contract_validation/`        | Contract validation reports by stage (emitted on validation failure)                          |
+| `logs/cache_provenance.json`       | Cache provenance and determinism logs (when caching is enabled)                               |
+| `security/`                        | Integrity artifacts when signing is enabled                                                   |
+| `unredacted/`                      | Quarantined sensitive artifacts (when enabled); excluded from default disclosure              |
+| `plan/`                            | [v0.2+] Plan expansion and execution artifacts                                                |
 
 Common per-action evidence location (run-relative):
 
@@ -566,8 +580,17 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
 1. **Outcome-sourced status**
 
    - `manifest.status` MUST be derived from stage outcomes, not from ad-hoc runtime heuristics.
-   - Stage outcome `reason_code` MUST be selected from the normative catalog for the relevant
-     `(stage, reason_code)` pair (see ADR-0005); unknown stage-outcome reason codes are forbidden.
+   - Stage outcome `reason_code` MUST be selected from a stable, stage-scoped set (ADR-0005).
+     Unknown stage-outcome reason codes are forbidden.
+   - Stage/substage outcomes MUST NOT emit `reason_domain`. The outcome domain is implicit as
+     `stage_outcome` and its reason-code catalog is scoped by ADR-0005.
+   - Any non-stage artifact that emits a `reason_code` field MUST also emit a sibling `reason_domain`
+     field:
+     - Pairing rule: `reason_domain` MUST be present iff `reason_code` is present.
+     - Contract alignment: for contract-backed artifacts, `reason_domain` MUST equal the artifact
+       schema’s `contract_id` (see `docs/contracts/contract_registry.json`).
+     - For non-contract placeholder/operator-interface artifacts, `reason_domain` MUST be one of the
+       explicitly documented constants (`artifact_placeholder`, `operator_interface`).
 
 1. **Safety policy is enforced, not advisory**
 
@@ -636,17 +659,17 @@ are mandatory (names are suggestions; harness/framework is implementation-define
 **Summary**: Each stage reads inputs from the run bundle and writes outputs back. The table below
 defines the minimum IO contract for v0.1.
 
-| Stage ID        | Minimum inputs                                                                                       | Minimum outputs                                                                                                                                                                                                  |
-| --------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lab_provider`  | Run configuration, provider inputs                                                                   | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                  |
-| `runner`        | Inventory snapshot, scenario plan                                                                    | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); \[v0.2+: `plan/**`\]                                                                             |
-| `telemetry`     | Inventory snapshot, `ground_truth.jsonl` lifecycle timestamps (plus configured padding)              | `raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)                                                                                           |
-| `normalization` | `raw_parquet/**`, mapping profiles                                                                   | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                  |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                        | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                    |
-| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                               | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                       |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                | `scoring/summary.json`                                                                                                                                                                                           |
-| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `inputs/**` (when regression enabled) | `report/report.json`, `report/thresholds.json`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
-| `signing`       | Finalized `manifest.json`, selected artifacts                                                        | `security/**` (checksums, signature, public key)                                                                                                                                                                 |
+| Stage ID        | Minimum inputs                                                                                             | Minimum outputs                                                                                                                                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lab_provider`  | Run configuration, provider inputs                                                                         | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                  |
+| `runner`        | Inventory snapshot, scenario plan                                                                          | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); \[v0.2+: `plan/**`\]                                                                             |
+| `telemetry`     | inventory snapshot, `inputs/range.yaml`, `inputs/scenario.yaml`, `ground_truth.jsonl` lifecycle timestamps | raw telemetry under `raw/otel/**` (collector output)                                                                                                                                                             |
+| `normalization` | `raw_parquet/**`, mapping profiles                                                                         | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                  |
+| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                              | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                    |
+| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                     | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                       |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                      | `scoring/summary.json`                                                                                                                                                                                           |
+| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `inputs/**` (when regression enabled)       | `report/report.json`, `report/thresholds.json`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
+| `signing`       | Finalized `manifest.json`, selected artifacts                                                              | `security/**` (checksums, signature, public key)                                                                                                                                                                 |
 
 **Note**: This table defines the **minimum** contract. Implementations MAY produce additional
 artifacts, but MUST produce at least these outputs for the stage to be considered successful.

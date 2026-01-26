@@ -16,15 +16,15 @@ This document defines the configuration surface for Purple Axiom. Configuration 
 - deterministic (config inputs are hashed and recorded in `manifest.json`)
 - safe (secrets are referenced, not embedded)
 
-Primary config file name used in examples: `range.yaml`.
+Primary config file name used in examples: `inputs/range.yaml`.
 
 ## Configuration files and precedence
 
 Recommended sources (lowest to highest precedence):
 
 1. Built-in defaults (code)
-1. `range.yaml` (range/lab and pipeline defaults)
-1. `scenario.yaml` (optional, scenario-specific overrides)
+1. `inputs/range.yaml` (range/lab and pipeline defaults)
+1. `inputs/scenario.yaml` (optional, scenario-specific overrides)
 1. CLI flags (optional, small overrides only)
 1. Environment variables (optional, for paths and secrets references)
 
@@ -32,7 +32,7 @@ Precedence rule: later sources override earlier sources at the leaf key level.
 
 Secrets rule:
 
-- Do not place credentials, tokens, or private keys directly in `range.yaml`.
+- Do not place credentials, tokens, or private keys directly in `inputs/range.yaml`.
 - Use references (file paths, OS keychain identifiers, or environment variable names).
 
 ## Top-level keys
@@ -407,7 +407,8 @@ Notes:
 
 ### Telemetry (telemetry)
 
-Controls collection and staging of raw telemetry in `raw/`.
+Controls collection and staging of raw telemetry (analytics-tier Parquet under `raw_parquet/`;
+evidence-tier raw preservation under `raw/` when enabled).
 
 Common keys:
 
@@ -423,7 +424,9 @@ Common keys:
       - `resume`: require checkpoint; if missing/corrupt, fall back to reset and mark checkpoint
         loss
       - `reset`: ignore checkpoints and start at run window start (plus skew tolerance)
-    - `checkpoint_dir` (optional): defaults to `runs/<run_id>/logs/telemetry_checkpoints/`
+    - `checkpoint_dir` (optional): defaults to a platform-local directory on the collector host
+      (implementation-defined; MUST be writable). A run-bundle snapshot MAY be copied into
+      `runs/<run_id>/logs/telemetry_checkpoints/` for diagnostics.
     - `flush_interval_seconds` (default: 5)
   - `checkpoint_corruption` (optional): policy for checkpoint store corruption events (validation
     and operability)
@@ -1026,7 +1029,7 @@ Operability guidance (non-normative):
 - Implementations MAY cache resolved secrets in memory for the duration of a run, but MUST NOT
   persist them.
 
-## Example range.yaml
+## Example inputs/range.yaml
 
 ```yaml
 lab:
@@ -1182,7 +1185,7 @@ Minimum validation (v0.1, normative):
 
 - YAML MUST parse successfully using a safe YAML 1.2 loader.
 - Duplicate YAML mapping keys MUST be rejected (fail closed) for all configuration inputs (including
-  `range.yaml` and `scenario.yaml`).
+  `inputs/range.yaml` and `inputs/scenario.yaml`).
 - The effective configuration (after applying precedence and overrides) MUST validate against
   `docs/contracts/range_config.schema.json` (JSON Schema draft 2020-12).
 - Unknown keys MUST be rejected by schema validation at every object boundary. The only exception is

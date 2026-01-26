@@ -419,6 +419,9 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `manifest.json` (single JSON object)
 - `ground_truth.jsonl` (JSONL)
 - `inputs/` (input snapshots and references used to interpret and compare runs)
+  - `inputs/range.yaml` (required) is the pinned range configuration snapshot used for this run.
+  - `inputs/scenario.yaml` (required) is the pinned scenario definition snapshot used for this run.
+  - `inputs/plan_draft.yaml` (v0.2+; optional; plan draft snapshot when plan building is enabled).
   - `inputs/baseline_run_ref.json` (required when regression is enabled; regression baseline pointer
     form)
   - `inputs/baseline/manifest.json` (optional; regression baseline snapshot form)
@@ -432,6 +435,11 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 - `control/` (v0.2+; operator control-plane requests/decisions, when implemented)
   - `control/audit.jsonl` (v0.2+; deterministic control-plane audit transcript when enabled; see
     `control_plane.audit.enabled`)
+  - `control/cancel.json` (v0.2+; durable cancellation request).
+  - `control/resume_request.json` (v0.2+; durable resume request).
+  - `control/resume_decision.json` (v0.2+; durable resume decision).
+  - `control/retry_request.json` (v0.2+; durable retry request).
+  - `control/retry_decision.json` (v0.2+; durable retry decision).
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
 - `raw_parquet/` (raw telemetry datasets, long-term; see storage formats)
 - `raw/` (evidence-tier blobs and source-native payloads where applicable)
@@ -766,8 +774,9 @@ outcome").
 
 A stage outcome MUST include:
 
-- `stage` (string): stable identifier (`runner`, `telemetry`, `normalization`, `detection`,
-  `scoring`, `reporting`), optionally suffixed by substage (`reporting.regression_compare`).
+- `stage` (string): stable identifier (`lab_provider`, `runner`, `telemetry`, `normalization`,
+  `validation`, `detection`, `scoring`, `reporting`, `signing`), optionally suffixed by substage
+  (`reporting.regression_compare`).
 - `status` (enum): `success | failed | skipped`.
 - `fail_mode` (enum): `fail_closed | warn_and_skip`.
 - `reason_code` (string, optional): stable reason token, required on `failed`. If present, it MUST
@@ -776,8 +785,8 @@ A stage outcome MUST include:
 Stage outcome ordering (normative):
 
 - Stage outcomes MUST be emitted in deterministic order:
-  - pipeline order for top-level stages (`runner`, `telemetry`, `normalization`, `detection`,
-    `scoring`, `reporting`), and
+  - pipeline order for top-level stages (`lab_provider`, `runner`, `telemetry`, `normalization`,
+    `validation`, `detection`, `scoring`, `reporting`, `signing`), and
   - within a stage, substage outcomes (dot-suffixed) ordered lexicographically by `stage` (UTF-8
     byte order).
 
@@ -917,11 +926,13 @@ Requirements and environment assumptions (normative; when evaluated):
     template-derived requirements (when applicable).
   - `evaluation` (string enum): `satisfied | unsatisfied | unknown`.
   - `results` (array): one row per evaluated requirement check. Each result MUST include:
-    - `kind` (string enum): `platform | privilege | tool`
-    - `key` (string): stable token (example: `windows`, `admin`, `powershell`)
-    - `status` (string enum): `satisfied | unsatisfied | unknown`
-    - `reason_code` (string): stable reason token. Minimum set: `unsupported_platform`,
-      `insufficient_privileges`, `missing_tool`, `requirement_unknown`.
+      - `kind` (string enum): `platform | privilege | tool`
+      - `key` (string): stable token (example: `windows`, `admin`, `powershell`)
+      - `status` (string enum): `satisfied | unsatisfied | unknown`
+      - `reason_domain` (string): stable reason namespace identifier
+        - MUST equal `requirements_evaluation`
+      - `reason_code` (string): stable reason token (scoped by `reason_domain`). Minimum set:
+        `unsupported_platform`, `insufficient_privileges`, `missing_tool`, `requirement_unknown`.
 - `requirements.declared` MUST be canonicalized:
   - any arrays (example: `platform.os`, `tools`) MUST be lowercased, de-duplicated, and sorted
     lexicographically.
@@ -957,11 +968,11 @@ Re-run safety and refusal recording (normative):
   example, the action is treated as `non_idempotent` and a prior execute-side effect is not proven
   reverted), the runner MUST still emit a ground truth line and MUST record:
   - an `execute` phase record with `phase_outcome="skipped"`, and
-  - `reason_code="unsafe_rerun_blocked"`.
+  - `reason_domain="ground_truth"`, and `reason_code="unsafe_rerun_blocked"`.
 - If `plan.cleanup=false` (or an equivalent operator-intent control) suppresses cleanup behavior for
   an action instance, the runner MUST record:
-  - `revert.phase_outcome="skipped"` with `reason_code="cleanup_suppressed"`, and
-  - `teardown.phase_outcome="skipped"` with `reason_code="cleanup_suppressed"`.
+  - `revert.phase_outcome="skipped"` with `reason_domain="ground_truth"` and `reason_code="cleanup_suppressed"`, and
+  - `teardown.phase_outcome="skipped"` with `reason_domain="ground_truth"` and `reason_code="cleanup_suppressed"`.
   - When suppressed, `teardown.evidence` MUST NOT reference `cleanup_verification.json` (because it
     MUST NOT be produced).
 - If a runner performs multiple `execute` attempts within a single action instance (retry behavior),
@@ -1228,7 +1239,7 @@ Key semantics:
   matching events, sample event_ids, query plans used).
 - The evaluator MUST emit exactly one result row per selected ground truth action.
   - If an action cannot be evaluated (missing telemetry, mapping gaps, executor error, and so on),
-    the evaluator MUST emit `status=skipped` and MUST set a stable `reason_code`.
+    the evaluator MUST emit `status=skipped` and MUST set a stable `reason_domain="criteria_result"` and `reason_code`.
 - The evaluator MUST NOT suppress results silently; skipped actions MUST remain visible in the
   output.
 
@@ -1291,7 +1302,7 @@ Rationale: consistent joins and deterministic provenance without depending on fi
 - The runner MUST copy `requirements.declared`, `requirements.evaluation`, and
   `requirements.results[]` into the corresponding ground truth row so reporting and scoring can
   explain skipped/failed actions without consulting runner-internal logs.
-
+  - Each row for `requirements.results[]` MUST include `reason_domain="requirements_evaluation"` when `reason_code` is present.
 #### Resolved inputs evidence (optional; schema-backed)
 
 Purpose: Provide a redaction-safe, machine-readable view of the resolved inputs basis used for
@@ -1335,6 +1346,9 @@ Normative requirements:
     `prepare | execute | revert | teardown`.
   - If a side effect spans multiple lifecycle phases, the runner MUST emit one entry per phase (do
     not reuse a single entry across phases).
+  - Optional failure annotation (normative):
+      - If an entry includes `reason_code`, it MUST also include `reason_domain`.
+      - When present, `reason_domain` MUST equal `side_effect_ledger`.
 - Recovery write-ahead requirement:
   - Before performing any external or target-mutating side effect, the runner MUST append the
     corresponding ledger entry and MUST flush it to durable storage.
@@ -1356,7 +1370,7 @@ Normative requirements:
   - The runner MUST only perform read-only probes during reconciliation.
   - If an item cannot be probed deterministically under the effective policy, the runner MUST emit
     the item with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable
-    `reason_code`.
+    `reason_domain="state_reconciliation_report"` and `reason_code`.
 - Minimum required fields:
   - `action_id`
   - `action_key`

@@ -626,21 +626,30 @@ To reduce replay volume while preserving at-least-once correctness:
 
 - The telemetry pipeline MUST persist **per-stream checkpoints** for sources that support a stable
   upstream cursor (example: Windows `EventRecordID`).
-- Checkpoints MUST be stored inside the run bundle under
-  `runs/<run_id>/logs/telemetry_checkpoints/`. The default layout SHOULD be:
-  - `runs/<run_id>/logs/telemetry_checkpoints/<source_type>/<asset_id>/<stream_id>.json`
+- The live checkpoint store MUST be located on the collector host (platform-local;
+  implementation-defined) and MUST survive collector restarts for the duration of the run.
+  - Implementations MAY snapshot the checkpoint store into the run bundle under
+    `runs/<run_id>/logs/telemetry_checkpoints/` for diagnostics and CI reproducibility.
+    - Snapshot format is implementation-defined (for example, a single database file for an OTel
+      `file_storage` backend).
+    - If the snapshot is exported as per-stream JSON files, the layout SHOULD be:
+      `runs/<run_id>/logs/telemetry_checkpoints/<source_type>/<asset_id>/<stream_id>.json`
 
-> **Note**: `<source_type>` in the checkpoint path is a telemetry-collection namespace (checkpoint
-> key space). It is not required to match `metadata.source_type` and is typically less granular.
+> **Note**: `<source_type>` in the checkpoint snapshot path is a telemetry-collection namespace
+> (checkpoint key space). It is not required to match `metadata.source_type` and is typically less
+> granular.
 
-- Checkpoint updates MUST be atomic (write temp file, fsync, rename).
+- Checkpoint updates MUST be crash-safe (atomic commit semantics).
+  - For file-based checkpoint exports, implementations MUST write to a temp file, fsync, then
+    rename.
 - Each successful checkpoint flush MUST increment `telemetry_checkpoints_written_total`.
 - The pipeline MUST flush checkpoints at least once every `N` events or `T` seconds (configurable).
 
 File-tailed sources (optional tightening, normative):
 
 - For file-tailed sources (for example: syslog files and osquery results logs), the pipeline SHOULD
-  persist per-stream checkpoints using the same layout.
+  persist per-stream checkpoints using the same checkpointing approach (and, if snapshotted into the
+  run bundle, the same snapshot namespace conventions).
 - These checkpoints are pipeline state intended to reduce replay volume. Implementations MUST NOT
   incorporate file tail offsets into `metadata.event_id` unless the offset is persisted as part of a
   stable stored artifact cursor and the source is explicitly using Tier 2 identity for that stored

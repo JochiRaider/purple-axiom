@@ -280,7 +280,7 @@ The Operator Interface MUST NOT re-implement these semantics in an alternate exe
 v0.2 MUST implement:
 
 - The OI service spawns orchestrator verb processes (subprocess execution).
-- The OI service streams logs/status by reading the run bundle artifacts and log files produced by
+- The OI service streams run status by reading the run bundle artifacts and log files produced by
   the orchestrator process.
 
 #### Concurrency control (v0.2 normative)
@@ -1313,14 +1313,15 @@ that adopt it:
 
 1. **Data contracts**
 
-- Register new contract-backed artifacts for:
+- Register new contract-backed artifacts (and/or bindings) for:
   - `runs/<run_id>/control/cancel.json`
   - `runs/<run_id>/control/resume_request.json`
   - `runs/<run_id>/control/resume_decision.json`
   - `runs/<run_id>/control/retry_request.json`
   - `runs/<run_id>/control/retry_decision.json`
   - `runs/<run_id>/inputs/plan_draft.yaml`
-  - `logs/ui_audit.jsonl`
+  - `logs/ui_audit.jsonl` (workspace-global; reuse existing `audit_event` schema/contract_id;
+    requires workspace-root contract binding or separate registry)
   - `state/run_registry.json` (run registry output)
   - `export_manifest.json` (export output)
 - run manifest extension fields:

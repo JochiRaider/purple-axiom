@@ -34,11 +34,9 @@ Rows are sorted lexicographically by filename.
 | “I need to add a new source_type mapping (new telemetry source)”     | `ocsf_mapping_profile_authoring_guide.md` | `coverage_matrix.md` (add a row/expectations), then add a new per-source mapping doc under `docs/mappings/`         |
 | “What does CI enforce for mapping packs and mapping outputs?”        | `docs/spec/100_test_strategy_ci.md`       | `coverage_matrix.md` (fixture minimums), `docs/spec/025_data_contracts.md` (mapping snapshot artifacts)             |
 
-
 ## Update rule (required)
 
 - Update this index to point to the authoritative mapping doc (keep it one page).
 - Do not include the agent, index or readme files.
 - Prefer pointers to existing sections over duplicated prose.
 - Unless stated otherwise, lists and tables are sorted lexicographically by path.
-

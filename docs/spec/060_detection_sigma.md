@@ -216,8 +216,8 @@ semantics.
 
 #### Gap category mapping for non-executable rules (normative):
 
-When a rule is marked non-executable, the detection/scoring pipeline MUST classify downstream gaps
-using the scoring taxonomy. The minimum required mapping (from compiled plan
+When a rule is marked non-executable, the detection or scoring pipeline MUST classify downstream
+gaps using the scoring taxonomy. The minimum required mapping (from compiled plan
 `non_executable_reason.reason_code`) is:
 
 | Reason code group                                                                                                                                   | Gap category         |

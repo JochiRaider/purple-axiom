@@ -245,12 +245,16 @@ explainable by inspection.
 A state machine definition typically translates to a small set of concrete implementation artifacts:
 
 - **State and event enums**: closed sets matching the spec.
+
 - **A pure transition function**: `next_state = transition(current_state, event, context)` plus a
   list of intended side effects.
+
 - **A side-effect layer** that performs artifact writes atomically and idempotently (publish gate
   semantics apply where relevant).
-- **Guards and refusal behavior** for illegal transitions, with observable signals (logs/health
-  substage, counters).
+
+- **Guards and refusal behavior** for illegal transitions, with observable signals (stage outcomes
+  in `logs/health.json`, counters).
+
 - **Conformance tests** that exercise transitions and validate the produced artifacts (golden files
   where applicable).
 

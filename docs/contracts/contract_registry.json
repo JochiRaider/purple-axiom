@@ -5,7 +5,7 @@
       "contract_id": "audit_event",
       "schema_path": "docs/contracts/audit_event.schema.json",
       "contract_version": "0.2.0",
-      "purpose": "Audit event row for control-plane transcripts (control/audit.jsonl).",
+      "purpose": "Audit event row schema (control/audit.jsonl; reused by workspace logs/ui_audit.jsonl in v0.2).",
       "artifact_kind": "run_artifact",
       "format": "jsonl"
     },
@@ -197,7 +197,7 @@
       "contract_id": "range_config",
       "schema_path": "docs/contracts/range_config.schema.json",
       "contract_version": "0.1.0",
-      "purpose": "Range configuration input (range.yaml).",
+      "purpose": "Range configuration input (snapshotted to inputs/range.yaml per run).",
       "artifact_kind": "repo_input",
       "format": "yaml"
     },
@@ -320,8 +320,8 @@
     { "artifact_glob": "normalized/mapping_coverage.json", "contract_id": "mapping_coverage", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/mapping_profile_snapshot.json", "contract_id": "mapping_profile_snapshot", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/ocsf_events.jsonl", "contract_id": "ocsf_event_envelope", "validation_mode": "jsonl_lines" },
-    { "artifact_glob": "raw_parquet/netflow/manifest.json", "contract_id": "netflow_manifest", "validation_mode": "json_document" },
-    { "artifact_glob": "raw_parquet/pcap/manifest.json", "contract_id": "pcap_manifest", "validation_mode": "json_document" },
+    { "artifact_glob": "raw/netflow/manifest.json", "contract_id": "netflow_manifest", "validation_mode": "json_document" },
+    { "artifact_glob": "raw/pcap/manifest.json", "contract_id": "pcap_manifest", "validation_mode": "json_document" },
     { "artifact_glob": "report/duckdb_conformance_report.json", "contract_id": "duckdb_conformance_report", "validation_mode": "json_document" },
     { "artifact_glob": "report/report.json", "contract_id": "report.schema", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/cleanup_verification.json", "contract_id": "cleanup_verification", "validation_mode": "json_document" },

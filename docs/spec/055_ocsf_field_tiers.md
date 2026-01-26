@@ -142,7 +142,7 @@ scoring or UX assumptions that rely on their availability for pivots.
 The Tier 1 coverage computation MUST operate over the set of **in-scope normalized OCSF events**:
 
 1. Start with normalized OCSF events emitted for the run (for example, the contents of
-   `normalized/ocsf_events.*`).
+   `normalized/ocsf_events/`).
 1. Exclude events that fail OCSF schema validation (invalid events are not counted in the coverage
    denominator).
 1. If an execution window can be derived from the executed actions (ground truth timeline), then the

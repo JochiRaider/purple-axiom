@@ -107,7 +107,7 @@ Notes (health files and outcome sources):
 | `logs/cache_provenance.json`               | orchestrator  | Cache hit/miss provenance (when enabled)              |
 | `plan/expanded_graph.json`                 | runner        | Compiled plan graph (v0.2+)                           |
 | `plan/expansion_manifest.json`             | runner        | Matrix expansion manifest (v0.2+)                     |
-| `normalized/ocsf_events.*`                 | normalization | Full normalized event store (JSONL or Parquet)        |
+| `normalized/ocsf_events/`                 | normalization | Full normalized event store (JSONL or Parquet)        |
 | `bridge/mapping_pack_snapshot.json`        | detection     | Bridge inputs snapshot for reproducibility            |
 | `bridge/compiled_plans/`                   | detection     | Per-rule compilation outputs                          |
 | `normalized/mapping_profile_snapshot.json` | normalization | Mapping profile snapshot for drift detection          |

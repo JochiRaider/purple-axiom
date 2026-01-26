@@ -601,17 +601,17 @@ Common keys:
 
 - `enabled` (default: true)
 - `criteria_pack` (optional)
-  - `pack_id` (required when enabled): identifier for the criteria pack
-  - `pack_version` (optional, recommended): pinned version for reproducibility
+  - `criteria_pack_id` (required when enabled): identifier for the criteria pack
+  - `criteria_pack_version` (optional, recommended): pinned version for reproducibility
     - Determinism requirement:
-      - For CI/regression runs, `pack_version` SHOULD be set explicitly.
-    - If `pack_version` is omitted:
+      - For CI/regression runs, `criteria_pack_version` SHOULD be set explicitly.
+    - If `criteria_pack_version` is omitted:
       - The implementation MUST resolve a version deterministically using SemVer ordering:
-        1. Enumerate available `<pack_id>/<pack_version>/` directories across `paths`.
+        1. Enumerate available `<criteria_pack_id>/<criteria_pack_version>/` directories across `paths`.
         1. Parse candidate versions as SemVer.
         1. Select the highest SemVer version.
         1. If no candidates parse as SemVer, fail closed.
-      - The resolved `pack_version` MUST be recorded in run provenance (manifest + report).
+      - The resolved `criteria_pack_version` MUST be recorded in run provenance (manifest + report).
   - `paths` (optional): one or more search paths (directories) that contain criteria packs
   - `entry_selectors` (optional): constraints to pick the most specific entry when multiple match
     - `os`
@@ -1108,8 +1108,8 @@ normalization:
 validation:
   enabled: true
   criteria_pack:
-    pack_id: "default"
-    pack_version: "0.1.0"
+    criteria_pack_id: "default"
+    criteria_pack_version: "0.1.0"
     paths: ["criteria/packs"]
   evaluation:
     time_window_before_seconds: 5

@@ -38,8 +38,8 @@ recorded inside the pack manifest (`criteria_pack_id`, `criteria_pack_version`).
 
 Optional (non-contractual):
 
-- `criteria/packs/<pack_id>/<pack_version>/README.md`
-- `criteria/packs/<pack_id>/<pack_version>/CHANGELOG.md`
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/README.md`
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/CHANGELOG.md`
 
 ## Pack control workflow (versioning and operational ownership)
 
@@ -52,7 +52,6 @@ This document uses:
 
 - `criteria_pack_id` and `criteria_pack_version` as the canonical names (matching
   `manifest.versions` pins per ADR-0001).
-- `pack_id` and `pack_version` as shorthand placeholders only when referring to filesystem layout.
 
 Normative requirements:
 
@@ -67,11 +66,11 @@ Normative requirements:
 
 ### Immutability and change discipline
 
-- A released pack version (a concrete `<pack_id>/<pack_version>/` directory) MUST be treated as
+- A released pack version (a concrete `<criteria_pack_id>/<criteria_pack_version>/` directory) MUST be treated as
   immutable.
 - Editing `criteria.jsonl` or `manifest.json` in-place for an already released version SHOULD NOT be
   done.
-- Any change that affects evaluation semantics MUST produce a new `pack_version`.
+- Any change that affects evaluation semantics MUST produce a new `criteria_pack_version`.
 
 Version bumps:
 
@@ -151,7 +150,7 @@ MUST NOT be used as a substitute for the version pins (`manifest.versions.criter
 
 ### Recommended source control practice (non-normative)
 
-- The repo MAY tag pack releases (example tag pattern: `criteria/<pack_id>/v<pack_version>`).
+- The repo MAY tag pack releases (example tag pattern: `criteria/<criteria_pack_id>/<criteria_pack_version>`).
 - CI SHOULD prevent changes to existing released pack version directories.
 
 ## Run bundle snapshot
@@ -260,7 +259,7 @@ To make drift detection implementable and testable without heuristic parsing:
 
 1. Criteria pack manifest provenance (pack authoring time).
 
-- `criteria/packs/<pack_id>/<pack_version>/manifest.json` MUST record, for each supported engine, an
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json` MUST record, for each supported engine, an
   upstream provenance record:
   - `upstreams[]` array, each element:
     - `engine` (string: `atomic`, `caldera`, `custom`)
@@ -502,7 +501,7 @@ interpreting drift status (see below).
 
 For regression comparisons across runs:
 
-- The criteria pack identity pins (`pack_id`, `pack_version`) MUST match.
+- The criteria pack identity pins (`criteria_pack_id`, `criteria_pack_version`) MUST match.
 
 - The criteria pack content fingerprints MUST match:
 

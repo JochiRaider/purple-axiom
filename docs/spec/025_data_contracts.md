@@ -836,7 +836,7 @@ Stage outcomes (v0.1 baseline expectations):
 | `lab_provider`  | `fail_closed`                                          | `manifest.json`                                                | Failure to resolve targets deterministically is fatal.                                                             |
 | `runner`        | `fail_closed`                                          | `ground_truth.jsonl`, `runner/**`                              | If stable `asset_id` resolution fails, the run MUST fail closed.                                                   |
 | `telemetry`     | `fail_closed`                                          | `raw_parquet/**` (when enabled), `manifest.json`               | If required Windows sources are missing (e.g., Sysmon), the run MUST fail closed unless the scenario exempts them. |
-| `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events.*`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped and unmapped counts MUST still be reported.          |
+| `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events/**`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped and unmapped counts MUST still be reported.          |
 | `validation`    | `warn_and_skip` (default)                              | `criteria/results.jsonl`, `criteria/manifest.json`             | MUST emit a result row per selected action; un-evaluable actions MUST be `skipped` with `reason_code`.             |
 | `detection`     | `fail_closed` (default)                                | `detections/detections.jsonl`, `bridge/coverage.json`          | MUST record non-executable rules with stable reasons (compiled plans and coverage).                                |
 | `scoring`       | `fail_closed`                                          | `scoring/summary.json`                                         | A missing or invalid summary is fatal when scoring is enabled.                                                     |
@@ -1497,7 +1497,7 @@ Absence semantics:
 
 ### Normalized events
 
-This artifact is stored under `normalized/ocsf_events.*`.
+This artifact is stored under `normalized/ocsf_events/**`.
 
 Purpose:
 

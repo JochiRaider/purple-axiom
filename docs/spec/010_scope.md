@@ -251,16 +251,12 @@ The following are explicit non-goals for initial releases, including v0.1.
   - Purple Axiom produces run bundles and evaluation artifacts.
   - External SIEM ingestion is optional and out of scope as a required capability.
 - Production deployment guidance for hostile or multi-tenant environments.
-- Exploit development, weaponization, destructive testing, or persistence-focused operations.
 - Network or threat intelligence enrichment that requires outbound network access by default.
 - Runtime self-update or “fetch dependencies at execution time” behavior as a supported runner
   mechanism.
 - A comprehensive UI or SaaS service.
   - Optional packaging (for example Docker Compose) is permitted as an installation convenience, but
     must not change stage semantics or determinism guarantees.
-- A required built-in trend database, dashboard service, or always-on metrics store.
-  - Trending keys and report artifacts exist to enable external dashboards, but persistence is
-    optional and external.
 
 ## Operating assumptions
 

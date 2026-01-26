@@ -459,7 +459,7 @@ Required operations (minimum):
 
 Where:
 
-- `artifact_path` is run-relative (e.g., `normalized/events.jsonl`), NOT an absolute path.
+- `artifact_path` is run-relative (e.g., `logs/health.json`), NOT an absolute path.
 - `ExpectedOutput` includes:
   - `artifact_path` (run-relative)
   - `contract_id` (schema/contract identity as used by the contract validator)
@@ -530,8 +530,150 @@ Each extension implementation MUST:
 - implement an adapter interface (or equivalent) that can be swapped without changing orchestrator
   control flow,
 - validate its configuration deterministically,
+- provide stable identity + provenance metadata for selection recording (at minimum: `adapter_id`,
+  `adapter_version`, `source_kind`, `source_ref`),
 - record its identity/version inputs into the run bundle (manifest and/or deterministic evidence),
 - avoid introducing service-to-service RPC dependencies for stage coordination.
+
+### Adapter wiring and provenance (v0.1; normative)
+
+This section defines how concrete adapters are selected and injected, and how those selections are
+recorded for determinism, explainability, and regression comparability.
+
+#### Composition root (dependency wiring)
+
+Purpose: define a single, explicit place where concrete implementations of ports and adapters are
+selected, constructed, and injected into the orchestrator and stage execution control flow.
+
+Normative requirements:
+
+- Implementations MUST define exactly one composition root per orchestrator process invocation.
+- The composition root MUST be the only place where concrete adapter implementations are selected
+  and constructed.
+- Stage core logic MUST NOT import, construct, or look up concrete adapters by name; it MUST depend
+  only on port interfaces and values passed in via explicit parameters.
+- Dependency injection MUST be achieved using explicit constructor/function parameters (manual DI).
+  This spec MUST NOT require (and MUST NOT assume) any third-party DI framework or container.
+- The composition root MUST resolve adapter selections using only:
+  - validated configuration inputs, and
+  - the effective policy snapshot (`PolicyEngine.effective_policy()`).
+- If a required port binding cannot be resolved (unknown adapter id, missing implementation, invalid
+  configuration), the orchestrator MUST fail closed and MUST record a deterministic stage (or dotted
+  substage) outcome.
+  - The outcome `reason_code` MUST be selected from ADR-0005. Implementations SHOULD use
+    `reason_code=config_schema_invalid` unless a more specific stage-scoped reason code is defined.
+
+#### Adapter registry (selection and inventory)
+
+Purpose: centralize the set of available adapter implementations and resolve port → adapter bindings
+deterministically.
+
+Normative requirements:
+
+- The adapter registry MUST be an in-process mapping from `(port_id, adapter_id)` to:
+  - an adapter factory (constructor/function) and
+  - static metadata required for provenance recording (see "Adapter provenance recording (v0.1)").
+- The registry MUST be constructed in the composition root at startup and MUST NOT be mutated after
+  stage execution begins.
+- The registry MAY be implemented as a static mapping; this spec does not require dynamic plugin
+  discovery.
+- Core stage logic MUST NOT access the registry directly; resolved adapter instances MUST be
+  injected via ports by the composition root.
+- Adapter selection MUST be deterministic:
+  - Given the same effective configuration and policy snapshot, the registry MUST resolve the same
+    bindings.
+  - Unknown adapters MUST be rejected (fail closed) unless an explicit warn-and-skip policy exists
+    for that port in the effective policy snapshot.
+
+#### Adapter provenance recording (v0.1)
+
+For every resolved adapter binding (including built-in adapters), the orchestrator MUST record an
+adapter provenance entry in the run manifest so runs remain explainable and comparable.
+
+Storage location (normative):
+
+- The run manifest MUST record adapter provenance under `manifest.extensions.adapter_provenance`.
+- `manifest.extensions.adapter_provenance.entries[]` MUST be present even when all selected adapters
+  are built-in.
+
+Entry shape (normative):
+
+Type names such as `id_slug_v1`, `semver_v1`, and `version_token_v1` refer to
+[ADR-0001: Project naming and versioning][adr-0001].
+
+- `port_id` (id_slug_v1; REQUIRED): stable identifier of the port being satisfied.
+- `adapter_id` (id_slug_v1; REQUIRED): stable identifier of the selected adapter implementation.
+- `adapter_version` (semver_v1 | version_token_v1; REQUIRED): pinned version/token used for this
+  run.
+- `source_kind` (id_slug_v1; REQUIRED): coarse source classification (for example: `builtin`,
+  `container_image`, `local_path`, `python_module`).
+- `source_ref` (string; REQUIRED): stable reference for the selected implementation source.
+  - MUST NOT be an absolute host path.
+  - For container images, tag-only references are forbidden; the reference MUST be digest-pinned.
+- `config_sha256` (string; OPTIONAL): `sha256:<hex>` of canonical JSON of the adapter's effective
+  configuration after redaction/withholding of secrets.
+  - When present, canonical JSON MUST use RFC 8785 (JCS) serialization.
+  - Implementations SHOULD include `config_sha256` when the adapter's configuration can affect any
+    contract-backed output or any regression-comparable metric.
+
+Determinism requirements (normative):
+
+- `entries[]` MUST be sorted by `(port_id asc, adapter_id asc)` using UTF-8 byte order (no locale).
+- The provenance record MUST NOT include hostnames, machine-specific absolute paths, or timestamps.
+- If adapter provenance cannot be recorded deterministically, the orchestrator MUST fail closed and
+  MUST record a deterministic stage (or dotted substage) outcome.
+
+### Contract-first modularity (v0.1; guidance)
+
+Implementation guidance (non-normative):
+
+Purple Axiom’s stage model is intentionally “contract-first”: each stage can be implemented as a
+black box that consumes only its contracted inputs and emits only its contracted outputs. This is
+intended to support parallel development mediated solely by schema contracts and fixtures.
+
+Recommended patterns:
+
+1. **Dependency injection at the composition root**
+
+   - The orchestrator SHOULD act as the composition root: it selects and constructs concrete adapter
+     implementations (lab providers, telemetry tools, evaluator backends, etc.) and passes them into
+     stage cores via the port interfaces defined in this section.
+   - Stage core logic SHOULD NOT instantiate concrete adapters directly. Instead, it SHOULD depend
+     on:
+     - contracted input artifacts in the run bundle,
+     - the cross-cutting ports (`PublishGate`, `ContractValidator`, `OutcomeSink`, `PolicyEngine`),
+       and
+     - adapter interfaces for any external integration.
+   - This supports unit testing stages against fixtures by substituting deterministic fakes/mocks
+     for external integrations.
+
+1. **Strategy pattern for swappable behaviors**
+
+   - Any configurable behavior that materially changes how a stage reads inputs or produces
+     contracted outputs SHOULD be expressed as a strategy behind an adapter interface.
+   - Strategy selection SHOULD be config-driven and deterministic. Avoid environment-dependent or
+     “auto-discovery” selection unless it is explicitly ordered and pinned by configuration.
+   - Strategy identity and version SHOULD be recorded in the run bundle via adapter provenance (see
+     "Adapter provenance recording (v0.1)").
+
+1. **Fixture-first, contract-backed stage tests**
+
+   - Each stage SHOULD have a minimal fixture set consisting of:
+     - only the contracted inputs required for the stage, and
+     - the expected contracted outputs for those inputs.
+   - Fixtures SHOULD be runnable without executing upstream stages (fixture inputs are treated as
+     authoritative snapshots).
+   - Tests SHOULD validate outputs using `ContractValidator` and SHOULD fail when any contracted
+     output is invalid, missing, or non-deterministic.
+
+Anti-patterns to avoid (non-normative):
+
+- Cross-stage in-process calls or shared mutable state that bypasses run bundle artifacts as the
+  source of truth.
+- Discovery mechanisms whose behavior depends on non-deterministic iteration order (filesystem, hash
+  maps, plugin registries) rather than explicit ordering and pinning.
+- Hidden side-effect channels (for example background daemons or network services) that are not
+  represented in the run bundle and therefore cannot be reproduced from a run bundle alone.
 
 ### Cross-cutting invariants (normative)
 
@@ -548,6 +690,21 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
 
    - Stages MUST communicate by reading/writing contract-backed artifacts under `runs/<run_id>/`.
    - Core stages MUST NOT require service-to-service RPC for coordination (v0.1).
+
+1. **Single composition root and explicit dependency injection**
+
+   - The orchestrator MUST define exactly one composition root responsible for selecting and wiring
+     concrete implementations of ports/adapters into the stage execution control flow.
+   - Stages and other core components MUST NOT select adapters by name at runtime (no service
+     locator in core logic). They MUST accept dependencies via explicit parameters from the
+     composition root.
+
+1. **Deterministic adapter selection and provenance**
+
+   - Adapter selection MUST be mediated by the adapter registry constructed in the composition root.
+   - For every resolved port binding, the run manifest MUST include an adapter provenance entry that
+     meets the "Adapter provenance recording (v0.1)" requirements above.
+   - If adapter provenance cannot be recorded deterministically, the run MUST fail closed.
 
 1. **Publish-gate only for contract-backed outputs**
 
@@ -644,6 +801,25 @@ are mandatory (names are suggestions; harness/framework is implementation-define
    - Assert: stage ordering is stable; substages follow immediately after the parent and are sorted.
    - Assert: when `operability.health.emit_health_files=true`, `logs/health.json` mirrors the same
      ordered outcomes as `manifest.json`.
+
+1. `adapter_provenance_entries_present_sorted_and_sanitized`
+
+   - Setup: run a minimal pipeline (or a binding-only harness) with at least two adapter bindings
+     resolved for distinct ports.
+   - Assert: `manifest.extensions.adapter_provenance.entries[]` is present and is sorted by
+     `(port_id, adapter_id)` using UTF-8 byte ordering.
+   - Assert: each `source_ref` is stable and is not an absolute host path.
+   - Assert: when `source_kind=container_image`, `source_ref` is digest-pinned
+     (`<image>@sha256:<digest>`).
+   - Assert: the provenance record contains no timestamps, hostnames, or machine-specific absolute
+     paths.
+
+1. `unknown_adapter_id_fail_closed_with_deterministic_outcome`
+
+   - Setup: supply a configuration that selects an unknown `adapter_id` for a required `port_id`.
+   - Assert: the orchestrator fails closed and records a deterministic failure outcome tuple
+     `(stage, status, fail_mode, reason_code)` for the same inputs on repeated runs.
+   - Assert: no contracted outputs for the affected stage are published.
 
 1. `cache_cross_run_gate_and_provenance`
 
@@ -1029,6 +1205,7 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 
 ## References
 
+- [ADR-0001: Project naming and versioning][adr-0001]
 - [ADR-0002: Event identity and provenance][adr-0002]
 - [ADR-0004: Deployment architecture and inter-component communication][adr-0004]
 - [ADR-0005: Stage outcomes and failure classification][adr-0005]
@@ -1054,17 +1231,19 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 
 ## Changelog
 
-| Date       | Change                                                                        |
-| ---------- | ----------------------------------------------------------------------------- |
-| 2026-01-22 | Add Vagrant as an optional lab provider example                               |
-| 2026-01-17 | Major revision: align with ADR-0004/0005, fix IO paths, add run bundle layout |
-| 2026-01-15 | Added `scoring` and `signing` stages; aligned with ADR-0004/ADR-0005          |
-| 2026-01-14 | Added stage IO boundaries table; updated to stable stage identifiers          |
-| 2026-01-13 | Added deployment topology section; expanded bridge artifacts                  |
-| 2026-01-12 | Style guide migration; added frontmatter, scope, references                   |
+| Date       | Change                                                                         |
+| ---------- | ------------------------------------------------------------------------------ |
+| 2026-01-26 | Define composition root, adapter registry, and adapter provenance requirements |
+| 2026-01-22 | Add Vagrant as an optional lab provider example                                |
+| 2026-01-17 | Major revision: align with ADR-0004/0005, fix IO paths, add run bundle layout  |
+| 2026-01-15 | Added `scoring` and `signing` stages; aligned with ADR-0004/ADR-0005           |
+| 2026-01-14 | Added stage IO boundaries table; updated to stable stage identifiers           |
+| 2026-01-13 | Added deployment topology section; expanded bridge artifacts                   |
+| 2026-01-12 | Style guide migration; added frontmatter, scope, references                    |
 
 <!-- Reference-style links -->
 
+[adr-0001]: ../adr/ADR-0001-project-naming-and-versioning.md
 [adr-0002]: ../adr/ADR-0002-event-identity-and-provenance.md
 [adr-0004]: ../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md
 [adr-0005]: ../adr/ADR-0005-stage-outcomes-and-failure-classification.md

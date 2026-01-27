@@ -491,12 +491,16 @@ breaking determinism goals.
 
 ### Definitions
 
-- **Collector checkpoint**: persisted receiver cursor/state used to resume ingestion after restart
-  (example: Windows `EventRecordID`-based bookmarks).
+- **Checkpoint store (checkpoint database)**: database-like on-disk state managed by the collector's
+  storage extension to persist checkpoints (embedded KV store / local DB file).
 - **Checkpoint loss**: missing, corrupt, or reset checkpoint state that causes the collector to
   re-emit previously exported events.
 - **File offset checkpoint**: persisted mapping from `(file identity, byte offset)` used by
   `filelog`-style tailing receivers to resume ingestion after restart.
+
+Implementation note (non-normative): If implementing a checkpoint store for a tailer/receiver,
+SQLite is a reasonable default, but the pipeline treats the store as an opaque artifact and does not
+depend on the backend choice.
 
 ### Required behavior
 
@@ -513,8 +517,12 @@ breaking determinism goals.
    - For `filelog` receivers, durable offset tracking MUST be implemented using the receiver
      `storage` setting wired to an enabled storage extension; v0.1 reference wiring is
      `storage: file_storage` with an enabled `file_storage` extension (filestorage).
-   - The on-disk storage extension data MUST be treated as a checkpoint artifact; loss, corruption,
-     or reset MUST be classified as checkpoint loss and recorded accordingly.
+   - The on-disk storage extension data MUST be treated as a database-like checkpoint artifact;
+     loss, corruption, or reset MUST be classified as checkpoint loss and recorded accordingly.
+   - Implementations MAY snapshot the checkpoint store into the run bundle under
+     `runs/<run_id>/logs/telemetry_checkpoints/` for diagnostics and CI reproducibility. When
+     present, the snapshot MUST be treated as volatile diagnostics and MUST be excluded from default
+     exports and checksums (see ADR-0009).
    - If the offset checkpoint storage is reset (example: storage corruption recovery or manual
      deletion), this MUST be treated as checkpoint loss and recorded as such.
    - If the chosen storage backend performs automatic corruption recovery by starting a fresh
@@ -711,9 +719,9 @@ When `telemetry.baseline_profile.enabled=true`:
 
 1. Restart the collector mid-stream; confirm no schema changes and that downstream
    `metadata.event_id` generation remains stable.
-1. Simulate checkpoint loss by deleting or moving the collector checkpoint directory, then restart;
-   confirm events may replay into the raw store and downstream dedupe preserves uniqueness by
-   `metadata.event_id`.
+1. Simulate checkpoint loss by deleting or moving the collector checkpoint store directory
+   (checkpoint database), then restart; confirm events may replay into the raw store and downstream
+   dedupe preserves uniqueness by `metadata.event_id`.
 1. Simulate checkpoint store corruption by corrupting the collector checkpoint database, then
    restart; confirm behavior matches the configured policy (fail-closed or recreate-fresh).
 1. If osquery or any file-tailed source is enabled, perform a crash/restart and rotation continuity

@@ -213,6 +213,95 @@ Regression comparable normalization metric inputs (normative):
   fields MAY be recorded as informational only (for example `generated_at_utc`) and MUST NOT
   participate in regression deltas or gating.
 
+#### Durable dedupe index contract (normative, v0.1)
+
+The requirements below are restatements of the
+[event identity ADR](../adr/ADR-0002-event-identity-and-provenance.md) to make the dedupe + replay
+contract mechanically implementable and testable.
+
+- **Window:** Deduplication MUST consider the full run window (unbounded within the run), i.e.
+  dedupe MUST consider all previously-emitted normalized events for the run, not only “recent”
+  events.
+- **Non-goal:** The project does not require `metadata.event_id` to be globally unique across run
+  bundles. Replays across different runs MAY intentionally produce the same `metadata.event_id`.
+- **On-disk durability:** The dedupe index MUST be persisted to disk inside the run bundle under
+  `runs/<run_id>/logs/` (example: `runs/<run_id>/logs/dedupe_index/ocsf_events.*`) and MUST survive
+  process restarts for the same `run_id`.
+  - All files that comprise the dedupe index (including engine sidecars such as journals/WAL/lock
+    files) MUST be contained under `logs/dedupe_index/` so they remain classified as volatile
+    diagnostics.
+- **Duplicate equivalence (volatile-field removal):**
+  - Define `instance_without_volatile_fields` as the normalized event with the following fields
+    removed when present:
+    - `metadata.ingest_time_utc`
+    - `metadata.observed_time`
+    - `metadata.extensions.purple_axiom.ingest_id`
+  - Define `instance_canonical_bytes = canonical_json_bytes(instance_without_volatile_fields)`.
+  - Define `conflict_key = sha256_hex(instance_canonical_bytes)`.
+    - `canonical_json_bytes` and `sha256_hex` MUST follow the canonical JSON + hashing rules in
+      `025_data_contracts.md` (RFC 8785 JCS; UTF-8 bytes; lowercase hex digest).
+- **Exact duplicates:** When an incoming normalized event is suppressed as an exact duplicate
+  (equivalent after volatile-field removal) because its `metadata.event_id` is already present in
+  the dedupe index, the normalizer MUST increment `dedupe_duplicates_dropped_total` (see
+  `110_operability.md`).
+- **Non-identical duplicates:** If two instances share the same `metadata.event_id` but have
+  different `instance_canonical_bytes`:
+  - The normalizer MUST treat this as a **dedupe conflict** (a data-quality signal).
+  - The canonical instance retained for a given `metadata.event_id` MUST be the instance with the
+    lexicographically smallest `conflict_key` across all observed instances for that
+    `metadata.event_id`, independent of ingestion order.
+  - The normalizer MUST increment `dedupe_conflicts_total` each time a non-equivalent instance is
+    observed for an existing `metadata.event_id` (see `110_operability.md`).
+  - The normalizer MUST record minimal conflict evidence under `runs/<run_id>/logs/` (without
+    writing sensitive payloads into long-term artifacts). Minimal evidence SHOULD include:
+    - `metadata.event_id`
+    - `metadata.source_type`
+    - `identity_source_type` (the value used for `identity_basis.source_type`)
+    - `metadata.source_event_id`
+    - `metadata.identity_tier`
+    - `conflict_key` of the incoming instance and the retained canonical instance
+- **Export + signing classification:** `logs/dedupe_index/**` is volatile diagnostics (see
+  `025_data_contracts.md` and
+  [ADR-0009](../adr/ADR-0009-run-export-policy-and-log-classification.md)) and MUST NOT be included
+  in default export bundles or signing/checksum scope.
+
+#### Storage engine note (non-normative)
+
+The spec does not mandate the storage engine for the dedupe index, only the behavioral contract
+above. A file-backed embedded DB is a natural fit (example: `logs/dedupe_index/ocsf_events.sqlite`),
+because it can enforce uniqueness on `metadata.event_id` and support transactional updates when
+selecting the canonical instance on conflicts.
+
+CI fixture sets already use a DB-file example under this directory (example:
+`logs/dedupe_index/ocsf_events.duckdb`); a SQLite variant is equally conformant as long as the
+behavioral contract is met.
+
+SQLite sketch:
+
+```sql
+CREATE TABLE IF NOT EXISTS dedupe_index (
+  event_id TEXT PRIMARY KEY,
+  conflict_key TEXT NOT NULL
+);
+
+-- Upsert pattern to enforce "keep lexicographically smallest conflict_key":
+INSERT INTO dedupe_index(event_id, conflict_key)
+VALUES (:event_id, :conflict_key)
+ON CONFLICT(event_id) DO UPDATE SET
+  conflict_key = CASE
+    WHEN excluded.conflict_key < dedupe_index.conflict_key THEN excluded.conflict_key
+    ELSE dedupe_index.conflict_key
+  END;
+```
+
+Note: If normalization emits the OCSF store incrementally, a non-identical duplicate that introduces
+a smaller\
+`conflict_key` will require deterministically replacing the previously retained instance (for
+example by staging\
+canonical events in an upsertable store keyed by `metadata.event_id` and materializing the final
+Parquet/JSONL output\
+at stage completion).
+
 ### Mapping profile snapshot
 
 Purpose:

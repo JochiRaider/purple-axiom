@@ -583,12 +583,6 @@ Optional substage outcome mapping (non-normative):
 
 This ADR requires follow-up changes before implementation can be considered complete:
 
-1. **Contracts**
-
-   - Add JSON Schemas under `docs/contracts/` for:
-     - `threat_intel_pack_manifest.schema.json`
-     - `threat_intel_indicator.schema.json`
-
 1. **Config reference**
 
    - Reserve and document `threat_intel.*` configuration keys in `120_config_reference.md`:

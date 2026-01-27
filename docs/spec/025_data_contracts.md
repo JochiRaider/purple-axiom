@@ -233,6 +233,10 @@ Minimum error fields (per error):
 
 - `artifact_path`: run-relative path using POSIX separators (`/`).
 - `contract_id`: contract identifier from `docs/contracts/contract_registry.json`.
+- `error_code`: OPTIONAL stable, machine-readable token (lower_snake_case) for the class of
+  validation failure.
+  - When the deterministic artifact path rule is violated, `error_code` MUST be
+    `"timestamped_filename_disallowed"`.
 - `instance_path`: JSON Pointer to the failing instance location (`""` for the document root).
 - `schema_path`: JSON Pointer to the failing schema location (`""` if unavailable, for example on
   parse failure).
@@ -303,6 +307,12 @@ Notes:
 
 - All contracted artifacts under `runs/<run_id>/` MUST use stable, spec-defined paths and MUST NOT
   include timestamps in filenames.
+
+- On violation, the contract validation report MUST include at least one error entry with:
+
+  - `error_code = "timestamped_filename_disallowed"`
+  - `artifact_path` set to the offending run-relative path
+  - `instance_path=""`, `schema_path=""`, and `keyword` omitted
 
 - “Timestamped exports” (if ever needed for ad-hoc operator workflows) MUST:
 
@@ -1467,6 +1477,17 @@ Minimum required fields (normative):
   - `result` (enum): `hit | miss | bypassed`
   - `notes` (optional string; MUST be redaction-safe; MUST avoid volatile data that would break
     determinism, such as raw timestamps)
+
+Key derivation guidance (non-normative; recommended):
+
+- Prefer keys that are stable across hosts and runs. A simple pattern is:
+  - Build a JSON object
+    `{"v": 1, "component": "<component>", "cache_name": "<cache_name>", "basis": {...}}` where
+    `basis` contains only pinned versions/hashes and other deterministic inputs.
+  - Serialize the object using RFC 8785 JCS and compute the SHA-256 digest.
+  - Set `entries[].key` to `sha256:<hex>`.
+- If a cross-run cache is backed by a shared store (for example a SQLite DB), the same `<hex>` value
+  can be used as the store lookup key to simplify provenance-to-store correlation.
 
 Deterministic ordering (normative):
 

@@ -259,6 +259,67 @@ normative deployment topology and inter-component communication contract.
   - Any cache use that could affect run outputs MUST be recorded in the run bundle (see
     `runs/<run_id>/logs/cache_provenance.json`).
 
+#### Cross-run caches and derived state (optional; explicitly gated)
+
+"Derived state" is any materialized output that can be deterministically recomputed from pinned,
+run-scoped inputs (for example compiled plans, parsed schemas, resolved inventories, or intermediate
+indexes). Derived state MAY be cached for performance, including across runs, provided determinism
+and provenance rules are upheld.
+
+Normative requirements:
+
+- The pipeline MUST remain correct when any cross-run cache is empty, missing, corrupted, or
+  cleared.
+  - Implementations MUST NOT require cross-run cache state to reproduce or interpret a run bundle.
+- Cross-run caches MUST be explicitly enabled (see `cache.cross_run_allowed` in the
+  [configuration reference][config-ref]).
+  - When cross-run caching is enabled, `logs/cache_provenance.json` MUST be written and MUST record
+    every cache lookup that can influence stage outputs (`hit | miss | bypassed`).
+- Cached values MUST NOT bypass publish-gate validation.
+  - If a cached value is used to populate a contract-backed artifact, the artifact MUST still be
+    validated against its schema before publish, and MUST be published atomically via the publish
+    gate.
+- Cache keys MUST be stable and redaction-safe.
+  - Keys SHOULD be content-addressed (RECOMMENDED: `sha256:<hex>` over a canonical JSON key-basis
+    object). Keys MUST NOT embed absolute paths, hostnames, or raw inputs that may contain secrets.
+
+##### SQLite-backed cross-run cache (non-normative implementation guidance)
+
+A practical implementation of a cross-run cache is a single SQLite database under a configured cache
+directory (for example a component's `*_cache_dir`), storing content-addressed blobs plus stable
+metadata.
+
+Recommended schema shape (illustrative):
+
+```sql
+-- Content-addressed value store.
+CREATE TABLE IF NOT EXISTS blobs (
+  blob_sha256 TEXT PRIMARY KEY,
+  bytes BLOB NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  content_type TEXT,
+  created_at_utc TEXT
+);
+
+-- Lookup keys to blob references (one namespace per logical cache).
+CREATE TABLE IF NOT EXISTS cache_entries (
+  namespace TEXT NOT NULL,
+  key_sha256 TEXT NOT NULL,
+  value_blob_sha256 TEXT NOT NULL REFERENCES blobs(blob_sha256),
+  meta_jcs BLOB NOT NULL,
+  created_at_utc TEXT,
+  PRIMARY KEY (namespace, key_sha256)
+);
+```
+
+Implementation notes:
+
+- `key_sha256` SHOULD match the `entries[].key` value recorded in `logs/cache_provenance.json`
+  (without the `sha256:` prefix).
+- `meta_jcs` SHOULD be RFC 8785 JCS canonical JSON bytes and SHOULD NOT include volatile values
+  (timestamps, absolute paths).
+- Any eviction policy is acceptable as long as it only affects performance (not outputs).
+
 #### Publish gate (normative, v0.1)
 
 - Stages MUST write candidate outputs under `runs/<run_id>/.staging/<stage_id>/`.

@@ -348,6 +348,9 @@ Definitions (normative):
 - A cache is considered **cross-run** if it can be read by a different run than the one that created
   it.
 - Implementations MUST treat any on-disk cache directory outside `runs/<run_id>/` as cross-run.
+- "Derived state" refers to deterministic, recomputable materializations (for example compiled
+  plans, parsed schemas, and intermediate indexes). If derived state is persisted outside
+  `runs/<run_id>/` and reused across runs, it is treated as a cross-run cache under this section.
 
 Common keys:
 
@@ -368,6 +371,15 @@ Normative requirements:
   validation MUST fail closed.
 - If cross-run cache usage is detected at runtime while `cross_run_allowed=false`, the pipeline MUST
   fail closed.
+
+Implementation guidance (non-normative):
+
+- Backing a cross-run cache with a local database (for example SQLite) is permitted. The database
+  file is considered part of the cache directory and is therefore subject to the same gating and
+  provenance requirements.
+- When helpful for debugging, implementations MAY include a stable backend marker in
+  `entries[].notes` (for example `backend=sqlite; store_format=v1`), subject to the redaction rules
+  in `090_security_safety.md`.
 
 ### Control plane (optional, control_plane)
 
@@ -623,7 +635,7 @@ Common keys:
   - `time_window_after_seconds` (optional, default: 120)
   - `max_sample_event_ids` (optional, default: 20)
   - `fail_mode` (optional, default: `warn_and_skip`): `fail_closed | warn_and_skip`
-    - `fail_closed`: criteria-stage errors that prevent producing a complete
+    - `fail_closed`: criteria evaluation errors that prevent producing a complete
       `criteria/results.jsonl` MUST cause the criteria stage outcome to be `failed`.
     - `warn_and_skip`: evaluator MUST still emit `criteria/results.jsonl` rows for all selected
       actions; actions that cannot be evaluated MUST be marked `status: "skipped"` with a stable
@@ -632,8 +644,8 @@ Common keys:
 Notes:
 
 - Criteria evaluation SHOULD operate on the normalized OCSF store (not raw events).
-- When `fail_mode: fail_closed`, criteria evaluation errors MUST produce a criteria stage outcome of
-  `failed`, and `manifest.status` MUST be derived per the
+- When `fail_mode: fail_closed`, criteria evaluation errors MUST produce a validation stage outcome
+  of `failed`, and `manifest.status` MUST be derived per the
   [data contracts specification](025_data_contracts.md) ("Status derivation").
 
 ### Detection (detection)
@@ -648,7 +660,7 @@ Common keys:
   - `rule_paths` (required when enabled): list of directories/files containing Sigma YAML
   - `rule_set_version` (optional): pinned identifier for reporting and trending
   - `bridge` (optional, recommended)
-    - `mapping_pack` (required): identifier for the Sigma-to-OCSF mapping pack (router + field
+    - `mapping_pack_id` (required): identifier for the Sigma-to-OCSF mapping pack (router + field
       aliases)
     - `mapping_pack_version` (optional, recommended): pin for reproducibility
     - `backend` (default: `duckdb_sql`): `duckdb_sql | tenzir | other`
@@ -1125,7 +1137,7 @@ detection:
     rule_paths: ["rules/sigma"]
     rule_set_version: "sigma-hq-snapshot-2026-01"
     bridge:
-      mapping_pack: "sigmahq-ocsf"
+      mapping_pack_id: "sigmahq-ocsf"
       mapping_pack_version: "0.1.0"
       backend: duckdb_sql
       fail_mode: fail_closed

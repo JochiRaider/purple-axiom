@@ -943,7 +943,7 @@ The fixture set MUST include at least:
   - Assert contract validation fails closed and emits
     `runs/<run_id>/logs/contract_validation/runner.json`.
   - Assert the contract validation report contains an error with:
-    - `artifact_relpath` matching the offending path
+    - `artifact_path` matching the offending path (run-relative; POSIX separators)
     - `error_code = "timestamped_filename_disallowed"` (stable error code for this class of
       violation)
 

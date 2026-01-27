@@ -269,7 +269,7 @@ For the selected route:
 
 When `detection.sigma.enabled=true`, the bridge MUST resolve a mapping pack using:
 
-- `detection.sigma.bridge.mapping_pack` (pack id)
+- `detection.sigma.bridge.mapping_pack_id` (pack id)
 - `detection.sigma.bridge.mapping_pack_version` (pack version)
 
 The resolved `(mapping_pack_id, mapping_pack_version)` MUST be recorded in run provenance

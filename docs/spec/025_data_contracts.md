@@ -1152,9 +1152,11 @@ Key semantics:
 
 - `scenario.scenario_id` is the stable scenario identifier for the run.
 
-- `scenario.posture` records the effective scenario posture declared by the scenario input.
+- `scenario.posture` MUST be present and records the effective scenario posture declared by the
+  scenario input.
 
-  - `mode` (string enum; default: `baseline`): `baseline | assumed_compromise`
+  - `mode` (string enum; REQUIRED): `baseline | assumed_compromise`
+    - If the scenario input omits `posture`, producers MUST set `mode` to `baseline`.
   - Producers MUST treat posture as non-secret and MUST NOT record credentials, tokens, usernames,
     hostnames, IPs, or other sensitive identifiers in posture fields.
 
@@ -2211,12 +2213,11 @@ Required invariants:
    - `ground_truth.scenario_id` for every line
    - `normalized.metadata.scenario_id` for every event
    - `summary.scenario_id`
-1. Scenario posture (v0.2+ when implemented):
-   - If `manifest.scenario.posture` is present, `manifest.scenario.posture.mode` MUST be one of:
-     `baseline | assumed_compromise`.
-   - When `plan/expanded_graph.json` is present and includes `scenario_posture`, implementations
-     MUST enforce that `plan/expanded_graph.json.scenario_posture.mode` equals
-     `manifest.scenario.posture.mode`.
+1. Scenario posture (v0.1+):
+   - `manifest.scenario.posture` MUST be present.
+   - `manifest.scenario.posture.mode` MUST be one of: `baseline | assumed_compromise`.
+   - When `plan/expanded_graph.json` is present and includes `scenario_posture` (v0.2+),
+     implementations MUST enforce that `plan/expanded_graph.json.scenario_posture.mode` equals
 1. Scenario cardinality (v0.1):
    - `manifest.scenario.scenario_id` MUST be present.
    - `ground_truth.jsonl.scenario_id` MUST either be absent or equal the manifest scenario_id.

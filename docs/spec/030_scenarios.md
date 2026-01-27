@@ -30,8 +30,9 @@ run bundle root `runs/<run_id>/` and MUST NOT include the `runs/<run_id>/` prefi
 ## Operational posture
 
 Scenarios MAY declare a **posture** that describes the assumed compromise state of the environment
-and attacker foothold at the start of the run. Posture is a planning input (v0.2+) and a reporting
-dimension; it is intentionally distinct from:
+and attacker foothold at the start of the run. Posture is a reporting dimension in v0.1 (it is
+recorded in the run manifest) and becomes a planning input starting in v0.2 when plan compilation is
+enabled; it is intentionally distinct from:
 
 - `safety`: safety constraints and lab enforcement controls, and
 - `plan.execution.principal_alias`: the non-secret alias the runner uses to select an execution
@@ -72,6 +73,8 @@ Reserved (v0.1):
 Provenance (normative):
 
 - The runner MUST record the effective posture in the run manifest (`manifest.scenario.posture`).
+  - v0.1: `manifest.scenario.posture.mode` MUST be present and MUST equal the effective posture
+    (`baseline` when the scenario omits posture).
 - When the plan execution model is enabled (v0.2+), the compiler MUST also record the effective
   posture in `plan/expanded_graph.json` (`scenario_posture` at the graph root).
 

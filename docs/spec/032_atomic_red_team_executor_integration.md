@@ -699,7 +699,7 @@ key:
 Reserved key collision handling:
 
 - If the scenario input map already includes the reserved key `__pa_principal_alias_v1` or
-  `__pa_action_requirements_v1`, the runner MUST fail closed with
+  `__pa_action_requirements_v1`, the runner MUST fail closed with `reason_domain="ground_truth"` and
   `reason_code=reserved_input_key_collision`.
 
 ## Target resolution and remote execution
@@ -720,12 +720,19 @@ Source of truth (v0.1):
 
 Resolution rules:
 
-- Locate the target asset in the inventory snapshot `assets[]` where `asset_id == target_asset_id`.
+- Determine the set of assets in the inventory snapshot `assets[]` where
+  `asset_id == target_asset_id`.
+  - If zero assets match, fail closed for the action with `reason_domain="ground_truth"` and
+    `reason_code=target_asset_not_found`.
+  - If more than one asset matches, fail closed for the action with `reason_domain="ground_truth"`
+    and `reason_code=target_asset_id_not_unique`.
+  - Otherwise, let `asset` be the single matching asset (the resolved target).
 - The runner MUST use `asset.os` (lowercased) as the target OS family input for supported-platform
   checks and requirements evaluation.
 - If `asset.ip` is present and non-empty, set `connection_address = asset.ip`.
 - Else if `asset.hostname` is present and non-empty, set `connection_address = asset.hostname`.
-- Else fail closed with `reason_code = target_connection_address_missing`.
+- Else fail closed for the action with `reason_domain="ground_truth"` and
+  `reason_code=target_connection_address_missing`.
 
 The runner SHOULD populate `resolved_target.hostname`, `resolved_target.ip`, and
 `resolved_target.provider_asset_ref` in `ground_truth.jsonl` from the inventory snapshot per
@@ -1129,11 +1136,11 @@ Per dependency evaluation order:
 Failure behavior:
 
 - If any dependency check fails and mode does not allow "get", treat prerequisites as unsatisfied
-  and skip execution with `reason_code = prereq_unsatisfied`.
+  and skip execution with `reason_domain="ground_truth"` and `reason_code=prereq_unsatisfied`.
 - If any `get_prereq_command` fails (non-zero exit or cannot execute), fail closed with
-  `reason_code = prereq_get_failed`.
+  `reason_domain="ground_truth"` and `reason_code=prereq_get_failed`.
 - If prerequisite commands cannot be run deterministically (interactive prompt), fail closed with
-  `reason_code = interactive_prompt_blocked`.
+  `reason_domain="ground_truth"` and `reason_code=interactive_prompt_blocked`.
 
 Determinism requirements:
 
@@ -1326,8 +1333,10 @@ redaction policy to transcripts before writing them.
 
 - If redaction policy is enabled, transcripts MUST be redacted deterministically before being
   persisted to run bundle storage.
-- If redaction fails, the runner MUST fail closed with `reason_code = redaction_failed` and MUST
-  withhold transcript artifacts from the published bundle.
+- If redaction fails, the runner MUST fail closed for the action with `reason_domain="ground_truth"`
+  and `reason_code=redaction_failed`, MUST withhold transcript artifacts from the published bundle,
+  and MUST emit a stage/substage outcome using `reason_code=redaction_policy_error` (see ADR-0003
+  and ADR-0005).
 
 ### Executor evidence file
 
@@ -1407,7 +1416,7 @@ Rules:
   - append cleanup side-effects to side-effect ledger
 
 - If cleanup is enabled but cleanup command is missing, the runner MUST fail closed with
-  `reason_code = cleanup_command_missing`.
+  `reason_domain="ground_truth"` and `reason_code=cleanup_command_missing`.
 
 - If `execute` was not attempted, the runner MUST NOT attempt cleanup and MUST record `revert` as
   `phase_outcome=skipped` with `reason_domain="ground_truth"` and
@@ -1494,7 +1503,7 @@ If ATTiRe import mode is implemented (normative requirements):
   MUST include a SHA-256 of the imported ATTiRe bytes after newline normalization (example field:
   `attire_sha256`).
 - If the imported record is missing required fields, the runner MUST fail closed for the action with
-  `reason_code=attire_import_error` and MUST preserve the raw import file only in a quarantined
+  `reason_domain="ground_truth"` and `reason_code=attire_import_error` and MUST preserve the raw
   location (if configured).
 
 This appendix does not require import mode for v0.1. When not enabled, `attire.json` is produced
@@ -1519,8 +1528,19 @@ Reason code scope (normative):
   `logs/health.json` unless the specific code is also present in ADR-0005 for that stage/substage.
 
 When an action-level failure causes the overall runner stage to fail, the runner MUST map it to the
-appropriate ADR-0005 runner stage reason code (for example `prepare_failed`, `execute_failed`,
-`cleanup_invocation_failed`) while preserving the action-level reason code in the per-action record.
+appropriate ADR-0005 runner stage reason code (prefer `prepare_failed`, `execute_failed`,
+`revert_failed`, `teardown_failed`) while preserving the action-level reason code in the per-action
+record.
+
+Reason domains (normative):
+
+- Unless otherwise specified by an owning artifact contract, action-level failures in this
+  specification MUST be recorded in ground truth lifecycle/phase records with
+  `reason_domain="ground_truth"`.
+- Requirements evaluation failures MUST be recorded with `reason_domain="requirements_evaluation"`
+  (see `035_validation_criteria.md` and `runner/actions/<action_id>/requirements_evaluation.json`).
+- If a redaction failure is surfaced as a stage/substage outcome, the stage/substage `reason_code`
+  MUST be the cross-cutting `redaction_policy_error` (not `redaction_failed`) per ADR-0003.
 
 At minimum, the runner MUST emit stable action-level reason codes for these failure classes:
 
@@ -1539,6 +1559,7 @@ At minimum, the runner MUST emit stable action-level reason codes for these fail
 - `redaction_failed`
 - `executor_invoke_error`
 - `cleanup_invoke_error`
+- `cleanup_command_missing`
 - `cleanup_verification_error`
 - `target_asset_not_found`
 - `target_asset_id_not_unique`
@@ -1554,8 +1575,9 @@ At minimum, the runner MUST emit stable action-level reason codes for these fail
 - `empty_command`
 
 Note: `unsafe_rerun_blocked` and `invalid_lifecycle_transition` are also valid stage outcome reason
-codes when surfaced via the `runner.lifecycle_enforcement` substage (ADR-0005). All other reason
-codes in the list above are action-level only and MUST NOT be emitted in `logs/health.json`.
+codes when surfaced via the `runner.lifecycle_enforcement` substage (ADR-0005). Implementations MUST
+NOT emit action-level codes in `logs/health.json` unless that exact code is registered in ADR-0005
+for the emitted stage/substage.
 
 ## Verification hooks
 

@@ -28,6 +28,11 @@ Conformance anchors (v0.1):
   `manifest.json`).
 - **Run lock (outside the bundle):** the orchestrator acquires `runs/.locks/<run_id>.lock` before
   creating or mutating `runs/<run_id>/`.
+- **Workspace root layout (v0.1+; reserved paths):** the workspace root (directory containing
+  `runs/`) has reserved top-level directories for forward compatibility. v0.1 tooling MUST ignore
+  unknown workspace files/directories and MUST NOT write persistent artifacts outside the run bundle
+  except under explicitly reserved workspace locations (for example `runs/.locks/`, `cache/`, and
+  `exports/`). See the Architecture spec "Workspace layout (v0.1+ normative)".
 - **Stage staging root:** stages write to `runs/<run_id>/.staging/<stage_id>/` and MUST publish by
   atomic rename/move into final run-bundle paths after publish-gate validation.
 - **Stage identifiers vs output directories:** stage identifiers appear in stage outcomes

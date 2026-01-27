@@ -202,6 +202,8 @@ Recommended additional keys (non-normative, strongly encouraged):
 - `collector_version` (string)
 - `normalizer_version` (string)
 - `evaluator_version` (string)
+- `contracts_bundle_sha256`: deterministic content hash of the distributed contracts bundle
+  corresponding to `contracts_version` (see `025_data_contracts.md`)
 
 #### Backward compatibility with `manifest.extensions` (transitional)
 
@@ -345,16 +347,76 @@ Note:
 
 ### Schema and contract pinning requirements
 
-- When a run publishes contract-backed artifacts, the manifest SHOULD record the `contract_version`
+The project distinguishes between:
+
+- **Diffable runs**: run bundles intended for CI, regression comparison, trending, or inclusion in a
+  golden dataset / archival catalog.
+- **Non-diffable runs**: ad-hoc/operator/debug runs not intended for long-term comparability.
+
+For diffable runs (normative):
+
+- When a run publishes contract-backed artifacts, the manifest MUST record the `contract_version`
   values for the contracts relevant to the run.
-- When a run publishes Parquet datasets with required `_schema.json` snapshots, the manifest SHOULD
+- When a run publishes Parquet datasets with required `_schema.json` snapshots, the manifest MUST
   record the dataset `schema_id` and `schema_version` values to support fast compatibility checks
   without scanning the filesystem.
 
-If recorded in the manifest, the following shapes are RECOMMENDED:
+For non-diffable runs (guidance):
 
-- `versions.contracts` as an object keyed by contract name to `contract_version`
-- `versions.datasets` as an object keyed by `schema_id` to `schema_version`
+- Producers SHOULD record the same information when feasible.
+
+Manifest shapes (normative when the corresponding map is present):
+
+- `versions.contracts` MUST be an object keyed by contract name to `contract_version`.
+- `versions.datasets` MUST be an object keyed by `schema_id` to `schema_version`.
+
+### Historical run bundle compatibility promise
+
+Archived run bundles accumulate over time (CI fixtures, regression baselines, golden dataset
+inputs). Downstream consumers (UI, reporting, dataset builder, regression runners) need a shared,
+explicit contract to avoid re-implementing ad hoc migration logic.
+
+Definitions:
+
+- **Compatibility major**: the SemVer component that represents a breaking compatibility boundary.
+  - For `MAJOR >= 1`: compatibility major = `MAJOR`.
+  - For `MAJOR == 0`: compatibility major = `0.MINOR` (treat MINOR bumps as breaking).
+- **Supported window**: `{current, previous}` compatibility majors for a given version pin, where
+  `previous` refers to the immediately preceding compatibility major.
+- **Out-of-window bundle**: a run bundle whose pinned versions fall outside the supported window for
+  the consuming toolchain release.
+
+Support window (normative):
+
+- For a given consumer release, "current" for each pin is the value that the consumer would emit
+  into `manifest.versions.*` when producing a new run bundle.
+- A consumer release MUST be able to parse and contract-validate diffable run bundles whose:
+  - `manifest.versions.pipeline_version` compatibility major is within the supported window, and
+  - `manifest.versions.contracts_version` compatibility major is within the supported window, and
+  - for each entry in `manifest.versions.datasets` (when present), the dataset `schema_version`
+    compatibility major is within the supported window for that `schema_id`.
+
+Behavior on mismatch (normative):
+
+- In CI/regression contexts, consumers MUST fail closed when opening an out-of-window bundle.
+- Outside CI/regression contexts, consumers MAY attempt a best-effort read of an out-of-window
+  bundle, but MUST:
+  - treat the bundle as **non-comparable** (MUST NOT compute regression deltas or include it in
+    trending aggregates),
+  - surface the incompatibility to the operator (for example, CLI stderr or a UI banner), and
+  - if a machine-readable aggregate output is produced, mark the corresponding bundle contribution
+    as non-comparable.
+
+Upgrade strategy (policy decision; details deferred):
+
+- The project adopts **write current, provide upgrader**:
+  - Producers MUST write new run bundles using the current contracts and dataset schemas for their
+    release.
+  - A deterministic "bundle upgrade" utility MUST exist before any release that would otherwise drop
+    support for an earlier compatibility major.
+  - The upgrader MUST NOT mutate the input bundle in place.
+  - When implemented, the upgrader MUST be deterministic (byte-identical outputs for identical
+    inputs) and MUST record provenance linking the upgraded bundle to the source bundle.
 
 ### Trending keys and join dimensions
 

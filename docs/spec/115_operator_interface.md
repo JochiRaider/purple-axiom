@@ -89,24 +89,28 @@ This spec explicitly does NOT define:
   operator-driven run control (cancel/resume/retry) without introducing a database for pipeline
   correctness.
 
-## Workspace layout (v0.2 normative)
+## Workspace layout (v0.1+ normative)
 
-The workspace root is a filesystem trust boundary for durable appliance data. v0.2 implementations
-MUST treat the following workspace-root children as **reserved** and MUST NOT place unrelated
-content at these paths.
+The workspace root is a filesystem trust boundary for durable appliance data. Implementations
+(v0.1+) MUST treat the following workspace-root children as **reserved** and MUST NOT place
+unrelated content at these paths.
 
 ### Required directories (v0.2)
 
 The appliance MUST ensure these directories exist (creating them if necessary) before serving the UI
 or accepting Operator API calls:
 
-| Path (workspace-root relative) | Purpose                                             | Sensitivity | Default perms |
-| ------------------------------ | --------------------------------------------------- | ----------- | ------------- |
-| `runs/`                        | Run bundles (pipeline outputs; authoritative)       | mixed       | 0750          |
-| `state/`                       | Secrets + durable control-plane state               | high        | 0700          |
-| `logs/`                        | Appliance-local logs (including `ui_audit.jsonl`)   | medium      | 0750          |
-| `plans/`                       | Plan drafts + draft metadata (OI-authored)          | medium      | 0700          |
-| `exports/`                     | Derived exports (archives + `export_manifest.json`) | high        | 0700          |
+Note (v0.1): the one-shot CLI MUST treat these directory names as reserved; only `runs/` is required
+to exist in v0.1.
+
+| Path (workspace-root relative) | Purpose                                               | Sensitivity | Default perms |
+| ------------------------------ | ----------------------------------------------------- | ----------- | ------------- |
+| `runs/`                        | Run bundles (pipeline outputs; authoritative)         | mixed       | 0750          |
+| `state/`                       | Secrets + durable control-plane state                 | high        | 0700          |
+| `logs/`                        | Appliance-local logs (including `ui_audit.jsonl`)     | medium      | 0750          |
+| `plans/`                       | Plan drafts + draft metadata (OI-authored)            | medium      | 0700          |
+| `exports/`                     | Derived exports (archives + `export_manifest.json`)   | high        | 0700          |
+| `cache/`                       | Cross-run caches and derived state (explicitly gated) | medium      | 0700          |
 
 Notes:
 
@@ -114,6 +118,7 @@ Notes:
 - `state/` MUST NOT be served by the artifact-serving endpoints.
 - `exports/` MUST NOT be served by the run artifact endpoints; exports are accessed only via
   explicit export download endpoints and policy gates.
+- `cache/` MUST NOT be served by the artifact-serving endpoints.
 
 ### Permissions and fail-closed posture
 
@@ -901,8 +906,8 @@ The Operator Interface MUST implement a run registry to define “what exists”
 purely on nondeterministic directory enumeration).
 
 - The registry is a control-plane artifact (global, not per-run).
-- v0.2 default location: `<workspace_root>/state/run_registry.json` (single JSON object; written via
-  write-to-temp + atomic rename).
+- Default location: `<workspace_root>/state/run_registry.json` (single JSON object; written via
+  write-to-temp + atomic rename; reserved in v0.1, written by v0.2+ control plane).
 - A run MUST be considered present if and only if `runs/<run_id>/manifest.json` exists and validates
   against the manifest contract.
 - The registry MUST be rebuildable by scanning `runs/<run_id>/manifest.json` surfaces.

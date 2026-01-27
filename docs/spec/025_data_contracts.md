@@ -116,6 +116,104 @@ expressed in JSON Schema via a `const` value. The `contract_version` value:
 If a schema’s `contract_version` disagrees with the registry entry for that `contract_id`, contract
 validation tooling MUST fail closed (treat as misconfiguration).
 
+### Contracts bundle distribution and retrieval for historical validation (normative)
+
+Runs pin `manifest.versions.contracts_version` (and, when applicable,
+`manifest.versions.schema_registry_version`) to make contract validation reproducible over time.
+Operators, CI jobs, and UIs MUST be able to validate an old run without checking out historical git
+commits.
+
+This spec defines a distributable **contracts bundle**: an immutable snapshot of the project’s
+contract schemas (the `docs/contracts/` tree) for a released `contracts_version`.
+
+#### Bundle layout and contents (normative)
+
+A contracts bundle MUST include a directory subtree `docs/contracts/**` with, at minimum:
+
+- `docs/contracts/contract_registry.json`
+- `docs/contracts/contract_registry.schema.json`
+- every schema file referenced by the registry (`contracts[].schema_path`)
+- any additional schema files required for local `$ref` resolution (see "$ref policy", above)
+
+The bundle MUST NOT rely on network access for schema resolution. All `$ref` targets MUST be present
+locally within the bundle.
+
+#### Deterministic bundle hash (normative)
+
+Each released `contracts_version` MUST be published as a distributable artifact addressable by:
+
+- `contracts_version` (SemVer), and
+- `contracts_bundle_sha256` (lowercase hex SHA-256) computed deterministically from the bundle’s
+  `docs/contracts/**` contents.
+
+`contracts_bundle_sha256` computation (normative):
+
+- Build `tree_basis_v1` with:
+  - `v: 1`
+  - `engine: "custom"` (fixed constant for contracts bundles)
+  - `files[]`: one entry per regular file under `docs/contracts/**`, with:
+    - `path`: normalized path relative to `docs/contracts/` (forward slashes; reject `..` and
+      absolute paths)
+    - `sha256`: lowercase hex SHA-256 of the exact file bytes
+- Sort `files[]` by `path` ascending using bytewise lexicographic order (UTF-8).
+- Compute `contracts_bundle_sha256 = sha256_hex(canonical_json_bytes(tree_basis_v1))`.
+
+For tarball distributions, implementations MUST NOT hash raw archive bytes. They MUST behave as if
+enumerating the archive as a file tree and hashing entry content bytes (fail closed on symlinks and
+special files), consistent with the deterministic tree hashing rules in `035_validation_criteria.md`
+(Tarball handling, normative).
+
+#### Distribution and storage locations (normative)
+
+A contracts bundle MUST be made available via at least one of the following:
+
+- a local on-disk bundle store directory (for offline/airgapped validation)
+- release artifacts (for example, CI-published artifacts)
+- an internal artifact registry
+
+Implementations MAY support multiple bundle sources; however, remote retrieval MUST be explicitly
+enabled (default: disabled).
+
+Publishers SHOULD distribute a sidecar checksum file alongside any archive distribution:
+
+- `<bundle>.sha256`: contains the expected `contracts_bundle_sha256` (lowercase hex)
+- `<bundle>.sig` (optional): a detached signature over `<bundle>.sha256`
+
+If signature verification is enabled by configuration, consumers MUST verify `<bundle>.sig` before
+trusting the `contracts_bundle_sha256` value from `<bundle>.sha256`.
+
+RECOMMENDED local store layout:
+
+- `<bundle_store_root>/<contracts_version>/<contracts_bundle_sha256>/`
+  - `bundle.tar.gz` (optional; if stored as an archive)
+  - `bundle/` (optional; extracted form)
+    - `docs/contracts/**`
+
+#### Retrieval order (normative)
+
+Given a run manifest that pins `manifest.versions.contracts_version`, consumers MUST resolve a
+matching contracts bundle using this deterministic order:
+
+1. **Explicit override**: if an operator/CI job/UI provides an explicit contracts bundle path
+   (directory or archive), use it.
+1. **Local store lookup**: otherwise, search the local bundle store for `contracts_version` (and,
+   when available, `contracts_bundle_sha256`).
+1. **Remote retrieval**: otherwise, if remote bundle sources are enabled, download the bundle into
+   the local store.
+
+After resolution, consumers MUST compute `contracts_bundle_sha256` and MUST verify it against a
+trusted expected value when one is available (for example, a signed sidecar `<bundle>.sha256`, or an
+explicit manifest pin if recorded). If verification fails or resolution is ambiguous, consumers MUST
+fail closed.
+
+#### Offline validation requirement (verification hook) (normative)
+
+A conforming implementation MUST support an offline validation mode: given only
+`(run bundle + contracts bundle)`, contract validation succeeds without network access and without
+repository checkout.
+
+See `100_test_strategy_ci.md` for the required fixture.
+
 ### Human-readable schema inventory (non-authoritative)
 
 The following list is for navigation only. The authoritative mapping is
@@ -490,6 +588,291 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 
 The manifest is the authoritative index for what exists in the bundle and which versions were used.
 
+## Consumer tooling: reference reader semantics (pa.reader.v1)
+
+Purple Axiom intentionally treats the run bundle (layout + contracts + invariants) as a first-class
+API surface for multiple independent consumers (CI gates, reporting, dataset builders, future UI,
+external exporters). Without a shared reader semantics surface, consumers will drift into
+inconsistent interpretations and require an expensive convergence refactor later.
+
+This section defines the canonical reader semantics for interpreting a run bundle and requires a
+reference implementation.
+
+### Reference reader SDK requirement (normative)
+
+- The repository MUST provide a reference reader implementation that conforms to this section
+  ("pa.reader.v1").
+- First-party consumer tooling (at minimum: CI validation and reporting) MUST:
+  - either use the reference reader SDK directly, or
+  - demonstrate byte-for-byte conformance via CI fixtures that compare derived inventory views and
+    error codes against the reference reader output (see `100_test_strategy_ci.md`, "Consumer
+    tooling conformance").
+
+Reader semantics versioning (normative):
+
+- This section defines reader semantics version `pa.reader.v1`.
+- Any change that alters behavior, derived inventory structure, or error-code meaning in a way that
+  could cause two conforming consumers to disagree MUST bump the semantics version (for example
+  `pa.reader.v2`) and MUST include explicit compatibility notes.
+
+### Canonical run bundle discovery (paths and fallbacks)
+
+Input:
+
+- The reader accepts either:
+  - a run bundle root directory, or
+  - a workspace root directory containing `runs/<run_id>/`.
+
+Canonical discovery algorithm (normative):
+
+1. If the input path is a directory and contains a `manifest.json` file, the input path MUST be
+   treated as the run bundle root.
+1. Else, if the input path is a directory and contains `ground_truth.jsonl`, the input path MUST be
+   treated as an intended run bundle root and discovery MUST fail with
+   `error_code="manifest_missing"`.
+1. Else, if the input path is a directory and contains a `runs/` directory:
+   - The reader MUST enumerate direct children of `runs/`.
+   - Any child directory whose name matches the v0.1 `run_id` format (UUID; see ADR-0001) is a run
+     candidate.
+   - A candidate directory is a discovered run bundle root only if it contains `manifest.json`.
+   - The discovered runs list MUST be sorted by `run_id` ascending using UTF-8 byte order (no
+     locale).
+1. Else, discovery fails.
+
+Failure mode:
+
+- If no run bundle root can be discovered, the reader MUST return
+  `error_code="run_bundle_root_not_found"`.
+
+Run id derivation and consistency (normative):
+
+- The canonical `run_id` is `manifest.run_id`.
+- If the run bundle root directory name is a UUID and differs from `manifest.run_id`, the reader
+  MUST fail closed with `error_code="run_id_mismatch"`.
+
+### Canonical artifact discovery and classification
+
+Path normalization (normative):
+
+- All artifact paths returned by the reader MUST be run-relative POSIX paths.
+- The reader MUST reject any path that:
+  - is absolute (starts with `/` or contains a drive prefix),
+  - contains a backslash (`\\`),
+  - contains a NUL byte,
+  - contains any `..` segment after normalization.
+- On violation, the reader MUST return `error_code="artifact_path_invalid"`.
+
+Contract-backed artifacts (normative):
+
+- Contract-backed artifact discovery MUST be driven by the local contract registry
+  (`docs/contracts/contract_registry.json`).
+- If the registry file cannot be read or parsed, the reader MUST fail closed with:
+  - `error_code="contract_registry_missing"` when absent, or
+  - `error_code="contract_registry_parse_error"` when present but invalid JSON.
+- For each `bindings[]` entry in the registry:
+  - The reader MUST expand `artifact_glob` relative to the run bundle root using POSIX glob
+    semantics.
+  - Matches MUST be sorted by `artifact_path` ascending (UTF-8 byte order, no locale).
+  - The reader MUST record a `(artifact_path, contract_id, expected_contract_version)` triple for
+    each match, where `expected_contract_version` is the `contracts[].contract_version` value for
+    that `contract_id`.
+
+Reserved scratch and quarantine locations:
+
+- `.staging/**` is a reserved publish-gate scratch area. The reader MUST treat any `.staging/**`
+  path as non-long-term scratch, MUST exclude it from inventory/hash sets, and MUST return
+  `error_code="artifact_in_staging"` if asked to open it via an evidence ref.
+- The quarantine directory is `runs/<run_id>/<security.redaction.unredacted_dir>` (default:
+  `runs/<run_id>/unredacted/`; see `090_security_safety.md`).
+  - By default, the reader MUST NOT return bytes from quarantine paths.
+  - Attempted reads MUST fail with `error_code="quarantine_access_denied"` unless the caller
+    explicitly opts in.
+
+Deterministic evidence vs volatile diagnostics under `logs/`:
+
+- `runs/<run_id>/logs/` classification MUST follow ADR-0009 (file-level allowlist).
+- Any `logs/**` path not explicitly allowlisted as deterministic evidence MUST be treated as
+  volatile diagnostics.
+
+Logical artifacts with multiple representations (normative):
+
+Some artifacts have more than one allowed physical representation. Consumers MUST treat these as a
+single logical artifact with deterministic selection rules.
+
+- Logical artifact id: `normalized.ocsf_events`
+  - If `normalized/ocsf_events/` exists, it MUST be treated as the OCSF event store (Parquet dataset
+    representation).
+  - Else, if `normalized/ocsf_events.jsonl` exists, it MUST be treated as the OCSF event store
+    (JSONL representation).
+  - If both exist, the reader MUST fail closed with `error_code="artifact_representation_conflict"`.
+
+### `manifest.versions` interpretation and comparability hooks
+
+`manifest.versions` is the canonical source of version pins used for run reproducibility, trending,
+and regression comparability (see ADR-0001).
+
+Normative requirements for consumers:
+
+- Consumers MUST treat `manifest.versions.*` as the authoritative pin source for:
+  - regression comparability,
+  - trending join keys,
+  - compatibility gating.
+- Consumers MUST NOT derive pins from other locations (for example `manifest.scenario.*`,
+  `bridge/mapping_pack_snapshot.json`, or pack manifests) except as explicitly defined by ADR-0001.
+- Pin values MUST be compared as byte-for-byte string equality with no normalization.
+
+Cross-location consistency (normative; when both are present):
+
+- `manifest.versions.scenario_id` MUST equal `manifest.scenario.scenario_id`.
+- `manifest.versions.scenario_version` MUST equal `manifest.scenario.scenario_version`.
+
+On mismatch, the reader MUST fail closed with `error_code="version_pin_conflict"`.
+
+Compatibility gating (normative):
+
+- If `manifest.versions.contracts_version` is present and the consumer does not support that value,
+  the consumer MUST fail closed with `error_code="contracts_version_incompatible"`.
+- If `manifest.versions.schema_registry_version` is present and the consumer does not support that
+  value, the consumer MUST fail closed with `error_code="schema_registry_version_incompatible"`.
+
+Comparability decision hooks:
+
+- The canonical regression comparability key set and deterministic check generation algorithm are
+  defined in `080_reporting.md` ("Regression comparability keys", normative).
+- The reference reader SDK MUST implement that algorithm as a reusable function so that any consumer
+  tool comparing runs can reuse identical semantics.
+
+### Evidence ref resolution and redaction handling
+
+This section defines canonical behavior when resolving `evidence_refs[]`. It does not redefine the
+`evidence_refs[]` schema (defined below); it defines consumer behavior.
+
+Effective handling rules (normative):
+
+- `evidence_ref.handling` is authoritative when present.
+- If `evidence_ref.handling` is omitted, the effective handling is `present`.
+- If the referenced file is a placeholder artifact per `090_security_safety.md` ("Placeholder
+  artifacts"), the placeholder's `handling` MUST override an effective `present` handling.
+
+Resolution algorithm (normative):
+
+Given an `evidence_ref` with `(artifact_path, selector?, handling?)`, the reader MUST:
+
+1. Normalize and validate `artifact_path` per "Path normalization". If invalid, return
+   `error_code="artifact_path_invalid"`.
+1. Resolve the path relative to the run bundle root.
+1. Apply effective handling:
+   - `present`:
+     - If the file does not exist: return `error_code="artifact_missing"`.
+     - If the resolved path is under the quarantine directory: return
+       `error_code="quarantine_access_denied"` (default deny).
+     - Otherwise, the reader MAY read bytes and MAY apply selector logic if implemented by the
+       caller.
+   - `withheld`:
+     - The reader MUST NOT return underlying evidence bytes.
+     - The reader MUST return `error_code="evidence_withheld"` (severity: `warning`).
+   - `quarantined`:
+     - The reader MUST NOT return underlying evidence bytes unless the caller explicitly enables
+       quarantine access.
+     - In default mode, the reader MUST return `error_code="evidence_quarantined"` (severity:
+       `warning`).
+   - `absent`:
+     - The reader MUST return `error_code="evidence_absent"` (severity: `error`).
+
+Selector prefix sanity (normative):
+
+- Selector prefixes are defined in the evidence ref selector grammar below.
+- If `selector` is present and its prefix is not one of the allowed prefixes, the reader MUST return
+  `error_code="evidence_selector_invalid"`.
+
+### Stable reader error codes (pa.reader.v1)
+
+All reader-level failures and gated warnings MUST be reported using stable machine-readable error
+codes so automation can gate deterministically.
+
+Error object shape (normative):
+
+- `error_domain` MUST be the string `pa.reader`.
+- `error_code` MUST be a stable `lower_snake_case` token.
+- `message` MUST be present for humans and MUST NOT contain secrets.
+- `artifact_path` MAY be present (run-relative POSIX).
+- `details` MAY be present; when present, keys MUST be stable and values MUST be JSON-serializable.
+
+Error ordering (normative):
+
+- When multiple errors are returned, they MUST be sorted by the tuple below using UTF-8 byte order
+  (no locale):
+  1. `error_code`
+  1. `artifact_path` (treat missing as empty string)
+  1. `message`
+
+Required error codes (v1):
+
+| error_code                             | Severity | When emitted                                                                 |
+| -------------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| `run_bundle_root_not_found`            | error    | No `manifest.json` can be located from the provided input path               |
+| `manifest_missing`                     | error    | Run bundle root is intended/known but `manifest.json` is missing             |
+| `manifest_parse_error`                 | error    | `manifest.json` exists but is not valid JSON                                 |
+| `manifest_schema_invalid`              | error    | `manifest.json` fails contract validation                                    |
+| `run_id_mismatch`                      | error    | Run directory name is a UUID but differs from `manifest.run_id`              |
+| `contract_registry_missing`            | error    | `docs/contracts/contract_registry.json` is absent                            |
+| `contract_registry_parse_error`        | error    | Contract registry exists but is not valid JSON                               |
+| `artifact_path_invalid`                | error    | Any artifact path fails reader path normalization rules                      |
+| `artifact_missing`                     | error    | An evidence ref or required artifact path does not exist                     |
+| `artifact_in_staging`                  | error    | An evidence ref attempts to access `.staging/**`                             |
+| `artifact_representation_conflict`     | error    | Multiple representations exist for a single logical artifact                 |
+| `quarantine_access_denied`             | error    | Attempted read under quarantine without explicit opt-in                      |
+| `evidence_withheld`                    | warning  | Evidence is withheld (placeholder or explicit handling)                      |
+| `evidence_quarantined`                 | warning  | Evidence is quarantined and quarantine access is off                         |
+| `evidence_absent`                      | error    | Evidence ref declares `absent` handling                                      |
+| `evidence_selector_invalid`            | error    | Evidence selector prefix is invalid                                          |
+| `version_pin_conflict`                 | error    | Two authoritative version pin locations disagree                             |
+| `contracts_version_incompatible`       | error    | Consumer does not support `manifest.versions.contracts_version`              |
+| `schema_registry_version_incompatible` | error    | Consumer does not support `manifest.versions.schema_registry_version`        |
+| `checksums_parse_error`                | error    | `security/checksums.txt` exists but is malformed                             |
+| `checksum_mismatch`                    | error    | A file hash does not match `security/checksums.txt` (when verification runs) |
+| `signature_invalid`                    | error    | Signature verification fails (when verification runs)                        |
+
+Notes (normative):
+
+- Removing a required error code, reusing an error code for a different meaning, or changing a
+  `warning` to an `error` in `pa.reader.v1` MUST be treated as a breaking change and requires a
+  semantics version bump.
+
+### Derived inventory view (pa.inventory.v1)
+
+To support cross-tool consistency, the reader defines a canonical derived inventory view for a run
+bundle.
+
+Inventory object (normative):
+
+- `inventory_version` MUST be the string `pa.inventory.v1`.
+- `run_id` MUST be present when `manifest.json` is readable and schema-valid.
+- `versions` MUST be the `manifest.versions` object as read from the manifest.
+  - If `manifest.versions` is missing, `versions` MUST be emitted as `{}` and the reader MUST also
+    emit a manifest error (for example `manifest_schema_invalid`).
+- `stage_outcomes` MUST be derived from `manifest.stage_outcomes` (authoritative).
+  - Entries MUST be sorted by `stage` ascending (UTF-8 byte order, no locale).
+- `files[]` MUST describe the deterministic long-term file set:
+  - If `security/checksums.txt` exists and is parseable, `files[]` MUST be derived from it.
+  - Otherwise, `files[]` MUST be derived by scanning the run bundle root and applying the inclusion
+    and exclusion rules defined in this spec (see "Long-term artifact selection for checksumming").
+  - Each entry MUST include:
+    - `path` (run-relative POSIX path)
+    - `sha256` (`sha256:<64hex>`; sha256 over file bytes)
+  - `files[]` MUST be sorted by `path` ascending (UTF-8 byte order, no locale).
+
+Canonical bytes (normative):
+
+- Inventory JSON bytes MUST equal `canonical_json_bytes(inventory)` (RFC 8785 JCS; UTF-8; no BOM; no
+  trailing newline).
+
+Verification hook (normative):
+
+- CI MUST include a conformance fixture that runs at least two independent consumers (report
+  generator and CI validator) on the same run bundle and asserts byte-identical
+  `canonical_json_bytes(pa.inventory.v1)` output (see `100_test_strategy_ci.md`).
+
 ## Artifact contracts
 
 ### Evidence references (shared shape)
@@ -699,8 +1082,9 @@ Failure mapping (normative):
 
 - Failure to locate or read the baseline manifest MUST be classified as `baseline_missing` (maps to
   the ADR-0005 `reporting.regression_compare` substage reason code).
-- Missing required baseline or candidate artifacts for regression comparison, or schema/contract
-  version incompatibility, MUST be classified as `baseline_incompatible`.
+- Missing required baseline or candidate artifacts for regression comparison, a baseline/candidate
+  run bundle that is outside the supported historical bundle compatibility window (ADR-0001), or
+  schema/contract version incompatibility, MUST be classified as `baseline_incompatible`.
 - Unexpected runtime errors during regression comparison MUST be classified as
   `regression_compare_failed`.
 
@@ -819,10 +1203,16 @@ Recommended manifest additions (normative in schema when implemented):
   - When `normalized/mapping_profile_snapshot.json` is present, `normalization.ocsf_version` SHOULD
     match `mapping_profile_snapshot.ocsf_version`.
 
-Recommended version recording (aligned with ADR-0001; normative if present):
+Recommended version recording (aligned with ADR-0001):
+
+For diffable runs (CI, regression, trending, golden dataset inputs), the manifest MUST record:
 
 - `versions.contracts` (object): map of `contract_id -> contract_version` for all contract-backed
   artifacts produced in the run.
+- `versions.datasets` (object): map of `schema_id -> schema_version` for all Parquet datasets
+  published with `_schema.json` snapshots in the run.
+
+For non-diffable runs, producers SHOULD record the same maps when feasible.
 
 Plan model provenance (v0.2+; normative when implemented):
 

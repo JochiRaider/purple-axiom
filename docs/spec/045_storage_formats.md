@@ -380,10 +380,10 @@ Within a run bundle, store Parquet datasets as directories with one or more Parq
 - `runs/<run_id>/raw_parquet/windows_eventlog/`
 - `runs/<run_id>/raw_parquet/linux_syslog/`
 - `runs/<run_id>/raw_parquet/osquery/`
-- `runs/<run_id>/raw_parquet/pcap/` (placeholder contract; capture/ingestion is not required for
-  v0.1)
-- `runs/<run_id>/raw_parquet/netflow/` (placeholder contract; capture/ingestion is not required for
-  v0.1)
+- `runs/<run_id>/raw_parquet/pcap/` (reserved; capture/ingestion is not required for v0.1; any
+  emission MUST be behind an explicit config gate)
+- `runs/<run_id>/raw_parquet/netflow/` (reserved; capture/ingestion is not required for v0.1; any
+  emission MUST be behind an explicit config gate)
 - `runs/<run_id>/normalized/ocsf_events/`
 - `runs/<run_id>/scoring/joins/` (optional)
 

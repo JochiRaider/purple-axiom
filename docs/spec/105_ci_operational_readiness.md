@@ -13,6 +13,7 @@ related:
   - 025_data_contracts.md
   - 080_reporting.md
   - 090_security_safety.md
+  - ADR-0001-project-naming-and-versioning.md
   - ADR-0003-redaction-policy.md
   - ADR-0004-deployment-architecture-and-inter-component-communication.md
   - ADR-0005-stage-outcomes-and-failure-classification.md
@@ -93,9 +94,11 @@ This section is a consolidation of existing requirements: reporting defines the 
 recommendation, data contracts define manifest status derivation, and operability/ADR-0005 define
 exit-code and outcome semantics.
 
-Unless otherwise stated, paths in this document are workspace-rooted under `runs/<run_id>/` (for
-example, `runs/<run_id>/manifest.json`). CI implementations MAY `cd` into `runs/<run_id>/` and treat
-the remaining paths as run-relative so long as the resolved paths are equivalent.
+Unless otherwise stated, paths in this document are workspace-rooted under
+`<workspace_root>/runs/<run_id>/` (for example, `runs/<run_id>/manifest.json`, where
+`<workspace_root>` is the directory containing the reserved `runs/` child). CI implementations MAY
+`cd` into `runs/<run_id>/` and treat the remaining paths as run-relative so long as the resolved
+paths are equivalent.
 
 #### Evidence precedence
 
@@ -173,7 +176,7 @@ CI MUST enforce the required gate categories already defined by the test strateg
 | Gate category             | Required?                       | Primary evidence                                                     | Fail mode                                                                                                      |
 | ------------------------- | ------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Schema validation         | REQUIRED                        | schema validation output / errors                                    | fail-closed                                                                                                    |
-| Version conformance       | REQUIRED                        | supported version pins + artifacts                                   | fail-closed                                                                                                    |
+| Version conformance       | REQUIRED                        | supported version pins + historical bundle fixtures                  | fail-closed                                                                                                    |
 | Determinism gates         | REQUIRED when enabled           | DuckDB conformance report + determinism fixtures                     | fail-closed for `result_hash_mismatch`; warn-only for `plan_hash_mismatch` unless explicitly enabled as a gate |
 | Artifact validation       | REQUIRED                        | run bundle paths + contract reports                                  | fail-closed                                                                                                    |
 | Cross-artifact invariants | REQUIRED                        | manifest/run_id joins + referential checks                           | fail-closed                                                                                                    |
@@ -422,6 +425,8 @@ Terminal mapping:
 A CI pipeline is conformant iff:
 
 - Required gate categories are executed and enforced with the specified fail modes.
+- Historical run bundle compatibility matrix is enforced (current tooling can parse and validate the
+  supported window of prior golden run bundles; see ADR-0001 and `100_test_strategy_ci.md`).
 - CI verdict is derived deterministically from the decision surface.
 - Exit code mapping matches the verdict mapping.
 - Missing required artifacts are treated as fail-closed contract failures.
@@ -477,10 +482,14 @@ Unless stated otherwise, fixtures assume `operability.health.emit_health_files=t
 - [Operability](110_operability.md)
 - [Reporting](080_reporting.md)
 - [Security and safety](090_security_safety.md)
+- [ADR-0001: Project naming and versioning](../adr/ADR-0001-project-naming-and-versioning.md)
 - [ADR-0004: Deployment architecture and inter-component communication](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)
 - [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
 - [ADR-0007: State machines for lifecycle semantics](../adr/ADR-0007-state-machines.md)
 
 ## Changelog
 
-- v0.1 (draft): Initial stitching spec (no new gates; consolidation only).
+| Date       | Change |
+| ---------- | ------ |
+| 2026-01-26 | update |
+| 2026-01-12 | draft  |

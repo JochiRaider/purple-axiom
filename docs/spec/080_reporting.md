@@ -66,6 +66,15 @@ Determinism defaults (normative):
 Each run produces a deterministic artifact bundle under `runs/<run_id>/`. The reporting stage
 consumes upstream artifacts and emits outputs to `report/`.
 
+Consumer tooling semantics (normative):
+
+- The reporting stage MUST use the reference reader semantics defined in `025_data_contracts.md`
+  ("Consumer tooling: reference reader semantics (pa.reader.v1)") for run bundle discovery, artifact
+  discovery, `manifest.versions` interpretation, evidence ref handling (withheld/quarantined
+  defaults), and integrity artifact parsing (`security/checksums.txt` and signatures when enabled).
+- The reporting stage MUST NOT implement ad-hoc fallbacks that diverge from those semantics; any new
+  fallback MUST be specified in the reader semantics section and covered by conformance fixtures.
+
 ### Required artifacts (v0.1)
 
 The following artifacts MUST be present for a run to be considered reportable:
@@ -98,21 +107,21 @@ Notes (health files and outcome sources):
 
 ### Optional artifacts
 
-| Path                                       | Source stage  | Purpose                                               |
-| ------------------------------------------ | ------------- | ----------------------------------------------------- |
-| `runner/`                                  | runner        | Per-action transcripts and cleanup evidence           |
-| `runner/principal_context.json`            | runner        | Redaction-safe principal context summary              |
-| `inputs/baseline_run_ref.json`             | reporting     | Resolved regression baseline reference (when enabled) |
-| `inputs/baseline/manifest.json`            | reporting     | Baseline manifest snapshot (when enabled)             |
-| `logs/cache_provenance.json`               | orchestrator  | Cache hit/miss provenance (when enabled)              |
-| `plan/expanded_graph.json`                 | runner        | Compiled plan graph (v0.2+)                           |
-| `plan/expansion_manifest.json`             | runner        | Matrix expansion manifest (v0.2+)                     |
-| `normalized/ocsf_events/`                  | normalization | Full normalized event store (JSONL or Parquet)        |
-| `bridge/mapping_pack_snapshot.json`        | detection     | Bridge inputs snapshot for reproducibility            |
-| `bridge/compiled_plans/`                   | detection     | Per-rule compilation outputs                          |
-| `normalized/mapping_profile_snapshot.json` | normalization | Mapping profile snapshot for drift detection          |
-| `security/checksums.txt`                   | signing       | SHA-256 checksums for long-term artifacts             |
-| `security/signature.ed25519`               | signing       | Ed25519 signature over checksums                      |
+| Path                                                        | Source stage  | Purpose                                               |
+| ----------------------------------------------------------- | ------------- | ----------------------------------------------------- |
+| `runner/`                                                   | runner        | Per-action transcripts and cleanup evidence           |
+| `runner/principal_context.json`                             | runner        | Redaction-safe principal context summary              |
+| `inputs/baseline_run_ref.json`                              | reporting     | Resolved regression baseline reference (when enabled) |
+| `inputs/baseline/manifest.json`                             | reporting     | Baseline manifest snapshot (when enabled)             |
+| `logs/cache_provenance.json`                                | orchestrator  | Cache hit/miss provenance (when enabled)              |
+| `plan/expanded_graph.json`                                  | runner        | Compiled plan graph (v0.2+)                           |
+| `plan/expansion_manifest.json`                              | runner        | Matrix expansion manifest (v0.2+)                     |
+| `normalized/ocsf_events/` or `normalized/ocsf_events.jsonl` | normalization | Full normalized event store (Parquet or JSONL)        |
+| `bridge/mapping_pack_snapshot.json`                         | detection     | Bridge inputs snapshot for reproducibility            |
+| `bridge/compiled_plans/`                                    | detection     | Per-rule compilation outputs                          |
+| `normalized/mapping_profile_snapshot.json`                  | normalization | Mapping profile snapshot for drift detection          |
+| `security/checksums.txt`                                    | signing       | SHA-256 checksums for long-term artifacts             |
+| `security/signature.ed25519`                                | signing       | Ed25519 signature over checksums                      |
 
 ## Required reporting outputs (v0.1)
 

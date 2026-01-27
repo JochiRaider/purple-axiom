@@ -89,6 +89,15 @@ Scenario safety interaction (normative):
   `runner.environment_config` in apply mode) MUST be explicitly enabled (default off), scoped to an
   allowlist, and recorded deterministically in run evidence.
 - Orchestration tools MUST NOT have access to production networks, identities, or secrets.
+- Adapter implementations (including packaged / third-party adapters) execute inside the
+  orchestrator trust boundary.
+  - v0.1 safe default: only built-in adapters are permitted.
+  - If third-party adapters are enabled, the orchestrator MUST enforce:
+    - explicit selection (no ambient discovery),
+    - immutable pinning (`adapter_version` + `source_digest`), and
+    - signature verification when required by `security.adapters` policy.
+  - Adapter provenance for every resolved binding MUST be recorded in the run manifest (see
+    `020_architecture.md` "Adapter provenance recording (v0.1)").
 
 ### Telemetry boundary (collector)
 

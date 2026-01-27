@@ -504,7 +504,7 @@ The fixture set MUST include at least:
       - `runner_state_reconciliation_repairs_failed_total == 0`
       - `runner_state_reconciliation_repair_blocked_total == 0`
     - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
-      `status="failed"` and `reason_code="drift_detected"`.
+      `status="success"` and MUST omit `reason_code`.
 
 - `clean_match`:
 
@@ -517,7 +517,7 @@ The fixture set MUST include at least:
       - `runner_state_reconciliation_repairs_failed_total == 0`
       - `runner_state_reconciliation_repair_blocked_total == 0`
     - `runs/<run_id>/logs/health.json` MUST include `stage="runner.state_reconciliation"` with
-      `status="success"` and `reason_code="clean"`.
+      `status="success"` MUST omit `reason_code`.
 
 - `repair_requested_but_blocked`:
 
@@ -553,8 +553,9 @@ For each fixture, the runner reconciliation implementation MUST:
 - Emit stable reconciliation counters for determinism and operability (required set):
   - `runner_state_reconciliation_items_total`
   - `runner_state_reconciliation_drift_detected_total`
-  - `runner_state_reconciliation_clean_total`
-  - `runner_state_reconciliation_error_total`
+  - `runner_state_reconciliation_skipped_total`
+  - `runner_state_reconciliation_unknown_total`
+  - `runner_state_reconciliation_probe_error_total`
   - `runner_state_reconciliation_repairs_attempted_total`
   - `runner_state_reconciliation_repairs_succeeded_total`
   - `runner_state_reconciliation_repairs_failed_total`
@@ -917,6 +918,37 @@ authoritative):
 CI SHOULD also enforce the pinned toolchain versions listed in the supported versions reference
 (Python, uv, pytest, ruff, pyright) to reduce non-deterministic test behavior.
 
+#### Historical run bundle compatibility matrix (compatibility promise)
+
+To prevent consumer-side reimplementation of ad hoc migration logic, CI MUST assert the project's
+historical run bundle compatibility promise (ADR-0001) by validating a fixed set of archived
+("golden") run bundles from prior releases.
+
+Minimum requirement (v0.1):
+
+- CI MUST include fixtures for at least `N=1` prior compatibility major within the supported window
+  (current + previous) for each of:
+  - `manifest.versions.pipeline_version`
+  - `manifest.versions.contracts_version`
+  - Parquet dataset `schema_version` values recorded under `manifest.versions.datasets` (when
+    applicable)
+- CI MUST run the current run-bundle validator against each historical fixture bundle and MUST
+  assert:
+  - `manifest.json` parses and validates against `manifest.schema.json`.
+  - Contract-backed artifacts required for reporting and scoring validate against their contracts
+    (or are explicitly marked absent by feature flags for that fixture).
+  - Any Parquet dataset included as a fixture has a valid `_schema.json` snapshot and is readable
+    with union-by-name semantics (see `045_storage_formats.md`).
+- Any failure to parse, locate required artifacts, or validate contracts in this matrix MUST fail CI
+  (fail closed). The failure output MUST identify the fixture bundle deterministically (for example,
+  by `run_id` and pinned versions).
+
+Notes:
+
+- For SemVer `0.y.z`, treat `0.y` as the compatibility-major boundary (ADR-0001).
+- The fixture set SHOULD be small (smoke-level) but MUST include at least one bundle that exercises
+  reporting outputs (`report/report.json` + `report/thresholds.json` + `report/run_timeline.md`).
+
 ### Determinism gates
 
 The DuckDB conformance gate (toolchain determinism; configurable) enforces deterministic query
@@ -946,6 +978,10 @@ The fixture set MUST include at least:
     - `artifact_path` matching the offending path (run-relative; POSIX separators)
     - `error_code = "timestamped_filename_disallowed"` (stable error code for this class of
       violation)
+- `offline_contract_validation_with_schema_bundle`: Provide a valid run bundle fixture and a
+  matching contracts bundle fixture (directory or tarball) and assert that contract validation
+  succeeds with (a) network access disabled and (b) no repository checkout available (only the two
+  bundles on disk).
 
 Report generation sanity checks validate that reports render without errors.
 
@@ -966,6 +1002,48 @@ Cross-artifact invariants enforce consistency across pipeline outputs:
     substages allowed) consistent with the architecture specification.
   - Each `health.json.stages[].reason_code` value (when present) MUST be drawn from ADR-0005 for the
     corresponding stage/substage; unknown reason codes MUST fail CI.
+
+### Consumer tooling conformance (reference reader semantics)
+
+Run bundles are consumed by multiple tools (CI validator, report generator, dataset builder, future
+UI, exporters). CI MUST enforce that first-party consumers share a single reader semantics surface
+(`pa.reader.v1`) defined in `025_data_contracts.md` ("Consumer tooling: reference reader
+semantics").
+
+For CI enforcement, each first-party consumer MUST expose an inventory-derivation entrypoint that
+can be invoked by tests (either as a library call or as a CLI mode) which emits `pa.inventory.v1` as
+canonical JSON bytes (`canonical_json_bytes(...)`).
+
+Fixture set (normative):
+
+- `consumer_reader_inventory_view_consistency` (cross-consumer semantic lock)
+
+  - Provide a minimal run bundle fixture that includes, at minimum:
+    - `manifest.json` with a non-empty `versions` object and at least two `stage_outcomes` entries
+    - `ground_truth.jsonl`
+    - one deterministic evidence log under `logs/` (example: `logs/counters.json`)
+    - one volatile diagnostics log under `logs/` (example: `logs/run.log`)
+    - one withheld placeholder artifact (to ensure placeholder-handling does not break discovery)
+    - one quarantined artifact under `unredacted/` (to validate default deny and exclusion rules)
+  - Test harness MUST invoke at least two independent consumer entrypoints (at minimum: report
+    generator and CI validator) against the same fixture and capture their derived inventory view
+    (`pa.inventory.v1`) as canonical JSON bytes.
+  - Assertions (normative):
+    - byte-for-byte equality between consumer outputs, and
+    - equality against the reference reader SDK output for the same fixture.
+
+- `consumer_reader_error_codes_stability` (deterministic gating surface)
+
+  - Provide a small suite of invalid run bundle fixtures that each exercise one primary reader error
+    code defined in `025_data_contracts.md` (minimum examples):
+    - `manifest_parse_error` (invalid JSON)
+    - `contract_registry_missing` (registry absent)
+    - `artifact_representation_conflict` (both OCSF store representations present)
+    - `quarantine_access_denied` (attempted read under `unredacted/` without opt-in)
+    - `version_pin_conflict` (scenario id/version mismatch between authoritative locations)
+  - For each fixture, invoke the same consumer entrypoints as above and assert:
+    - identical `error_domain` and `error_code`, and
+    - deterministic error ordering when multiple errors are emitted.
 
 ### Export and checksums scope
 

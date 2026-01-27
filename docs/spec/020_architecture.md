@@ -275,6 +275,10 @@ Normative requirements:
   [configuration reference][config-ref]).
   - When cross-run caching is enabled, `logs/cache_provenance.json` MUST be written and MUST record
     every cache lookup that can influence stage outputs (`hit | miss | bypassed`).
+- Cross-run cache storage MUST be workspace-scoped.
+  - Any cross-run cache directory MUST resolve under `<workspace_root>/cache/` (see Workspace
+    layout) and MUST NOT be a per-user home directory cache (for example `~/.cache`) or a global OS
+    temp directory.
 - Cached values MUST NOT bypass publish-gate validation.
   - If a cached value is used to populate a contract-backed artifact, the artifact MUST still be
     validated against its schema before publish, and MUST be published atomically via the publish
@@ -374,6 +378,75 @@ See [ADR-0004: Deployment architecture and inter-component communication][adr-00
 publish semantics, the [data contracts specification][data-contracts] for contracted artifact paths
 and schemas, and the [storage formats specification][storage-formats-spec] for Parquet and
 evidence-tier layout rules.
+
+## Workspace layout (v0.1+ normative)
+
+**Summary**: The workspace root (`<workspace_root>/`) is the stable filesystem boundary that
+contains run bundles and all other durable Purple Axiom artifacts. Even though v0.1 is a one-shot
+CLI, the workspace layout is treated as a forward-compatible filesystem API: introducing a UI,
+concurrency, or resumability MUST NOT require directory migrations or re-keying.
+
+### Workspace root definition
+
+- `<workspace_root>` is any directory that contains a `runs/` child directory.
+- Default `<workspace_root>` for v0.1 CLI: the current working directory.
+- Tooling MUST tolerate and ignore unknown files/directories at `<workspace_root>/` (do not assume
+  an empty directory).
+
+### Reserved workspace-root children
+
+The following workspace-root children are **reserved names**. Implementations MUST NOT place
+unrelated content at these paths, and v0.1 tooling MUST ignore their presence when unused.
+
+| Path (workspace-root relative) | Purpose                                                             | v0.1 requirement |
+| ------------------------------ | ------------------------------------------------------------------- | ---------------- |
+| `runs/`                        | Run bundles (authoritative pipeline outputs)                        | required         |
+| `state/`                       | Durable control-plane state (run registry, secrets, UI/daemon)      | reserved         |
+| `exports/`                     | Derived exports and export manifests                                | reserved         |
+| `cache/`                       | Cross-run caches and derived state (explicitly gated; optional use) | reserved         |
+| `logs/`                        | Workspace-local logs/audit (v0.2+)                                  | reserved         |
+| `plans/`                       | Operator-authored plan drafts and draft metadata (v0.2+)            | reserved         |
+
+Notes:
+
+- v0.1 tooling MUST NOT require `state/`, `logs/`, `plans/`, `exports/`, or `cache/` to exist unless
+  the invoked feature explicitly uses that directory.
+- `runs/` is the only directory whose contents are treated as authoritative pipeline outputs.
+- `runs/.locks/` is reserved for lockfiles and is not a run directory; scanners MUST ignore it.
+- `state/`, `exports/`, `cache/`, `logs/`, and `plans/` MUST NOT be treated as run artifact roots
+  and MUST NOT be included in run-bundle export packaging unless a spec explicitly says so.
+
+### Workspace write boundary
+
+Normative requirements:
+
+- Stages MUST treat `runs/<run_id>/` as their only persistent output surface.
+
+- The orchestrator MAY write outside the run bundle only in reserved workspace locations:
+
+  - `runs/.locks/<run_id>.lock` (required)
+  - `<workspace_root>/cache/` (optional; only when cross-run caching is explicitly enabled)
+  - `<workspace_root>/exports/` (optional; only for explicit export/packaging commands)
+  - `<workspace_root>/state/` and `<workspace_root>/logs/` (reserved for v0.2+ control-plane
+    features; v0.1 SHOULD leave these untouched)
+
+- Tooling MUST NOT create or modify other workspace-root siblings as a side effect of a run.
+
+- Tooling MUST NOT write durable artifacts outside `<workspace_root>/` (for example `~/.cache`,
+  `~/.config`, `/var/tmp`) for correctness or resumability.
+
+### Run discovery surfaces
+
+- A run MUST be considered present if and only if `runs/<run_id>/manifest.json` exists and validates
+  against the manifest contract.
+
+- Implementations MAY maintain a derived workspace run registry at
+  `<workspace_root>/state/run_registry.json` for fast discovery, but it MUST be rebuildable by a
+  deterministic scan of `runs/<run_id>/manifest.json` surfaces:
+
+  - The scan MUST ignore non-run directories under `runs/` (for example `runs/.locks/`).
+  - The scan order MUST be deterministic: enumerate candidate run directories and sort by `run_id`
+    ascending (UTF-8 byte order) before reading manifests.
 
 ## Stage identifiers
 
@@ -638,6 +711,14 @@ Normative requirements:
   stage execution begins.
 - The registry MAY be implemented as a static mapping; this spec does not require dynamic plugin
   discovery.
+- If the registry is populated from packaged adapters (out-of-repo or otherwise), inventory
+  construction MUST be explicit and deterministic:
+  - The set of available packaged adapters MUST be fully determined by the effective configuration
+    (and policy snapshot) for the run.
+  - Ambient discovery (for example: scanning system site-packages/entrypoints, current working
+    directory, or environment variables) is forbidden.
+  - Any filesystem enumeration performed during registry construction MUST sort candidates using
+    UTF-8 byte order and MUST treat ties deterministically.
 - Core stage logic MUST NOT access the registry directly; resolved adapter instances MUST be
   injected via ports by the composition root.
 - Adapter selection MUST be deterministic:
@@ -671,6 +752,37 @@ Type names such as `id_slug_v1`, `semver_v1`, and `version_token_v1` refer to
 - `source_ref` (string; REQUIRED): stable reference for the selected implementation source.
   - MUST NOT be an absolute host path.
   - For container images, tag-only references are forbidden; the reference MUST be digest-pinned.
+- `source_digest` (string; CONDITIONALLY REQUIRED): immutable content digest for the selected
+  implementation source, recorded as `sha256:<hex>`.
+  - REQUIRED when `source_kind != "builtin"`.
+  - For container images, `source_digest` MUST equal the digest in `source_ref`
+    (`<image>@sha256:<digest>`).
+  - For directory-based sources (`source_kind="local_path"`), implementations MUST compute
+    `source_digest` as `hash_basis_v1` over the referenced directory tree with:
+    - `artifact_kind="adapter"`
+    - `artifact_id=adapter_id`
+    - `artifact_version=adapter_version` (see [ADR-0001: Project naming and versioning][adr-0001]).
+  - Implementations MUST fail closed if `source_digest` cannot be determined for a non-builtin
+    adapter.
+- `signature` (object; OPTIONAL): Ed25519 signature over the adapter provenance tuple, used for
+  supply-chain attestations when adapters are provided out-of-repo.
+  - `sig_alg` (string; REQUIRED): `ed25519`
+  - `public_key_b64` (string; REQUIRED): base64 of the 32 raw Ed25519 public key bytes
+  - `key_id` (string; REQUIRED): `sha256(public_key_bytes)` encoded as 64 lowercase hex characters
+  - `signature_b64` (string; REQUIRED): base64 of the 64 raw signature bytes
+  - Signature payload (normative):
+    - Compute RFC 8785 (JCS) canonical JSON of the following object (with the exact field names and
+      values shown), then sign the canonical bytes using Ed25519:
+      ```json
+      {
+        "v": "adapter_signature_v1",
+        "adapter_id": "<adapter_id>",
+        "adapter_version": "<adapter_version>",
+        "source_kind": "<source_kind>",
+        "source_ref": "<source_ref>",
+        "source_digest": "<source_digest>"
+      }
+      ```
 - `config_sha256` (string; OPTIONAL): `sha256:<hex>` of canonical JSON of the adapter's effective
   configuration after redaction/withholding of secrets.
   - When present, canonical JSON MUST use RFC 8785 (JCS) serialization.
@@ -681,8 +793,26 @@ Determinism requirements (normative):
 
 - `entries[]` MUST be sorted by `(port_id asc, adapter_id asc)` using UTF-8 byte order (no locale).
 - The provenance record MUST NOT include hostnames, machine-specific absolute paths, or timestamps.
+- If `source_kind != "builtin"`, `source_digest` MUST be present and MUST match
+  `^sha256:[0-9a-f]{64}$`.
+- If adapter signatures are required by the effective policy snapshot
+  (`security.adapters.require_signatures=true`), every non-builtin entry MUST include a `signature`
+  object whose `key_id` is in `security.adapters.trusted_key_ids` and whose signature verifies
+  against the canonical payload above.
 - If adapter provenance cannot be recorded deterministically, the orchestrator MUST fail closed and
   MUST record a deterministic stage (or dotted substage) outcome.
+
+Third-party adapter policy (decision):
+
+- Adapters MAY be provided out-of-repo as packaged plugins; the architecture does not restrict
+  adapters to in-repo-only implementations.
+- v0.1 default posture: third-party adapters are disabled. A run MUST fail closed if it attempts to
+  select a non-builtin adapter when `security.adapters.allow_third_party=false`.
+- When `security.adapters.allow_third_party=true`, every non-builtin adapter MUST:
+  - be explicitly selected (no auto-discovery),
+  - be pinned by `adapter_version` and `source_digest`, and
+  - satisfy any configured signature requirements (for example
+    `security.adapters.require_signatures=true`).
 
 ### Contract-first modularity (v0.1; guidance)
 
@@ -872,6 +1002,11 @@ are mandatory (names are suggestions; harness/framework is implementation-define
    - Assert: each `source_ref` is stable and is not an absolute host path.
    - Assert: when `source_kind=container_image`, `source_ref` is digest-pinned
      (`<image>@sha256:<digest>`).
+   - Assert: when `source_kind != "builtin"`, `source_digest` is present and matches
+     `^sha256:[0-9a-f]{64}$`.
+   - Assert: when `source_kind=container_image`, `source_digest` equals the digest in `source_ref`.
+   - Assert: when policy requires adapter signatures, each non-builtin entry includes a `signature`
+     object and the signature verifies against the canonical payload.
    - Assert: the provenance record contains no timestamps, hostnames, or machine-specific absolute
      paths.
 
@@ -884,12 +1019,29 @@ are mandatory (names are suggestions; harness/framework is implementation-define
 
 1. `cache_cross_run_gate_and_provenance`
 
-   - Setup: attempt to use a cache directory outside `runs/<run_id>/` with
-     `cross_run_allowed=false`.
+   - Setup: attempt to use a cache directory under `<workspace_root>/cache/` (outside
+     `runs/<run_id>/`) with `cross_run_allowed=false`.
    - Assert: config validation rejects the configuration OR runtime detection fails closed.
-   - Setup: enable cross-run caching explicitly.
+   - Setup: enable cross-run caching explicitly and configure a cache directory under
+     `<workspace_root>/cache/`.
    - Assert: `logs/cache_provenance.json` is emitted and deterministically ordered by
      `(component, cache_name, key)`.
+
+1. `workspace_unknown_entries_ignored`
+
+   - Setup: create a workspace root containing additional unrelated files/directories alongside the
+     reserved workspace-root children.
+   - Assert: the orchestrator completes a minimal run and does not treat unknown workspace entries
+     as errors.
+
+1. `workspace_write_boundary_reserved_paths_only`
+
+   - Setup: snapshot the workspace filesystem tree; execute a minimal run; snapshot again.
+   - Assert: all new/modified files are under `runs/<run_id>/` or explicitly reserved workspace
+     locations used by the run (for example `runs/.locks/`, `<workspace_root>/cache/`, and
+     `<workspace_root>/exports/`).
+   - Assert: the run does not create new top-level directories at the workspace root other than the
+     reserved set.
 
 ## Stage IO boundaries
 

@@ -35,6 +35,28 @@ Secrets rule:
 - Do not place credentials, tokens, or private keys directly in `inputs/range.yaml`.
 - Use references (file paths, OS keychain identifiers, or environment variable names).
 
+## Workspace root and filesystem paths
+
+Purple Axiom is workspace-rooted: all durable artifacts written by the toolchain live under a single
+workspace root directory. See: [architecture](020_architecture.md) → "Workspace layout (v0.1+
+normative)".
+
+Path resolution rules (normative):
+
+- Keys explicitly described as "relative directory under the run bundle root" are resolved relative
+  to the active run bundle root (`runs/<run_id>/`).
+- All other relative filesystem paths in configuration MUST be resolved relative to
+  `<workspace_root>/`.
+- v0.1 default `<workspace_root>`: the current working directory.
+
+Workspace boundary rules (normative):
+
+- Tooling MUST NOT write persistent artifacts outside `<workspace_root>/` except for OS-managed
+  ephemeral temp files that are not required for correctness/resumability.
+- Cross-run caches MUST live under `<workspace_root>/cache/` (reserved workspace directory).
+- Derived exports produced outside the run bundle MUST live under `<workspace_root>/exports/`
+  (reserved workspace directory).
+
 ## Top-level keys
 
 ### Lab (lab)
@@ -481,6 +503,9 @@ Common keys:
     - `enabled`
     - `config_path` or equivalent
     - `output_path` under `raw/`
+  - v0.1 reserved output paths (normative when implemented):
+    - `pcap.output_path` MUST be `raw/pcap/` (manifest: `raw/pcap/manifest.json`)
+    - `netflow.output_path` MUST be `raw/netflow/` (manifest: `raw/netflow/manifest.json`)
   - `osquery` (optional)
     - `enabled` (default: false)
     - `config_path` (optional): path to an osquery configuration file (deployment is
@@ -684,8 +709,10 @@ Common keys:
       `reason_domain="bridge_compiled_plan"` and `reason_code: "raw_fallback_disabled"`.
     - When `true`, any fallback use MUST be accounted for via `extensions.bridge.fallback_used=true`
       in detection outputs.
-    - `compile_cache_dir` (optional): path for cached compiled plans keyed by (rule hash, mapping
-      pack version, backend version)
+    - `compile_cache_dir` (optional): workspace-root relative path under `<workspace_root>/cache/`
+      for cached compiled plans keyed by (rule hash, mapping pack version, backend version)
+      - `compile_cache_dir` MUST NOT be an absolute path and MUST resolve under
+        `<workspace_root>/cache/` (see "Workspace root and filesystem paths").
       - If `compile_cache_dir` points to a location reused across runs, it is a cross-run cache and
         therefore:
         - requires `cache.cross_run_allowed=true`, and
@@ -956,6 +983,18 @@ Common keys:
         fail closed if the canary is missing or incomplete.
       - When `false`, implementations MAY treat the egress canary as best-effort and record a
         `skipped` outcome with deterministic reasons.
+- `adapters` (optional)
+  - Controls whether non-builtin (packaged / third-party) adapters are permitted and how they are
+    verified (see `020_architecture.md` "Adapter provenance recording (v0.1)").
+  - `allow_third_party` (optional, default: false)
+    - When `false`, the pipeline MUST fail closed if any selected adapter has
+      `source_kind != "builtin"`.
+  - `require_signatures` (optional, default: true)
+    - When `true`, every selected adapter with `source_kind != "builtin"` MUST include a valid
+      `signature` object in adapter provenance and MUST verify successfully before stage execution.
+  - `trusted_key_ids` (optional): list of allowed `key_id` values for adapter signature verification
+    - REQUIRED when `require_signatures: true` and third-party adapters are allowed.
+    - `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
 - `signing` (optional)
   - `enabled` (default: false)
   - `key_ref` (required when enabled): reference to signing private key material (never inline)
@@ -1142,7 +1181,7 @@ detection:
       backend: duckdb_sql
       fail_mode: fail_closed
       raw_fallback_enabled: true
-      compile_cache_dir: ".cache/sigma-compiled"
+      compile_cache_dir: "cache/sigma-compiled"
     limits:
       max_rules: 5000
 

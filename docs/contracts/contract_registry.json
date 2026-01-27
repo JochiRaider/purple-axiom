@@ -336,6 +336,6 @@
   "notes": [
     "contracts[].contract_version MUST be kept in sync with each schema file's contract_version const (enforced by validation/runtime).",
     "bindings[].artifact_glob values are run-relative (relative to the run bundle root; do not include the runs/<run_id>/ prefix).",
-    "raw_parquet/** network manifest bindings are placeholders; reconcile final paths with the run bundle layout spec before relying on them as stable."
+    "Network sensor manifests (raw/pcap/manifest.json and raw/netflow/manifest.json) are v0.1 placeholder artifacts. They MAY be absent unless the corresponding telemetry source is enabled and implemented. These paths are reserved; changing them MUST be treated as a breaking change (version bump + migration guidance)."
   ]
 }

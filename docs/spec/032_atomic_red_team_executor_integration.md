@@ -327,6 +327,170 @@ Minimum v0.1 scope (normative):
   with `status=skipped` (preferred) or `status=unknown`, and MUST set a stable
   `reason_domain="state_reconciliation_report"` and `reason_code`.
 
+### State machine: Runner state reconciliation lifecycle
+
+#### Purpose
+
+- **What it represents**: The runner’s reconciliation lifecycle from per-action reconciliation
+  results (`runner/actions/<action_id>/state_reconciliation_report.json`) to the run-level health
+  substage `runner.state_reconciliation`, including the v0.1 report-status enum.
+- **Scope**: run (derived from per-action reconciliation reports).
+- **Machine ID**: `runner-state-reconciliation` (id_slug_v1)
+- **Version**: `0.1.0`
+
+This state machine is **runner-enforced** and **fixture-backed** in v0.1.
+
+#### Lifecycle authority references
+
+- Scenarios spec:
+  - State reconciliation policy (per action): enablement, sources precedence, repair requested but
+    not supported in v0.1 (`030_scenarios.md`).
+- This document:
+  - State reconciliation (optional; when enabled): minimum v0.1 report population, item-level
+    requirements, repair blocking behavior.
+- ADR-0005: Stage outcomes and failure classification:
+  - State reconciliation policy and deterministic health-substage selection.
+- Operability spec:
+  - Required `runner.state_reconciliation` health substage behavior and counters.
+- Test strategy and CI:
+  - Reconciliation fixtures are treated as state-machine conformance fixtures.
+
+If this state machine conflicts with the linked lifecycle authority, the linked lifecycle authority
+is authoritative.
+
+#### Entities and identifiers
+
+- **Machine instance key**: `run_id`
+
+- **Per-action report key**: `action_id`
+
+- **Eligibility predicate** (deterministic):
+
+  An action is **reconciliation-eligible** for this machine if:
+
+  - effective reconciliation is enabled by runner config, and
+  - the action’s effective reconciliation policy is not `none`.
+
+#### Report status enum
+
+Each reconciliation-eligible action MUST emit exactly one top-level reconciliation report:
+`runner/actions/<action_id>/state_reconciliation_report.json`.
+
+For v0.1, `state_reconciliation_report.status` is a closed string enum:
+
+| Value            | Meaning (v0.1)                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| `clean`          | Reconciliation completed deterministically and no drift was detected for any probed item.             |
+| `drift_detected` | One or more items were probed and at least one drift condition was detected.                          |
+| `unknown`        | No drift was detected, but one or more items had an indeterminate outcome (for example: probe error). |
+| `skipped`        | No drift was detected and reconciliation was skipped for all items (policy-gated or non-probeable).   |
+
+Deterministic status derivation (normative):
+
+- The runner MUST compute the top-level `status` from the set of item outcomes with the following
+  precedence (highest to lowest):
+
+  1. `drift_detected`
+  1. `unknown`
+  1. `skipped`
+  1. `clean`
+
+- If an action has zero reconciliation items after applying the effective sources and policy, the
+  runner MUST set `status="skipped"`.
+
+Top-level `reason_code` conventions (normative):
+
+- When `status="drift_detected"`, the report MUST include a deterministic top-level
+  `reason_code="drift_detected"`.
+- The report MUST reserve `reason_code="reconcile_failed"` for cases where the runner cannot produce
+  a deterministic, contract-valid reconciliation report for an eligible action.
+  - If `reason_code="reconcile_failed"` is emitted, the report MUST set `status="unknown"`.
+
+#### States
+
+Run-level states (closed set for v0.1):
+
+| State                     | Kind     | Description                                                                   |
+| ------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `not_applicable`          | terminal | No reconciliation-eligible actions exist (or reconciliation is disabled).     |
+| `collecting`              | initial  | Reconciliation is enabled and the runner is emitting per-action reports.      |
+| `success`                 | terminal | Reports complete; no action report indicates drift or reconcile failure.      |
+| `failed_drift_detected`   | terminal | At least one action report indicates drift; none indicates reconcile failure. |
+| `failed_reconcile_failed` | terminal | At least one action report indicates `reason_code="reconcile_failed"`.        |
+
+#### Events and transitions
+
+| From state       | Event                         | Guard (deterministic)                                           | To state               |
+| ---------------- | ----------------------------- | --------------------------------------------------------------- | ---------------------- |
+| `collecting`     | `event.action_report_written` | A contract-valid `state_reconciliation_report.json` is written. | `collecting`           |
+| `collecting`     | `event.aggregate_computed`    | All reconciliation-eligible actions have emitted a report.      | `success` / `failed_*` |
+| `not_applicable` | N/A                           | Reconciliation disabled or no eligible actions.                 | `not_applicable`       |
+
+Aggregate computation (normative):
+
+When computing the aggregate, the runner MUST apply the following deterministic precedence:
+
+1. If any action report has `reason_code="reconcile_failed"`, aggregate state MUST be
+   `failed_reconcile_failed`.
+1. Else if any action report has `status="drift_detected"`, aggregate state MUST be
+   `failed_drift_detected`.
+1. Else aggregate state MUST be `success`.
+
+#### Health substage mapping
+
+When the aggregate state is computed, the runner MUST record the run-level health substage
+`stage="runner.state_reconciliation"` as follows (see ADR-0005 and operability):
+
+- If aggregate state is `failed_reconcile_failed`:
+  - `status="failed"`
+  - `reason_code="reconcile_failed"`
+- Else if aggregate state is `failed_drift_detected`:
+  - `status="failed"`
+  - `reason_code="drift_detected"`
+- Else if aggregate state is `success`:
+  - `status="success"`
+  - `reason_code` MUST be omitted
+
+If reconciliation is `not_applicable`, the runner SHOULD omit the `runner.state_reconciliation`
+substage entry.
+
+#### Observability
+
+When reconciliation is enabled (i.e., there exists at least one reconciliation-eligible action), the
+runner MUST emit:
+
+- per-action reconciliation reports under
+  `runner/actions/<action_id>/state_reconciliation_report.json`
+- the run-level health substage `runner.state_reconciliation` as above
+- deterministic counters as defined by the operability spec:
+  - `runner_state_reconciliation_items_total`
+  - `runner_state_reconciliation_drift_detected_total`
+  - `runner_state_reconciliation_skipped_total`
+  - `runner_state_reconciliation_unknown_total`
+  - `runner_state_reconciliation_probe_error_total`
+  - `runner_state_reconciliation_repairs_attempted_total`
+  - `runner_state_reconciliation_repairs_succeeded_total`
+  - `runner_state_reconciliation_repairs_failed_total`
+  - `runner_state_reconciliation_repair_blocked_total`
+
+#### Conformance tests
+
+Conformance fixtures for this machine live under `tests/fixtures/runner/state_reconciliation/` (see
+`100_test_strategy_ci.md`).
+
+The fixture set MUST include, at minimum:
+
+- `record_present_reality_absent` (drift detected)
+- `record_absent_reality_present` (drift detected)
+- `observe_only_drift_detected` (drift detected; no repair attempted)
+- `clean_match` (clean)
+- `repair_requested_but_blocked` (repair intent blocked; drift surfaced)
+
+For each fixture where reconciliation is enabled, the harness MUST assert:
+
+- the per-action report `status` matches the expected enum value, and
+- the run-level `runner.state_reconciliation` health substage matches the mapping above.
+
 ## Atomic YAML parsing
 
 ### Technique discovery

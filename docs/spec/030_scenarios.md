@@ -775,70 +775,203 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
 - Action identity is derived from `action_key_basis_v1` using RFC 8785 canonicalization.
 - Target selection must be deterministic when selectors match multiple assets.
 
-## Appendix: Action lifecycle state machine representation
+## State machine: Runner action lifecycle
 
-This appendix is **representational only**. It is included to make the action lifecycle easier to
-reason about and to align the document with ADR-0007's guidance for state machine notation. It MUST
-NOT be treated as introducing new lifecycle requirements.
+### Purpose
 
-Lifecycle authority references:
+- **What it represents**: The per-action lifecycle (`prepare`, `execute`, `revert`, `teardown`) and
+  the runner-enforced guards that prevent invalid phase ordering and unsafe re-execution.
+- **Scope**: action (single `(run_id, action_id)` instance).
+- **Machine ID**: `runner-action-lifecycle` (id_slug_v1)
+- **Version**: `0.1.0`
+
+### Lifecycle authority references
+
+This state machine is a mechanically consumable representation of the lifecycle semantics already
+defined by the following authoritative sources:
 
 - This document:
   - [Action lifecycle](#action-lifecycle)
   - [Allowed transitions (finite-state machine, normative)](#allowed-transitions-finite-state-machine-normative)
   - [Recording requirements (normative)](#recording-requirements-normative)
-- [ADR-0007 State machines for lifecycle semantics](../adr/ADR-0007-state-machines.md)
+- [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md):
+  - [Runner-enforced lifecycle guards (normative)](032_atomic_red_team_executor_integration.md#runner-enforced-lifecycle-guards-normative)
+- [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md):
+  - `runner.lifecycle_enforcement` health substage semantics
+- [Operability specification](110_operability.md):
+  - Lifecycle enforcement counters (`runner_invalid_lifecycle_transition_total`,
+    `runner_unsafe_rerun_blocked_total`)
 
-### Machine overview
+If this state machine definition conflicts with the linked lifecycle authority, the linked lifecycle
+authority is authoritative (this state machine does not override those semantics).
 
-- **Scope**: per-action lifecycle for a single `(run_id, action_id)` pair.
-- **Authoritative state representation**: `ground_truth.jsonl` -> `lifecycle.phases[]` ordering and
-  `(phase, phase_outcome, reason_code)` tuples.
+### Entities and identifiers
 
-### States (closed set)
+- **Machine instance key**: `(run_id, action_id)`
+- **Correlation identifiers** (used by guards; not a separate state store):
+  - `action_key` (stable action identity/join key)
+  - `target_asset_id`
 
-| State      | Kind         | Description (mapping)                                                           |
-| ---------- | ------------ | ------------------------------------------------------------------------------- |
-| `init`     | initial      | No lifecycle phase records have been written for the action.                    |
-| `prepare`  | intermediate | `prepare` phase is being attempted (or is the next phase to attempt).           |
-| `execute`  | intermediate | `execute` phase is being attempted (or is the next phase to attempt).           |
-| `revert`   | intermediate | `revert` phase is being attempted (or is the next phase to attempt).            |
-| `teardown` | intermediate | `teardown` phase is being attempted (or is the next phase to attempt).          |
-| `done`     | terminal     | The lifecycle has been fully recorded through `teardown` (including `skipped`). |
+### Authoritative state representation
 
-### Events and triggers
+- **Source of truth**: the action’s `lifecycle.phases[]` in the ground truth timeline entry
+  (contracted under `runs/<run_id>/ground_truth.jsonl`).
 
-| Event                     | Meaning                                                       |
-| ------------------------- | ------------------------------------------------------------- |
-| `event.prepare_recorded`  | A `prepare` phase record is present in `lifecycle.phases[]`.  |
-| `event.execute_recorded`  | An `execute` phase record is present in `lifecycle.phases[]`. |
-| `event.revert_recorded`   | A `revert` phase record is present in `lifecycle.phases[]`.   |
-| `event.teardown_recorded` | A `teardown` phase record is present in `lifecycle.phases[]`. |
+- **Derivation rule** (deterministic):
 
-### Transition mapping
+  Let `P` be the set of phase names present for the action across all lifecycle records
+  (`lifecycle.phases[].phase`), filtered to the canonical v0.1 phase names:
+  `{prepare, execute, revert, teardown}`.
 
-This table summarizes the *allowed* ordering and the most important gating rules described in this
-spec. Guards are expressed in terms of the phase outcomes recorded in ground truth.
+  The machine state is:
 
-| From state | Event                     | Guard (authoritative semantics)                                                                                                                                                                                       | To state   |
-| ---------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `init`     | `event.prepare_recorded`  | Always                                                                                                                                                                                                                | `prepare`  |
-| `prepare`  | `event.execute_recorded`  | `prepare.phase_outcome=success` -> `execute` is attempted; otherwise `execute.phase_outcome=skipped` with a stable `reason_code`                                                                                      | `execute`  |
-| `execute`  | `event.revert_recorded`   | `revert` is attempted only when `execute` was attempted; otherwise `revert.phase_outcome=skipped` with `reason_code=prior_phase_blocked` (when cleanup is enabled) or `cleanup_suppressed` (when cleanup is disabled) | `revert`   |
-| `revert`   | `event.teardown_recorded` | `teardown` is recorded after `revert` (attempted or skipped). When cleanup is enabled, `teardown` is typically attempted even when earlier phases failed.                                                             | `teardown` |
-| `teardown` | `event.teardown_recorded` | Once `teardown` is recorded, the lifecycle is complete for the action.                                                                                                                                                | `done`     |
+  - `init` if `P` is empty.
+  - `prepare_recorded` if `prepare ∈ P` and `execute ∉ P`.
+  - `execute_recorded` if `execute ∈ P` and `revert ∉ P`.
+  - `revert_recorded` if `revert ∈ P` and `teardown ∉ P`.
+  - `done` if `teardown ∈ P`.
 
-### Illegal transition surface
+  Notes:
 
-If an implementation is asked to force an invalid lifecycle ordering or to re-run a `non_idempotent`
-action unsafely, this spec requires that the lifecycle evidence surfaces stable enforcement reason
-codes (emitted in lifecycle phase records with `reason_domain="ground_truth"`):
+  - v0.2+ retry records MAY add additional `execute` and/or `revert` records. Retry legality and
+    `attempt_ordinal` ordering are defined by the data contracts spec; retries do not change the
+    v0.1 state progression above.
 
-- `invalid_lifecycle_transition`
-- `unsafe_rerun_blocked`
+- **Persistence requirement**:
 
-See the authoritative "Allowed transitions" section for the normative requirements and the
-`logs/health.json` linkage.
+  - MUST persist: yes (implicit via the ground truth lifecycle records).
+
+### Events
+
+- `event.prepare_recorded`: a `prepare` phase record is appended to `lifecycle.phases[]`.
+- `event.execute_recorded`: an `execute` phase record is appended to `lifecycle.phases[]`.
+- `event.revert_recorded`: a `revert` phase record is appended to `lifecycle.phases[]`.
+- `event.teardown_recorded`: a `teardown` phase record is appended to `lifecycle.phases[]`.
+
+Event requirements (normative):
+
+- Events MUST be processed in the same order as the corresponding phase records appear in
+  `lifecycle.phases[]`.
+- If v0.2+ retry records are present, additional `event.execute_recorded` and/or
+  `event.revert_recorded` events MAY occur and MUST follow the data-contract retry semantics
+  (`attempt_ordinal`, monotonic ordering). (Retry semantics are out of scope for this v0.1 machine
+  version’s conformance suite.)
+
+### States
+
+| State              | Kind         | Description                                                           | Invariants                                                                                           | Observable signals                                                                                |
+| ------------------ | ------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `init`             | initial      | No lifecycle phase record has been appended for the action yet.       | `lifecycle.phases[]` is absent or empty.                                                             | No `lifecycle.phases[]` for the action in `ground_truth.jsonl`.                                   |
+| `prepare_recorded` | intermediate | A `prepare` phase record exists; `execute` has not yet been recorded. | `prepare` is present in `lifecycle.phases[]`.                                                        | `lifecycle.phases[]` contains a `prepare` record.                                                 |
+| `execute_recorded` | intermediate | An `execute` phase record exists; `revert` has not yet been recorded. | `prepare` precedes `execute` in `lifecycle.phases[]` ordering.                                       | `lifecycle.phases[]` contains `prepare`, then `execute`.                                          |
+| `revert_recorded`  | intermediate | A `revert` phase record exists; `teardown` has not yet been recorded. | `revert` MUST NOT be recorded before `execute` (ordering invariant).                                 | `lifecycle.phases[]` contains `prepare`, `execute`, then `revert`.                                |
+| `done`             | terminal     | A `teardown` phase record exists; the v0.1 lifecycle is complete.     | `lifecycle.phases[]` contains `prepare`, `execute`, `revert`, `teardown` in that order (at minimum). | `lifecycle.phases[]` contains `prepare`, `execute`, `revert`, `teardown` in order for the action. |
+
+### Transition rules
+
+| From state         | Event                     | Guard (deterministic)         | To state           | Actions (entry/exit)                                                    | Outcome mapping                                                                                       | Observable transition evidence            |
+| ------------------ | ------------------------- | ----------------------------- | ------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `init`             | `event.prepare_recorded`  | None                          | `prepare_recorded` | Append a `prepare` phase record to `lifecycle.phases[]` (append-only).  | Phase record MUST satisfy the ground truth lifecycle contract (`025_data_contracts.md`).              | `ground_truth.jsonl` contains `prepare`.  |
+| `prepare_recorded` | `event.execute_recorded`  | `prepare` phase record exists | `execute_recorded` | Append an `execute` phase record to `lifecycle.phases[]` (append-only). | Phase record MUST satisfy gating/guard rules in “Entry actions and exit actions” below.               | `ground_truth.jsonl` contains `execute`.  |
+| `execute_recorded` | `event.revert_recorded`   | `execute` phase record exists | `revert_recorded`  | Append a `revert` phase record to `lifecycle.phases[]` (append-only).   | Phase record MUST satisfy cleanup suppression / prior-phase blocked / invalid-transition rules below. | `ground_truth.jsonl` contains `revert`.   |
+| `revert_recorded`  | `event.teardown_recorded` | `revert` phase record exists  | `done`             | Append a `teardown` phase record to `lifecycle.phases[]` (append-only). | Phase record MUST satisfy cleanup suppression rules below.                                            | `ground_truth.jsonl` contains `teardown`. |
+
+### Entry actions and exit actions
+
+For v0.1, the primary state-advancing side effect is appending the corresponding phase record to
+ground truth. The following rules constrain what MAY be attempted and how skipped phases MUST be
+recorded.
+
+Requirements (normative):
+
+- Writes to `lifecycle.phases[]` MUST be append-only and MUST preserve phase ordering.
+- Phase records MUST conform to the data contract shape and validation rules in
+  `025_data_contracts.md`.
+- Phases that are not attempted MUST still be recorded as `phase_outcome="skipped"` with
+  `reason_domain="ground_truth"` and a stable `reason_code`.
+
+Per-phase rules (normative):
+
+- **`execute` gating**:
+
+  - The runner MUST attempt `execute` only when `prepare.phase_outcome="success"`.
+  - If `prepare.phase_outcome != "success"`, `execute.phase_outcome` MUST be `skipped` with a stable
+    `reason_code`.
+  - If the runner refuses an unsafe re-run of a `non_idempotent` (or `unknown` treated as
+    `non_idempotent`) action instance, `execute.phase_outcome` MUST be `skipped` with
+    `reason_code="unsafe_rerun_blocked"`.
+
+- **`revert` applicability**:
+
+  - If effective `plan.cleanup=false`, the runner MUST NOT attempt `revert`.
+    - `revert.phase_outcome` MUST be `skipped` with `reason_code="cleanup_suppressed"`.
+  - Otherwise, the runner MUST attempt `revert` only when `execute` was attempted.
+    - If `execute` was not attempted, `revert.phase_outcome` MUST be `skipped` with
+      `reason_code="prior_phase_blocked"` (normal short-circuit).
+
+- **`teardown` applicability**:
+
+  - If effective `plan.cleanup=false`, the runner MUST NOT attempt cleanup-dependent `teardown`
+    work.
+    - `teardown.phase_outcome` MUST be `skipped` with `reason_code="cleanup_suppressed"`.
+
+### Illegal transitions
+
+Illegal transitions are any attempt to violate the lifecycle ordering or guard rules in a way that
+is not explainable by normal short-circuit semantics (`prior_phase_blocked`, `cleanup_suppressed`).
+
+- **Policy**: fail closed or warn-and-skip as determined by runner policy (see ADR-0005 and
+  operability). The requested phase MUST NOT be attempted.
+- **Classification**:
+  - `reason_code="invalid_lifecycle_transition"` MUST be used only for true violations (for example:
+    an explicit/forced request to attempt `execute` without `prepare` success, or to attempt
+    `revert` without any `execute` attempt), and MUST NOT be used for normal `prior_phase_blocked`
+    or `cleanup_suppressed` cases.
+  - `reason_code="unsafe_rerun_blocked"` MUST be used only for re-run safety refusal of
+    non-idempotent (or `unknown`) actions.
+
+Observable evidence (normative):
+
+- The affected phase record in ground truth MUST be recorded as `phase_outcome="skipped"` with the
+  corresponding `reason_code`.
+- When `logs/health.json` is enabled, the runner MUST emit a health substage entry with:
+  - `stage="runner.lifecycle_enforcement"`
+  - `status="failed"`
+  - `reason_code="invalid_lifecycle_transition"` or `reason_code="unsafe_rerun_blocked"`
+- Deterministic counters MUST be incremented as defined by operability:
+  - `runner_invalid_lifecycle_transition_total`
+  - `runner_unsafe_rerun_blocked_total`
+
+### Observability
+
+Required signals (normative):
+
+- **Artifacts**:
+  - `runs/<run_id>/ground_truth.jsonl` (phase records + `reason_code` fields)
+  - `runs/<run_id>/logs/health.json` (when enabled): `health.json.stages[]` entry for
+    `stage="runner.lifecycle_enforcement"` when an enforcement event occurs
+- **Counters** (when counters are enabled for the run):
+  - `runner_invalid_lifecycle_transition_total`
+  - `runner_unsafe_rerun_blocked_total`
+
+### Conformance tests
+
+Minimum conformance suite (normative):
+
+- Conformance fixtures for this machine live under `tests/fixtures/runner/lifecycle/` (see
+  `100_test_strategy_ci.md`).
+- The fixture set MUST include, at minimum:
+  - **Happy path**: an action that records `prepare`, `execute`, `revert`, `teardown` in order with
+    no enforcement events.
+  - **Unsafe re-run refusal**:
+    - `unsafe_rerun_blocked_cleanup_suppressed`
+    - `unsafe_rerun_blocked_revert_failed`
+  - **Invalid transition enforcement**:
+    - `execute_not_attempted_without_prepare_success`
+    - `revert_not_attempted_without_execute`
+  - **Determinism**: for at least one enforcement fixture, the harness MUST compute a stable hash
+    over the action lifecycle records (RECOMMENDED: RFC 8785 JCS + SHA-256) and assert the hash is
+    identical across repeated runs with identical inputs.
 
 ## References
 
@@ -853,7 +986,7 @@ See the authoritative "Allowed transitions" section for the normative requiremen
 
 | Date      | Change                                                                                               |
 | --------- | ---------------------------------------------------------------------------------------------------- |
-| 1/24/2026 | update                                                                                               |
+| 1/26/2026 | state machine update                                                                                 |
 | 1/19/2026 | align scenario types with plan execution model; align ground truth seed/examples with data contracts |
 | 1/13/2026 | Define allow_network enforcement + validation hook                                                   |
 | 1/10/2026 | Style guide migration (no technical changes)                                                         |

@@ -177,6 +177,10 @@ When normalization is enabled, the normalizer MUST emit:
 - `normalized/mapping_coverage.json` (required; MUST be emitted even when zero events are
   normalized)
 
+Note (normative): `normalized/mapping_profile_snapshot.json` is the normalization mapping provenance
+snapshot. It is distinct from `bridge/mapping_pack_snapshot.json` (Sigma-to-OCSF bridge provenance)
+which is emitted by the detection stage when Sigma bridge evaluation is enabled.
+
 When normalization produces an OCSF event store, the normalizer MUST also emit exactly one of:
 
 - `normalized/ocsf_events/` (Parquet dataset directory; MUST include

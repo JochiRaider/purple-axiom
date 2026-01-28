@@ -27,6 +27,16 @@ Purple Axiom tiers normalized event content to balance MVP feasibility with long
 coverage gate. Tier 2 defines per-family minimums when a class is enabled. Tier 3 is enrichment that
 MUST remain deterministic. Tier R defines redaction-safe raw retention.
 
+Terminology note (normative):
+
+- This document defines **field tiers** (FT0/FT1/FT2/FT3/FT-R) for normalization completeness and
+  validation gating.
+- `metadata.identity_tier` defines **identity tiers** (IT1/IT2/IT3) for event identity strength (see
+  ADR-0002).
+- Reports, gate names, and operator-facing text SHOULD qualify tier references as either "field
+  tier" or "identity tier" (or use FT\*/IT\* shorthand). They SHOULD NOT use bare "Tier N" where
+  ambiguity is possible.
+
 ## Goals
 
 1. **Make MVP feasible**: define a small, stable Core set that every event should carry.
@@ -98,7 +108,7 @@ Every emitted normalized event MUST include the following fields.
 | `metadata.normalizer_version` |        MUST | Normalizer build/version.                                                                                                                                                                                                                    |
 | `metadata.source_type`        |        MUST | Source discriminator (example: `windows-security`, `windows-sysmon`, `osquery`, `linux-auditd`).                                                                                                                                             |
 | `metadata.source_event_id`    |        MUST | Source-native upstream ID when present; else `null`. MUST be a string when non-null. For `metadata.identity_tier = 3`, this MUST be `null`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).       |
-| `metadata.identity_tier`      |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). This is distinct from the Tier 0/1/2/3/R field tier model. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                 |
+| `metadata.identity_tier`      |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). This is distinct from the FT0/FT1/FT2/FT3/FT-R field tier model. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).           |
 
 #### Provisional network telemetry source types (v0.1)
 

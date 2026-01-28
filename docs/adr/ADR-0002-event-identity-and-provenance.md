@@ -56,8 +56,11 @@ Provenance surfaces (normative):
 Terminology note (normative):
 
 - `metadata.identity_tier` refers to event identity strength tiers (1|2|3) defined in this ADR.
-- This is distinct from OCSF field tiering (Tier 0/1/2/3 in 055_ocsf_field_tiers.md) and MUST NOT be
-  conflated in reporting or gate naming.
+- This is distinct from OCSF field tiering (Tier 0/1/2/3/R in `055_ocsf_field_tiers.md`) and MUST
+  NOT be conflated in reporting or gate naming.
+- Human-facing outputs and gate descriptions SHOULD qualify tier references as either "identity
+  tier" (IT1/IT2/IT3) or "field tier" (FT0/FT1/FT2/FT3/FT-R). They SHOULD NOT use unqualified "Tier
+  N" where ambiguity is possible.
 
 ### `metadata.source_type` vs `identity_basis.source_type`
 

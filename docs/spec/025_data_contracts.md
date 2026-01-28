@@ -783,6 +783,14 @@ Given an `evidence_ref` with `(artifact_path, selector?, handling?)`, the reader
    - `absent`:
      - The reader MUST return `error_code="evidence_absent"` (severity: `error`).
 
+Terminology note (normative):
+
+- `error_code="artifact_missing"` is a reader/consumer error meaning a referenced artifact path does
+  not exist in the run bundle (filesystem absence).
+- This is distinct from the scoring/reporting gap category `missing_telemetry`, which means expected
+  telemetry signals for an executed action are absent (see `070_scoring_metrics.md`).
+- Implementations MUST NOT map `artifact_missing` to the `missing_telemetry` gap category.
+
 Selector prefix sanity (normative):
 
 - Selector prefixes are defined in the evidence ref selector grammar below.
@@ -922,8 +930,18 @@ Selector constraints (normative when present):
 
 - `selector` MUST be ASCII, \<=256 chars.
 - `selector` MUST be one of:
-  - `json_pointer:<RFC6901 JSON Pointer>` (selects subobject from JSON file)
-  - `jsonl_line:<N>` (selects 1-indexed line from JSONL)
+  - `json_pointer:<pointer>`
+    - `<pointer>` MUST be an RFC 6901 JSON Pointer string.
+    - The `json_pointer:` prefix (including the colon) is the selector type; it is not part of the
+      JSON Pointer value.
+    - The JSON Pointer string MAY be empty to select the full JSON document.
+      - Canonical form for the empty pointer: `json_pointer:` (no trailing `/`).
+    - If the JSON Pointer string is non-empty, it MUST start with `/`.
+      - Example: `json_pointer:/versions/pipeline_version`
+    - `json_pointer:/` selects the member with an empty key at the document root and MUST NOT be
+      used as a synonym for the empty pointer.
+  - `jsonl_line:<N>`
+    - `<N>` MUST be a base-10, 1-indexed positive integer selecting the Nth line from a JSONL file.
 
 ### Run counters (operability) (normative)
 
@@ -1023,8 +1041,14 @@ Optional integrity field:
 
 Output guarantees:
 
-- The reporting stage MUST include the pointer form. If snapshot form is present, it MUST match the
-  bytes of the baseline manifest referenced by the pointer (by SHA-256 digest).
+- The reporting stage MUST include the pointer form.
+- If snapshot form is present:
+  - `inputs/baseline_run_ref.json.baseline_manifest_sha256` MUST be present, and
+  - it MUST equal `sha256(file_bytes)` of `inputs/baseline/manifest.json`, serialized as a canonical
+    digest string (`sha256:<lowercase_hex>`).
+  - If the snapshot digest does not match `baseline_manifest_sha256`, the implementation MUST fail
+    closed and MUST classify the condition as `baseline_incompatible` in the
+    `reporting.regression_compare` substage (ADR-0005).
 
 Resolution algorithm (normative):
 
@@ -1044,44 +1068,30 @@ Resolution algorithm (normative):
      possible, and then MUST write `inputs/baseline_run_ref.json` atomically once with:
      - the selected baseline fields,
      - `baseline_manifest_ref`, and
-     - `baseline_manifest_sha256` if the bytes were successfully read.
+     - `baseline_manifest_sha256` (MUST be present if the bytes were successfully read).
 
 1. Materialize or reuse the snapshot form (best-effort, recommended):
 
    - If `inputs/baseline/manifest.json` exists, implementations MUST validate it and MUST NOT
      rewrite it.
+     - Implementations MUST also verify snapshot consistency:
+       - `inputs/baseline_run_ref.json` MUST exist.
+       - `inputs/baseline_run_ref.json.baseline_manifest_sha256` MUST be present.
+       - `sha256(file_bytes(inputs/baseline/manifest.json))` MUST equal that
+         `baseline_manifest_sha256` value.
+       - On any mismatch, the implementation MUST fail closed with `baseline_incompatible` in the
+         `reporting.regression_compare` substage (ADR-0005).
    - Otherwise, if baseline manifest bytes were successfully read, implementations SHOULD write
      `inputs/baseline/manifest.json` to exactly those bytes (atomic write).
 
 #### Deterministic baseline resolution and failure mapping (normative)
 
-Inputs:
+Baseline resolution algorithm (normative):
 
-- Baseline selection is provided by configuration via `reporting.regression.baseline_run_id` or
-  `reporting.regression.baseline_manifest_path` (see `120_config_reference.md`).
-
-Output guarantees (when regression is enabled):
-
-- `runs/<run_id>/inputs/baseline_run_ref.json` MUST be materialized.
-- At least one baseline reference form MUST be present under `runs/<run_id>/inputs/`.
-- When the baseline manifest bytes are readable, implementations SHOULD also materialize
-  `runs/<run_id>/inputs/baseline/manifest.json` (snapshot form).
-
-Resolution algorithm (normative):
-
-1. Determine `baseline_manifest_ref`:
-   - If `baseline_run_id` is selected, `baseline_manifest_ref` MUST be
-     `runs/<baseline_run_id>/manifest.json` (relative to `reporting.output_dir`).
-   - If `baseline_manifest_path` is selected, `baseline_manifest_ref` MUST be the provided
-     `baseline_manifest_path` (relative to `reporting.output_dir`).
-1. Implementations MUST write `inputs/baseline_run_ref.json` with the selected baseline fields and
-   `baseline_manifest_ref` prior to regression comparison.
-1. Implementations MUST attempt to read the baseline manifest bytes from `baseline_manifest_ref`:
-   - On success, implementations MUST compute `baseline_manifest_sha256` over the exact bytes read,
-     serialize it as `sha256:<lowercase_hex>`, and SHOULD snapshot those same bytes to
-     `inputs/baseline/manifest.json`.
-   - On failure, implementations MUST omit `baseline_manifest_sha256` from
-     `inputs/baseline_run_ref.json` and MUST classify the condition as `baseline_missing`.
+- Implementations MUST follow the "Resolution algorithm (normative)" defined in the preceding
+  "Regression baseline reference inputs (normative)" section.
+- Any snapshot/pointer inconsistency MUST be treated as `baseline_incompatible` (see "Output
+  guarantees" above).
 
 Failure mapping (normative):
 
@@ -1209,6 +1219,14 @@ Recommended manifest additions (normative in schema when implemented):
 - `normalization.ocsf_version` (string): pinned OCSF version used by the normalizer for this run.
   - When `normalized/mapping_profile_snapshot.json` is present, `normalization.ocsf_version` SHOULD
     match `mapping_profile_snapshot.ocsf_version`.
+
+Terminology note (normative):
+
+- The term "mapping profile" in this artifact name aligns with the OCSF mapping profile authoring
+  model (`docs/mappings/ocsf_mapping_profile_authoring_guide.md`).
+- This artifact is distinct from the Sigma bridge mapping pack snapshot at
+  `bridge/mapping_pack_snapshot.json`. Specs and tooling SHOULD refer to these artifacts by full
+  run-relative path to avoid ambiguity.
 
 Recommended version recording (aligned with ADR-0001):
 
@@ -2130,6 +2148,14 @@ Hashing (normative):
 ### Bridge mapping pack snapshot
 
 This artifact is stored at `bridge/mapping_pack_snapshot.json`.
+
+Terminology note (normative):
+
+- This artifact captures Sigma-to-OCSF bridge inputs and is named `mapping_pack_snapshot` to align
+  with the bridge terminology in `065_sigma_to_ocsf_bridge.md`.
+- This artifact is distinct from the normalization mapping profile snapshot at
+  `normalized/mapping_profile_snapshot.json`. Specs and tooling SHOULD refer to these artifacts by
+  full run-relative path to avoid ambiguity.
 
 Purpose:
 

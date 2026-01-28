@@ -215,8 +215,15 @@ Computation rules (normative):
 - Phase outcome cells MUST be rendered from the ground truth `phase_outcome` values.
   - If retries exist for `execute` and/or `revert`, the cell MUST list attempt outcomes in ascending
     `attempt_ordinal` order using the syntax `<phase>[<n>]=<outcome>`, joined by `; `.
-- `order` MUST be derived by sorting rows by `(start_utc, action_id)` (UTF-8 byte order, no locale)
-  and then assigning 1..N in that order.
+- `order` MUST be derived by sorting rows by a deterministic key and then assigning 1..N in that
+  order.
+  - Primary sort key: `start_utc` ascending.
+  - Secondary sort key (tie-breaker when `start_utc` is identical):
+    - When `plan/expanded_graph.json` is present and a `node_ordinal` can be resolved for every
+      `action_id` in the table (by joining on `action_id`), rows MUST be sorted by `node_ordinal`
+      ascending (numeric).
+    - Otherwise, rows MUST be sorted by `action_id` ascending (UTF-8 byte order, no locale).
+  - Final tie-breaker: `action_id` ascending (UTF-8 byte order, no locale).
 
 Evidence links (normative):
 
@@ -320,6 +327,14 @@ Common degradation reasons include:
 | `regression_compare_failed`          | Quality gate  | Regression comparison errored; results indeterminate           |
 | `cleanup_verification_failed`        | Validation    | Cleanup verification failures above threshold (future gate)    |
 | `criteria_misconfigured_rate`        | Validation    | Criteria misconfigured rate above threshold (optional gate)    |
+
+Clarification (normative):
+
+- `report/report.json.status_reasons[]` and `report/report.json.status_reason_details[]` use
+  `reason_domain="report.schema"` and are scoped to the report schema (not the ADR-0005 stage
+  outcome reason code catalog).
+- Stage/substage outcome `reason_code` values in `manifest.stage_outcomes[]` and `logs/health.json`
+  remain governed by ADR-0005.
 
 Determinism (normative):
 
@@ -538,6 +553,14 @@ emit additional gap category tokens.
 | `rule_logic_gap`              | Fields present, rule executable, but rule did not fire    | Rule tuning                   |
 | `cleanup_verification_failed` | Cleanup invoked but verification checks failed            | Runner/scenario investigation |
 
+Terminology note (normative):
+
+- `missing_telemetry` describes missing expected telemetry signals for an executed action.
+- It MUST NOT be used to describe missing artifact files (for example missing Parquet partitions or
+  missing JSON artifacts). Missing artifacts are surfaced via stage outcomes (for example
+  `input_missing`, `baseline_missing`, `baseline_incompatible`) or reader errors
+  (`error_code="artifact_missing"`), not via the gap taxonomy.
+
 Required content:
 
 - Aggregate counts per gap category
@@ -561,6 +584,14 @@ Measurement layers (closed set):
 - `normalization`
 - `detection`
 - `scoring`
+
+Note (stage vs layer, normative):
+
+- The pipeline includes a `validation` stage (criteria evaluation and cleanup verification)
+  configured via `validation.*` (see `120_config_reference.md`).
+- Validation is not a separate `measurement_layer` token. Validation-originated gap categories
+  (`criteria_unavailable`, `criteria_misconfigured`, `cleanup_verification_failed`) MUST use
+  `measurement_layer="scoring"` per the mapping in `070_scoring_metrics.md`.
 
 Note: Artifact namespaces such as `bridge/**`, `criteria/**`, and `runner/**` are evidence surfaces
 and report subsections. They MUST NOT be used as `measurement_layer` values.
@@ -926,13 +957,27 @@ Required fields:
 
 Baseline field derivation (normative):
 
+- If `inputs/baseline/manifest.json` exists:
+
+  - `inputs/baseline_run_ref.json` MUST exist.
+  - `inputs/baseline_run_ref.json.baseline_manifest_sha256` MUST be present.
+  - Reporting MUST compute `sha256(file_bytes)` of `inputs/baseline/manifest.json` and MUST verify
+    it `baseline.manifest_ref` MUST equal that `baseline_manifest_sha256` value.
+  - On mismatch, `comparability.status` MUST be `indeterminate` with
+    `comparability.reason_code="baseline_incompatible"`, `deltas[]` MUST be empty, and the reporting
+    stage MUST emit `reporting.regression_compare` with `reason_code=baseline_incompatible`
+    (ADR-0005).
+
 - `baseline.manifest_ref` derivation:
+
   - If `inputs/baseline/manifest.json` exists, `baseline.manifest_ref` MUST be
     `inputs/baseline/manifest.json`.
   - Otherwise, if `inputs/baseline_run_ref.json` records `baseline_manifest_sha256`, then
     `baseline.manifest_ref` SHOULD equal that `baseline_manifest_sha256` value.
   - Otherwise (baseline not readable), `baseline.manifest_ref` MUST be `null`.
+
 - `baseline.generated_at_utc` derivation:
+
   - If `baseline.run_id` is known and the baseline report exists at
     `runs/<baseline_run_id>/report/report.json`, then `baseline.generated_at_utc` MUST equal the
     baseline report’s top-level `generated_at_utc`.
@@ -1071,6 +1116,10 @@ If any MUST-match key results in `status=fail`:
 - Fixture: runs with identical `manifest.versions.*` pins but differing environment fields
   (hostnames, timestamps, absolute paths) MUST remain comparable; comparability MUST NOT depend on
   ephemeral fields.
+- Fixture: when `inputs/baseline/manifest.json` is present, but
+  `inputs/baseline_run_ref.json.baseline_manifest_sha256` is missing or does not match the snapshot
+  bytes, regression MUST be indeterminate with `comparability.reason_code="baseline_incompatible"`
+  and `deltas[]=[]`.
 
 ### Regression deltas
 
@@ -1339,7 +1388,7 @@ The `report/report.json` output MUST conform to the following structure:
         },
         {
           "artifact_path": "inputs/baseline_run_ref.json",
-          "selector": "json_pointer:/",
+          "selector": "json_pointer:",
           "handling": "present | withheld | quarantined | absent"
         },
         {

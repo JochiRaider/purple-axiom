@@ -626,7 +626,16 @@ Common keys:
 - `dedupe` (optional)
   - `enabled` (default: true)
   - `scope` (default: `per_run`): `per_run` (v0.1 only)
-  - `index_dir` (optional): defaults to `runs/<run_id>/logs/dedupe_index/`
+  - `index_dir` (optional; run-relative directory under the run bundle root)
+    - Default: `logs/dedupe_index/`
+    - Path constraints (normative):
+      - MUST be a run-relative POSIX path (no leading `/`, no drive letters, no `..` segments).
+      - MUST normalize to `logs/dedupe_index/` or a subdirectory under `logs/dedupe_index/`.
+      - Any value that would resolve outside `runs/<run_id>/logs/dedupe_index/` MUST be rejected by
+        config validation (fail closed with `reason_code=config_schema_invalid`).
+    - Rationale (non-normative): the dedupe index is volatile diagnostics and remains excluded from
+      default export bundles and `security/checksums.txt` when it stays under `logs/` (see
+      `050_normalization_ocsf.md`, `025_data_contracts.md`, and ADR-0009).
   - `conflict_policy` (default: `warn`): `warn | fail_closed`
 
 Notes (v0.1):
@@ -687,6 +696,10 @@ Notes:
 - When `fail_mode: fail_closed`, criteria evaluation errors MUST produce a validation stage outcome
   of `failed`, and `manifest.status` MUST be derived per the
   [data contracts specification](025_data_contracts.md) ("Status derivation").
+- Reporting/triage note (normative): Validation is a pipeline stage but the reporting measurement
+  layer taxonomy is coarser. Validation-originated gap categories (`criteria_unavailable`,
+  `criteria_misconfigured`, `cleanup_verification_failed`) MUST be attributed to
+  `measurement_layer="scoring"` (see `070_scoring_metrics.md` and `080_reporting.md`).
 
 ### Detection (detection)
 

@@ -236,6 +236,15 @@ comparison semantics (normative)".
   - cleanup_verification_failed: cleanup invoked, but verification checks failed (run may be
     considered tainted)
 
+Terminology note (normative):
+
+- The gap category token `missing_telemetry` refers to missing expected telemetry signals for an
+  executed action.
+
+- It MUST NOT be used to represent missing artifact files. Missing artifacts are surfaced as stage
+  failures (for example `input_missing`) or reader errors (`artifact_missing`) per
+  `025_data_contracts.md`.
+
 - Criteria evaluation (when criteria packs are enabled):
 
   - criteria_pass_rate: fraction of executed actions with criteria status `pass`

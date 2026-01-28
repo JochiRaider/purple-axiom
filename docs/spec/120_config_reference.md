@@ -272,6 +272,21 @@ Common keys:
       - `get_only`: the runner MAY execute `get_prereq_command` unconditionally. Any prerequisite
         get/install MUST be recorded as a side effect (`effect_type=prereq_install`) attributable to
         `prepare` (see `032_atomic_red_team_executor_integration.md`).
+  - `template_snapshot` (optional)
+    - `mode` (optional, default: `off`; enum: `off | extracted | source`)
+      - `off`: do not write template snapshot artifacts.
+      - `extracted`: write `runner/actions/<action_id>/atomic_test_extracted.json`.
+      - `source`: write both:
+        - `runner/actions/<action_id>/atomic_test_extracted.json`
+        - `runner/actions/<action_id>/atomic_test_source.yaml`
+      - When mode is `extracted` or `source`, the runner MUST write `atomic_test_extracted.json`
+        before attempting execution and before prerequisites evaluation.
+      - When mode is `source`, the runner MUST also write `atomic_test_source.yaml` with newline
+        normalization to LF.
+      - Snapshot artifacts represent the Atomic template (no input placeholder substitution; no
+        resolved/substituted commands).
+      - See also: `032_atomic_red_team_executor_integration.md` ("Atomic template snapshot"); it
+        defines `runner.atomic.template_snapshot.mode` semantics.
   - `capture_transcripts` (optional, default: true): persist per-test stdout/stderr under `runner/`
     evidence
   - `capture_terminal_recordings` (optional, default: false): persist per-test terminal session

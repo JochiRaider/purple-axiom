@@ -60,6 +60,10 @@ with this document referenced as needed.
 - Run bundle: The folder `runs/<run_id>/` containing all artifacts for one execution.
 - Run-relative path: A POSIX-style path interpreted as relative to the run bundle root
   (`runs/<run_id>/`). Run-relative paths MUST NOT include the `runs/<run_id>/` prefix.
+- Field-path notation (manifest; normative): When referring to fields inside the run manifest
+  content, documents in this repository MUST use `manifest.<field_path>` (for example,
+  `manifest.status`, `manifest.versions.ocsf_version`). The `.json` extension MUST NOT appear in a
+  field path. `manifest.json` refers only to the manifest filename/artifact path.
 - JSONL: JSON Lines, one JSON object per line.
 - OCSF event: A normalized event that conforms to the required envelope fields and may include
   additional OCSF fields and vendor extensions.
@@ -1014,13 +1018,13 @@ Baseline selection (exactly one is REQUIRED):
 
 Optional integrity field:
 
-- `baseline_manifest_sha256`: string (hex). If the baseline manifest is readable, implementations
-  SHOULD populate this field to pin the exact bytes used for comparison.
+- `baseline_manifest_sha256`: string (`sha256:<lowercase_hex>`). If the baseline manifest is
+  readable, implementations SHOULD populate this field to pin the exact bytes used for comparison.
 
 Output guarantees:
 
 - The reporting stage MUST include the pointer form. If snapshot form is present, it MUST match the
-  bytes of the baseline manifest referenced by the pointer (by sha256).
+  bytes of the baseline manifest referenced by the pointer (by SHA-256 digest).
 
 Resolution algorithm (normative):
 
@@ -1073,8 +1077,9 @@ Resolution algorithm (normative):
 1. Implementations MUST write `inputs/baseline_run_ref.json` with the selected baseline fields and
    `baseline_manifest_ref` prior to regression comparison.
 1. Implementations MUST attempt to read the baseline manifest bytes from `baseline_manifest_ref`:
-   - On success, implementations MUST compute `baseline_manifest_sha256` over the exact bytes read
-     and SHOULD snapshot those same bytes to `inputs/baseline/manifest.json`.
+   - On success, implementations MUST compute `baseline_manifest_sha256` over the exact bytes read,
+     serialize it as `sha256:<lowercase_hex>`, and SHOULD snapshot those same bytes to
+     `inputs/baseline/manifest.json`.
    - On failure, implementations MUST omit `baseline_manifest_sha256` from
      `inputs/baseline_run_ref.json` and MUST classify the condition as `baseline_missing`.
 
@@ -2269,6 +2274,27 @@ Normative requirements:
   MUST NOT be written into the run bundle.
 - Signing MUST be the final step after all long-term artifacts are materialized.
 
+### Canonical SHA-256 digest strings (normative)
+
+Within run bundles, any SHA-256 digest serialized as a string (for example `*_sha256` fields,
+`security/checksums.txt`, and signing provenance) MUST use the following canonical form:
+
+- `sha256:<lowercase_hex>`
+- Regex: `^sha256:[0-9a-f]{64}$`
+
+Requirements:
+
+- The `sha256:` prefix is mandatory.
+- `<lowercase_hex>` MUST be exactly 64 characters and MUST be lowercase hex (`0-9a-f`).
+- The digest string MUST NOT contain whitespace.
+
+Filesystem-safe exception (only when explicitly required by a path constraint):
+
+- When a digest is used as a filename stem or path segment, it MUST use `<lowercase_hex>` only (no
+  `sha256:` prefix).
+- Specs using this exception MUST label the value as a filename stem/path segment (not a digest
+  string field value).
+
 ### Signing artifacts and locations
 
 When signing is enabled, the run bundle MUST include:
@@ -2283,8 +2309,8 @@ signing artifacts, and related metadata).
 ### Long-term artifact selection for checksumming
 
 `security/checksums.txt` MUST include one line per included file, sorted by `path` ascending using
-UTF-8 byte order (no locale), in the format: `<sha256_hex><space><path><newline>`. `path` MUST be
-run-relative using POSIX separators (`/`). Newlines MUST be `\n` (LF).
+UTF-8 byte order (no locale), in the format: `sha256:<lowercase_hex><space><path><newline>`. `path`
+MUST be run-relative using POSIX separators (`/`). Newlines MUST be `\n` (LF).
 
 `security/checksums.txt` MUST include every file under `runs/<run_id>/` except:
 
@@ -2340,8 +2366,9 @@ This section defines the `security/checksums.txt` format.
 
 - Encoding: UTF-8.
 - Line endings: LF (`\n`).
-- One record per line: `sha256_hex  relative_path` Where:
-  - `sha256_hex` is 64 lowercase hex characters of `sha256(file_bytes)`.
+- One record per line: `sha256:<lowercase_hex><space><relative_path><newline>` Where:
+  - `sha256:<lowercase_hex>` MUST match `^sha256:[0-9a-f]{64}$` and MUST equal `sha256(file_bytes)`
+    serialized in the canonical digest string form.
   - `relative_path` is the canonicalized relative path.
 - Ordering: lines MUST be sorted by `relative_path` using lexicographic order over UTF-8 bytes.
 
@@ -2351,7 +2378,7 @@ This section defines `key_id`.
 
 - `security/public_key.ed25519` MUST contain the Ed25519 public key as base64 of the 32 raw public
   key bytes, followed by a single LF.
-- `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
+- `key_id` is defined as `sha256(public_key_bytes)` serialized as `sha256:<lowercase_hex>`.
 - Implementations SHOULD record `key_id` in run provenance (for example, `manifest.json` under an
   extensions namespace) to support downstream trust policies.
 
@@ -2363,7 +2390,7 @@ present):
 - If any of the following fields are recorded, they MUST match the emitted signing artifacts:
   - `extensions.security.signing.key_id` (string): the `key_id` defined above.
   - `extensions.security.signing.checksums_sha256` (string): `sha256(file_bytes)` of
-    `security/checksums.txt`, as 64 lowercase hex characters.
+    `security/checksums.txt`, serialized as `sha256:<lowercase_hex>`.
   - `extensions.security.signing.checksums_path` (string): `security/checksums.txt`.
   - `extensions.security.signing.signature_path` (string): `security/signature.ed25519`.
   - `extensions.security.signing.public_key_path` (string): `security/public_key.ed25519`.
@@ -2384,7 +2411,8 @@ Given a run bundle that includes `security/checksums.txt`, `security/signature.e
 `security/public_key.ed25519`, verification MUST:
 
 1. Parse and canonicalize `security/checksums.txt` exactly as specified above.
-1. Recompute sha256 for each referenced file and compare to `sha256_hex`.
+1. Recompute sha256 for each referenced file, serialize as `sha256:<lowercase_hex>`, and compare for
+   exact string equality with the digest token from `security/checksums.txt`.
 1. Verify the Ed25519 signature in `security/signature.ed25519` against the bytes of
    `security/checksums.txt` using the public key from `security/public_key.ed25519`.
 

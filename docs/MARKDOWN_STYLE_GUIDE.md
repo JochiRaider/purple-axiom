@@ -701,21 +701,18 @@ To support consistent regex search, use these labels at the start of a line (col
 
 Each labeled line MUST use the form:
 
-`Label: \`value\``
+`Label: \`value\`\`
 
 Example:
 
-Contract id: `manifest`
-Schema: `docs/contracts/manifest.schema.json`
-Artifact path: `runs/<run_id>/manifest.json`
-Config key: `telemetry.otel.enabled`
-Stage id: `telemetry.windows_eventlog.raw_mode`
-Reason code: `winlog_raw_missing`
+Contract id: `manifest` Schema: `docs/contracts/manifest.schema.json` Artifact path:
+`runs/<run_id>/manifest.json` Config key: `telemetry.otel.enabled` Stage id:
+`telemetry.windows_eventlog.raw_mode` Reason code: `winlog_raw_missing`
 
 ### Quick reference block (recommended for specs)
 
-Specs with multiple artifacts/config keys SHOULD include a `## Quick reference` section near the
-top containing the key search tokens as one-per-line bullets:
+Specs with multiple artifacts/config keys SHOULD include a `## Quick reference` section near the top
+containing the key search tokens as one-per-line bullets:
 
 - Artifacts (paths)
 - Contracts (contract id + schema path)

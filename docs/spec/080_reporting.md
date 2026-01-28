@@ -783,7 +783,8 @@ Additional provenance (when present):
 
 - Mapping pack ref (from `bridge/coverage.json` → `mapping_pack_ref`)
 - Criteria pack manifest (from `criteria/manifest.json`)
-- Range config sha (from `manifest.inputs.range_yaml_sha256`)
+- Range config sha (from `manifest.inputs.range_yaml_sha256`; `sha256:<lowercase_hex>` form when
+  present)
 
 ## Regression analysis
 
@@ -929,7 +930,7 @@ Baseline field derivation (normative):
   - If `inputs/baseline/manifest.json` exists, `baseline.manifest_ref` MUST be
     `inputs/baseline/manifest.json`.
   - Otherwise, if `inputs/baseline_run_ref.json` records `baseline_manifest_sha256`, then
-    `baseline.manifest_ref` SHOULD be `sha256:<baseline_manifest_sha256>`.
+    `baseline.manifest_ref` SHOULD equal that `baseline_manifest_sha256` value.
   - Otherwise (baseline not readable), `baseline.manifest_ref` MUST be `null`.
 - `baseline.generated_at_utc` derivation:
   - If `baseline.run_id` is known and the baseline report exists at
@@ -988,8 +989,9 @@ Notes:
   not use `manifest.scenario.*` as the primary comparability pin source for regression runs.
 
 - `inputs.range_yaml_sha256` is an OPTIONAL best-effort pipeline/config hash until a canonical
-  `manifest.versions.*` configuration-hash field is standardized. It MUST NOT fail comparability by
-  default because it may include environment-dependent configuration.
+  `manifest.versions.*` configuration-hash field is standardized. When present, it MUST be a SHA-256
+  digest string in `sha256:<lowercase_hex>` form (`^sha256:[0-9a-f]{64}$`). It MUST NOT fail
+  comparability by default because it may include environment-dependent configuration.
 
 #### Deterministic check generation (normative)
 

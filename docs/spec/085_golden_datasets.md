@@ -560,8 +560,9 @@ Normative requirements:
 
 - Dataset releases MUST include `security/checksums.txt`.
 - `security/checksums.txt` MUST be UTF-8 with LF (`\n`) newlines and contain one record per line in
-  the format: `<sha256_hex><space><relative_path><newline>`.
-  - `sha256_hex` MUST be 64 lowercase hex characters of `sha256(file_bytes)`.
+  the format: `sha256:<lowercase_hex><space><relative_path><newline>`.
+  - `sha256:<lowercase_hex>` MUST match `^sha256:[0-9a-f]{64}$` and MUST equal `sha256(file_bytes)`
+    serialized in the canonical digest string form.
   - `relative_path` MUST be dataset-release-root relative, use POSIX separators (`/`), and be
     compared and sorted using UTF-8 byte order (no locale).
 - `security/checksums.txt` MUST include every file under the dataset release directory except:

@@ -17,7 +17,8 @@ Condensed reference for the [full style guide](MARKDOWN_STYLE_GUIDE.md).
 - When listing keys/IDs/enums, use **one token per list item** (one per line) for clean `rg` hits.
 - When referencing another document, include the **document ID + title** in text (not just a link):
   `ADR-0002 "Event identity and provenance"`.
-- Avoid ambiguous pronouns (“it”, “this”, “that”) when a repeated noun makes the sentence searchable.
+- Avoid ambiguous pronouns (“it”, “this”, “that”) when a repeated noun makes the sentence
+  searchable.
 
 ## Frontmatter required
 
@@ -29,7 +30,7 @@ status: draft | stable | deprecated
 ---
 ```
 
-* Keep `title` stable after publish (changing it breaks search + links).
+- Keep `title` stable after publish (changing it breaks search + links).
 
 ## Headings
 
@@ -40,9 +41,9 @@ status: draft | stable | deprecated
 #### Detail                   ← Use sparingly
 ```
 
-* Sentence case: "Event identity model" not "Event Identity Model"
-* No skipped levels (H2 → H4 without H3 is wrong)
-* Make headings **keyword-bearing** (prefer nouns agents will search for; avoid generic “Notes” /
+- Sentence case: "Event identity model" not "Event Identity Model"
+- No skipped levels (H2 → H4 without H3 is wrong)
+- Make headings **keyword-bearing** (prefer nouns agents will search for; avoid generic “Notes” /
   “Misc” headings)
 
 ## Lists
@@ -60,10 +61,10 @@ Definition style:
 **Term**: Definition text here.
 ```
 
-* Max two nesting levels
-* Short items: no trailing punctuation
-* Long items (full sentences): use punctuation
-* For “search targets” (keys, IDs, enums), prefer **one-per-line** list items
+- Max two nesting levels
+- Short items: no trailing punctuation
+- Long items (full sentences): use punctuation
+- For “search targets” (keys, IDs, enums), prefer **one-per-line** list items
 
 ## Code
 
@@ -87,7 +88,7 @@ uv sync --frozen
 
 Common languages: `yaml`, `json`, `jsonl`, `python`, `bash`, `sql`, `text`, `toml`, `markdown`
 
-* When documenting stable strings, show them exactly (prefer `key=value` forms for greppable tokens:
+- When documenting stable strings, show them exactly (prefer `key=value` forms for greppable tokens:
   `reason_code=...`, `contract_id=...`, `stage="..."`).
 
 ## Links
@@ -102,7 +103,8 @@ See the [OCSF schema docs](https://schema.ocsf.io/).
 
 Never: `[here](link)` or `[click here](link)`
 
-* Cross-doc references should include **type + id + title**: `ADR-0002 "Event identity and provenance"`.
+- Cross-doc references should include **type + id + title**:
+  `ADR-0002 "Event identity and provenance"`.
 
 ## Tables
 
@@ -112,8 +114,8 @@ Never: `[here](link)` or `[click here](link)`
 | `run_id`   | string | Yes      | Execution identifier |
 ```
 
-* Prefer tables for stable reference data (fields, enums, thresholds).
-* Keep key names in backticks (so `rg` finds exact strings).
+- Prefer tables for stable reference data (fields, enums, thresholds).
+- Keep key names in backticks (so `rg` finds exact strings).
 
 ## Emphasis
 
@@ -123,7 +125,7 @@ Never: `[here](link)` or `[click here](link)`
 `Code`: Field names, paths, commands, literals
 ```
 
-* Prefer backticks for exact strings you expect people/agents to search for.
+- Prefer backticks for exact strings you expect people/agents to search for.
 
 ## Admonitions
 
@@ -145,7 +147,7 @@ Never: `[here](link)` or `[click here](link)`
 | SHOULD NOT | Discouraged          |
 | MAY        | Optional             |
 
-* Put the normative keyword near the start of the sentence so it’s easy to scan and grep.
+- Put the normative keyword near the start of the sentence so it’s easy to scan and grep.
 
 ## Section summary pattern
 

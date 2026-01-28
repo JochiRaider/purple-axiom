@@ -566,13 +566,14 @@ For each fixture, the runner reconciliation implementation MUST:
 
 ### Criteria evaluation
 
-Criteria pack versioning tests validate that
-`criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json.criteria_pack_id` MUST
-match `<criteria_pack_id>` and
-`criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json.criteria_pack_version` MUST
-match `<criteria_pack_version>`. If multiple search paths contain the same
-`(criteria_pack_id, criteria_pack_version)`, CI MUST fail unless the pack snapshots are
-byte-identical (manifest plus criteria content hashes match).
+Criteria pack versioning tests validate that the criteria pack manifest file
+`criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json` has:
+
+- field `criteria_pack_id` that MUST match `<criteria_pack_id>`, and
+- field `criteria_pack_version` that MUST match `<criteria_pack_version>`.
+
+If multiple search paths contain the same `(criteria_pack_id, criteria_pack_version)`, CI MUST fail
+unless the pack snapshots are byte-identical (manifest plus criteria content hashes match).
 
 Criteria drift detection tests validate that given a criteria pack manifest upstream with
 `(engine, source_ref, source_tree_sha256)` and a runner provenance that differs, the evaluator MUST

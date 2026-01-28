@@ -273,7 +273,7 @@ When `detection.sigma.enabled=true`, the bridge MUST resolve a mapping pack usin
 - `detection.sigma.bridge.mapping_pack_version` (pack version)
 
 The resolved `(mapping_pack_id, mapping_pack_version)` MUST be recorded in run provenance
-(`manifest.json.versions.*`) per ADR-0001.
+(`manifest.versions.*`) per ADR-0001.
 
 If mapping pack resolution or contract validation fails, the detection stage MUST fail with
 `reason_code="bridge_mapping_pack_invalid"`. The stage `fail_mode` MUST follow
@@ -726,7 +726,8 @@ These artifacts MUST conform to the data contracts specification, including cano
   - MUST include `router_table_id`, `router_table_version`, `ocsf_version`, `routes[]`,
     `router_table_sha256`, and `generated_at_utc`.
   - `router_table_sha256` MUST be computed as specified by the data contracts specification (SHA-256
-    over canonical JSON stable inputs; MUST exclude `generated_at_utc`).
+    over canonical JSON stable inputs; MUST exclude `generated_at_utc`) and MUST be serialized as
+    `sha256:<lowercase_hex>`.
 
 - `mapping_pack_snapshot.json` (required)
 
@@ -737,16 +738,17 @@ These artifacts MUST conform to the data contracts specification, including cano
     Mapping packs SHOULD embed the referenced router table for single-file reproducibility.
   - `mapping_pack_sha256` MUST be computed as specified by the data contracts specification (SHA-256
     over canonical JSON stable inputs; MUST exclude run-specific fields such as `run_id`,
-    `scenario_id`, and `generated_at_utc`).
+    `scenario_id`, and `generated_at_utc`) and MUST be serialized as `sha256:<lowercase_hex>`.
 
 - `compiled_plans/` (directory; required)
 
   - `compiled_plans/<rule_id>.plan.json` MUST be emitted for each evaluated rule.
   - Each plan MUST include:
     - `rule_id`
-    - `rule_sha256` (SHA-256 over canonical Sigma rule bytes per the data contracts specification;
-      see canonical rule hashing guidance in `060_detection_sigma.md`)
-    - `mapping_pack_sha256`
+    - `rule_sha256` (SHA-256 digest string in `sha256:<lowercase_hex>` form over canonical Sigma
+      rule bytes per the data contracts specification; see canonical rule hashing guidance in
+      `060_detection_sigma.md`)
+    - `mapping_pack_sha256` (`sha256:<lowercase_hex>`)
     - `executable` (boolean)
     - `non_executable_reason` when `executable=false`
 
@@ -755,8 +757,8 @@ These artifacts MUST conform to the data contracts specification, including cano
   - MUST include:
 
     - `mapping_pack_ref` (at minimum: `mapping_pack_id`, `mapping_pack_version`,
-      `mapping_pack_sha256`)
-    - `mapping_profile_sha256`
+      `mapping_pack_sha256` (`sha256:<lowercase_hex>`))
+    - `mapping_profile_sha256` (`sha256:<lowercase_hex>`)
     - `ocsf_version`
     - `total_rules`
     - `routed_rules`
@@ -776,10 +778,10 @@ These artifacts MUST conform to the data contracts specification, including cano
 ### Cross-artifact invariants (normative)
 
 - `mapping_pack_snapshot.json.ocsf_version` MUST match the run's OCSF version pins (including
-  `manifest.json.versions.ocsf_version`).
+  `manifest.versions.ocsf_version`).
 
 - `mapping_pack_snapshot.json.mapping_pack_id` and `mapping_pack_snapshot.json.mapping_pack_version`
-  MUST match the resolved mapping pack pins recorded in `manifest.json.versions.*` (see ADR-0001).
+  MUST match the resolved mapping pack pins recorded in `manifest.versions.*` (see ADR-0001).
 
 - When present, `bridge/coverage.json.mapping_profile_sha256` MUST match
   `normalized/mapping_profile_snapshot.json.mapping_profile_sha256`.
@@ -795,7 +797,7 @@ Detection instances (which represent executable rules that produced ≥1 match) 
 provenance in `extensions.bridge`, such as:
 
 - `mapping_pack_id`, `mapping_pack_version`
-- `mapping_pack_sha256`
+- `mapping_pack_sha256` (`sha256:<lowercase_hex>`)
 - `backend`, `compiled_at_utc`
 - `fallback_used` (when rule-field `raw.*` fallback was required)
 - `unmapped_sigma_fields` (when compilation required dropping selectors or using fallback)

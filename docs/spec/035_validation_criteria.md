@@ -538,8 +538,8 @@ engine** present in ground truth:
 
 1. Load the selected pack snapshot manifest from the run bundle.
 1. For each engine `E` present in `ground_truth.jsonl` actions:
-   1. Read the pack manifest provenance entry for engine `E` (from
-      `criteria/manifest.json.upstreams[]`).
+   1. Read the pack manifest provenance entry for engine `E` (from the criteria pack manifest
+      snapshot file `criteria/manifest.json`, field `upstreams[]`)
    1. Read the runner-recorded provenance for engine `E` (from the run manifest runner extensions).
    1. Compare `(E, source_ref, source_tree_sha256)`:
       - If all match: `criteria_drift_status[E] = "none"`.

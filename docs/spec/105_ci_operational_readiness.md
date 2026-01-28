@@ -68,8 +68,8 @@ raise an issue to reconcile the discrepancy.
 - Fail-closed gate: A gate where any failure MUST yield a `failed` run status.
 - Threshold gate: A gate where violations degrade the run status to `partial` (or `failed` when the
   underlying contract requires hard failure) while keeping the run mechanically reportable.
-- Run status: The canonical `(success | partial | failed)` value recorded in
-  `runs/<run_id>/manifest.json.status` (derived from stage outcomes per ADR-0005).
+- Run status: The canonical `(success | partial | failed)` value recorded in the run manifest file
+  `runs/<run_id>/manifest.json` as `manifest.status` (derived from stage outcomes per ADR-0005).
 - `Status recommendation`: The CI-facing status computed by the reporting stage; recorded in
   `runs/<run_id>/report/thresholds.json.status_recommendation` (authoritative) and mirrored in
   `runs/<run_id>/report/report.json.status` for reportable runs.
@@ -109,7 +109,7 @@ signals) MUST override the selected verdict source and force the CI verdict to `
 1. If `runs/<run_id>/report/thresholds.json` exists and validates against its schema, CI MUST use
    `runs/<run_id>/report/thresholds.json.status_recommendation`.
 1. Else, if `runs/<run_id>/manifest.json` exists and validates against its schema, CI MUST use
-   `runs/<run_id>/manifest.json.status`.
+   `manifest.status` from `runs/<run_id>/manifest.json`.
 1. Else, if the run bundle root `runs/<run_id>/` exists, CI MUST derive status from the orchestrator
    process exit code captured by CI:
    - `0 -> success`
@@ -145,12 +145,14 @@ When the following artifacts are present, CI MUST fail closed if their status si
 - When `runs/<run_id>/report/run_timeline.md` is present, it MUST be timeline-conformant per
   `080_reporting.md` (including UTF-8 encoding, LF newlines, required columns, and stable ordering).
 - When `runs/<run_id>/manifest.json` and `runs/<run_id>/report/report.json` are present,
-  `runs/<run_id>/manifest.json.run_id` MUST equal `runs/<run_id>/report/report.json.run_id`.
+  `manifest.run_id` from `runs/<run_id>/manifest.json` MUST equal
+  `runs/<run_id>/report/report.json.run_id`.
 - `runs/<run_id>/report/report.json.status_reasons[]` MUST contain unique reason codes and MUST be
   emitted sorted ascending (UTF-8 byte order, no locale) when `runs/<run_id>/report/report.json` is
   present.
-- `runs/<run_id>/manifest.json.status` MUST equal `runs/<run_id>/logs/health.json.status` when
-  health files are enabled and `runs/<run_id>/logs/health.json` is present.
+- `manifest.status` from `runs/<run_id>/manifest.json` MUST equal
+  `runs/<run_id>/logs/health.json.status` when health files are enabled and
+  `runs/<run_id>/logs/health.json` is present.
 - The CI job step that enforces this contract MUST exit with `(0|10|20)` matching the derived
   verdict.
 - When the orchestrator process exit code is available to CI as a captured signal (for example, from
@@ -292,13 +294,13 @@ effective value in a contracted run artifact so that aggregation is deterministi
 
 | Axis (concept)                                             | Authoritative recording location                                                                              | Regression deltas when this axis varies?                         |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Scenario (`scenario_id`/`scenario_version`)                | `runs/<run_id>/manifest.json.versions.scenario_*`                                                             | No. MUST be pinned for reporting regression.                     |
-| Rule set (`rule_set_id`/`rule_set_version`)                | `runs/<run_id>/manifest.json.versions.rule_set_*`                                                             | No. MUST be pinned for reporting regression.                     |
-| Mapping pack (`mapping_pack_id`/`mapping_pack_version`)    | `runs/<run_id>/manifest.json.versions.mapping_pack_*`                                                         | Only if pinned, or if drift is explicitly allowed by policy.     |
-| Criteria pack (`criteria_pack_id`/`criteria_pack_version`) | `runs/<run_id>/manifest.json.versions.criteria_pack_*`                                                        | No. MUST be pinned for reporting regression.                     |
-| OCSF version (`ocsf_version`)                              | `runs/<run_id>/manifest.json.versions.ocsf_version`                                                           | No. MUST be pinned for reporting regression.                     |
-| Pipeline version (`pipeline_version`)                      | `runs/<run_id>/manifest.json.versions.pipeline_version`                                                       | No. MUST be pinned for reporting regression.                     |
-| Range config hash (best-effort)                            | `runs/<run_id>/manifest.json.inputs.range_yaml_sha256` (optional)                                             | Yes, but SHOULD be pinned to reduce noise.                       |
+| Scenario (`scenario_id`/`scenario_version`)                | `runs/<run_id>/manifest.json`: `manifest.versions.scenario_*`                                                 | No. MUST be pinned for reporting regression.                     |
+| Rule set (`rule_set_id`/`rule_set_version`)                | `runs/<run_id>/manifest.json`: `manifest.versions.rule_set_*`                                                 | No. MUST be pinned for reporting regression.                     |
+| Mapping pack (`mapping_pack_id`/`mapping_pack_version`)    | `runs/<run_id>/manifest.json`: `manifest.versions.mapping_pack_*`                                             | Only if pinned, or if drift is explicitly allowed by policy.     |
+| Criteria pack (`criteria_pack_id`/`criteria_pack_version`) | `runs/<run_id>/manifest.json`: `manifest.versions.criteria_pack_*`                                            | No. MUST be pinned for reporting regression.                     |
+| OCSF version (`ocsf_version`)                              | `runs/<run_id>/manifest.json`: `manifest.versions.ocsf_version`                                               | No. MUST be pinned for reporting regression.                     |
+| Pipeline version (`pipeline_version`)                      | `runs/<run_id>/manifest.json`: `manifest.versions.pipeline_version`                                           | No. MUST be pinned for reporting regression.                     |
+| Range config hash (best-effort)                            | `runs/<run_id>/manifest.json`: `manifest.inputs.range_yaml_sha256` (optional)                                 | Yes, but SHOULD be pinned to reduce noise.                       |
 | Gate thresholds / regression policy                        | `runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json.regression.comparability.policy` | Metrics comparable; gate decisions not comparable unless pinned. |
 
 Notes (normative):

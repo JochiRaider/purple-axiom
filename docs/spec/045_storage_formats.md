@@ -105,7 +105,8 @@ Baseline reference (v0.1; normative):
 - Pointer form (REQUIRED when regression comparison is enabled):
   - `runs/<run_id>/inputs/baseline_run_ref.json`
     - A deterministic record of baseline selection and baseline manifest integrity (expected SHA-256
-      for the baseline `manifest.json` bytes when readable).
+      digest string (`sha256:<lowercase_hex>`) for the baseline `manifest.json` bytes when
+      readable).
 - Snapshot form (RECOMMENDED when the baseline manifest bytes are readable; preferred for
   local-first portability):
   - `runs/<run_id>/inputs/baseline/manifest.json`
@@ -473,6 +474,8 @@ When enabled:
   example: `event_xml`, `raw.event_data.script_block_text`).
 - `field_path` MUST be encoded as UTF-8 with no normalization.
 - `field_path_hash = sha256_hex(UTF8(field_path))` as lowercase hex.
+- Because `field_path_hash` is a filename stem, it MUST use `<lowercase_hex>` only (no `sha256:`
+  prefix).
 
 File extensions (normative):
 
@@ -493,7 +496,7 @@ Reference fields (normative):
 - Implementations MAY use either:
   - generic reference fields:
     - `sidecar_ref` (string; run-relative path under the run bundle root)
-    - `sidecar_sha256` (string; lowercase hex SHA-256 of the sidecar payload bytes), or
+    - `sidecar_sha256` (string; `sha256:<lowercase_hex>` digest of the sidecar payload bytes), or
   - dataset-specific reference fields with identical semantics (for example `payload_overflow_ref` /
     `payload_overflow_sha256` in the raw Windows Event Log dataset).
 
@@ -698,11 +701,12 @@ Canonical raw payload (required):
 - `event_xml` (string, nullable)
   - When present, `event_xml` MUST contain the (possibly truncated) Windows Event XML payload.
 - `event_xml_sha256` (string, required)
-  - Lowercase hex SHA-256 computed over the full (untruncated) canonical XML payload bytes (UTF-8;
-    CRLF normalized to LF).
+  - SHA-256 digest string in `sha256:<lowercase_hex>` form computed over the full (untruncated)
+    canonical XML payload bytes (UTF-8; CRLF normalized to LF).
 - `event_xml_truncated` (bool, required)
 - `payload_overflow_ref` (string, nullable; run-relative sidecar path when overflow is written)
-- `payload_overflow_sha256` (string, nullable; lowercase hex SHA-256 of the sidecar payload bytes)
+- `payload_overflow_sha256` (string, nullable; `sha256:<lowercase_hex>` digest of the sidecar
+  payload bytes)
 
 Overflow constraints (normative):
 
@@ -822,18 +826,18 @@ The manifest should record:
 
 Signing and integrity provenance (normative if present):
 
-- When `security.signing.enabled: true`, implementations SHOULD record the hash of
-  `security/checksums.txt` and signing metadata in `manifest.json` under
-  `extensions.security.signing` (see `025_data_contracts.md`, "Recommended signing provenance in
-  manifest.json").
+- When `security.signing.enabled: true`, implementations SHOULD record the hash
+  (`sha256:<lowercase_hex>`) of `security/checksums.txt` and signing metadata in `manifest.json`
+  under `extensions.security.signing` (see `025_data_contracts.md`, "Recommended signing provenance
+  in manifest.json").
 - If any `extensions.security.signing.*` fields are recorded, they MUST match the emitted
   `security/checksums.txt`, `security/signature.ed25519`, and `security/public_key.ed25519` files.
 
 Integrity recording note (v0.1):
 
-- When signing is enabled, implementations SHOULD prefer recording the hash of
-  `security/checksums.txt` (and optional signature metadata) in `manifest.json` under an extensions
-  namespace, consistent with the data contracts guidance.
+- When signing is enabled, implementations SHOULD prefer recording the hash
+  (`sha256:<lowercase_hex>`) of `security/checksums.txt` (and optional signature metadata) in
+  `manifest.json` under an extensions namespace, consistent with the data contracts guidance.
 
 ## Decision matrix: native container exports vs Parquet
 

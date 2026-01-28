@@ -155,8 +155,6 @@ applicable.
 | 2026-01-12 | Initial draft                   |
 ```
 
-______________________________________________________________________
-
 ## Headings
 
 ### Hierarchy rules
@@ -201,8 +199,6 @@ links:
 - Keep heading text stable once documents are published
 - If you must rename a heading, update all internal references
 
-______________________________________________________________________
-
 ## Paragraphs and prose
 
 ### Line wrapping
@@ -241,8 +237,6 @@ The provenance model consists of three components...
 ```
 
 This pattern helps agents extract key information without parsing entire sections.
-
-______________________________________________________________________
 
 ## Lists
 
@@ -331,8 +325,6 @@ record of what occurred during a scenario run.
 **Run bundle**: The complete artifact set produced by a single execution, rooted at
 `runs/<run_id>/`.
 ```
-
-______________________________________________________________________
 
 ## Code
 
@@ -430,8 +422,6 @@ runs/<run_id>/
     └── index.html
 ```
 
-______________________________________________________________________
-
 ## Tables
 
 ### When to use tables
@@ -470,8 +460,6 @@ If a table exceeds 100 characters, consider:
 1. Moving detailed descriptions to footnotes or a following list
 1. Splitting into multiple tables
 1. Using a definition list instead
-
-______________________________________________________________________
 
 ## Links and references
 
@@ -529,8 +517,6 @@ The [normalization spec][norm-spec] defines how events map to [OCSF 1.7.0][ocsf]
 [ocsf]: https://schema.ocsf.io/1.7.0/
 ```
 
-______________________________________________________________________
-
 ## Emphasis
 
 ### Bold
@@ -569,8 +555,6 @@ See *Designing Data-Intensive Applications* for background on event sourcing.
 - Underlining (not standard markdown)
 - Combining bold and italics (`***text***`)
 - Excessive emphasis (if everything is bold, nothing is)
-
-______________________________________________________________________
 
 ## Special sections
 
@@ -613,8 +597,6 @@ Use tables for inline changelogs:
 | 2026-01-12 | Added provenance field requirements       |
 | 2026-01-10 | Initial draft                             |
 ````
-
-______________________________________________________________________
 
 ## Agent-specific patterns
 
@@ -680,7 +662,65 @@ Or link to a central glossary:
 Each **run bundle** ([glossary](glossary.md#run-bundle)) contains...
 ```
 
-______________________________________________________________________
+## Greppability conventions (agent + tooling)
+
+This repo is routinely navigated using line-oriented search tools (`rg`, `grep`). Authoring MUST
+assume searches are **single-line** by default (no multiline matching).
+
+### Search tokens (required)
+
+A **search token** is a string an agent/operator is expected to locate mechanically, including:
+
+- artifact paths (example: `runs/<run_id>/manifest.json`)
+- contract IDs (example: `mapping_profile_snapshot`)
+- schema paths (example: `docs/contracts/manifest.schema.json`)
+- config keys (example: `telemetry.otel.enabled`)
+- stage IDs (example: `telemetry.windows_eventlog.raw_mode`)
+- reason codes (example: `winlog_rendering_detected`)
+- enum values (example: `fail_closed`)
+
+Rules:
+
+1. Search tokens MUST appear in backticks as a single uninterrupted token (no spaces).
+1. When a section introduces multiple search tokens, they MUST be presented as one-per-line list
+   items or table rows (do not bury tokens only in wrapped prose).
+1. Do not rely on multi-word phrase searches across wrapped lines. If a term must be searchable,
+   give it a heading and/or a labeled line.
+
+### Standard label lines (required)
+
+To support consistent regex search, use these labels at the start of a line (column 1):
+
+- `Contract id:`
+- `Schema:`
+- `Artifact path:`
+- `Config key:`
+- `Stage id:`
+- `Reason code:`
+- `Enum:`
+
+Each labeled line MUST use the form:
+
+`Label: \`value\``
+
+Example:
+
+Contract id: `manifest`
+Schema: `docs/contracts/manifest.schema.json`
+Artifact path: `runs/<run_id>/manifest.json`
+Config key: `telemetry.otel.enabled`
+Stage id: `telemetry.windows_eventlog.raw_mode`
+Reason code: `winlog_raw_missing`
+
+### Quick reference block (recommended for specs)
+
+Specs with multiple artifacts/config keys SHOULD include a `## Quick reference` section near the
+top containing the key search tokens as one-per-line bullets:
+
+- Artifacts (paths)
+- Contracts (contract id + schema path)
+- Config keys
+- Reason codes / enums (when relevant)
 
 ## Common mistakes
 

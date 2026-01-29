@@ -110,9 +110,10 @@ Operators must choose one of the following strategies per host:
    these duplicates by comparing `metadata.event_id` (Tier 1 cursor-based IDs and Tier 2
    artifact-cursor IDs will differ by design).
 
-   If an implementation supports an overlap dedupe mode, it MUST be explicitly enabled and MUST be
-   recorded in the run manifest as `telemetry.unix.dedupe_strategy`. For v0.1, the only allowed
-   overlap dedupe strategy token is `unix_syslog_fingerprint_v1`, defined as:
+   If an implementation supports an overlap dedupe mode, it MUST be explicitly enabled via
+   `telemetry.sources.unix.dedupe_strategy` and MUST be recorded in the run manifest at
+   `manifest.telemetry.sources.unix.dedupe_strategy`. For v0.1, the only allowed overlap dedupe
+   strategy token is `unix_syslog_fingerprint_v1`, defined as:
 
    - Compute `fingerprint_basis_v1`:
 

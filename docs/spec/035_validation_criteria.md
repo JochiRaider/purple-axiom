@@ -99,8 +99,8 @@ Determinism requirement:
 
 Resolution algorithm (normative):
 
-1. Let `criteria_pack_id = validation.criteria_pack.pack_id`.
-1. Let `criteria_pack_version = validation.criteria_pack.pack_version` (may be omitted;
+1. Let `criteria_pack_id = validation.criteria_pack.criteria_pack_id`.
+1. Let `criteria_pack_version = validation.criteria_pack.criteria_pack_version` (may be omitted;
    non-recommended).
 1. Let `paths[] = validation.criteria_pack.paths[]` (search order is authoritative; earlier entries
    win ties when content is identical).

@@ -130,7 +130,9 @@ The following pinned fields MUST be `semver_v1`:
 - `scenario_version`
 - `criteria_pack_version` (when criteria evaluation is enabled)
 - `mapping_pack_version` (when the Sigma-to-OCSF bridge is enabled)
-- `mapping_profile_version` (when normalization mapping profiles are in use)
+- `mapping_pack_version` (`semver_v1`), when the Sigma-to-OCSF bridge is enabled
+- `criteria_pack_id` (id_slug_v1), when criteria evaluation is enabled
+- `criteria_pack_version` (`semver_v1`), when criteria evaluation is enabled
 
 ##### `version_token_v1` (normative)
 
@@ -246,15 +248,15 @@ When the corresponding feature is enabled, orchestrators MUST project configurat
 into `manifest.versions` pins as follows (effective/resolved values):
 
 - Criteria packs:
-  - `validation.criteria_pack.pack_id` -> `manifest.versions.criteria_pack_id`
-  - `validation.criteria_pack.pack_version` -> `manifest.versions.criteria_pack_version`
+  - `validation.criteria_pack.criteria_pack_id` -> `manifest.versions.criteria_pack_id`
+  - `validation.criteria_pack.criteria_pack_version` -> `manifest.versions.criteria_pack_version`
 - Sigma rule evaluation:
   - `detection.sigma.rule_set_version` -> `manifest.versions.rule_set_version`
   - Because v0.1 configuration does not carry an explicit `rule_set_id`, implementations MUST set
     `manifest.versions.rule_set_id` deterministically when Sigma evaluation is enabled. Default:
     `rule_set_id = "sigma"` unless configured otherwise.
 - Sigma-to-OCSF bridge:
-  - `detection.sigma.bridge.mapping_pack` -> `manifest.versions.mapping_pack_id`
+  - `detection.sigma.bridge.mapping_pack_id` -> `manifest.versions.mapping_pack_id`
   - `detection.sigma.bridge.mapping_pack_version` -> `manifest.versions.mapping_pack_version`
 
 ### Deterministic resolution when version pins are omitted
@@ -428,10 +430,19 @@ fields (for example, hostnames, absolute paths, timestamps).
 - `versions.scenario_id`
 - `versions.scenario_version` (SHOULD be present for trending)
 - `versions.pipeline_version`
+- `versions.rule_set_id` (when rule evaluation is enabled)
 - `versions.rule_set_version` (when rule evaluation is enabled)
+- `versions.mapping_pack_id` (when the Sigma-to-OCSF bridge is enabled)
 - `versions.mapping_pack_version` (when the Sigma-to-OCSF bridge is enabled)
 - `versions.ocsf_version`
+- `versions.criteria_pack_id` (when criteria evaluation is enabled)
 - `versions.criteria_pack_version` (when criteria evaluation is enabled)
+
+Notes (normative):
+
+- For pack-like artifacts (rule sets, mapping packs, criteria packs), consumers MUST treat the
+  `(versions.*_id, versions.*_version)` pair as a single join dimension. `*_version` values alone
+  MUST NOT be used as regression/trending join keys.
 
 Non-goal (normative):
 

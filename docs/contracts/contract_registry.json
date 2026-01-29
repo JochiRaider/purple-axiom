@@ -10,6 +10,14 @@
       "format": "jsonl"
     },
     {
+      "contract_id": "baseline_detection_package_manifest",
+      "schema_path": "docs/contracts/baseline_detection_package_manifest.schema.json",
+      "contract_version": "0.2.0",
+      "purpose": "Manifest for a Baseline Detection Package stored under exports/baselines/<baseline_id>/<baseline_version>/baseline_package_manifest.json.",
+      "artifact_kind": "other",
+      "format": "json"
+    },
+    {
       "contract_id": "bridge_compiled_plan",
       "schema_path": "docs/contracts/bridge_compiled_plan.schema.json",
       "contract_version": "0.1.0",

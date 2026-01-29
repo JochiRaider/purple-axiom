@@ -680,7 +680,12 @@ Required content (per `source_type`):
 - Top unmapped fields (when `normalization_gap` present)
 
 Source types MUST align with `metadata.source_type` values in normalized events (e.g.,
-`windows-security`, `windows-sysmon`, `osquery`, `auditd`).
+`windows-security`, `windows-sysmon`, `osquery`, `linux-auditd`).
+
+Terminology note (normative): `metadata.source_type` uses the **event_source_type** namespace
+(hyphenated `id_slug_v1` literals). It MUST NOT be confused with `identity_basis.source_type`
+(**identity_source_type**; typically lower_snake_case such as `windows_eventlog`, `linux_auditd`)
+used for deterministic `metadata.event_id` computation (ADR-0002).
 
 ### Sigma-to-OCSF bridge health
 

@@ -15,40 +15,58 @@
       "description": "Contract definitions. Deterministic ordering requirement (enforced outside JSON Schema): sort ascending by contract_id (UTF-8 byte order).",
       "type": "array",
       "minItems": 1,
+      "maxItems": 2048,
+      "uniqueItems": true,      
       "items": { "$ref": "#/$defs/contract_def" }
     },
     "bindings": {
       "description": "Artifact glob bindings. Deterministic ordering requirement (enforced outside JSON Schema): sort ascending by (artifact_glob, contract_id) (UTF-8 byte order).",
       "type": "array",
       "minItems": 1,
+      "maxItems": 8192,
+      "uniqueItems": true,      
       "items": { "$ref": "#/$defs/binding_def" }
     },
     "notes": {
       "description": "Optional human-readable notes. Notes MUST be redaction-safe and stable (avoid volatile data).",
       "type": "array",
-      "items": { "type": "string" }
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
     }
   },
   "$defs": {
     "semver": {
       "type": "string",
+      "maxLength": 64,
       "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
     },
     "contract_id": {
       "description": "Stable identifier for a contract. Intended to be filename-derived (without .schema.json).",
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$"
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*(?:\\.[a-z][a-z0-9]*(?:_[a-z0-9]+)*)*$"
     },
     "schema_path": {
       "description": "Repository-relative path to the schema file. MUST be local and under docs/contracts/.",
       "type": "string",
+      "minLength": 1,
+      "maxLength": 256,      
       "pattern": "^docs/contracts/[A-Za-z0-9_.-]+\\.schema\\.json$"
     },
     "artifact_glob": {
       "description": "Run-bundle-relative artifact glob (POSIX separators). MUST NOT start with '/' and MUST NOT include 'runs/<run_id>/' prefix.",
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?!/)(?!runs/)[^\\\\]+$"
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!runs/)(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9._*?\\[\\]-]+(?:/[A-Za-z0-9._*?\\[\\]-]+)*$"
+    },
+    "binding_scope": {
+      "description": "Scope root used to interpret binding_def.artifact_glob. Default is run_bundle. Extensions MUST use the x_ prefix.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(run_bundle|repo_root|x_[a-z0-9]+(?:_[a-z0-9]+)*)$"
     },
     "contract_def": {
       "type": "object",
@@ -63,7 +81,9 @@
         },
         "purpose": {
           "description": "Optional short purpose string for humans.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
         },
         "artifact_kind": {
           "description": "Optional classification to help tooling decide when and how to validate.",
@@ -84,6 +104,11 @@
       "properties": {
         "artifact_glob": { "$ref": "#/$defs/artifact_glob" },
         "contract_id": { "$ref": "#/$defs/contract_id" },
+        "binding_scope": {
+          "description": "Optional scope for interpreting artifact_glob. If omitted, tooling MUST treat it as \"run_bundle\".",
+          "default": "run_bundle",
+          "$ref": "#/$defs/binding_scope"
+        },        
         "validation_mode": {
           "description": "Optional hint for validators. If omitted, validators infer from contract/extension and stage rules.",
           "type": "string",
@@ -91,7 +116,10 @@
         },
         "notes": {
           "description": "Optional redaction-safe notes. MUST be stable and MUST avoid volatile data.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+
         }
       }
     }

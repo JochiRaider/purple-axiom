@@ -493,7 +493,6 @@ Minimum artifacts when enabled: `raw_parquet/**`, `manifest.json`
 | `baseline_profile_not_met`      | FATAL    | Telemetry baseline profile requirements not met for one or more assets.                                |
 | `collector_startup_failed`      | FATAL    | Collector cannot start (config parse error, binding failure).                                          |
 | `checkpoint_store_corrupt`      | FATAL    | Checkpoint/offset store corruption prevents reliable ingestion or collector startup.                   |
-| `checkpoint_corruption_fatal`   | FATAL    | Legacy alias for `checkpoint_store_corrupt`; SHOULD NOT be emitted in new runs.                        |
 | `agent_heartbeat_missing`       | FATAL    | No agent self-telemetry heartbeat observed for one or more expected assets within startup grace.       |
 | `disk_free_space_insufficient`  | FATAL    | Disk preflight indicates insufficient free space for configured run budgets.                           |
 | `disk_metrics_missing`          | FATAL    | Disk preflight metrics could not be computed deterministically.                                        |
@@ -820,8 +819,8 @@ Default `fail_mode`: `fail_closed` (when enabled)
 
 ## Changelog
 
-| Date       | Change                                                                           |
-| ---------- | -------------------------------------------------------------------------------- |
-| 2026-01-25 | Replace legacy `plan.json` example with `inputs/plan_draft.yaml` for plan drafts |
-| 2026-01-13 | Add telemetry.network.egress_policy canary reason codes                          |
-| 2026-01-12 | Formatting update                                                                |
+| Date       | Change                                                           |
+| ---------- | ---------------------------------------------------------------- |
+| 2026-01-28 | Replace legacy plan-draft example with `inputs/plan_draft.yaml`. |
+| 2026-01-13 | Add telemetry.network.egress_policy canary reason codes          |
+| 2026-01-12 | Formatting update                                                |

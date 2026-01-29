@@ -312,6 +312,11 @@ Common keys:
       - When `true`, the runner emits synthetic marker events for correlation (see
         `032_atomic_red_team_executor_integration.md`) and records the marker value in run
         artifacts.
+        - Ground truth action records: `extensions.synthetic_correlation_marker` (see
+          `025_data_contracts.md`).
+        - Normalized OCSF events (when marker-bearing telemetry is ingested and normalized):
+          `metadata.extensions.purple_axiom.synthetic_correlation_marker` (see
+          `050_normalization_ocsf.md`).
     - `method` (optional, default: `auto`): `auto | windows_eventlog | linux_syslog | filelog`
       - `auto`: implementation selects an OS-appropriate method.
       - `filelog`: marker is appended to a local file that is tailed by the collector.
@@ -510,17 +515,29 @@ Common keys:
       `runs/<run_id>/inputs/telemetry_baseline_profile.json` and use the snapshotted bytes for
       evaluation and hashing.
 - `sources` (optional)
-  - Additional non-OTel sources (example: `osquery`, `pcap`, `netflow`)
+  - Additional sources (example: `unix`, `osquery`, `pcap`, `netflow`)
   - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not
     required). If enabled without an implementation, telemetry MUST fail closed with
     `reason_code=source_not_implemented`.
-  - Each source should include:
+  - Each source should include (when applicable):
     - `enabled`
     - `config_path` or equivalent
     - `output_path` under `raw/`
   - v0.1 reserved output paths (normative when implemented):
     - `pcap.output_path` MUST be `raw/pcap/` (manifest: `raw/pcap/manifest.json`)
     - `netflow.output_path` MUST be `raw/netflow/` (manifest: `raw/netflow/manifest.json`)
+  - `unix` (optional)
+    - Unix log ingestion declarations used for duplication avoidance validation and provenance (see
+      `044_unix_log_ingestion.md`).
+    - `journald` (optional)
+      - `enabled` (default: false)
+    - `syslog_files` (optional): list of absolute paths to syslog text files expected to be tailed.
+      - Example values: `/var/log/syslog`, `/var/log/messages`, `/var/log/auth.log`.
+    - `dedupe_strategy` (optional): overlap dedupe strategy token (discouraged;
+      implementation-defined; see `044_unix_log_ingestion.md`).
+      - v0.1 allowed token: `unix_syslog_fingerprint_v1`.
+      - When set, the pipeline MUST record the effective value in the run manifest at
+        `manifest.telemetry.sources.unix.dedupe_strategy`.
   - `osquery` (optional)
     - `enabled` (default: false)
     - `config_path` (optional): path to an osquery configuration file (deployment is
@@ -623,6 +640,9 @@ Common keys:
 - `ocsf_version` (required): pinned OCSF version string (example: `1.7.0`)
 - `mapping_profiles` (optional): list of profile identifiers (example: `windows`, `linux`, `dns`)
 - `source_type_mapping` (optional): map of raw source identifiers to `metadata.source_type`
+  - Note: `metadata.source_type` is an event/source-pack discriminator. It MUST NOT be conflated
+    with `identity_basis.source_type` (identity_source_type) used for `metadata.event_id` hashing
+    (see ADR-0002-event-identity-and-provenance.md).
 - `dedupe` (optional)
   - `enabled` (default: true)
   - `scope` (default: `per_run`): `per_run` (v0.1 only)
@@ -880,6 +900,11 @@ Common keys:
     MUST NOT rely on external `.css` or `.js` files.
 - `emit_json` (default: true)
 - `include_debug_sections` (default: false)
+- Failure semantics (v0.1 baseline):
+  - Reporting is `fail_closed` when enabled (see ADR-0005).
+  - `html_render_error` severity is policy-dependent:
+    - when HTML is required (`emit_html=true`) it is treated as FATAL under fail-closed semantics
+    - when HTML is best-effort (`emit_html=false`) it is recorded as NON-FATAL warning-only
 - `regression` (optional)
   - `enabled` (default: false)
     - When `true`, reporting MUST attempt a deterministic comparison against a baseline run and MUST

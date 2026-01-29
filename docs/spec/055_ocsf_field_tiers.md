@@ -289,7 +289,8 @@ Tier 2 families used by the v0.1 MVP normalizer. The authoritative checklist is 
 
 The matrix:
 
-- Uses rows = `source_type` (for example, Windows Security, Sysmon, osquery, auditd).
+- Uses rows = `metadata.source_type` (for example, `windows-security`, `windows-sysmon`, `osquery`,
+  `linux-auditd`).
 - Uses columns = OCSF field paths (Tier 1 plus the v0.1 enabled event families defined in "Enabled
   event families (v0.1 baseline)").
 - Uses cells = `R` / `O` / `N/A` with the following semantics:

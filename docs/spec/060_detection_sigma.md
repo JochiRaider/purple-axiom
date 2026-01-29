@@ -127,8 +127,8 @@ Rules without valid ATT&CK tags:
 Sigma evaluation is a two-stage process.
 
 1. **Compile (bridge-aware)**
-   - Select a bridge mapping pack (router + field aliases) per `detection.sigma.bridge.mapping_pack`
-     and `detection.sigma.bridge.mapping_pack_version`.
+   - Select a bridge mapping pack (router + field aliases) per
+     `detection.sigma.bridge.mapping_pack_id` and `detection.sigma.bridge.mapping_pack_version`.
    - Route the rule: `logsource` to an OCSF class filter (and optional producer/source predicates
      via `filters[]` OCSF filter objects).
    - Rewrite Sigma field references to OCSF JSONPaths (or backend-native column expressions).

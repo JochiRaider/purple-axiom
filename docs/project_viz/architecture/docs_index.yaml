@@ -1,0 +1,904 @@
+# file: architecture/docs_index.yaml
+version: 1
+documents:
+  - id: spec_000_charter
+    filename: 000_charter.md
+    title: Charter
+    purpose: Defines Purple Axiom’s mission, MVP outcomes, and core principles (determinism, contract-driven stages, safety-by-default) that all other specs build on.
+    key_sections:
+      - heading: Summary
+        summary: Project mission and what “done” looks like for v0.1.
+      - heading: Principles
+        summary: Determinism, contract-driven execution, and stage-scoped responsibilities.
+      - heading: Safety-by-default operation
+        summary: Default-safe behavior expectations (e.g., network intent signaling, redaction posture).
+    important_terms:
+      - term: Purple Axiom
+        note: System name used across the corpus.
+      - term: run bundle
+        note: Primary artifact boundary for pipeline outputs.
+      - term: stage identifiers
+        note: Stable stage IDs (v0.1+) referenced in multiple specs.
+      - term: action_key
+        note: Deterministic action identity referenced by other specs.
+      - term: scenario.safety.allow_network
+        note: Scenario-level network intent signal.
+    evidence:
+      - {file: "000_charter.md", section_heading: "Summary", excerpt: "This charter defines Purple Axiom’s mission and MVP outcomes."}
+
+  - id: spec_010_scope
+    filename: 010_scope.md
+    title: Scope
+    purpose: Declares the v0.1 scope boundaries (in-scope vs out-of-scope) and references the stable stage-based pipeline framing used throughout the system.
+    key_sections:
+      - heading: Overview
+        summary: What the project covers at a high level for v0.1.
+      - heading: In-scope
+        summary: Explicit v0.1 deliverables and supported behaviors.
+      - heading: Out-of-scope
+        summary: Excluded features reserved for later versions.
+    important_terms:
+      - term: v0.1
+        note: Baseline scope version referenced by CI/readiness docs.
+      - term: stages
+        note: Stage-based pipeline framing for orchestration.
+      - term: determinism
+        note: Cross-cutting requirement reiterated across specs.
+      - term: contracts
+        note: Artifact contracts used to validate and gate publishes.
+      - term: local-first
+        note: Operating principle for artifacts and workflows.
+    evidence:
+      - {file: "010_scope.md", section_heading: "Overview", excerpt: "Defines the v0.1 scope boundaries for Purple Axiom."}
+
+  - id: spec_015_lab_providers
+    filename: 015_lab_providers.md
+    title: Lab providers and inventory resolution
+    purpose: Defines the pluggable lab provider interface and deterministic inventory snapshotting, producing a canonical lab.assets shape used across stages.
+    key_sections:
+      - heading: Purpose
+        summary: Provider abstraction to avoid coupling to one provisioning system.
+      - heading: Key concepts
+        summary: Lab provider, inventory snapshot, and canonical asset shape.
+      - heading: Publish and validation gate
+        summary: Staging/publish semantics and contract validation requirements for the stage.
+    important_terms:
+      - term: lab provider
+        note: Component that resolves assets from an external inventory source.
+      - term: lab.assets
+        note: Canonical resolved asset list used by downstream stages.
+      - term: inventory snapshot
+        note: Run-scoped snapshot for reproducibility.
+      - term: asset_id
+        note: Stable logical asset identifier within Purple Axiom.
+      - term: provider_asset_ref
+        note: Optional reference back to the provider’s native identity.
+    evidence:
+      - {file: "015_lab_providers.md", section_heading: "Purpose", excerpt: "Define a pluggable interface for resolving lab assets."}
+
+  - id: spec_020_architecture
+    filename: 020_architecture.md
+    title: Architecture
+    purpose: Defines the high-level system flow, stage identifiers, IO boundaries, and extension points, including normative workspace and run-bundle layouts.
+    key_sections:
+      - heading: Scope
+        summary: What the architecture spec covers (and does not cover).
+      - heading: Workspace layout (v0.1+ normative)
+        summary: Reserved directories and how artifacts are organized.
+      - heading: Stage pipeline
+        summary: How stages hand off via the filesystem and contracts.
+    important_terms:
+      - term: workspace_root
+        note: Filesystem boundary for durable artifacts.
+      - term: runs/<run_id>/
+        note: Canonical per-run bundle root.
+      - term: publish gate
+        note: Staging then atomic publish into final paths.
+      - term: adapter registry
+        note: Mediates adapter selection rather than ad-hoc imports.
+      - term: ports and adapters
+        note: Extension mechanism for stage implementations.
+    evidence:
+      - {file: "020_architecture.md", section_heading: "Scope", excerpt: "Defines the high-level system flow, stage identifiers, IO boundaries."}
+
+  - id: spec_025_data_contracts
+    filename: 025_data_contracts.md
+    title: Data contracts
+    purpose: Defines contract-backed run-bundle artifacts, validation rules, canonicalization/hashing requirements, and reader semantics for reproducible consumption.
+    key_sections:
+      - heading: Terminology
+        summary: Defines core artifact and validation terms (run bundle, contract, etc.).
+      - heading: Contract-backed artifacts
+        summary: Required paths and semantics for run-bundle artifacts.
+      - heading: Cross-artifact invariants
+        summary: Invariants enforced in code/CI beyond JSON Schema expressiveness.
+    important_terms:
+      - term: contract registry
+        note: Source of schemas used for validation.
+      - term: canonical_json_bytes
+        note: Canonical JSON serialization basis for hashing/diffs.
+      - term: sha256:<lowercase_hex>
+        note: Digest string format used throughout.
+      - term: bridge/router_table.json
+        note: Snapshot artifact for Sigma routing behavior.
+      - term: bridge/mapping_pack_snapshot.json
+        note: Snapshot artifact for bridge inputs and provenance.
+    evidence:
+      - {file: "025_data_contracts.md", section_heading: "Terminology", excerpt: "Defines contract-backed artifacts and reader semantics for run bundles."}
+
+  - id: spec_030_scenarios
+    filename: 030_scenarios.md
+    title: Scenarios
+    purpose: Referenced as the authority for scenario model inputs and deterministic action identity (action_id/action_key) used by runner and other stages.
+    key_sections:
+      - heading: unknown
+        summary: Source content not retrievable from the current indexed corpus.
+      - heading: unknown
+        summary: Source content not retrievable from the current indexed corpus.
+      - heading: unknown
+        summary: Source content not retrievable from the current indexed corpus.
+    important_terms:
+      - term: inputs/scenario.yaml
+        note: Scenario-specific configuration input referenced by config precedence.
+      - term: scenario_id
+        note: Stable scenario identifier pinned for comparability.
+      - term: scenario_version
+        note: SemVer versioning domain for scenarios.
+      - term: action_id
+        note: Ground-truth action instance identifier (used as join key in datasets).
+      - term: action_key
+        note: Deterministic action key referenced across specs.
+    evidence:
+      - {file: "120_config_reference.md", section_heading: "Configuration files and precedence", excerpt: "`inputs/scenario.yaml` (optional, scenario-specific overrides)."}
+      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Scenario identity and version", excerpt: "`scenario_id` MUST be a stable identifier for a logical scenario."}
+
+  - id: spec_031_plan_execution_model
+    filename: 031_plan_execution_model.md
+    title: Plan execution model
+    purpose: Defines the plan model used to execute stage work, including steps, target cardinality, and deterministic execution semantics.
+    key_sections:
+      - heading: Overview
+        summary: Plan model goals and integration points.
+      - heading: Plan graph and steps
+        summary: Execution units and ordering semantics.
+      - heading: Target cardinality
+        summary: How steps target assets/hosts (single vs many).
+    important_terms:
+      - term: plan
+        note: Executable unit describing stage work.
+      - term: step
+        note: Atomic plan node within execution.
+      - term: target cardinality
+        note: How many targets a step addresses.
+      - term: plan graph
+        note: Step dependency structure.
+      - term: execution semantics
+        note: Deterministic ordering and handling expectations.
+    evidence:
+      - {file: "031_plan_execution_model.md", section_heading: "Overview", excerpt: "Defines the v0.1 plan execution model used by stages."}
+
+  - id: spec_032_atomic_red_team_executor_integration
+    filename: 032_atomic_red_team_executor_integration.md
+    title: Atomic Red Team executor integration
+    purpose: Specifies runner integration expectations for Atomic Red Team, including cleanup invocation/verification and deterministic reconciliation outputs.
+    key_sections:
+      - heading: Cleanup invocation and verification
+        summary: How cleanup is invoked and evidenced.
+      - heading: State reconciliation semantics
+        summary: Deterministic reporting of residue and repair constraints.
+      - heading: Integration boundaries
+        summary: What ART integration does/does not define.
+    important_terms:
+      - term: Atomic Red Team
+        note: External executor referenced by integration spec.
+      - term: cleanup_verification
+        note: Evidence of cleanup checks.
+      - term: state reconciliation
+        note: Residue detection and reporting.
+      - term: runner.state_reconciliation
+        note: Outcome name referenced in safety guidance.
+      - term: reason_code
+        note: Deterministic classification for integration failures.
+    evidence:
+      - {file: "032_atomic_red_team_executor_integration.md", section_heading: "Cleanup invocation and verification", excerpt: "Cleanup invocation and verification requirements for the runner."}
+
+  - id: spec_035_validation_criteria
+    filename: 035_validation_criteria.md
+    title: Validation criteria packs
+    purpose: Defines criteria packs used to validate expected signals per action/technique and to drive scoring and gap attribution when enabled.
+    key_sections:
+      - heading: Overview
+        summary: What criteria packs are and how they are used.
+      - heading: Criteria pack format
+        summary: Required fields and deterministic hashing rules.
+      - heading: Results and evidence
+        summary: How evaluation outcomes reference evidence artifacts.
+    important_terms:
+      - term: criteria pack
+        note: Pack-like artifact selected/pinned for a run.
+      - term: criteria/manifest.json
+        note: Contract-backed manifest for criteria pack snapshot.
+      - term: criteria/results.jsonl
+        note: Line-delimited results of criteria evaluation.
+      - term: criteria_unavailable
+        note: Gap category when no matching criteria entry exists.
+      - term: criteria_misconfigured
+        note: Gap category when entry exists but cannot evaluate.
+    evidence:
+      - {file: "070_scoring_metrics.md", section_heading: "Primary metrics (seed)", excerpt: "criteria_unavailable: action executed but no matching criteria entry."}
+
+  - id: spec_040_telemetry_pipeline
+    filename: 040_telemetry_pipeline.md
+    title: Telemetry pipeline
+    purpose: Defines the telemetry pipeline ETL spine, including OTel collector roles, raw/validated stores, and reproducible checkpointing for telemetry ingestion.
+    key_sections:
+      - heading: Overview
+        summary: Telemetry pipeline responsibilities and boundaries.
+      - heading: Checkpointing & restart
+        summary: Deterministic checkpoint artifacts for resumability.
+      - heading: Related specifications
+        summary: Integration points to osquery, unix ingestion, normalization, and contracts.
+    important_terms:
+      - term: OpenTelemetry Collector
+        note: Telemetry collector component referenced by the pipeline.
+      - term: raw_parquet/
+        note: Raw parquet store path used for telemetry storage.
+      - term: logs/telemetry_validation.json
+        note: Telemetry validation output artifact.
+      - term: logs/health.json
+        note: Health signal artifact (referenced in scoring evidence rules).
+      - term: unix log ingestion
+        note: Referenced integration spec for unix sources.
+    evidence:
+      - {file: "040_telemetry_pipeline.md", section_heading: "Overview", excerpt: "Defines the telemetry pipeline ETL spine and OTel collector roles."}
+
+  - id: spec_042_osquery_integration
+    filename: 042_osquery_integration.md
+    title: osquery integration
+    purpose: Defines how osquery scheduled query results are ingested and normalized, including identity basis and routing expectations.
+    key_sections:
+      - heading: Overview
+        summary: Integration scope for osquery artifacts.
+      - heading: Identity basis
+        summary: Deterministic identity strategy for osquery events.
+      - heading: Routing and normalization
+        summary: How scheduled query names map into normalized representations.
+    important_terms:
+      - term: osquery
+        note: Telemetry source integrated into the pipeline.
+      - term: scheduled query results
+        note: Primary osquery output form for ingestion.
+      - term: identity basis
+        note: Identity strategy referenced by ADR-0002.
+      - term: routing
+        note: How osquery data is directed into classes/streams.
+      - term: normalization
+        note: Integration point to OCSF normalization.
+    evidence:
+      - {file: "042_osquery_integration.md", section_heading: "Purpose", excerpt: "Defines osquery scheduled query ingestion and deterministic identity basis."}
+
+  - id: spec_044_unix_log_ingestion
+    filename: 044_unix_log_ingestion.md
+    title: Unix log ingestion
+    purpose: Referenced as the authority for unix log ingestion declarations, duplication avoidance, and provenance recording for syslog/journald sources.
+    key_sections:
+      - heading: unknown
+        summary: Source content not retrievable from the current indexed corpus.
+      - heading: unknown
+        summary: Source content not retrievable from the current indexed corpus.
+      - heading: unknown
+        summary: Source content not retrievable from the current indexed corpus.
+    important_terms:
+      - term: syslog_files
+        note: Unix telemetry source declaration referenced in config.
+      - term: journal_files
+        note: Journald source declaration referenced in config.
+      - term: overlap-dedupe mode
+        note: Provenance expectation referenced by ADR-0002.
+      - term: unix_syslog_fingerprint_v1
+        note: Dedupe strategy token referenced in other docs.
+      - term: provenance
+        note: Recording duplication-avoidance configuration and decisions.
+    evidence:
+      - {file: "120_config_reference.md", section_heading: "Top-level keys", excerpt: "Unix log ingestion declarations used for duplication avoidance validation."}
+      - {file: "ADR-0002-event-identity-and-provenance.md", section_heading: "Identity basis by source type", excerpt: "recorded as provenance (for overlap-dedupe mode; see Unix log ingestion spec)."}
+
+  - id: spec_045_storage_formats
+    filename: 045_storage_formats.md
+    title: Storage formats
+    purpose: Defines canonical storage formats for artifacts (JSON/JSONL/Parquet), including schema snapshotting and determinism requirements for long-term storage.
+    key_sections:
+      - heading: Overview
+        summary: Which formats are used where and why.
+      - heading: JSON/JSONL conventions
+        summary: Canonicalization and newline expectations.
+      - heading: Parquet dataset conventions
+        summary: Dataset layout, _schema.json snapshots, and ordering rules.
+    important_terms:
+      - term: JSONL
+        note: Line-delimited JSON used for event/result streams.
+      - term: Parquet dataset
+        note: Directory-based Parquet representation for normalized events.
+      - term: _schema.json
+        note: Required schema snapshot for Parquet datasets.
+      - term: UTF-8 byte order
+        note: Sorting rule used across outputs.
+      - term: schema_version
+        note: Logical schema version recorded for datasets.
+    evidence:
+      - {file: "045_storage_formats.md", section_heading: "Overview", excerpt: "Defines canonical storage formats and schema snapshot rules."}
+
+  - id: spec_050_normalization_ocsf
+    filename: 050_normalization_ocsf.md
+    title: OCSF normalization
+    purpose: Defines normalization to OCSF as the canonical event model, including validation tiers, coverage metrics, and mapping snapshot requirements.
+    key_sections:
+      - heading: Validation strategy
+        summary: Tiered validation gates (Tier 0/1/2/3/R) and CI expectations.
+      - heading: Observability and coverage
+        summary: Mapping coverage metrics and regression detection.
+      - heading: Key decisions
+        summary: OCSF pinning and required normalization artifacts.
+    important_terms:
+      - term: OCSF
+        note: Canonical normalized event model.
+      - term: ocsf_event_envelope.schema.json
+        note: Envelope contract referenced for validation.
+      - term: normalized/mapping_coverage.json
+        note: Coverage artifact used for gates and trends.
+      - term: mapping_profile_sha256
+        note: Hash tying metrics to a specific mapping profile.
+      - term: Tier 1 coverage gate
+        note: CI gate derived from field tiers and coverage.
+    evidence:
+      - {file: "050_normalization_ocsf.md", section_heading: "Key decisions", excerpt: "OCSF is the canonical normalized event model and is pinned."}
+
+  - id: spec_055_ocsf_field_tiers
+    filename: 055_ocsf_field_tiers.md
+    title: OCSF field tiers
+    purpose: Defines OCSF field tiers used for validation/coverage gates, especially Tier 1 coverage metrics used by normalization and scoring.
+    key_sections:
+      - heading: Overview
+        summary: Motivation for tiering and what is measured.
+      - heading: Tier definitions
+        summary: Definitions of Tier 0/1/2/3 expectations.
+      - heading: Coverage computation
+        summary: How tier coverage is computed and reported.
+    important_terms:
+      - term: Tier 0
+        note: Envelope/schema validity gate.
+      - term: Tier 1
+        note: Core field coverage gate for CI/regression.
+      - term: Tier 2
+        note: Deeper class/source validation tier.
+      - term: Tier 3
+        note: Storage-focused tier (Parquet/schema constraints).
+      - term: tier1_field_coverage
+        note: Metric used as a gating signal (via scoring thresholds).
+    evidence:
+      - {file: "055_ocsf_field_tiers.md", section_heading: "Overview", excerpt: "Defines OCSF field tiers used for coverage gates."}
+
+  - id: spec_060_detection_sigma
+    filename: 060_detection_sigma.md
+    title: Detection rules (Sigma)
+    purpose: Defines the detection stage’s Sigma rule evaluation outputs, including detection instance schema requirements and attribution semantics.
+    key_sections:
+      - heading: Detection instance schema
+        summary: Required and recommended fields for detection instances.
+      - heading: Unattributed detections
+        summary: Handling detections that cannot be attributed to ground truth.
+      - heading: Rule provenance
+        summary: What provenance should be recorded for rules.
+    important_terms:
+      - term: detections/detections.jsonl
+        note: Primary detections stream output.
+      - term: detection_instance.schema.json
+        note: Contract for detection instance validation.
+      - term: matched_event_ids
+        note: References to metadata.event_id values.
+      - term: scenario_id
+        note: Recommended field for detection instances when available.
+      - term: extensions.bridge
+        note: Bridge provenance embedded in detections.
+    evidence:
+      - {file: "060_detection_sigma.md", section_heading: "Detection instance schema", excerpt: "Detection instances MUST validate against detection_instance.schema.json."}
+
+  - id: spec_065_sigma_to_ocsf_bridge
+    filename: 065_sigma_to_ocsf_bridge.md
+    title: Sigma-to-OCSF bridge
+    purpose: Defines the routing, aliasing, and backend adapter contract for executing Sigma over OCSF, including deterministic bridge artifacts.
+    key_sections:
+      - heading: Core concept
+        summary: Router + alias map + backend adapter composition.
+      - heading: Logsource router
+        summary: Mapping Sigma logsource to OCSF class scopes and filters.
+      - heading: Evaluator backend adapter
+        summary: Deterministic compilation requirements (e.g., duckdb_sql).
+    important_terms:
+      - term: logsource router
+        note: Routes Sigma logsource to OCSF class scopes.
+      - term: field alias map
+        note: Maps Sigma fields to OCSF field paths.
+      - term: evaluator backend adapter
+        note: Compiles and evaluates rules over normalized stores.
+      - term: raw.* fallback
+        note: Controlled fallback path with safety gates.
+      - term: bridge_mapping_pack_invalid
+        note: Fail-closed reason code for invalid mapping packs.
+    evidence:
+      - {file: "065_sigma_to_ocsf_bridge.md", section_heading: "Overview", excerpt: "Defines the Sigma-to-OCSF bridge contract for compiling Sigma rules."}
+
+  - id: spec_070_scoring_metrics
+    filename: 070_scoring_metrics.md
+    title: Scoring metrics
+    purpose: Defines the scoring surface (coverage, latency, fidelity, and pipeline health), CI threshold semantics, and evidence pointer requirements by measurement layer.
+    key_sections:
+      - heading: Primary metrics (seed)
+        summary: Metric families and initial gap taxonomy tokens.
+      - heading: Thresholds (CI gates)
+        summary: Threshold configuration and interpretation rules.
+      - heading: Deterministic ordering
+        summary: Deterministic ordering and comparison semantics for metrics.
+    important_terms:
+      - term: scoring/summary.json
+        note: Authoritative scoring output used for thresholds.
+      - term: detection_latency
+        note: Metric definition (first_detection_time - ground_truth_time).
+      - term: missing_telemetry
+        note: Gap category token for missing expected signals.
+      - term: normalization_gap
+        note: Gap category token for missing required OCSF fields.
+      - term: evidence pointers
+        note: Required evidence pointer sets by measurement layer.
+    evidence:
+      - {file: "070_scoring_metrics.md", section_heading: "Primary metrics (seed)", excerpt: "detection_latency = first_detection_time - ground_truth_time."}
+
+  - id: spec_080_reporting
+    filename: 080_reporting.md
+    title: Reporting
+    purpose: Defines reporting artifacts, exit-code semantics, and CI-facing status recommendations derived from contracted artifacts and scoring outputs.
+    key_sections:
+      - heading: Overview
+        summary: Reporting responsibilities and artifact outputs.
+      - heading: Status and exit codes
+        summary: How status recommendation maps to exit behavior.
+      - heading: Regression reporting
+        summary: Cross-run diffing surfaces and baseline comparisons.
+    important_terms:
+      - term: report/report.json
+        note: Reportable run summary artifact.
+      - term: report/thresholds.json
+        note: Threshold evaluation and status recommendation.
+      - term: status_recommendation
+        note: CI-facing status computed by reporting stage.
+      - term: regression baseline
+        note: Baseline run comparison model.
+      - term: exit code semantics
+        note: Standardized exit behavior for CI integration.
+    evidence:
+      - {file: "105_ci_operational_readiness.md", section_heading: "Definitions", excerpt: "Status recommendation: recorded in report/thresholds.json.status_recommendation."}
+
+  - id: spec_085_golden_datasets
+    filename: 085_golden_datasets.md
+    title: Golden dataset generation for ML training and evaluation
+    purpose: Defines deterministic dataset exports derived from run bundles, with label-strippable views, reproducible splits, and release posture rules.
+    key_sections:
+      - heading: Purpose
+        summary: Why and how “golden datasets” are built from runs.
+      - heading: Dataset manifest
+        summary: dataset_manifest.json schema, canonicalization, and hashing.
+      - heading: Splits
+        summary: Deterministic split assignment algorithm and outputs.
+    important_terms:
+      - term: dataset_manifest.json
+        note: Root manifest describing dataset release contents.
+      - term: dataset_release_id
+        note: Deterministic release ID derived from hash basis.
+      - term: dataset view
+        note: Features/labels/provenance projections with includes/excludes.
+      - term: release posture
+        note: public|gated|internal posture policy for contents.
+      - term: join keys
+        note: Stable keys to re-attach labels to features.
+    evidence:
+      - {file: "085_golden_datasets.md", section_heading: "Purpose", excerpt: "Defines a deterministic, reproducible mechanism for generating \"golden datasets\"."}
+
+  - id: spec_086_detection_baseline_library
+    filename: 086_detection_baseline_library.md
+    title: Detection baseline library
+    purpose: Defines Baseline Detection Packages (BDPs) and a baseline library under exports/baselines for detection regression and offline evaluation (v0.2+).
+    key_sections:
+      - heading: Overview
+        summary: What BDPs are and why they exist.
+      - heading: Storage location and addressing
+        summary: exports/baselines layout, identifiers, and versioning.
+      - heading: Baseline package manifest contract
+        summary: baseline_package_manifest.json contract and required fields.
+    important_terms:
+      - term: Baseline Detection Package (BDP)
+        note: Redaction-safe, lightweight subset of a single run bundle.
+      - term: baseline_package_manifest.json
+        note: Contract-backed manifest for BDPs.
+      - term: exports/baselines/
+        note: Reserved baseline library storage location.
+      - term: security/checksums.txt
+        note: Integrity enumeration required for BDPs.
+      - term: profile detection_eval_v1
+        note: BDP profile defined by the spec.
+    evidence:
+      - {file: "086_detection_baseline_library.md", section_heading: "Overview", excerpt: "A Baseline Detection Package (BDP) is a redaction-safe, lightweight subset."}
+
+  - id: spec_090_security_safety
+    filename: 090_security_safety.md
+    title: Security and safety
+    purpose: Defines safety and security constraints across pipeline stages, including cache provenance constraints, reconciliation safety requirements, and failure handling rules.
+    key_sections:
+      - heading: Cache provenance
+        summary: Constraints to avoid accidental disclosure in cache provenance artifacts.
+      - heading: Failure handling
+        summary: Fail-closed behavior for safety violations and misconfiguration.
+      - heading: References
+        summary: Links to telemetry pipeline, data contracts, config, and redaction policy.
+    important_terms:
+      - term: logs/cache_provenance.json
+        note: Run-level cache provenance artifact and constraints.
+      - term: security.redaction.enabled
+        note: Redaction enablement signal referenced by rules.
+      - term: deterministic placeholder
+        note: Placeholder artifacts used when withholding content.
+      - term: runner.state_reconciliation
+        note: Outcome referenced for residue reporting.
+      - term: unexpected network egress
+        note: Safety violation that must fail the run.
+    evidence:
+      - {file: "090_security_safety.md", section_heading: "Cache provenance", excerpt: "Cache provenance MUST NOT contain secrets (credentials, tokens, private keys)."}
+
+  - id: spec_100_test_strategy_ci
+    filename: 100_test_strategy_ci.md
+    title: Test strategy (CI)
+    purpose: Defines the conformance and determinism test strategy required for CI, including fixtures and stable output comparisons.
+    key_sections:
+      - heading: Overview
+        summary: Testing objectives for deterministic CI validation.
+      - heading: Fixture strategy
+        summary: Required fixture types and what they validate.
+      - heading: Conformance checks
+        summary: What must be asserted for contracts and deterministic ordering.
+    important_terms:
+      - term: conformance tests
+        note: CI-suitable tests for deterministic outputs.
+      - term: fixtures
+        note: Fixed inputs used to assert stability.
+      - term: determinism checks
+        note: Byte-identical/ordering checks across runs/builds.
+      - term: schema validation
+        note: Contract validation for artifacts in CI.
+      - term: regression tests
+        note: Diffing comparable surfaces across baselines/candidates.
+    evidence:
+      - {file: "100_test_strategy_ci.md", section_heading: "Overview", excerpt: "Defines CI conformance tests and determinism fixtures for v0.1."}
+
+  - id: spec_105_ci_operational_readiness
+    filename: 105_ci_operational_readiness.md
+    title: CI and Operational Readiness
+    purpose: Consolidates existing v0.1 gates, publish gates, health signals, and exit-code semantics into a single deterministic CI verdict model without introducing new artifacts.
+    key_sections:
+      - heading: Overview
+        summary: CI verdict contract assembled from existing sources.
+      - heading: Scope
+        summary: What is and is not introduced by this consolidation.
+      - heading: Definitions
+        summary: Canonical CI terms (run status, gates, status recommendation).
+    important_terms:
+      - term: CI gate
+        note: Pass/fail rule evaluated over contracted artifacts.
+      - term: threshold gate
+        note: Gate that may degrade status to partial.
+      - term: manifest.status
+        note: success|partial|failed derived from stage outcomes.
+      - term: status recommendation
+        note: CI-facing status computed by reporting stage.
+      - term: evidence surfaces
+        note: Mapping from gates to required artifacts/reports/health files.
+    evidence:
+      - {file: "105_ci_operational_readiness.md", section_heading: "Overview", excerpt: "Defines the normative CI pipeline contract for Purple Axiom v0.1."}
+
+  - id: spec_110_operability
+    filename: 110_operability.md
+    title: Operability
+    purpose: Defines operational health signals, health files, counters, and safeguards to support deterministic observability and CI-friendly diagnosis.
+    key_sections:
+      - heading: Overview
+        summary: Operability objectives and produced health signals.
+      - heading: Health files
+        summary: health.json/counters.json and their roles.
+      - heading: Safeguards
+        summary: Operational constraints to reduce risk and drift.
+    important_terms:
+      - term: logs/health.json
+        note: Health signal artifact referenced by scoring evidence rules.
+      - term: logs/counters.json
+        note: Deterministic counters for stage observability.
+      - term: health files
+        note: Standardized operability outputs.
+      - term: safeguards
+        note: Operational rules and defaults.
+      - term: CI diagnosis
+        note: Evidence surfaces for CI troubleshooting.
+    evidence:
+      - {file: "105_ci_operational_readiness.md", section_heading: "Overview", excerpt: "Run health and operational safeguards (110_operability.md)."}
+
+  - id: spec_115_operator_interface
+    filename: 115_operator_interface.md
+    title: Operator Interface
+    purpose: Defines a local-first web UI and Operator API for plan authoring, run management, status monitoring, and safe artifact/report viewing (v0.2+).
+    key_sections:
+      - heading: Version scope
+        summary: v0.2+ normative scope for the Operator Interface.
+      - heading: Goals
+        summary: Required UI/API capabilities including baseline library management.
+      - heading: Terms
+        summary: Defines appliance, OI, reverse proxy, and verb.
+    important_terms:
+      - term: Operator API
+        note: HTTP API used by the UI and future clients.
+      - term: verb
+        note: Stable orchestrator entry point (build/simulate/replay/export/destroy).
+      - term: appliance
+        note: Single-container packaging model for v0.2.
+      - term: baseline library
+        note: UI-managed BDP library for regression workflows.
+      - term: otel_gateway
+        note: OTLP gateway configuration and mTLS expectations.
+    evidence:
+      - {file: "115_operator_interface.md", section_heading: "Goals", excerpt: "Defines an Operator Interface that is web-based, local-first, and contract-aligned."}
+
+  - id: spec_120_config_reference
+    filename: 120_config_reference.md
+    title: Configuration reference
+    purpose: Defines the operator-facing configuration surface, precedence rules, determinism requirements, and validation expectations across pipeline stages.
+    key_sections:
+      - heading: Configuration files and precedence
+        summary: Ordered precedence for defaults, range.yaml, scenario.yaml, CLI, env.
+      - heading: Workspace root and filesystem paths
+        summary: Path resolution and workspace boundary rules.
+      - heading: Top-level keys
+        summary: Key namespaces (lab, telemetry, detection, scoring, reporting, etc.).
+    important_terms:
+      - term: inputs/range.yaml
+        note: Primary config file used in examples.
+      - term: inputs/scenario.yaml
+        note: Optional scenario-specific overrides.
+      - term: secrets rule
+        note: Secrets are referenced, not embedded.
+      - term: workspace boundary rules
+        note: Writes must remain under workspace_root (with limited exceptions).
+      - term: reserved workspace directories
+        note: cache/, exports/, and other reserved roots.
+    evidence:
+      - {file: "120_config_reference.md", section_heading: "Configuration files and precedence", excerpt: "This document defines the configuration surface for Purple Axiom."}
+
+  - id: adr_0001_project_naming_and_versioning
+    filename: ADR-0001-project-naming-and-versioning.md
+    title: ADR-0001 Project naming and versioning
+    purpose: Establishes stable naming/versioning domains and pinning rules (IDs, SemVer domains, pack-like artifacts, schema/contract versions) to ensure reproducibility and comparability.
+    key_sections:
+      - heading: Context
+        summary: Why stable identifiers and explicit pins are needed.
+      - heading: Decision
+        summary: Normative conventions for IDs, versions, and pinning.
+      - heading: Canonical identifier formats
+        summary: id_slug_v1 and semver_v1 requirements.
+    important_terms:
+      - term: project_version
+        note: SemVer identifying the Purple Axiom release.
+      - term: run_id
+        note: UUID identifier for a run.
+      - term: scenario_id
+        note: Stable scenario identity.
+      - term: pack-like artifacts
+        note: Criteria packs, rule sets, mapping packs, threat intel packs.
+      - term: id_slug_v1
+        note: Canonical ID format for *_id fields.
+    evidence:
+      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Decision", excerpt: "Purple Axiom MUST implement the naming, versioning, and pinning conventions."}
+
+  - id: adr_0002_event_identity_and_provenance
+    filename: ADR-0002-event-identity-and-provenance.md
+    title: ADR-0002 Event identity and provenance
+    purpose: Defines deterministic event identity (metadata.event_id) and provenance rules, including identity basis by source type and handling conflicting identities.
+    key_sections:
+      - heading: Decision
+        summary: Normative event identity and provenance requirements.
+      - heading: Identity basis by source type
+        summary: Source-specific identity strategies and tiering.
+      - heading: Consequences
+        summary: Required producer behaviors and consumer expectations.
+    important_terms:
+      - term: metadata.event_id
+        note: Canonical per-event identity in normalized outputs.
+      - term: metadata.uid
+        note: Internal uniqueness token distinct from event_id.
+      - term: identity_basis
+        note: Declared basis used to compute event identity.
+      - term: provenance
+        note: Recorded metadata enabling traceability and audits.
+      - term: overlap-dedupe mode
+        note: Unix dedupe/provenance requirement referenced by ADR.
+    evidence:
+      - {file: "ADR-0002-event-identity-and-provenance.md", section_heading: "Decision", excerpt: "Defines deterministic event identity and provenance rules."}
+
+  - id: adr_0003_redaction_policy
+    filename: ADR-0003-redaction-policy.md
+    title: ADR-0003 Redaction policy
+    purpose: Defines the redaction policy model, redaction-safe posture, and handling of withheld/quarantined artifacts in exports and sharing.
+    key_sections:
+      - heading: Context
+        summary: Why redaction policy is required for safe sharing.
+      - heading: Decision
+        summary: Policy rules and required snapshots/handling.
+      - heading: Consequences
+        summary: Expected behavior across stages and exports.
+    important_terms:
+      - term: redaction policy
+        note: Rules governing what may be exported/shared.
+      - term: redaction-safe
+        note: Posture permitting broad distribution.
+      - term: quarantined
+        note: Content disallowed in public posture.
+      - term: placeholder artifacts
+        note: Deterministic placeholders for withheld content.
+      - term: policy snapshot
+        note: Snapshot artifact pinned for auditability.
+    evidence:
+      - {file: "ADR-0003-redaction-policy.md", section_heading: "Decision", excerpt: "Defines the redaction policy model and handling rules."}
+
+  - id: adr_0004_deployment_architecture_and_inter_component_communication
+    filename: ADR-0004-deployment-architecture-and-inter-component-communication.md
+    title: ADR-0004 Deployment architecture and inter-component communication
+    purpose: Defines the deployment model and filesystem-mediated inter-component communication (staging + atomic publish, locks, and no RPC between stages).
+    key_sections:
+      - heading: Context
+        summary: Constraints for local-first, deterministic coordination.
+      - heading: Decision
+        summary: Run lock, staging, and publish semantics.
+      - heading: Canonical run sequence
+        summary: Stage ordering and required pinned inputs/snapshots.
+    important_terms:
+      - term: runs/.locks/<run_id>.lock
+        note: Lock file used to prevent concurrent writers.
+      - term: .staging
+        note: Staging area for publish-gated writes.
+      - term: atomic rename
+        note: Publish mechanism into final artifact paths.
+      - term: one-shot orchestrator
+        note: Process model for stage execution coordination.
+      - term: file-based coordination
+        note: No cross-stage RPC; filesystem is coordination plane.
+    evidence:
+      - {file: "ADR-0004-deployment-architecture-and-inter-component-communication.md", section_heading: "Canonical run sequence", excerpt: "The canonical v0.1 run sequence is:"}
+
+  - id: adr_0005_stage_outcomes_and_failure_classification
+    filename: ADR-0005-stage-outcomes-and-failure-classification.md
+    title: ADR-0005 Stage outcomes and failure classification
+    purpose: Defines how stages emit outcomes (status/fail_mode/reason_code), and how manifest.status is derived for reportability and CI interpretation.
+    key_sections:
+      - heading: Decision
+        summary: Normative stage outcome event model and required fields.
+      - heading: Reason code registry
+        summary: Canonical tokens for failure classification.
+      - heading: Status derivation
+        summary: Rules for deriving manifest.status from outcomes.
+    important_terms:
+      - term: stage outcome
+        note: Stage-level outcome record emitted for each stage/substage.
+      - term: fail_mode
+        note: fail_closed vs warn_and_skip semantics.
+      - term: reason_code
+        note: Canonical reason for outcome classification.
+      - term: manifest.status
+        note: success|partial|failed derived from stage outcomes.
+      - term: substage
+        note: Dotted substage naming convention.
+    evidence:
+      - {file: "ADR-0005-stage-outcomes-and-failure-classification.md", section_heading: "Decision", excerpt: "manifest.status is derived from stage outcomes per ADR-0005."}
+
+  - id: adr_0006_plan_execution_model_and_target_cardinality
+    filename: ADR-0006-plan-execution-model.md
+    title: ADR-0006 Plan execution model and target cardinality
+    purpose: Records the decision on plan execution semantics and how steps target one or more assets, aligning with the plan execution spec.
+    key_sections:
+      - heading: Context
+        summary: Motivations for plan/step modeling and target cardinality.
+      - heading: Decision
+        summary: Normative semantics for plan execution.
+      - heading: Consequences
+        summary: Impacts to pipeline orchestration and artifacts.
+    important_terms:
+      - term: plan
+        note: Executable plan unit for a stage.
+      - term: step
+        note: Node within a plan.
+      - term: target cardinality
+        note: Single vs multi-target semantics.
+      - term: deterministic execution
+        note: Deterministic ordering expectations.
+      - term: plan preview
+        note: Used by operator-facing tooling (v0.2+).
+    evidence:
+      - {file: "ADR-0006-plan-execution-model.md", section_heading: "Decision", excerpt: "Defines plan execution semantics and target cardinality rules."}
+
+  - id: adr_0007_state_machines_for_lifecycle_semantics
+    filename: ADR-0007-state-machines.md
+    title: ADR-0007 State machines
+    purpose: Defines guidance for lifecycle state machines (normative vs representational), shaping how run/stage lifecycle semantics are modeled and validated.
+    key_sections:
+      - heading: Context
+        summary: Why state machine clarity matters for CI and lifecycle semantics.
+      - heading: Decision
+        summary: Normative guidance for state machine specification.
+      - heading: Consequences
+        summary: Expectations for lifecycle modeling across components.
+    important_terms:
+      - term: state machine
+        note: Lifecycle model for runs/stages/components.
+      - term: normative state machine
+        note: Defines allowed transitions as a contract.
+      - term: representational state machine
+        note: Describes observed state without constraining it.
+      - term: lifecycle semantics
+        note: Shared meanings for states and transitions.
+      - term: determinism
+        note: State reporting and transitions must be deterministic.
+    evidence:
+      - {file: "ADR-0007-state-machines.md", section_heading: "Decision", excerpt: "Distinguishes normative vs representational state machines."}
+
+  - id: adr_0008_threat_intelligence_integration_model
+    filename: ADR-0008-Threat-intelligence-integration-model.md
+    title: ADR-0008 Threat intelligence integration model
+    purpose: Defines how threat intelligence packs are selected, pinned, and integrated into runs for enrichment and provenance, including pack identifiers and inputs paths.
+    key_sections:
+      - heading: Context
+        summary: Motivations for TI enrichment and comparability.
+      - heading: Decision
+        summary: Pack model, pins, and required artifacts.
+      - heading: Consequences
+        summary: Implications for normalization/scoring/reporting consumers.
+    important_terms:
+      - term: threat_intel_pack_id
+        note: Pack-like artifact identifier (ADR-0001 domain).
+      - term: threat_intel_pack_version
+        note: SemVer version pin for the pack.
+      - term: inputs/threat_intel/
+        note: Reserved input location for pinned TI content.
+      - term: indicators.jsonl
+        note: Example TI content type referenced by ADR.
+      - term: provenance pins
+        note: Required pins for reproducibility.
+    evidence:
+      - {file: "ADR-0008-Threat-intelligence-integration-model.md", section_heading: "Decision", excerpt: "Threat intelligence packs are selected and pinned per run."}
+
+  - id: adr_0009_run_export_policy_and_log_classification
+    filename: ADR-0009-run-export-policy-and-log-classification.md
+    title: ADR-0009 Run export policy and log classification
+    purpose: Defines export policy (what is included/excluded), classifies logs (deterministic evidence vs volatile diagnostics), and specifies integrity/signing behavior for exports.
+    key_sections:
+      - heading: Context
+        summary: Why export policy and log classification are needed.
+      - heading: Decision
+        summary: Export scopes, exclusions, and signing requirements.
+      - heading: Consequences
+        summary: Constraints on operator tooling and sharing workflows.
+    important_terms:
+      - term: deterministic evidence
+        note: Log/artifact class that should be exported/checksummed.
+      - term: volatile diagnostics
+        note: Log/artifact class excluded by default exports.
+      - term: security/checksums.txt
+        note: Required integrity enumeration file.
+      - term: signature.ed25519
+        note: Optional signature over checksums bytes.
+      - term: export_manifest.json
+        note: Export output referenced by operator tooling (v0.2+).
+    evidence:
+      - {file: "ADR-0009-run-export-policy-and-log-classification.md", section_heading: "Decision", excerpt: "Exclude volatile diagnostics under runs/<run_id>/logs/ from default exports."}

@@ -45,6 +45,9 @@ The Operator Interface MUST provide:
    - run listing and monitoring (status, logs, progress)
    - report viewing and export (redaction-safe by default)
    - configuration editing for **UI-scoped settings** (not full platform configuration)
+   - Baseline detection package library management for detection regression workflows (v0.2+
+     optional): create from completed “known good” runs, list/search, view metadata, download, and
+     delete baseline packages.
 
 1. An **Operator API (HTTP)** used by the UI, designed so that:
 
@@ -479,6 +482,64 @@ tailing.
 Export endpoints MUST enforce the export gates in Export behavior and\
 MUST NOT treat exports as ordinary run artifacts.
 
+### Optional endpoints (v0.2+; normative when implemented)
+
+#### Baseline detection packages (baseline library)
+
+This optional endpoint set supports the Baseline Detection Package (BDP) library described in
+`086_detection_baseline_library.md`. BDPs are stored outside `runs/` (under
+`<workspace_root>/exports/baselines/...`) and are accessed via this resource rather than via run
+artifact browsing.
+
+Endpoints:
+
+- `GET /api/baselines`
+  - Returns a list of available baseline packages (summary view).
+  - Sorting MUST be deterministic: `baseline_id` ascending, then `baseline_version` descending by
+    SemVer precedence. If two versions compare equal by SemVer precedence, ties MUST be broken by
+    `baseline_version` string ascending (UTF-8 byte order, no locale).
+- `GET /api/baselines/{baseline_id}/{baseline_version}`
+  - Returns the baseline package manifest (`baseline_detection_package_manifest`).
+- `POST /api/baselines`
+  - Creates a new baseline package from a completed run bundle.
+  - Request body (minimum):
+    - `baseline_id` (id_slug_v1)
+    - `baseline_version` (semver_v1)
+    - `source_run_id` (run_id UUID)
+    - optional `description`, `tags`
+  - Response: `201 Created` with the baseline package manifest.
+  - Implementations MAY return `202 Accepted` if creation is long-running, but MUST make progress
+    observable (for example, via audit events and/or server logs).
+- `PATCH /api/baselines/{baseline_id}/{baseline_version}`
+  - Updates mutable metadata fields (for example, `description`, `tags`, `blessing`) without
+    changing immutable identity/content fields.
+- `DELETE /api/baselines/{baseline_id}/{baseline_version}`
+  - Deletes the baseline package.
+- `GET /api/baselines/{baseline_id}/{baseline_version}/download`
+  - Downloads the baseline package as a deterministic archive (zip/tar).
+  - MUST enforce path traversal defenses equivalent to run artifact serving.
+
+Error handling:
+
+- MUST use the standard Operator API error envelope and domain (`operator_interface`).
+- Recommended error codes:
+  - `baseline_not_found` (404)
+  - `baseline_already_exists` (409)
+  - `baseline_create_in_progress` (409)
+  - `baseline_source_run_not_found` (404)
+  - `baseline_source_run_ineligible` (409)
+  - `artifact_missing` (422)
+  - `baseline_manifest_invalid` (422)
+  - `baseline_package_unsafe` (422)
+  - `artifact_representation_conflict` (409)
+
+Audit logging:
+
+- All baseline library mutations (create/update/delete/download) MUST emit `audit_event` rows into
+  `logs/ui_audit.jsonl`.
+- The `action` field SHOULD use distinct strings (for example, `baseline.create`, `baseline.update`,
+  `baseline.delete`, `baseline.download`).
+
 ## Functional surfaces (v0.2 normative)
 
 The web UI MUST expose, at minimum, the following capabilities:
@@ -516,6 +577,18 @@ The web UI MUST expose, at minimum, the following capabilities:
    - view `report/report.json`
    - view `report/report.html` (served safely; see Artifact Serving)
    - trigger exports (zip/archive) with explicit inclusion toggles
+
+1. **Optional functional surfaces** (v0.2+; normative when implemented)
+
+   If the Baseline Detection Package (BDP) library feature is enabled (see
+   `086_detection_baseline_library.md`), the Operator Interface SHOULD provide:
+
+   - Baseline library manager: list/search baseline packages, view details and manifest, create from
+     completed runs, update metadata (tags/description/blessing), delete, and download baseline
+     packages.
+   - (Optional) A “Trial detections” affordance that launches a detection-only evaluation using one
+     or more selected baseline packages as inputs. (Execution semantics are reserved; this bullet
+     only defines the UX surface.)
 
 1. **UI-scoped configuration**
 

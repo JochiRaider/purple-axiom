@@ -126,7 +126,8 @@ Common invariants (normative, v0.1):
   [ADR-0004: Deployment architecture and inter-component communication][adr-0004]) before creating
   or mutating any run bundle artifacts (including `manifest.json`).
 - Materialize/pin operator inputs under `runs/<run_id>/inputs/` (at minimum `inputs/range.yaml` and
-  `inputs/scenario.yaml`) before running the first stage.
+  `inputs/scenario.yaml`; when the plan execution model is enabled (v0.2+), also pin
+  `inputs/plan_draft.yaml`) before running the first stage.
 - Any verb that executes one or more stages MUST record stage outcomes in `manifest.json` per
   [ADR-0005: Stage outcomes and failure classification][adr-0005]. When health files are enabled
   (`operability.health.emit_health_files=true`), it MUST also record the same ordered outcomes in
@@ -147,6 +148,8 @@ Verb definitions (v0.1):
       as:
       - `inputs/range.yaml` (range configuration snapshot)
       - `inputs/scenario.yaml` (scenario definition snapshot)
+      - `inputs/plan_draft.yaml` (v0.2+; plan draft snapshot when plan compilation/execution is
+        enabled)
     - These inputs MUST be treated as read-only by all stages. Implementations MUST NOT mutate these
       snapshots after `build` completes.
   - MUST NOT execute scenario actions or collect telemetry.
@@ -341,32 +344,35 @@ what exists in the bundle.
 
 Normative top-level entries (run-relative):
 
-| Path                               | Purpose                                                                                       |
-| ---------------------------------- | --------------------------------------------------------------------------------------------- |
-| `manifest.json`                    | Authoritative run index and provenance pins                                                   |
-| `inputs/`                          | Pinned run inputs (read-only; materialized during `build`) and regression baseline references |
-| `inputs/baseline/`                 | Baseline run snapshot materialization (regression; optional but recommended)                  |
-| `inputs/baseline_run_ref.json`     | Baseline selection and resolution record (regression; required when enabled)                  |
-| `ground_truth.jsonl`               | Append-only action timeline (what was attempted)                                              |
-| `runner/`                          | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)                   |
-| `runner/principal_context.json`    | Run-level runner evidence (principal/execution context; when enabled)                         |
-| `raw_parquet/`                     | Raw telemetry datasets (Parquet)                                                              |
-| `raw/`                             | Evidence-tier payloads and source-native blobs (when enabled)                                 |
-| `normalized/`                      | OCSF-normalized event store and mapping coverage                                              |
-| `criteria/`                        | Criteria pack snapshot and evaluation results                                                 |
-| `bridge/`                          | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)                      |
-| `detections/`                      | Detection output artifacts                                                                    |
-| `scoring/`                         | Scoring summaries and metrics                                                                 |
-| `report/`                          | Report outputs (required: `report/report.json`, `report/thresholds.json`)                     |
-| `logs/`                            | Operability summaries and debug logs; not considered long-term storage                        |
-| `logs/health.json`                 | Stage/substage outcomes mirror (when enabled; see operability)                                |
-| `logs/telemetry_validation.json`   | Telemetry validation evidence (when validation enabled)                                       |
-| `logs/lab_inventory_snapshot.json` | Inventory snapshot produced by `lab_provider` (referenced by manifest)                        |
-| `logs/contract_validation/`        | Contract validation reports by stage (emitted on validation failure)                          |
-| `logs/cache_provenance.json`       | Cache provenance and determinism logs (when caching is enabled)                               |
-| `security/`                        | Integrity artifacts when signing is enabled                                                   |
-| `unredacted/`                      | Quarantined sensitive artifacts (when enabled); excluded from default disclosure              |
-| `plan/`                            | [v0.2+] Plan expansion and execution artifacts                                                |
+| Path                                      | Purpose                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `manifest.json`                           | Authoritative run index and provenance pins                                                       |
+| `inputs/`                                 | Pinned run inputs (scenario, range config; optional plan draft when enabled).                     |
+| `inputs/plan_draft.yaml`                  | Plan draft snapshot (v0.2+; when plan compilation/execution is enabled).                          |
+| `inputs/baseline/`                        | Baseline run snapshot materialization (regression; optional but recommended)                      |
+| `inputs/baseline_run_ref.json`            | Baseline selection and resolution record (regression; required when enabled)                      |
+| `ground_truth.jsonl`                      | Append-only action timeline (what was attempted)                                                  |
+| `runner/`                                 | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)                       |
+| `runner/principal_context.json`           | Run-level runner evidence (principal/execution context; when enabled)                             |
+| `raw_parquet/`                            | Raw telemetry datasets (Parquet)                                                                  |
+| `raw/`                                    | Evidence-tier payloads and source-native blobs (when enabled)                                     |
+| `normalized/`                             | OCSF-normalized event store and mapping coverage                                                  |
+| `criteria/`                               | Criteria pack snapshot and evaluation results                                                     |
+| `bridge/`                                 | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)                          |
+| `detections/`                             | Detection output artifacts                                                                        |
+| `scoring/`                                | Scoring summaries and metrics                                                                     |
+| `report/`                                 | Report outputs (required: `report/report.json`, `report/thresholds.json`)                         |
+| `logs/`                                   | Operability summaries and debug logs; not considered long-term storage                            |
+| `logs/health.json`                        | Stage/substage outcomes mirror (when enabled; see operability)                                    |
+| `logs/telemetry_validation.json`          | Telemetry validation evidence (when validation enabled)                                           |
+| `logs/lab_inventory_snapshot.json`        | Inventory snapshot produced by `lab_provider` (referenced by manifest)                            |
+| `logs/contract_validation/`               | Contract validation reports by stage (emitted on validation failure)                              |
+| `logs/cache_provenance.json`              | Cache provenance and determinism logs (when caching is enabled)                                   |
+| `logs/dedupe_index/`                      | Volatile normalization runtime index (restart-oriented; excluded from default exports/checksums). |
+| `security/`                               | Integrity artifacts when signing is enabled                                                       |
+| `security/redaction_policy_snapshot.json` | Snapshot of the effective redaction policy (recommended when redaction is enabled).               |
+| `unredacted/`                             | Quarantined sensitive artifacts (when enabled); excluded from default disclosure                  |
+| `plan/`                                   | [v0.2+] Plan expansion and execution artifacts                                                    |
 
 Common per-action evidence location (run-relative):
 
@@ -608,6 +614,10 @@ Finalize semantics (normative):
   locations.
 - If validation succeeds, `finalize()` MUST promote outputs using atomic publish semantics (atomic
   rename / replace into final locations).
+- After a successful `finalize()`, the publish gate implementation MUST delete (or leave empty)
+  `runs/<run_id>/.staging/<stage_id>/` before returning.
+- Publish-scratch hygiene: once a run is in a terminal state (success/partial/failed),
+  `runs/<run_id>/.staging/**` MUST be absent (or empty).
 - After a successful `finalize()`, the stage MUST record a terminal stage outcome in `manifest.json`
   (and in `logs/health.json` when enabled) before control returns to the orchestrator stage loop.
 
@@ -940,6 +950,12 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
      - For non-contract placeholder/operator-interface artifacts, `reason_domain` MUST be one of the
        explicitly documented constants (`artifact_placeholder`, `operator_interface`).
 
+   Note: This architecture spec does not define per-stage default `fail_mode` values. The v0.1
+   baseline defaults are specified in ADR-0005 and summarized in `025_data_contracts.md` ("Stage
+   outcomes"). The "fail-closed" principle here refers to publish-gate semantics and fatal stop
+   conditions, not an assertion that every stage defaults to `fail_closed` (for example,
+   `validation` defaults to `warn_and_skip` in v0.1).
+
 1. **Safety policy is enforced, not advisory**
 
    - The system MUST be local-first and lab-isolated by default.
@@ -1153,9 +1169,9 @@ Responsibilities:
   - `teardown`: Verify cleanup post-conditions.
 - Requirements evaluation summary fields (when present) MUST be copied into the corresponding ground
   truth action record for deterministic downstream joins.
-- When plan execution is enabled (v0.2+), compile multi-action plans to a deterministic plan graph
-  (expanded nodes + edges), write `plan/expanded_graph.json`, and assign deterministic action
-  instance ids (`action_id`).
+- When plan execution is enabled (v0.2+), compile plans into executable sub-steps (actions) and
+  assign deterministic action instance ids (`action_id`) per `025_data_contracts.md` (v0.2+ MUST NOT
+  use the legacy ordinal form `s<positive_integer>`).
 - Emit `ground_truth.jsonl`: what ran, when, where, with what resolved inputs.
 - When enabled, emit a per-action synthetic correlation marker event and ensure it propagates
   through telemetry, normalization, and reporting.
@@ -1203,7 +1219,8 @@ Responsibilities:
   heartbeats (substage: `telemetry.agent.liveness`).
 - Support Sysmon event collection (via Windows Event Log receiver).
 - Support optional osquery results ingestion (event format NDJSON via `filelog` receiver).
-- Support Linux auditd log ingestion.
+- Support Linux auditd log ingestion (normalized events use
+  `metadata.source_type = "linux-auditd"`).
 - Support Unix syslog ingestion.
 - Execute runtime canaries (substage: `telemetry.windows_eventlog.raw_mode`).
 - Validate checkpointing and dedupe behavior (substage:
@@ -1231,6 +1248,12 @@ Responsibilities:
 - Emit `normalized/**` as the canonical OCSF event store.
 - Emit `normalized/mapping_coverage.json` summarizing field coverage and unmapped events.
 - Emit `normalized/mapping_profile_snapshot.json` capturing the effective mapping profile.
+
+Terminology note (normative): `metadata.source_type` uses the **event_source_type** namespace
+(hyphenated `id_slug_v1` literals such as `linux-auditd`). It MUST NOT be conflated with
+`identity_basis.source_type` (**identity_source_type**; typically lower_snake_case such as
+`windows_eventlog`, `linux_auditd`) used for deterministic `metadata.event_id` computation
+(ADR-0002).
 
 See the [OCSF normalization specification][ocsf-spec] for mapping rules and the
 [field tiers specification][field-tiers] for coverage requirements.
@@ -1368,18 +1391,18 @@ artifact selection rules.
 
 Purple Axiom is designed for extensibility at defined boundaries:
 
-| Extension type            | Examples                                               | Interface                                     |
-| ------------------------- | ------------------------------------------------------ | --------------------------------------------- |
-| Lab providers             | Manual, Ludus, Terraform, Vagrant, custom              | Inventory snapshot contract                   |
-| Environment configurators | Ansible, DSC v3, scripts, image-baked profiles, custom | Readiness profile + deterministic operability |
-| Scenario runners          | Atomic Red Team, Caldera, custom                       | Ground truth + evidence contracts             |
-| Telemetry sources         | Windows Event Log, Sysmon, osquery, auditd, EDR, pcap  | OTel receiver + raw schema                    |
-| Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles             | Mapping profile contract                      |
-| Rule languages            | Sigma, YARA, Suricata (future)                         | Bridge + evaluator contracts                  |
-| Bridge mapping packs      | Logsource routers, field alias maps                    | Mapping pack schema                           |
-| Evaluator backends        | DuckDB/SQL, Tenzir, streaming engines                  | Compiled plan + detection contract            |
-| Criteria packs            | Default, environment-specific                          | Criteria pack manifest + entries              |
-| Redaction policies        | Default patterns, custom patterns                      | Redaction policy contract                     |
+| Extension type            | Examples                                                                     | Interface                                     |
+| ------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| Lab providers             | Manual, Ludus, Terraform, Vagrant, custom                                    | Inventory snapshot contract                   |
+| Environment configurators | Ansible, DSC v3, scripts, image-baked profiles, custom                       | Readiness profile + deterministic operability |
+| Scenario runners          | Atomic Red Team, Caldera, custom                                             | Ground truth + evidence contracts             |
+| Telemetry sources         | Windows Event Log, Sysmon, osquery, Linux auditd (`linux-auditd`), EDR, pcap | OTel receiver + raw schema                    |
+| Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles                                   | Mapping profile contract                      |
+| Rule languages            | Sigma, YARA, Suricata (future)                                               | Bridge + evaluator contracts                  |
+| Bridge mapping packs      | Logsource routers, field alias maps                                          | Mapping pack schema                           |
+| Evaluator backends        | DuckDB/SQL, Tenzir, streaming engines                                        | Compiled plan + detection contract            |
+| Criteria packs            | Default, environment-specific                                                | Criteria pack manifest + entries              |
+| Redaction policies        | Default patterns, custom patterns                                            | Redaction policy contract                     |
 
 Environment configurators are also the v0.1 integration point for generating realistic background
 activity (“noise”) so that datasets are not comprised solely of attack actions. Examples include:

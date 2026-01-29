@@ -92,8 +92,10 @@ Required steps for changing the pinned OCSF version (normative):
       the canonical location for retaining the source payload
 - Preserve the synthetic correlation marker in the normalized envelope even when the base event is
   unmapped:
-  - if the source record carries `metadata.extensions.purple_axiom.synthetic_correlation_marker`,
-    the normalizer MUST preserve it verbatim at the same path on the emitted envelope
+  - if the source record carries `metadata.extensions.purple_axiom.synthetic_correlation_marker`
+    (the same marker value is also recorded in ground truth action records as
+    `extensions.synthetic_correlation_marker`; see `025_data_contracts.md`), the normalizer MUST
+    preserve it verbatim at the same path on the emitted envelope
   - the synthetic correlation marker MUST NOT be used as part of `metadata.event_id` computation
   - if the record is otherwise unrouted/unmapped, the normalizer MUST still emit a minimal OCSF
     envelope record (see "Required envelope (Purple Axiom contract)") and retain the payload per the

@@ -30,7 +30,12 @@ In scope `source_type` rows (v0.1 MVP):
 - `windows-security` (Windows Event Log: Security channel; `metadata.source_type`)
 - `windows-sysmon` (Sysmon; `metadata.source_type`)
 - `osquery` (`metadata.source_type`)
-- `auditd` (`metadata.source_type`)
+- `linux-auditd` (Linux auditd; `metadata.source_type`)
+
+Terminology note (normative): This document's `source_type` rows are `metadata.source_type` values
+(**event_source_type**; hyphenated `id_slug_v1` literals). They MUST NOT be conflated with
+`identity_basis.source_type` values (**identity_source_type**; lower_snake_case such as
+`windows_eventlog`, `linux_auditd`) used to compute deterministic `metadata.event_id` (ADR-0002).
 
 Out of scope for this v0.1 matrix:
 
@@ -118,7 +123,7 @@ Notes:
 | windows-security     | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | R[U]            | R[U]           | O[P]               | O[P]              | O       | O             |
 | windows-sysmon       | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | O[U]           | R[P]               | R[P]              | O       | O             |
 | osquery              | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | O[U]           | R[P]               | R[P]              | O       | O             |
-| auditd               | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | R[U]           | O[P]               | R[P]              | O       | O             |
+| linux-auditd         | R[C]         | R[C]     | O[C]        | R[H]            | R[H]       | O[H]               | O[U]            | R[U]           | O[P]               | R[P]              | O       | O             |
 
 Tier 1 rationale notes (per row):
 
@@ -139,9 +144,9 @@ Tier 1 rationale notes (per row):
   - `actor.process.*` is required for the v0.1 routed tables `process_events` and `socket_events`.
     (See Tier 2 tables for per-family strictness.)
 
-- **auditd**
+- **linux-auditd**
 
-  - `actor.user.uid` is required because auditd provides stable numeric principals (UID/AUID).
+  - `actor.user.uid` is required because Linux auditd provides stable numeric principals (UID/AUID).
   - `actor.user.name` is optional because UID→name resolution requires an explicit deterministic
     context snapshot if you choose to support it.
 
@@ -161,7 +166,7 @@ To keep CI implementable, Tier 2 is expressed as a small set of family-specific 
 | windows-security     | R[U]            | R[U]           |      R[C] | O[N]            | O[N]              | O[U]             | O[U]            |
 | windows-sysmon       | N/A             | N/A            |       N/A | N/A             | N/A               | N/A              | N/A             |
 | osquery              | N/A             | N/A            |       N/A | N/A             | N/A               | N/A              | N/A             |
-| auditd               | O[U]            | R[U]           |      O[C] | N/A             | N/A               | N/A              | N/A             |
+| linux-auditd         | O[U]            | R[U]           |      O[C] | N/A             | N/A               | N/A              | N/A             |
 
 Notes:
 
@@ -172,14 +177,14 @@ Notes:
 - `target.user.*` is optional because not all auth events have a distinct target principal beyond
   `actor.user`.
 
-### Tier 2B process and execution activity for Windows Security, Sysmon, osquery, and auditd
+### Tier 2B process and execution activity for Windows Security, Sysmon, osquery, and Linux auditd
 
 | metadata.source_type | activity_id | actor.process.name | actor.process.pid | actor.process.cmd_line | actor.process.parent_process.pid | actor.user.uid | actor.user.name |
 | -------------------- | ----------- | ------------------ | ----------------- | ---------------------- | -------------------------------- | -------------- | --------------- |
 | windows-security     | R[C]        | O[P]               | O[P]              | O[P]                   | O[P]                             | R[U]           | R[U]            |
 | windows-sysmon       | R[C]        | R[P]               | R[P]              | R[P]                   | R[P]                             | O[U]           | O[U]            |
 | osquery              | R[C]        | R[P]               | R[P]              | R[P]                   | O[P]                             | O[U]           | O[U]            |
-| auditd               | R[C]        | O[P]               | R[P]              | O[P]                   | O[P]                             | R[U]           | O[U]            |
+| linux-auditd         | R[C]        | O[P]               | R[P]              | O[P]                   | O[P]                             | R[U]           | O[U]            |
 
 Notes:
 
@@ -189,9 +194,9 @@ Notes:
   `0 = Unknown`.
 - Sysmon requires process pivots because it is the primary v0.1 source for endpoint behavior
   detections.
-- auditd often provides executable path rather than a clean process name. Mapping profiles may
-  choose to populate `actor.process.name` from the basename of an executable path only if this
-  derivation is explicitly defined and tested.
+- Linux auditd (`linux-auditd`) often provides executable path rather than a clean process name.
+  Mapping profiles may choose to populate `actor.process.name` from the basename of an executable
+  path only if this derivation is explicitly defined and tested.
 
 ### Tier 2C network and connection activity for Sysmon and osquery
 
@@ -200,7 +205,7 @@ Notes:
 | windows-security     | N/A             | N/A               | N/A             | N/A               |
 | windows-sysmon       | R[N]            | R[N]              | R[N]            | R[N]              |
 | osquery              | R[N]            | O[N]              | R[N]            | O[N]              |
-| auditd               | O[N]            | O[N]              | O[N]            | O[N]              |
+| linux-auditd         | O[N]            | O[N]              | O[N]            | O[N]              |
 
 Notes:
 
@@ -209,14 +214,14 @@ Notes:
 - For osquery `socket_events`, port availability depends on the table/back-end; treat as optional
   unless the raw provides them.
 
-### Tier 2D file system activity for Sysmon, osquery, and auditd
+### Tier 2D file system activity for Sysmon, osquery, and Linux auditd
 
 | metadata.source_type | file.name | file.parent_folder | file.path | actor.process.pid | actor.process.name | actor.user.uid |
 | -------------------- | --------: | -----------------: | --------: | ----------------: | -----------------: | -------------: |
 | windows-security     |      O[F] |               O[F] |      O[F] |              O[P] |               O[P] |           O[U] |
 | windows-sysmon       |      R[F] |               R[F] |      R[F] |              R[P] |               R[P] |           O[U] |
 | osquery              |      R[F] |               R[F] |      O[F] |               N/A |                N/A |           O[U] |
-| auditd               |      R[F] |               O[F] |      O[F] |              R[P] |               O[P] |           R[U] |
+| linux-auditd         |      R[F] |               O[F] |      O[F] |              R[P] |               O[P] |           R[U] |
 
 Notes:
 
@@ -233,9 +238,9 @@ Notes:
     only the authoritative field(s).
   - `file.path` is marked `O[F]` for sources that do not always provide a full path (osquery
     `file_events` may have partial paths depending on configuration).
-- For auditd file activity, `file.parent_folder` is optional because audit records may provide only
-  a full path or inode-derived context depending on configuration. If only a full path is available,
-  mapping profiles should deterministically split it into `parent_folder` and `name`.
+- For Linux auditd file activity, `file.parent_folder` is optional because audit records may provide
+  only a full path or inode-derived context depending on configuration. If only a full path is
+  available, mapping profiles should deterministically split it into `parent_folder` and `name`.
 
 ______________________________________________________________________
 
@@ -251,7 +256,7 @@ For each `source_type`, maintain a small raw fixture corpus that includes at lea
 - Windows Security:
   - 1 successful auth event
   - 1 failed auth event
-- Sysmon:
+- Windows Sysmon:
   - 1 process creation event
   - 1 network connection event
   - 1 file activity event
@@ -259,7 +264,7 @@ For each `source_type`, maintain a small raw fixture corpus that includes at lea
   - 1 `process_events` row
   - 1 `socket_events` row
   - 1 `file_events` row
-- auditd:
+- Linux auditd:
   - 1 exec/process event
   - 1 network/socket event (optional; validates Tier 2C `O[N]` handling)
   - 1 file activity event

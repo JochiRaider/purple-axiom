@@ -167,10 +167,32 @@ Verb definitions (v0.1):
 
 - `replay`
 
-  - Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and
-    optional `signing`).
-  - Preconditions: the candidate run bundle MUST already contain `raw_parquet/**` and
-    `ground_truth.jsonl`. `replay` MUST treat these inputs as read-only.
+  - Default stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting`
+    (and optional `signing`).
+  - Preconditions: the candidate run bundle MUST already contain `ground_truth.jsonl` and either:
+    - `raw_parquet/**` (full replay; `normalization` and `validation` are executed), OR
+    - a normalized event store (normalized-input replay; v0.2+):
+      - `normalized/ocsf_events/` (Parquet dataset; MUST include `normalized/ocsf_events/_schema.json`),
+        OR `normalized/ocsf_events.jsonl`, AND
+      - `normalized/mapping_profile_snapshot.json`.
+  - Normalized-input replay fast path (v0.2+; normative when used):
+    - If a normalized event store exists and its normalization provenance matches the current
+      version control for the run, the orchestrator MUST skip directly to `detection`.
+    - Match criteria (normative):
+      - `normalized/mapping_profile_snapshot.json` MUST validate against the data contracts.
+      - `normalized/mapping_profile_snapshot.json.ocsf_version` MUST equal
+        `manifest.versions.ocsf_version`.
+      - `normalized/mapping_profile_snapshot.json.mapping_profile_sha256` MUST equal the expected
+        mapping profile hash for the run, computed using the hashing rules in
+        `025_data_contracts.md` ("mapping_profile_snapshot.json").
+    - Stage behavior (normative):
+      - Stages executed: `detection` → `scoring` → `reporting` (and optional `signing`).
+      - The orchestrator MUST record `normalization` and `validation` as `status="skipped"` with
+        `fail_mode="warn_and_skip"` and `reason_code="normalized_store_reused"`.
+      - If the match criteria fail and `raw_parquet/**` is absent, `replay` MUST fail closed with
+        `reason_code="normalized_store_incompatible"`.
+  - Input immutability (normative): `replay` MUST treat `ground_truth.jsonl`, `raw_parquet/**`
+    (when present), and `normalized/**` (when present) as read-only.
   - MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or
     `raw_parquet/**` except for operability logs under `logs/**`.
   - When regression comparison is enabled, `replay` MUST treat any pre-existing artifacts under

@@ -15,6 +15,8 @@ Purple Axiom v0.1 enforces a strict 1:1 relationship between an action and a tar
 > selector matches multiple assets, the runner/provider MUST select deterministically using stable
 > ordering over `lab.assets[].asset_id` (UTF-8 byte order, no locale).
 
+Note: `target_asset_id` is the stable lab asset identifier (`lab.assets[].asset_id`) resolved from the run's pinned inventory snapshot (`logs/lab_inventory_snapshot.json`). v0.1 "single-target" selection is therefore deterministic over that snapshot, not dependent on live provider state.
+
 This design makes it impossible to express scenarios like:
 
 - "Run T1059.001 on ALL Windows hosts" (to test coverage across OS versions)
@@ -48,40 +50,45 @@ determinism and enabling future UI/daemon capabilities.
 The plan execution engine MUST be designed around a directed acyclic graph (DAG) model internally,
 even when the user-facing plan type is simpler.
 
-**Plan graph definition:**
+**Plan graph shape (illustrative; non-normative):**
 
 ```yaml
 
-plan_graph:  
-  nodes:  
-    - action_id: "<action_id>"  
-      action_key: "<action_key>"  
-      node_ordinal: 0  
-      template_id: "<template_id>"  
-      target_asset_id: "<target_asset_id>"  
-  parameters:  
-      resolved_inputs_sha256: ""  
-      status: pending | running | succeeded | failed | skipped  
-      extensions: { }  
-  edges:  
-    - from: "<action_id>"  
-      to: "<action_id>"  
-      condition: "always | on_success | on_failure | on_any"  
-      extensions: { }
-
+plan_graph:
+  scenario_posture:
+    mode: "baseline" # baseline | assumed_compromise
+  nodes:
+    - action_id: "<action_id>"
+      action_key: "<action_key>"
+      node_ordinal: 0
+      template_id: "<template_id>"
+      target_asset_id: "<target_asset_id>"
+      parameters:
+        resolved_inputs_sha256: "sha256:<hex>"
+      extensions: {}
+  edges:
+    - from: "<action_id>"
+      to: "<action_id>"
+      condition: "always | on_success | on_failure | on_any"
+      extensions: {}
+  extensions: {}
 ```
 
 Notes:
 
 - In v0.2+, the immutable expanded node/edge set MUST be recorded in `plan/expanded_graph.json`.
-- Node `status` is runtime state and MUST be tracked without mutating the compiled plan artifacts
-  (for example via the ground truth timeline plus runner evidence, or a separate execution journal).
+- When plan execution is enabled (v0.2+), the graph root MUST record the effective posture
+  (`scenario_posture.mode`) for auditability.
+- Node execution status is runtime state and MUST be tracked without mutating the compiled plan
+  artifacts (for example via the ground truth timeline plus runner evidence, and optionally a
+  separate scheduler journal such as `plan/execution_log.jsonl` when defined/implemented).
 
 **Key properties:**
 
-- A plan graph with no edges represents embarrassingly parallel execution (matrix semantics).
-- A plan graph with linear edges represents sequential execution.
-- A plan graph with branching edges represents conditional/campaign execution (future).
+- A plan graph with no edges encodes no inter-node dependencies (a "matrix" fragment). Nodes MAY
+  still be executed sequentially or in parallel depending on scheduler configuration.
+- A plan graph with linear edges encodes explicit ordering dependencies (sequence semantics).
+- A plan graph with branching edges encodes conditional activation (campaign semantics; reserved).
 
 **Rationale:**
 
@@ -111,7 +118,7 @@ plan:
   type: "matrix"
   axes:
     templates:
-      - "atomic/T1059.001/<guid>"  # template_id (engine/technique/test)
+      - "atomic/T1059.001/<guid>"  # template_id: atomic/<technique_id>/<engine_test_id>
     targets:
       selector: { os: "windows" }
     input_variants: ["default"]    # reserved for future input sets
@@ -134,20 +141,34 @@ plan:
 
 **Determinism and safety requirements:**
 
-- Axis enumeration MUST be deterministic:
-  - Selector-resolved `targets` MUST be sorted by `target_asset_id` ascending (UTF-8 byte order, no\
+- Enumeration MUST be deterministic and MUST be computed solely from the run's pinned inventory
+  snapshot (`logs/lab_inventory_snapshot.json`) plus the scenario plan (no live provider queries
+  during compilation):
+  - Templates MUST be enumerated in ascending lexical order of `template_id` (bytewise UTF-8, no
     locale).
-  - User-specified arrays (for example `templates`, `input_variants`) MUST be enumerated in the
-    order\
+  - Selector-resolved `targets` MUST be sorted by `target_asset_id` ascending (UTF-8 byte order, no
+    locale).
+  - User-specified axis arrays (for example `input_variants`) MUST be enumerated in the order
     provided (no implicit sorting).
+- If any axis listed in `expand` resolves to 0 concrete values (for example a selector matches no
+  targets), compilation MUST fail closed before executing any action instances. (TODO: specify the
+  `reason_code` in ADR-0005 when matrix plans are implemented.)
+- `expand[]` MUST be treated as an ordered list of opaque dimension tokens. For a pure `matrix`
+  plan, expansion coordinates MUST use `cell.path == expand[]` (same elements, same order).
+- `node_ordinal` MUST be unique within the run and 0-based, and MUST be assigned by the canonical
+  ordering algorithm defined in the plan execution model spec (`031_plan_execution_model.md`).
 - Execution order (when `order: "sequential"`) MUST follow ascending `node_ordinal`.
-- The compiler MUST enforce the configured maximum expanded node count (`plan.max_nodes`). If the\
-  limit is exceeded, the runner MUST fail closed with `reason_code=plan_expansion_limit` before\
+- Any axis not listed in `expand` MUST resolve to exactly one concrete value (singleton). If an
+  unexpanded axis would yield 2+ values, compilation MUST fail closed (prefer
+  `reason_code=config_schema_invalid`).
+- The compiler MUST enforce the configured maximum expanded node count (`plan.max_nodes`). If the
+  limit is exceeded, the runner MUST fail closed with `reason_code=plan_expansion_limit` before
   executing any action instances.
 - Requested per-plan concurrency MUST be clamped to `plan.max_concurrency`.
 - The expanded plan graph MUST be recorded in the run bundle for reproducibility:
   - `plan/expanded_graph.json` (required; flattened node/edge graph)
-  - `plan/expansion_manifest.json` (optional; records axis enumeration and `cell` coordinates)
+  - `plan/expansion_manifest.json` (required for matrix plans; records axis enumeration and `cell`
+    coordinates)
 
 ### 4. Ground truth and reporting implications
 
@@ -157,8 +178,9 @@ plan:
 - `action_id` and `action_key` remain the stable join keys across runner evidence, scoring, and
   reporting.
 - Matrix expansion coordinates MUST be recoverable by joining `ground_truth.jsonl` rows to
-  `plan/expanded_graph.json` (and `plan/expansion_manifest.json` when present). No new top-level
-  field is required in the ground truth contract for this linkage.
+  `plan/expanded_graph.json` and `plan/expansion_manifest.json` (required for matrix plans; may be
+  absent for non-expanded `atomic` plans). No new top-level field is required in the ground truth
+  contract for this linkage.
 
 **Reporting:**
 
@@ -177,6 +199,47 @@ The scenario model spec (`030_scenarios.md`) MUST specify (v0.1):
 1. The `action_key` design is forward-compatible with target expansion.
 1. Implementations MUST fail closed with `reason_code=plan_type_reserved` if a matrix plan is
    encountered in v0.1.
+
+### 6. State machine integration (representational; non-normative)
+
+This section is an illustrative lifecycle view only. It does not define new conformance
+requirements; conformance is defined by the artifact contracts and stage outcome semantics
+referenced below.
+
+**Lifecycle authority references (per ADR-0007):**
+
+- Scenario model spec: action lifecycle phases and `ground_truth.jsonl`
+- Plan execution model spec: plan artifacts and scheduling semantics
+- ADR-0005: runner stage outcomes and `reason_code` taxonomy
+
+#### State machine: Plan node lifecycle (representational)
+
+- **Machine ID (proposed):** `plan_node_lifecycle`
+- **Version (seed):** `0.2.0`
+
+**States (closed set):**
+
+- `node_pending` (node exists in the compiled graph but dependencies/conditions may not yet permit scheduling)
+- `node_ready` (node is eligible to be scheduled under the plan's dependency/condition semantics)
+- `node_running` (runner has begun the node's action lifecycle)
+- `node_succeeded` (node reached terminal success)
+- `node_failed` (node reached terminal failure)
+- `node_skipped` (node will not be executed)
+
+**Transitions (informative):**
+
+- `node_pending -> node_ready` (dependencies satisfied and conditions met, if any)
+- `node_ready -> node_running` (runner starts the action lifecycle for the node)
+- `node_running -> node_succeeded`
+- `node_running -> node_failed`
+- `node_pending | node_ready -> node_skipped` (conditional edge not met, fail-fast policy, or explicit skip policy; reserved)
+
+**Observable signals (informative mapping):**
+
+- Identity and membership: `plan/expanded_graph.json.nodes[]`
+- Scheduling journal (when present): `plan/execution_log.jsonl`
+- Execution timeline and outcomes: `ground_truth.jsonl` (join on `action_id`) plus per-node evidence
+  under `runner/actions/<action_id>/`
 
 ## Consequences
 
@@ -216,13 +279,14 @@ plan artifacts and their determinism, versioning, and safety requirements. Key r
 
 - The expanded plan graph MUST be recorded at `plan/expanded_graph.json` and MUST validate against a
   contract schema (registered in `docs/contracts/contract_registry.json`).
-- When present, `plan/expansion_manifest.json` MUST validate against its contract schema and MUST be
-  consistent with `plan/expanded_graph.json` (node ids, `node_ordinal`, and expansion coordinates).
+- For matrix plans (v0.2+), `plan/expansion_manifest.json` MUST be emitted, MUST validate against
+  its contract schema, and MUST be consistent with `plan/expanded_graph.json` (node ids,
+  `node_ordinal`, and expansion coordinates).
 - Compiled plan artifacts MUST be immutable after publish and MUST be safe to retain (no unredacted
   secrets or sensitive values).
 - Runtime execution state (node statuses, scheduling decisions) MUST be tracked without mutating the
   compiled plan artifacts (for example via the ground truth timeline and runner evidence, and
-  optionally a separate execution journal).
+  optionally a separate execution journal such as `plan/execution_log.jsonl` when defined/implemented).
 - The compiler MUST enforce `plan.max_nodes`, and the runner MUST clamp requested concurrency to
   `plan.max_concurrency` per the configuration reference.
 
@@ -254,11 +318,14 @@ For daemon or UI implementations:
 - [Config reference](../spec/120_config_reference.md)
 - [Reporting spec](../spec/080_reporting.md)
 - [ADR-0003: Redaction policy](ADR-0003-redaction-policy.md)
+- [ADR-0005: Stage outcomes and failure classification](ADR-0005-stage-outcomes-and-failure-classification.md)
+- [ADR-0007: State machines](ADR-0007-state-machines.md) 
 - [Lab providers spec](../spec/015_lab_providers.md)
 
 ## Changelog
 
 | Date      | Change                                                                    |
 | --------- | ------------------------------------------------------------------------- |
+| 1/28/2026 | update                                                             |
 | 1/19/2026 | Align ADR with v0.2 plan artifacts, determinism ordering, and safety caps |
 | 1/13/2026 | Initial draft                                                             |

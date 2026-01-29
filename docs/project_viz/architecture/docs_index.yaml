@@ -1,4 +1,4 @@
-# file: architecture/docs_index.yaml
+# file: docs/project_viz/architecture/docs_index.yaml
 version: 1
 documents:
   - id: spec_000_charter

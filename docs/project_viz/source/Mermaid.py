@@ -92,6 +92,27 @@ def mm_text(text: str) -> str:
     )
 
 
+def mm_edge_label(text: str) -> str:
+    """Format a Mermaid *edge label* (the text inside `-->|...|`) safely.
+
+    GitHub's Mermaid renderer can fail when an edge label begins with certain
+    punctuation (e.g., "(optional ...)"). Quoting the label avoids parse errors.
+
+    Args:
+        text: Raw edge label text.
+
+    Returns:
+        A string suitable for use between the label pipes in Mermaid flowcharts.
+        The returned string does not include the surrounding `|` delimiters.
+    """
+    raw = str(text)
+    escaped = mm_text(raw)
+    stripped = raw.lstrip()
+    if stripped and not re.match(r"[A-Za-z0-9_]", stripped[0]):
+        return f'"{escaped}"'
+    return escaped
+
+
 def _sanitize_yaml_for_pyyaml(raw: str) -> str:
     """Sanitize YAML to improve compatibility with PyYAML parsing.
 
@@ -533,7 +554,8 @@ def gen_trust_boundaries(model: dict[str, Any]) -> str:
         dst = rel["to"]
         label = rel.get("label") or ""
         if label:
-            lines.append(f"  {src} -->|{mm_text(str(label))}| {dst}")
+            edge_label = mm_edge_label(str(label))
+            lines.append(f"  {src} -->|{edge_label}| {dst}")
         else:
             lines.append(f"  {src} --> {dst}")
 

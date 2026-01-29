@@ -59,9 +59,9 @@ flowchart TB
   orchestrator_cli -->|invoke stage| telemetry
   orchestrator_cli -->|invoke stage| validation
   otlp_stream -->|deliver telemetry to gateway| otel_collector_gateway
-  reporting -->|(optional regression) read baseline packages| baseline_library
+  reporting -->|"(optional regression) read baseline packages"| baseline_library
   reporting -->|publish report artifacts| report_artifacts
-  reporting -->|(optional regression) materialize baseline inputs| run_bundle_store
+  reporting -->|"(optional regression) materialize baseline inputs"| run_bundle_store
   runner -->|write ground truth and runner evidence| run_bundle_store
   scoring -->|publish scoring summary| run_bundle_store
   signing -->|publish checksums and signature| integrity_artifacts

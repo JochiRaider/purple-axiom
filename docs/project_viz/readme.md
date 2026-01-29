@@ -1,6 +1,6 @@
 # Project Viz
 
-Project Viz is the “system model → diagrams” workspace for the Purple Team CI Orchestrator documentation. It standardizes a single, validated system graph (`system_model.yaml`) and generates consistent Mermaid flowcharts from named views.
+Project Viz is the “system model → diagrams” workspace for the Purple Team CI Orchestrator documentation. It standardizes a single, evidence-backed architecture model (`system_model.yaml`) and generates a small set of consistent Mermaid diagrams.
 
 This README lives in: `docs/project_viz/`
 
@@ -8,341 +8,256 @@ This README lives in: `docs/project_viz/`
 
 Primary inputs:
 
-* `architecture/system_model.yaml`
-  Design-time system graph used to generate Mermaid flowcharts (topology, run sequence, IO boundary views). This file MUST conform to the `system_model_v1` schema (see below).
+* `architecture/system_model.yaml`  
+  YAML system model used to generate Mermaid diagrams. The model is **spec-derived** and should be **evidence-backed** (see “Evidence pointers”).
 
-* `source/Mermaid.py`
-  Mermaid diagram generator (parsing, linting, rendering). Unit tests map 1:1 to a lint checklist described in this README.
+* `source/Mermaid.py`  
+  Mermaid diagram generator for the YAML model. It validates the model for diagram safety and emits Markdown files containing Mermaid code blocks.
 
-Related specs that define key invariants referenced by this project:
+Generated outputs (do not hand-edit):
 
-* ADR-0001: project naming/versioning (`id_slug_v1`, `version_token_v1`, SemVer rules)
-* ADR-0004: deployment architecture + normative run sequence + minimum v0.1 I/O boundaries
+* `docs/diagrams/generated/`
+  * `stage_flow.md`
+  * `trust_boundaries.md`
+  * `run_sequence.md`
+  * `run_status_state.md`
+
+## Quickstart
+
+From the repo root:
+
+```bash
+python3 docs/project_viz/source/Mermaid.py
+```
+
+Common options:
+
+```bash
+# Render using a specific workflow id (default: exercise_run)
+python3 docs/project_viz/source/Mermaid.py --workflow exercise_run
+
+# Treat warnings as failures (recommended for CI)
+python3 docs/project_viz/source/Mermaid.py --strict
+
+# Override model path / output directory
+python3 docs/project_viz/source/Mermaid.py \
+  --model docs/project_viz/architecture/system_model.yaml \
+  --out-dir docs/diagrams/generated
+```
 
 ## System model format
 
-`architecture/system_model.yaml` is YAML, but it is restricted to a JSON-compatible subset and is validated after parse.
+`architecture/system_model.yaml` is a YAML mapping. The model can contain additional fields for future tooling, but `Mermaid.py` currently consumes (and lightly validates) the following sections:
 
-Schema token and identity:
+### Top-level keys commonly used
 
-* Schema version token: `system_model_v1`
-* Schema `$id`: `urn:purple-axiom:schema:system_model_v1`
+- `version` (integer; informational)
+- `system` (informational metadata)
+- `trust_zones` (diagram clustering + validation)
+- `actors`, `containers`, `datastores`, `externals`, `buses` (entities referenced by diagrams)
+- `relationships` (used by trust boundary view)
+- `workflows` (used by stage flow + run sequence)
+- `states` (currently unused by the generator; reserved for future explicit state machines)
+    
 
-### JSON-compatible YAML subset (SM001)
+### Trust zones
 
-The YAML parser MUST reject non-JSON YAML features. At minimum, these are not allowed:
+`trust_zones` is a list. Each trust zone should include:
+- `id` (**required**; Mermaid-safe identifier)
+- `name` (human label; used in diagrams)
+- `description` (optional)
+- `evidence` (recommended)
+    
+Trust zones are used to **cluster nodes** in the trust boundary diagram and to validate that entities reference declared zones.
 
-* anchors / aliases (`&anchor`, `*alias`)
-* YAML tags (`!!tag`)
-* duplicate map keys
+### Entities
 
-This is enforced as a hard error (generation fails).
+Entities are defined across these sections:
 
-### Root shape (required keys)
+- `actors`
+- `containers`
+- `datastores`
+- `externals`
+- `buses`
 
-After YAML is parsed to JSON, the root object MUST contain:
+For diagram generation, each entity needs:
 
-* `v` (MUST equal `system_model_v1`)
-* `system`
-* `nodes`
-* `edges`
-* `views`
+- `id` (**required**; unique across all entity sections)
+- `name` (recommended; used as the displayed label)
+- `trust_zone` (recommended; used for trust boundary clustering)
 
-Optional:
+Additional fields are allowed (e.g., `kind`, `type`, `tech`, `responsibilities`, `tags`, `description`, `evidence`, etc.).
 
-* `groups` (for diagram grouping / subgraphs)
+#### Stages vs non-stages
 
-Additional root keys are not allowed (fail closed).
+The **Stage flow** diagram is derived from workflow steps, but it only includes `containers` where:
 
-### `system`
+- `kind: stage` 
 
-`system` identifies the modeled system:
+If a workflow step targets a container that is not `kind: stage`, it will not appear in `stage_flow.md`.
 
-* `system.system_id`
-  MUST be `id_slug_v1` as defined in ADR-0001 (lowercase letters/digits/hyphen; no leading/trailing hyphen; no consecutive hyphens).
+### Relationships
 
-* `system.system_version`
-  MUST be `semver_v1` (SemVer 2.0.0, no leading `v`).
+`relationships` is a list of directed edges, used by the trust boundary diagram.
 
-* `system.title`
-  Human title for diagrams.
+The generator expects each relationship item to be a mapping and typically uses:
 
-* `system.description` (optional)
-  Human description.
+- `from` (entity id) 
+- `to` (entity id)
+- `label` (optional; shown on the edge)
 
-### `groups` (optional)
+Other relationship fields (e.g., protocol, auth, evidence) are allowed and ignored by the generator for now.
 
-`groups` define optional subgraph boundaries used for diagram grouping.
+### Workflows
 
-Key fields:
+`workflows` is a list of named workflows. The generator uses one workflow (selected by `--workflow`, defaulting to `exercise_run`) to build:
 
-* `groups[].id` (lower_snake_case identifier; Mermaid-safe)
-* `groups[].label` (Mermaid-safe label)
-* `groups[].parent` (optional; must reference an existing group; must be acyclic)
-* `groups[].order` (optional; integer sort key)
-* `groups[].description` (optional)
+- `stage_flow.md`
+- `run_sequence.md`
 
-### `nodes`
+A workflow should contain:
 
-`nodes` are the diagram-addressable entities. Every node has:
+- `id` (string; referenced by `--workflow`)
+- `name` (optional)
+- `steps` (list of workflow steps)
 
-* `nodes[].id`
-  Lower snake case identifier (Mermaid-safe ID). Must be unique.
+Each workflow step should contain:
 
-* `nodes[].kind`
-  One of:
+- `n` (integer ordering key; used for sorting)
+- `from` (entity id)
+- `to` (entity id)
+- `message` (human message used in the sequence diagram)
 
-  * `core_stage`
-  * `stage`
-  * `orchestrator`
-  * `run_bundle`
-  * `endpoint`
-  * `collector_agent`
-  * `collector_gateway`
-  * `datastore`
-  * `external_service`
-  * `note`
+**Optional stage heuristic:** if a step’s `message` contains the literal substring `(optional)`, the generator marks that stage as optional in `stage_flow.md` and renders the incoming edge as “optional”.
 
-* `nodes[].label`
-  Mermaid-safe label (constraints below).
+## ID rules
 
-Optional node fields:
+To keep Mermaid output stable and parse-safe, trust zone IDs and entity IDs must be **Mermaid-safe**:
 
-* `group` (must reference an existing `groups[].id`)
-* `order` (integer; used for stable sorting / deterministic output)
-* `tags` (unique list of lower_snake_case tags)
-* `description` (free text)
+- Must match: `^[A-Za-z_][A-Za-z0-9_]*$`
+    - letters, digits, underscore
+    - cannot start with a digit  
 
-Core stages (v0.1):
+Examples:
 
-* If a node has `kind: core_stage`, its `id` MUST be one of the stable v0.1 core stage identifiers:
+- ✅ `ci_environment`, `orchestrator_cli`, `run_bundle_store`
+- ❌ `ci-environment` (hyphen), `123_stage` (starts with digit)
 
-  * `lab_provider`
-  * `runner`
-  * `telemetry`
-  * `normalization`
-  * `validation`
-  * `detection`
-  * `scoring`
-  * `reporting`
-  * `signing` (optional-by-config, but enumerated for reference)
+IDs must also be unique across all entity sections.
 
-### `edges`
+## Evidence pointers
 
-`edges` are directed relationships between nodes. Every edge has:
+Project policy: **Evidence or it doesn’t exist.**
 
-* `edges[].id` (unique lower_snake_case identifier)
-* `edges[].from` (must reference an existing `nodes[].id`)
-* `edges[].to` (must reference an existing `nodes[].id`)
-* `edges[].channel` (communication channel)
+Model elements should be backed by evidence pointers in the shape:
 
-Allowed channels:
+- `file` (spec filename)
+- `section_heading` (nearest heading)
+- `excerpt` (short quote; keep it brief)
 
-* `filesystem`
-* `otlp_grpc`
-* `otlp_http`
-* `https`
-* `ssh`
-* `winrm`
-* `in_process`
-* `other`
+The generator does not currently enforce “evidence required”, but the model is intended to be auditable and maintainable, so treat evidence as mandatory for new additions.
 
-Optional edge fields:
+## YAML pitfalls and quoting
 
-* `label` (Mermaid-safe label)
-* `optional` (boolean; default false)
-* `artifacts` (unique list of run-relative artifact paths or globs)
+Some YAML parsers reject _plain scalars_ that contain `:` (colon-space). In the current model this most commonly appears in evidence `excerpt:` lines.
 
-Artifact path / glob constraints:
+Guidance:
 
-* Must be run-relative POSIX-style (no leading `/`)
-* No backslashes
-* No `..` path segments
-* Allows `*` and `<placeholder>` tokens
+- If an `excerpt:` contains `:` , quote it:
+    - `excerpt: "Atomic Red Team tests: pinned exact version."`
+- Prefer short, single-line excerpts.
+    
 
-### Mermaid-safe labels
+`Mermaid.py` includes a narrow fallback sanitizer that auto-quotes **unquoted** `excerpt:` values containing `:` , and prints a warning so the YAML can be fixed properly later.
 
-Labels used in nodes, groups, and edges are restricted to avoid Mermaid parse hazards.
+## Diagram set produced by Mermaid.py
 
-At minimum:
+### 1) Stage flow (`stage_flow.md`)
 
-* no newlines
-* no tabs
-* no `[` or `]`
-* no `|`
-* no double quotes (`"`)
+A Mermaid **flowchart** that represents the ordered stage pipeline for the selected workflow:
 
-If a label violates Mermaid-safe constraints, generation MUST fail closed (or sanitize deterministically, if the generator explicitly supports a safe sanitizer).
+- Derived from `workflows[].steps` sorted by `n`
+- Extracts `to:` endpoints that are `containers` with `kind: stage`
+- Preserves first-seen order
+- Marks a stage optional if any step message includes `(optional)`
+    
 
-### `views`
+This view is meant to stay small and legible: it shows the stage pipeline, not every internal dependency.
 
-`views` are named Mermaid render targets. The generator renders exactly one Mermaid flowchart per view.
+### 2) Trust boundaries (`trust_boundaries.md`)
 
-Each view has:
+A Mermaid **flowchart** clustered by `trust_zones`:
+- Nodes are grouped into subgraphs by each entity’s `trust_zone`
+- Edge selection is intentionally bounded:
+    - includes all **cross-trust-zone** relationships
+    - plus any `orchestrator_cli -> *` relationship with `label: invoke stage`
+- Nodes without a `trust_zone` appear under an `unmodeled` subgraph
 
-* `views[].id` (unique lower_snake_case identifier)
-* `views[].title` (human title)
-* `views[].kind` (MUST be `flowchart`)
-* `views[].direction` (one of `TB`, `TD`, `BT`, `LR`, `RL`)
-* `views[].nodes` (unique list of node IDs included in the view)
-* `views[].edges` (unique list of edge IDs included in the view)
+### 3) Canonical run sequence (`run_sequence.md`)
 
-Optional view fields:
+A Mermaid **sequenceDiagram** generated directly from workflow steps:
 
-* `profile` (conformance profile; see below)
-* `include_groups` (optional list of group IDs to include)
-* `notes` (free text notes attached to the view)
+- Participants are collected in first-seen order across `from`/`to`
+- Each step becomes a message `from ->> to: n. message`
 
-## View profiles (v0.1 conformance)
+### 4) Run status state (`run_status_state.md`)
 
-A view may set `views[].profile` to enable additional conformance lints. Profiles are:
+A Mermaid **stateDiagram-v2** that currently renders a stable, spec-level summary:
 
-* `none` (default)
-* `v0_1_run_sequence`
-* `v0_1_io_boundaries`
-* `v0_1_deployment_topology`
+- Running → Failed (fail_closed)
+- Running → Partial (warn_and_skip)
+- Running → Success (otherwise)
 
-Notes on expectations:
+The generator currently does not build this from `states` (the model currently has `states: []`), so treat this as a placeholder until an explicit state machine is modeled.
 
-* `v0_1_run_sequence` reflects ADR-0004’s normative stage ordering and responsibilities.
-* `v0_1_io_boundaries` reflects ADR-0004’s “Minimum v0.1 IO boundaries” table.
-* Stage coordination is filesystem-based (the run-bundle is the coordination plane). OTLP is part of the telemetry plane and is not required for stage-to-stage coordination.
+## Validation behavior (errors vs warnings)
 
-## Mermaid generator contract and lints
+The generator performs lightweight structural validation before rendering:
 
-The generator is tested as a lint-and-render pipeline with the following assumed contract:
+Errors (generation fails):
 
-* `parse_system_model_yaml(path) -> model_json`
-* `lint_system_model(model_json) -> findings[]`
-* `render_mermaid(model_json, view_id) -> mermaid_text`
+- `trust_zones` / entity sections are not lists
+- missing string `id` for trust zones or entities
+- duplicate entity IDs across all entity sections
+- IDs that are not Mermaid-safe
+- workflow `steps` is not a list
 
-Findings contract:
+Warnings (generation continues by default):
 
-* Each finding has at least:
+- entities reference an undeclared `trust_zone`
+- relationships reference unknown entity IDs
+- workflow steps reference unknown entity IDs
+- non-mapping items in lists (skipped)
 
-  * `code`
-  * `message`
-  * `json_pointer`
+In CI, prefer `--strict` so warnings fail the build.
 
-Severity:
-
-* All checklist items below are treated as errors (any finding fails generation).
-
-## Lint checklist (maps 1:1 to unit tests)
-
-Model / parse / schema lints:
-
-* SM001 (`test_SM001_reject_non_json_yaml_features`)
-  Reject anchors/aliases, tags, and duplicate keys (JSON-subset only).
-
-* SM002 (`test_SM002_schema_validation_errors_reported`)
-  Parsed JSON MUST validate against `system_model_v1`; schema failures must surface as lint findings.
-
-* SM003 (`test_SM003_version_token_must_match`)
-  `v` MUST equal `system_model_v1` (fail closed for unknown versions).
-
-ID uniqueness and reference integrity lints:
-
-* SM010 (`test_SM010_group_ids_unique`)
-  `groups[].id` MUST be unique.
-
-* SM011 (`test_SM011_group_parent_must_exist`)
-  If `groups[].parent` is set, it MUST reference an existing `groups[].id`.
-
-* SM012 (`test_SM012_group_parent_must_be_acyclic`)
-  Group parent chains MUST be acyclic.
-
-* SM020 (`test_SM020_node_ids_unique`)
-  `nodes[].id` MUST be unique.
-
-* SM021 (`test_SM021_node_group_must_exist`)
-  If `nodes[].group` is set, it MUST reference an existing `groups[].id`.
-
-* SM030 (`test_SM030_edge_ids_unique`)
-  `edges[].id` MUST be unique.
-
-* SM031 (`test_SM031_edge_endpoints_must_exist`)
-  `edges[].from` and `edges[].to` MUST reference existing `nodes[].id`.
-
-* SM032 (`test_SM032_no_self_edges`)
-  `edges[].from` MUST NOT equal `edges[].to`.
-
-* SM033 (`test_SM033_no_duplicate_semantic_edges`)
-  No two edges may share the same semantic key `(from, to, channel, label)`.
-
-View integrity lints:
-
-* SM040 (`test_SM040_view_node_refs_exist`)
-  Every `views[].nodes[]` entry MUST reference an existing `nodes[].id`.
-
-* SM041 (`test_SM041_view_edge_refs_exist`)
-  Every `views[].edges[]` entry MUST reference an existing `edges[].id`.
-
-* SM042 (`test_SM042_view_edges_must_connect_included_nodes`)
-  For each edge referenced by a view, both endpoints MUST be included in `views[].nodes[]`.
-
-v0.1 profile lints (only apply when `views[].profile` is set):
-
-* SM100 (`test_SM100_profile_run_sequence_requires_core_stages`)
-  For `profile=v0_1_run_sequence`, the view MUST include all stable core stage IDs. `signing` MAY be omitted.
-
-* SM101 (`test_SM101_profile_run_sequence_stage_order`)
-  For `profile=v0_1_run_sequence`, the view MUST include the canonical stage order from ADR-0004:
-  `lab_provider → runner → telemetry → normalization → validation → detection → scoring → reporting`
-  If `signing` is present, it MUST be last.
-
-* SM102 (`test_SM102_profile_run_sequence_no_otlp_between_stages`)
-  For `profile=v0_1_run_sequence`, edges connecting two core stages MUST NOT use OTLP channels.
-
-* SM110 (`test_SM110_profile_io_boundaries_minimum_artifacts_present`)
-  For `profile=v0_1_io_boundaries`, the view MUST include edges whose `artifacts[]` cover the minimum v0.1 IO boundaries defined in ADR-0004. Examples (non-exhaustive):
-
-  * runner emits `ground_truth.jsonl`
-  * telemetry emits `raw_parquet/**`
-  * normalization emits `normalized/**`
-
-Mermaid render determinism and formatting lints (generator behavior):
-
-* MG001 (`test_MG001_render_is_order_independent`)
-  Rendering MUST be deterministic regardless of input ordering.
-
-* MG002 (`test_MG002_render_uses_stable_sort_keys`)
-  Generator MUST sort emitted Mermaid statements by stable keys. Recommended sort keys:
-
-  * groups by `(order, id)`
-  * nodes by `(order, id)`
-  * edges by `(from, to, channel, label, id)`
-
-* MG003 (`test_MG003_render_rejects_or_sanitizes_unsafe_labels`)
-  If labels violate Mermaid-safe constraints, generator MUST fail closed (or sanitize deterministically, if supported).
-
-* MG010 (`test_MG010_golden_mermaid_for_v0_1_run_sequence`)
-  For a canonical `system_model.v0_1.yaml` fixture, rendered Mermaid MUST match a checked-in golden `.mmd` file byte-for-byte.
-
-## Editing checklist (practical)
+## Editing checklist
 
 When you edit `architecture/system_model.yaml`:
 
-* Ensure it stays within the JSON-compatible YAML subset (SM001).
-* Ensure `v: system_model_v1` (SM003).
-* Ensure all IDs are unique and references resolve (SM010–SM042).
-* Prefer stable IDs; renames should be avoided unless explicitly required.
-* Keep labels Mermaid-safe (schema + MG003).
-* For profile views:
-
-  * `v0_1_run_sequence`: include all core stages and preserve canonical ordering; avoid OTLP between core stages.
-  * `v0_1_io_boundaries`: ensure required artifact boundary edges are present (per ADR-0004).
+- Keep IDs Mermaid-safe and stable (rename only when strictly necessary).
+- Ensure entity IDs are globally unique across `actors/containers/datastores/externals/buses`.
+- Ensure `trust_zone` references point to declared `trust_zones[].id` values.
+- Keep workflow step `n` values as integers and unique within the workflow.
+- If a stage is optional-by-config and you want that reflected in `stage_flow.md`, include `(optional)` in the step’s `message`.
+- Quote `excerpt:` strings containing `:` .
+- Re-run the generator locally and resolve warnings (or run with `--strict`).
 
 ## Troubleshooting generation failures
 
-If diagram generation fails, start with the lint findings:
+Common failure modes:
 
-* Use `code` to identify the category (schema vs reference vs profile vs render).
-* Use `json_pointer` to jump directly to the failing location in `system_model.yaml` (after parse-to-JSON).
-* Fix the first/earliest schema or reference error before debugging profile-related errors (later lints often cascade from missing nodes/edges).
+- **YAML parse errors**  
+    Usually caused by unquoted `excerpt:` values containing `:` . Quote the excerpt (preferred) or confirm the sanitizer warning appears and then fix the YAML.
+- **“not Mermaid-safe” id errors**  
+    Rename the offending `id` to match `^[A-Za-z_][A-Za-z0-9_]*$`.
+- **Warnings about unknown ids**  
+    Fix typos in `relationships[].from/to` and `workflows[].steps[].from/to`, or add the missing entity definition in the appropriate section.
+- **Trust boundaries diagram looks empty**  
+    Check that relationships include cross-zone edges, or that `orchestrator_cli -> *` edges use `label: invoke stage`.
 
 ## Security and safety hygiene
 
-* Do not embed secrets, credentials, tokens, or internal URLs with embedded credentials in labels, descriptions, or artifact paths.
-* Keep labels conservative: Mermaid parsing failures should result in clean lint errors, not “almost renders” output.
-* If you need to capture uncertainties or TODOs inside the model, use `kind: note` nodes and keep them out of conformance-profile views unless they are explicitly intended to appear in a diagram.
+- Do not put secrets (tokens/keys/passwords) in labels, descriptions, or evidence excerpts.
+- Prefer placeholders like `<run_id>` / `<workspace_root>` over environment-specific internal paths.
+- Keep text single-line where possible to avoid Mermaid parsing quirks.

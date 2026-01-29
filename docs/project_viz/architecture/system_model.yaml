@@ -132,24 +132,15 @@ externals:
       - file: 050_normalization_ocsf.md
         section_heading: Mapping profiles
         excerpt: Normalization uses mapping profiles to map raw fields into OCSF.
-  - id: golden_dataset_store
-    name: Golden Dataset Store
-    type: external_storage
-    description: Persistent store of golden datasets for regression.
+  - id: contract_registry
+    name: Contract Registry
+    type: external_service
+    description: Registry providing schemas for contract validation when present.
     trust_zone: ci_environment
     evidence:
-      - file: 085_golden_datasets.md
-        section_heading: Location
-        excerpt: exports/datasets/<dataset_id>/<dataset_version>/
-  - id: golden_dataset_builder
-    name: Golden Dataset Builder (implementation-defined)
-    type: external_process
-    description: Implementation-defined tool/process that produces golden dataset releases.
-    trust_zone: ci_environment
-    evidence:
-      - file: 085_golden_datasets.md
-        section_heading: Generation
-        excerpt: Dataset build process is implementation-defined.
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: "validate the snapshot (schema ... via the contract registry)."
   - id: target_osquery_agent
     name: Target osquery agent
     type: external_agent
@@ -159,24 +150,6 @@ externals:
       - file: 042_osquery_integration.md
         section_heading: Overview
         excerpt: Osquery integration provides host telemetry for the pipeline.
-  - id: otel_collector_agent
-    name: OTel Collector Agent
-    type: external_agent
-    description: OpenTelemetry Collector agent tier on endpoints exporting OTLP telemetry.
-    trust_zone: lab_range
-    evidence:
-      - file: 040_telemetry_pipeline.md
-        section_heading: Canonical topology
-        excerpt: "- **Agent**: reads OS/native sources (Windows Event Log, syslog, file logs), adds minimal provenance, ships upstream."
-  - id: otel_collector_gateway
-    name: OTel Collector Gateway
-    type: external_system
-    description: Optional OpenTelemetry Collector gateway tier receiving OTLP from agents.
-    trust_zone: lab_range
-    evidence:
-      - file: 040_telemetry_pipeline.md
-        section_heading: Canonical topology
-        excerpt: "- **Gateway (optional)**: applies buffering, batching, auth, and fan-out to storage backends."
   - id: atomic_red_team
     name: Atomic Red Team
     type: external_package
@@ -346,6 +319,17 @@ datastores:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Run bundle (coordination and evidence plane)
         excerpt: Run bundle (`runs/<run_id>/`) is the filesystem contract boundary between stages.
+  - id: unredacted_quarantine
+    name: Unredacted Quarantine
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - unredacted_sensitive
+    evidence:
+      - file: 090_security_safety.md
+        section_heading: Redaction and quarantine
+        excerpt: "Quarantine location: `runs/<run_id>/unredacted/` (default)."      
   - id: run_lock_dir
     name: Run lock directory (runs/.locks/)
     kind: filesystem_dir
@@ -369,6 +353,39 @@ datastores:
       - file: 020_architecture.md
         section_heading: Workspace boundary (normative, v0.1)
         excerpt: 'Cache (optional): `<workspace_root>/cache/`.'
+  - id: workspace_exports
+    name: Workspace Exports
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - exports
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Workspace boundary (normative, v0.1)
+        excerpt: "Exports (reserved): `<workspace_root>/exports/`."
+  - id: baseline_library
+    name: Baseline Library
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - baseline_packages
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Storage location and addressing
+        excerpt: stored in `exports/baselines/<baseline_id>/<baseline_version>/`.
+  - id: golden_dataset_store
+    name: Golden Dataset Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - golden_datasets
+    evidence:
+      - file: 085_golden_datasets.md
+        section_heading: Location
+        excerpt: exports/datasets/<dataset_id>/<dataset_version>/        
   - id: raw_parquet_store
     name: Raw Parquet Store
     kind: filesystem_dir
@@ -380,6 +397,17 @@ datastores:
       - file: 045_storage_formats.md
         section_heading: Run bundle filesystem layout (v0.1)
         excerpt: '`raw_parquet/` is stored as a Parquet dataset.'
+  - id: raw_artifacts_store
+    name: Raw Artifact Preservation Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - raw_artifacts
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: "`raw_parquet/**`, `raw/**` (when raw preservation enabled)"        
   - id: normalized_ocsf_store
     name: Normalized OCSF Store
     kind: filesystem_dir
@@ -676,6 +704,22 @@ relationships:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
         excerpt: '[signing] (optional) sign artifacts -> publish security/**'
+  - from: orchestrator_cli
+    to: audit_redactor
+    label: export redaction pipeline
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0003-redaction-policy.md
+        section_heading: Decision
+        excerpt: All operator-facing exports MUST run through the redaction pipeline.
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'export: package a run bundle for sharing.'        
   - from: lab_provider
     to: lab_provider_sources
     label: import inventory
@@ -692,6 +736,19 @@ relationships:
       - file: 015_lab_providers.md
         section_heading: Lab provider resolvers (v0.1)
         excerpt: 'terraform: import range inventory from Terraform output.'
+  - from: lab_provider
+    to: contract_registry
+    label: validate inventory snapshot against contracts
+    interaction: batch
+    protocol: unknown
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: "validate the snapshot (schema ... via the contract registry)."        
   - from: lab_provider
     to: run_bundle_store
     label: publish inventory snapshot
@@ -804,6 +861,20 @@ relationships:
       - file: 045_storage_formats.md
         section_heading: Run bundle filesystem layout (v0.1)
         excerpt: '`raw_parquet/` is stored as a Parquet dataset.'
+  - from: telemetry
+    to: raw_artifacts_store
+    label: optionally preserve raw artifacts
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - raw/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: "`raw_parquet/**`, `raw/**` (when raw preservation enabled)"        
   - from: telemetry
     to: run_bundle_store
     label: write telemetry validation evidence
@@ -923,12 +994,16 @@ relationships:
       - criteria/manifest.json
       - criteria/criteria.jsonl
       - criteria/results.jsonl
+      - criteria/summary.json
     frequency: unknown
     reliability: unknown
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
         excerpt: '`criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`'
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`criteria/results.jsonl`, `criteria/summary.json`'      
       - file: 035_validation_criteria.md
         section_heading: Run bundle snapshot
         excerpt: validation stage MUST snapshot the selected criteria pack into the run bundle.
@@ -1051,6 +1126,34 @@ relationships:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
         excerpt: '`scoring/**`, `criteria/**`, `detections/**`, manifest'
+  - from: reporting
+    to: baseline_library
+    label: (optional regression) read baseline packages
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data:
+      - exports/baselines/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Summary
+        excerpt: stores baseline datasets for detections, scoring, and reporting.
+  - from: reporting
+    to: run_bundle_store
+    label: (optional regression) materialize baseline inputs
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - inputs/baseline/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[reporting] (optional regression) materialize inputs/baseline/**'        
   - from: reporting
     to: report_artifacts
     label: publish report artifacts
@@ -1501,6 +1604,152 @@ workflows:
       - file: ADR-0005-stage-outcomes-and-failure-classification.md
         section_heading: Cleanup verification policy (normative)
         excerpt: Ground truth MUST record lifecycle phase outcomes ... including a `teardown` phase.
+  - id: run_replay
+    name: Replay (analysis-only)
+    scope: analysis
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke replay to rerun downstream analysis stages
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 2
+        from: orchestrator_cli
+        to: normalization
+        message: invoke normalization (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 3
+        from: orchestrator_cli
+        to: validation
+        message: invoke validation (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 4
+        from: orchestrator_cli
+        to: detection
+        message: invoke detection (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 5
+        from: orchestrator_cli
+        to: scoring
+        message: invoke scoring (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 6
+        from: orchestrator_cli
+        to: reporting
+        message: invoke reporting (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'replay: rerun only downstream analysis stages.'
+  - id: run_export
+    name: Export (redaction-safe bundle)
+    scope: export
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke export to package a run bundle for sharing
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'export: package a run bundle for sharing.'
+      - n: 2
+        from: orchestrator_cli
+        to: audit_redactor
+        message: redact operator-facing export
+        data: []
+        evidence:
+          - file: ADR-0003-redaction-policy.md
+            section_heading: Decision
+            excerpt: All operator-facing exports MUST run through the redaction pipeline.
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Policy
+            excerpt: Exports MUST exclude `unredacted/**` by default.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'export: package a run bundle for sharing.'
+  - id: range_destroy
+    name: Destroy (range teardown)
+    scope: provisioning
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke destroy to tear down range resources
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'destroy: tear down range resources.'
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'destroy: tear down range resources.'
+  - id: publish_gate
+    name: Publish gate (staging + atomic publish)
+    scope: control_plane
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: staging_area
+        message: write stage outputs under .staging/ prior to publish
+        data: []
+        evidence:
+          - file: 000_charter.md
+            section_heading: Guiding principles
+            excerpt: Stages write to a staging location (`.staging/`).
+      - n: 2
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: validate required schema contracts before publish
+        data: []
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: validate all required schema contracts before publish
+      - n: 3
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: publish via atomic rename into final run-bundle paths
+        data: []
+        evidence:
+          - file: 000_charter.md
+            section_heading: Guiding principles
+            excerpt: publish them by atomic rename after validation.
+          - file: 015_lab_providers.md
+            section_heading: Publish and validation gate
+            excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+    evidence:
+      - file: glossary.yaml
+        section_heading: publish_gate
+        excerpt: Write to a staging location first, validate, then publish atomically.
 
 states: []
 
@@ -1531,6 +1780,42 @@ constraints:
       - file: 010_scope.md
         section_heading: Non-goals
         excerpt: Do not assume specific vendor stacks unless explicitly required.
+  - id: one_shot_local_first
+    description: System runs as a one-shot, local-first pipeline.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Overview
+        excerpt: Purple Axiom is a one-shot, local-first pipeline.
+  - id: single_host_no_internal_rpc
+    description: Executed on a single host without internal service-to-service RPC.
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Decision
+        excerpt: executed on a single host without internal service-to-service RPC.
+  - id: filesystem_contract_boundary
+    description: Run bundle directory is the contract boundary between stages.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Workspace boundary (local-first)
+        excerpt: filesystem contract boundary between stages.
+  - id: publish_gate_atomic_publish
+    description: Artifacts are staged, validated, and published via atomic rename.
+    evidence:
+      - file: 000_charter.md
+        section_heading: Guiding principles
+        excerpt: publish them by atomic rename after validation.
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+  - id: redaction_safe_by_default
+    description: Unredacted artifacts are quarantined and excluded from exports by default.
+    evidence:
+      - file: 090_security_safety.md
+        section_heading: Redaction and quarantine
+        excerpt: "Quarantine location: `runs/<run_id>/unredacted/` (default)."
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Policy
+        excerpt: Exports MUST exclude `unredacted/**` by default.
 
 glossary:
   - term: run bundle
@@ -1545,7 +1830,18 @@ glossary:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: File-based stage coordination (normative)
         excerpt: Stages MUST communicate by reading and writing contract-backed artifacts.
-
+  - term: publish gate
+    definition: Write to staging, validate, then publish atomically into final locations.
+    evidence:
+      - file: glossary.yaml
+        section_heading: publish_gate
+        excerpt: Write to a staging location first, validate, then publish atomically.
+  - term: baseline library
+    definition: Set of BDPs under exports/baselines managed via the Operator Interface.
+    evidence:
+      - file: glossary.yaml
+        section_heading: baseline_library
+        excerpt: managed via the Operator Interface.
 notes:
   open_questions:
     - id: orchestrator_implementation_tech

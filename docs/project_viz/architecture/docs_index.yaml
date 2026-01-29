@@ -902,3 +902,75 @@ documents:
         note: Export output referenced by operator tooling (v0.2+).
     evidence:
       - {file: "ADR-0009-run-export-policy-and-log-classification.md", section_heading: "Decision", excerpt: "Exclude volatile diagnostics under runs/<run_id>/logs/ from default exports."}
+
+  - id: model_system_architecture
+    filename: system_model.yaml
+    title: Evidence-backed system model
+    purpose: Canonical, evidence-backed architecture model used to generate and keep diagrams consistent as specs evolve.
+    key_sections:
+      - heading: system
+        summary: System identity and top-level evidence anchors.
+      - heading: trust_zones
+        summary: Trust zones used to cluster components and boundaries in diagrams.
+      - heading: containers and relationships
+        summary: Components and evidence-backed interactions used by diagram generation.
+    important_terms:
+      - term: purple_ci_orchestrator
+        note: Stable system ID used by diagrams.
+      - term: trust_zones
+        note: Trust-zone partitioning for context/container views.
+      - term: relationships
+        note: Evidence-backed edges between actors, stages, and stores.
+      - term: workflows
+        note: Ordered sequences derived from ADR-0004 canonical run sequence.
+      - term: constraints
+        note: Cross-cutting rules captured for safety and determinism.
+    evidence:
+      - {file: "system_model.yaml", section_heading: "system", excerpt: "Runs purple-team exercises in CI, collects telemetry"}
+
+  - id: model_glossary
+    filename: glossary.yaml
+    title: Canonical glossary
+    purpose: Canonical vocabulary (terms, definitions, aliases) and tracked open questions to prevent naming drift across specs and diagrams.
+    key_sections:
+      - heading: terms
+        summary: Canonical terms with definitions, aliases, and evidence pointers.
+      - heading: open_questions
+        summary: Explicitly tracked unknowns to avoid guessing in the model/diagrams.
+    important_terms:
+      - term: aliases
+        note: Synonyms list used to prevent naming drift.
+      - term: category
+        note: Term grouping (general, data, security, workflow, etc.).
+      - term: evidence
+        note: Evidence pointers back to the spec corpus.
+      - term: open_questions
+        note: Recorded gaps that block precise modeling.
+      - term: stable IDs
+        note: Deterministic glossary IDs used by the system model.
+    evidence:
+      - {file: "glossary.yaml", section_heading: "terms", excerpt: "term: Purple Axiom"}
+
+  - id: tool_mermaid_diagram_generator
+    filename: Mermaid.py
+    title: Mermaid diagram generator
+    purpose: Script that renders Mermaid diagrams from system_model.yaml into docs/diagrams/generated/.
+    key_sections:
+      - heading: Inputs
+        summary: Reads system_model.yaml and emits multiple diagram views.
+      - heading: Outputs
+        summary: Writes stage_flow.md, trust_boundaries.md, run_sequence.md, and run_status_state.md.
+      - heading: YAML parsing notes
+        summary: Sanitizes YAML excerpts that include colon-space patterns for Mermaid emission.
+    important_terms:
+      - term: docs/diagrams/generated/
+        note: Output directory for generated diagram markdown.
+      - term: stage_flow.md
+        note: High-level pipeline stage flow diagram view.
+      - term: trust_boundaries.md
+        note: Trust zone boundaries diagram view.
+      - term: run_sequence.md
+        note: Canonical run sequence diagram view.
+      - term: run_status_state.md
+        note: Run lifecycle state machine diagram view.
+    evidence:      - {file: "Mermaid.py", section_heading: "Docstring", excerpt: "Generate Mermaid diagrams from system_model.yaml"}      

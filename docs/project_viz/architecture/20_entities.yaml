@@ -1,4 +1,4 @@
-
+# file: docs/project_viz/architecture/20_entities.yaml
 actors:
   - id: operator
     name: Operator

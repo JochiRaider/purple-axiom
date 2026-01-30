@@ -7,465 +7,1201 @@ terms:
     definition: One-shot, local-first, contract-driven pipeline that produces deterministic run bundles for purple-team evaluation.
     aliases: []
     evidence:
-      - {file: "020_architecture.md", section_heading: "Scope", excerpt: "one-shot, local-first pipeline ... produces reproducible run bundles."}
-
+      - file: 020_architecture.md
+        section_heading: Scope
+        excerpt: one-shot, local-first pipeline ... produces reproducible run bundles.
+  - id: trust_zone
+    term: trust_zone
+    category: security
+    definition: Named environment boundary used to cluster components and reason about trust.
+    aliases:
+      - trust zone
+    evidence:
+      - file: 10_trust_zones.yaml
+        section_heading: trust_zones
+        excerpt: Automation runner/harness that executes the orchestrator pipeline
   - id: project_version
     term: project_version
     category: general
     definition: SemVer identifying the Purple Axiom release (codebase).
     aliases: []
     evidence:
-      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Project release version", excerpt: "`project_version` identifies the Purple Axiom release (codebase)."}
-
+      - file: ADR-0001-project-naming-and-versioning.md
+        section_heading: Project release version
+        excerpt: '`project_version` identifies the Purple Axiom release (codebase).'
   - id: run_id
     term: run_id
     category: data
     definition: RFC 4122 UUID string identifying a run; MUST be globally unique and not reused.
     aliases: []
     evidence:
-      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Run identifier", excerpt: "`run_id` MUST be an RFC 4122 UUID string."}
-
-  - id: workspace_root
-    term: workspace_root
-    category: infra
-    definition: Filesystem root under which all durable artifacts are written; tools must not persist artifacts outside it (with limited exceptions).
-    aliases: ["<workspace_root>"]
-    evidence:
-      - {file: "120_config_reference.md", section_heading: "Workspace boundary rules (normative)", excerpt: "Tooling MUST NOT write persistent artifacts outside <workspace_root>/."}
-
-  - id: run_bundle
-    term: run bundle
-    category: data
-    definition: The canonical per-run directory at <workspace_root>/runs/<run_id>/ containing artifacts produced by the orchestrator.
-    aliases: ["runs/<run_id>/"]
-    evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Terminology", excerpt: "Run bundle: The canonical per-run directory at <workspace_root>/runs/<run_id>/."}
-
-  - id: manifest_json
-    term: manifest.json
-    category: data
-    definition: The canonical run manifest file at runs/<run_id>/manifest.json used as a provenance and status anchor for the run.
-    aliases: ["runs/<run_id>/manifest.json"]
-    evidence:
-      - {file: "105_ci_operational_readiness.md", section_heading: "Definitions", excerpt: "Run status recorded in runs/<run_id>/manifest.json as manifest.status."}
-
-  - id: manifest_status
-    term: manifest.status
-    category: data
-    definition: Canonical run status value (success | partial | failed) recorded in the run manifest; derived from stage outcomes.
-    aliases: ["run status"]
-    evidence:
-      - {file: "105_ci_operational_readiness.md", section_heading: "Definitions", excerpt: "Run status: (success | partial | failed) ... as manifest.status."}
-
-  - id: stage
-    term: stage
-    category: workflow
-    definition: A pipeline step with scoped inputs/outputs that communicates via filesystem artifacts and contract validation.
-    aliases: []
-    evidence:
-      - {file: "000_charter.md", section_heading: "Principles", excerpt: "contract-driven, stage-scoped execution."}
-
-  - id: stable_stage_identifiers
-    term: stable stage identifiers
-    category: workflow
-    definition: Canonical stage ID set used across v0.1+ pipeline definitions: lab_provider, runner, telemetry, normalization, validation, detection, scoring, reporting, signing.
-    aliases: ["stage identifiers"]
-    evidence:
-      - {file: "000_charter.md", section_heading: "Summary", excerpt: "Stable stage identifiers: lab_provider, runner, telemetry, normalization, validation, detection, scoring, reporting, signing."}
-
-  - id: publish_gate
-    term: publish gate
-    category: workflow
-    definition: Write to a staging location first, validate, then publish atomically into the final run-bundle path.
-    aliases: ["staging + atomic publish"]
-    evidence:
-      - {file: "015_lab_providers.md", section_heading: "Publish and validation gate", excerpt: "The stage MUST publish by atomic rename into the final run bundle location."}
-
-  - id: staging_directory
-    term: .staging
-    category: infra
-    definition: Reserved staging area used by publish-gated writers prior to atomic rename into final locations.
-    aliases: ["staging location"]
-    evidence:
-      - {file: "015_lab_providers.md", section_heading: "Publish and validation gate", excerpt: "Staging location MUST be under runs/<run_id>/.staging/lab_provider/."}
-
-  - id: stage_outcome
-    term: stage outcome
-    category: data
-    definition: Deterministic per-stage (or substage) outcome record including status/fail_mode/reason_code; used to derive manifest.status.
-    aliases: ["stage outcomes"]
-    evidence:
-      - {file: "ADR-0005-stage-outcomes-and-failure-classification.md", section_heading: "Decision", excerpt: "Stage outcomes and failure classification."}
-
-  - id: fail_mode
-    term: fail_mode
-    category: data
-    definition: Outcome severity mode that governs whether failures are hard (fail_closed) or non-fatal (warn_and_skip).
-    aliases: []
-    evidence:
-      - {file: "015_lab_providers.md", section_heading: "Stage outcomes and failure classification", excerpt: "Fail-closed ... fail_mode=\"fail_closed\"."}
-
-  - id: reason_code
-    term: reason_code
-    category: data
-    definition: Canonical token classifying why a stage/substage outcome occurred.
-    aliases: []
-    evidence:
-      - {file: "015_lab_providers.md", section_heading: "Stage outcomes and failure classification", excerpt: "the stage MUST emit stage outcomes and reason codes."}
-
-  - id: contract
-    term: contract
-    category: data
-    definition: A schema-backed definition for an artifact class used for validation and CI gating.
-    aliases: ["contract-backed artifact"]
-    evidence:
-      - {file: "025_data_contracts.md", section_heading: "Terminology", excerpt: "Defines contract-backed artifacts and reader semantics for run bundles."}
-
-  - id: contract_registry
-    term: contract registry
-    category: component
-    definition: Registry that provides schemas for contract validation when present.
-    aliases: []
-    evidence:
-      - {file: "015_lab_providers.md", section_heading: "Publish and validation gate", excerpt: "validate the snapshot (schema ... via the contract registry)."}
-
-  - id: canonical_json_bytes
-    term: canonical_json_bytes
-    category: data
-    definition: RFC 8785 JCS canonical JSON encoded as UTF-8 bytes (no BOM; no trailing newline) used as a hashing basis.
-    aliases: ["RFC 8785", "JCS"]
-    evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Integrity and signing", excerpt: "canonical_json_bytes(x) is RFC 8785 JCS canonical JSON."}
-
-  - id: evidence_refs
-    term: evidence_refs
-    category: data
-    definition: Evidence pointer list used to reference run artifacts supporting a derived conclusion (e.g., gap attribution).
-    aliases: ["evidence pointers"]
-    evidence:
-      - {file: "050_normalization_ocsf.md", section_heading: "Regression fixture (normative)", excerpt: "with evidence_refs[] including normalized/mapping_coverage.json."}
-
-  - id: redaction_policy
-    term: redaction policy
-    category: security
-    definition: Policy controlling what data can be retained/exported and how sensitive artifacts are handled (withholding/quarantine and redaction-safe defaults).
-    aliases: ["ADR-0003"]
-    evidence:
-      - {file: "ADR-0003-redaction-policy.md", section_heading: "Decision", excerpt: "Defines the redaction policy model and handling rules."}
-
-  - id: placeholder_artifact
-    term: placeholder artifact
-    category: security
-    definition: Deterministic placeholder written in place of withheld/quarantined content per security policy and reader semantics.
-    aliases: ["placeholder"]
-    evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Forbidden content (redaction-safe by default)", excerpt: "a \"placeholder\" is any deterministic placeholder artifact written."}
-
-  - id: quarantined
-    term: quarantined
-    category: security
-    definition: Artifact handling state indicating content is disallowed for public posture and must be excluded from redaction-safe exports.
-    aliases: []
-    evidence:
-      - {file: "085_golden_datasets.md", section_heading: "Verification and CI", excerpt: "presence of quarantined/unredacted artifacts in public posture."}
-
-  - id: unredacted
-    term: unredacted
-    category: security
-    definition: Artifact class or directory containing unredacted content; must be controlled by redaction policy and excluded from redaction-safe artifacts.
-    aliases: ["unredacted/**"]
-    evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Forbidden content (redaction-safe by default)", excerpt: "A BDP MUST NOT include ... run/unredacted/**."}
-
-  - id: run_lock
-    term: run lock
-    category: infra
-    definition: File-based lock preventing concurrent writers to the same run bundle.
-    aliases: ["runs/.locks/<run_id>.lock"]
-    evidence:
-      - {file: "ADR-0004-deployment-architecture-and-inter-component-communication.md", section_heading: "Decision", excerpt: "acquire run lock runs/.locks/<run_id>.lock."}
-
-  - id: inputs_scenario_yaml
-    term: inputs/scenario.yaml
-    category: data
-    definition: Optional configuration file used for scenario-specific overrides; higher precedence than inputs/range.yaml.
-    aliases: ["scenario.yaml"]
-    evidence:
-      - {file: "120_config_reference.md", section_heading: "Configuration files and precedence", excerpt: "`inputs/scenario.yaml` (optional, scenario-specific overrides)."}
-
+      - file: ADR-0001-project-naming-and-versioning.md
+        section_heading: Run identifier
+        excerpt: '`run_id` MUST be an RFC 4122 UUID string.'
   - id: scenario_id
     term: scenario_id
     category: data
     definition: Stable identifier for a logical scenario; independent of project_version.
     aliases: []
     evidence:
-      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Scenario identity and version", excerpt: "`scenario_id` MUST be a stable identifier for a logical scenario."}
-
+      - file: ADR-0001-project-naming-and-versioning.md
+        section_heading: Scenario identity and version
+        excerpt: '`scenario_id` MUST be a stable identifier for a logical scenario.'
   - id: scenario_version
     term: scenario_version
     category: data
     definition: SemVer version identifying a scenario revision; versioned independently from project_version.
     aliases: []
     evidence:
-      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Scenario identity and version", excerpt: "`scenario_version` MUST be SemVer and MUST be versioned independently."}
-
+      - file: ADR-0001-project-naming-and-versioning.md
+        section_heading: Scenario identity and version
+        excerpt: '`scenario_version` MUST be SemVer and MUST be versioned independently.'
   - id: action_id
     term: action_id
     category: data
-    definition: Ground-truth action instance identifier; reserved as a stable join key in dataset exports (v0.2+ / multi-action runs).
+    definition: Ground-truth action instance identifier; reserved as a stable join key in dataset exports (v0.2+ / multi-action
+      runs).
     aliases: []
     evidence:
-      - {file: "085_golden_datasets.md", section_heading: "Terminology", excerpt: "Action-level: (run_id, action_id) (ground truth action instance id)."}
-
+      - file: 085_golden_datasets.md
+        section_heading: Terminology
+        excerpt: 'Action-level: (run_id, action_id) (ground truth action instance id).'
   - id: action_key
     term: action_key
     category: data
-    definition: Deterministic action identity key referenced for reproducible action instance semantics (authority: scenarios spec).
+    definition: 'Deterministic action identity key referenced for reproducible action instance semantics (authority: scenarios
+      spec).'
     aliases: []
     evidence:
-      - {file: "000_charter.md", section_heading: "Safety-by-default operation", excerpt: "Deterministic action identity (action_id, action_key) ... see scenarios."}
-
+      - file: 000_charter.md
+        section_heading: Safety-by-default operation
+        excerpt: Deterministic action identity (action_id, action_key) ... see scenarios.
+  - id: workspace_root
+    term: workspace_root
+    category: infra
+    definition: Filesystem root under which all durable artifacts are written; tools must not persist artifacts outside it
+      (with limited exceptions).
+    aliases:
+      - <workspace_root>
+      - workspace_root
+    evidence:
+      - file: 120_config_reference.md
+        section_heading: Workspace boundary rules (normative)
+        excerpt: Tooling MUST NOT write persistent artifacts outside <workspace_root>/.
+  - id: run_bundle
+    term: run bundle
+    category: data
+    definition: The canonical per-run directory at <workspace_root>/runs/<run_id>/ containing artifacts produced by the orchestrator.
+    aliases:
+      - <workspace_root>/runs/<run_id>/
+      - run bundle root
+      - runs/<run_id>/
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Terminology
+        excerpt: 'Run bundle: The canonical per-run directory at <workspace_root>/runs/<run_id>/.'
+  - id: run_relative_path
+    term: run-relative path
+    category: data
+    definition: A path interpreted relative to the run bundle root (omit runs/<run_id>/ prefix).
+    aliases:
+      - run-relative
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: do not include the runs/<run_id>/ prefix
+  - id: manifest_json
+    term: manifest.json
+    category: data
+    definition: The canonical run manifest file at runs/<run_id>/manifest.json used as a provenance and status anchor for
+      the run.
+    aliases:
+      - manifest.json
+      - runs/<run_id>/manifest.json
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: Run status recorded in runs/<run_id>/manifest.json as manifest.status.
+  - id: manifest_status
+    term: manifest.status
+    category: data
+    definition: Canonical run status value (success | partial | failed) recorded in the run manifest; derived from stage outcomes.
+    aliases:
+      - run status
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: 'Run status: (success | partial | failed) ... as manifest.status.'
+  - id: run_lock
+    term: run lock
+    category: infra
+    definition: File-based lock preventing concurrent writers to the same run bundle.
+    aliases:
+      - runs/.locks/<run_id>.lock
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Decision
+        excerpt: acquire run lock runs/.locks/<run_id>.lock.
+  - id: verb_build
+    term: build
+    category: workflow
+    definition: Lifecycle verb that executes lab_provider stage only.
+    aliases:
+      - orchestrator build
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'build: Execute `lab_provider` stage only.'
+  - id: verb_simulate
+    term: simulate
+    category: workflow
+    definition: Lifecycle verb that runs the full end-to-end pipeline.
+    aliases:
+      - orchestrator simulate
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'simulate: full pipeline (end-to-end).'
+  - id: verb_replay
+    term: replay
+    category: workflow
+    definition: Lifecycle verb that reruns downstream analysis stages only.
+    aliases:
+      - orchestrator replay
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'replay: rerun only downstream analysis stages.'
+  - id: verb_export
+    term: export
+    category: workflow
+    definition: Lifecycle verb that packages a run bundle for sharing.
+    aliases:
+      - run export
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'export: package a run bundle for sharing.'
+  - id: verb_destroy
+    term: destroy
+    category: workflow
+    definition: Lifecycle verb that tears down range resources.
+    aliases:
+      - range destroy
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'destroy: tear down range resources.'
+  - id: stage
+    term: stage
+    category: workflow
+    definition: A pipeline step with scoped inputs/outputs that communicates via filesystem artifacts and contract validation.
+    aliases: []
+    evidence:
+      - file: 000_charter.md
+        section_heading: Principles
+        excerpt: contract-driven, stage-scoped execution.
+  - id: stage_outcome
+    term: stage outcome
+    category: data
+    definition: Deterministic per-stage (or substage) outcome record including status/fail_mode/reason_code; used to derive
+      manifest.status.
+    aliases:
+      - stage outcomes
+    evidence:
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Decision
+        excerpt: Stage outcomes and failure classification.
+  - id: fail_mode
+    term: fail_mode
+    category: data
+    definition: Outcome severity mode that governs whether failures are hard (fail_closed) or non-fatal (warn_and_skip).
+    aliases: []
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Stage outcomes and failure classification
+        excerpt: Fail-closed ... fail_mode="fail_closed".
+  - id: reason_code
+    term: reason_code
+    category: data
+    definition: Canonical token classifying why a stage/substage outcome occurred.
+    aliases: []
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Stage outcomes and failure classification
+        excerpt: the stage MUST emit stage outcomes and reason codes.
+  - id: stable_stage_identifiers
+    term: stable stage identifiers
+    category: workflow
+    definition: 'Canonical stage ID set used across v0.1+ pipeline definitions: lab_provider, runner, telemetry, normalization,
+      validation, detection, scoring, reporting, signing.'
+    aliases:
+      - stage identifiers
+    evidence:
+      - file: 000_charter.md
+        section_heading: Summary
+        excerpt: 'Stable stage identifiers: lab_provider, runner, telemetry, normalization, validation, detection, scoring,
+          reporting, signing.'
+  - id: publish_gate
+    term: publish gate
+    category: workflow
+    definition: Write to a staging location first, validate, then publish atomically into the final run-bundle path.
+    aliases:
+      - staging + atomic publish
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+  - id: staging_directory
+    term: .staging
+    category: infra
+    definition: Reserved staging area used by publish-gated writers prior to atomic rename into final locations.
+    aliases:
+      - staging location
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: Staging location MUST be under runs/<run_id>/.staging/lab_provider/.
+  - id: contract_validation_report
+    term: logs/contract_validation/<stage_id>.json
+    category: data
+    definition: Deterministic contract validation report emitted on publish-gate failure.
+    aliases:
+      - contract validation report
+    evidence:
+      - file: teardown.yaml
+        section_heading: teardown
+        excerpt: logs/contract_validation/<stage_id>.json
+  - id: contract
+    term: contract
+    category: data
+    definition: A schema-backed definition for an artifact class used for validation and CI gating.
+    aliases:
+      - contract-backed artifact
+    evidence:
+      - file: 025_data_contracts.md
+        section_heading: Terminology
+        excerpt: Defines contract-backed artifacts and reader semantics for run bundles.
+  - id: contract_registry
+    term: contract registry
+    category: component
+    definition: Registry that provides schemas for contract validation when present.
+    aliases: []
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: validate the snapshot (schema ... via the contract registry).
+  - id: contract_registry_json
+    term: contract_registry.json
+    category: data
+    definition: Machine-readable registry binding artifact globs to schema contracts and validation modes.
+    aliases:
+      - contract registry file
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: bindings[].artifact_glob values are run-relative
+  - id: registry_version
+    term: registry_version
+    category: data
+    definition: Version token for the contract registry file format.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: registry_version
+        excerpt: registry_version
+  - id: contract_id
+    term: contract_id
+    category: data
+    definition: Identifier naming an artifact schema contract in the contract registry.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: contract_id
+  - id: schema_path
+    term: schema_path
+    category: data
+    definition: Repository path to the JSON schema for a contract.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: schema_path
+  - id: contract_version
+    term: contract_version
+    category: data
+    definition: SemVer identifying a contract schema version; must match schema constant.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: contracts[].contract_version MUST be kept in sync
+  - id: artifact_kind
+    term: artifact_kind
+    category: data
+    definition: 'Contract classification: run_artifact | repo_input | other.'
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: artifact_kind
+  - id: contract_format
+    term: format
+    category: data
+    definition: Serialization format for a contract-backed artifact (json | jsonl | yaml).
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: format
+  - id: validation_mode
+    term: validation_mode
+    category: data
+    definition: Contract binding validation mode (json_document | jsonl_lines | yaml_document).
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: bindings
+        excerpt: validation_mode
+  - id: artifact_glob
+    term: artifact_glob
+    category: data
+    definition: Run-relative glob pattern used to bind artifacts to schema contracts.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: bindings[].artifact_glob values are run-relative
+  - id: contract_binding
+    term: contract binding
+    category: data
+    definition: Mapping from artifact_glob to contract_id plus validation_mode in the contract registry.
+    aliases:
+      - binding
+    evidence:
+      - file: contract_registry.json
+        section_heading: bindings
+        excerpt: bindings
+  - id: canonical_json_bytes
+    term: canonical_json_bytes
+    category: data
+    definition: RFC 8785 JCS canonical JSON encoded as UTF-8 bytes (no BOM; no trailing newline) used as a hashing basis.
+    aliases:
+      - RFC 8785
+      - JCS
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Integrity and signing
+        excerpt: canonical_json_bytes(x) is RFC 8785 JCS canonical JSON.
+  - id: evidence_refs
+    term: evidence_refs
+    category: data
+    definition: Evidence pointer list used to reference run artifacts supporting a derived conclusion (e.g., gap attribution).
+    aliases:
+      - evidence pointers
+    evidence:
+      - file: 050_normalization_ocsf.md
+        section_heading: Regression fixture (normative)
+        excerpt: with evidence_refs[] including normalized/mapping_coverage.json.
+  - id: redaction_policy
+    term: redaction policy
+    category: security
+    definition: Policy controlling what data can be retained/exported and how sensitive artifacts are handled (withholding/quarantine
+      and redaction-safe defaults).
+    aliases:
+      - ADR-0003
+    evidence:
+      - file: ADR-0003-redaction-policy.md
+        section_heading: Decision
+        excerpt: Defines the redaction policy model and handling rules.
+  - id: redaction_safe
+    term: redaction-safe
+    category: security
+    definition: Posture permitting broad distribution of artifacts after applying redaction policy.
+    aliases:
+      - public posture
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.adr_0003_redaction_policy.important_terms
+        excerpt: Posture permitting broad distribution.
+  - id: release_posture
+    term: release posture
+    category: security
+    definition: Policy token controlling dataset/export contents (public | gated | internal).
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_085_golden_datasets.important_terms
+        excerpt: public|gated|internal posture policy for contents.
+  - id: placeholder_artifact
+    term: placeholder artifact
+    category: security
+    definition: Deterministic placeholder written in place of withheld/quarantined content per security policy and reader
+      semantics.
+    aliases:
+      - placeholder
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Forbidden content (redaction-safe by default)
+        excerpt: a "placeholder" is any deterministic placeholder artifact written.
+  - id: quarantined
+    term: quarantined
+    category: security
+    definition: Artifact handling state indicating content is disallowed for public posture and must be excluded from redaction-safe
+      exports.
+    aliases: []
+    evidence:
+      - file: 085_golden_datasets.md
+        section_heading: Verification and CI
+        excerpt: presence of quarantined/unredacted artifacts in public posture.
+  - id: unredacted
+    term: unredacted
+    category: security
+    definition: Artifact class or directory containing unredacted content; must be controlled by redaction policy and excluded
+      from redaction-safe artifacts.
+    aliases:
+      - runs/<run_id>/unredacted/**
+      - unredacted/**
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Forbidden content (redaction-safe by default)
+        excerpt: A BDP MUST NOT include ... run/unredacted/**.
+  - id: sha256_lowercase_hex
+    term: sha256:<lowercase_hex>
+    category: security
+    definition: Digest string format used throughout the corpus for SHA-256 identifiers.
+    aliases:
+      - sha256 digest
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_025_data_contracts.important_terms
+        excerpt: Digest string format used throughout.
+  - id: control_audit_jsonl
+    term: control/audit.jsonl
+    category: data
+    definition: JSONL audit log for a run (one audit_event record per line).
+    aliases:
+      - audit log
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Audit event row schema (control/audit.jsonl
+  - id: ui_audit_jsonl
+    term: logs/ui_audit.jsonl
+    category: data
+    definition: Operator Interface UI audit event log (append-only JSONL).
+    aliases:
+      - ui_audit.jsonl
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Audit
+        excerpt: UI audit events are appended to logs/ui_audit.jsonl.
+  - id: inputs_range_yaml
+    term: inputs/range.yaml
+    category: data
+    definition: Pinned range configuration snapshot for a run (validated as range_config contract).
+    aliases:
+      - range.yaml
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Range configuration input (snapshotted to inputs/range.yaml
+  - id: inputs_scenario_yaml
+    term: inputs/scenario.yaml
+    category: data
+    definition: Optional configuration file used for scenario-specific overrides; higher precedence than inputs/range.yaml.
+    aliases:
+      - scenario.yaml
+    evidence:
+      - file: 120_config_reference.md
+        section_heading: Configuration files and precedence
+        excerpt: '`inputs/scenario.yaml` (optional, scenario-specific overrides).'
+  - id: scenario_safety_allow_network
+    term: scenario.safety.allow_network
+    category: security
+    definition: Scenario-level network intent signal (allow or disallow network activity).
+    aliases:
+      - allow_network
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_000_charter.important_terms
+        excerpt: Scenario-level network intent signal.
+  - id: telemetry_baseline_profile_json
+    term: inputs/telemetry_baseline_profile.json
+    category: data
+    definition: Telemetry baseline profile input used by telemetry validation (when enabled).
+    aliases:
+      - telemetry_baseline_profile.json
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Telemetry baseline profile input (inputs/telemetry_baseline_profile.json).
+  - id: threat_intel_manifest_json
+    term: inputs/threat_intel/manifest.json
+    category: data
+    definition: Threat intel pack snapshot manifest pinned into the run bundle.
+    aliases:
+      - threat intel manifest
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Threat intel pack snapshot manifest (inputs/threat_intel/manifest.json).
+  - id: threat_intel_indicators_jsonl
+    term: inputs/threat_intel/indicators.jsonl
+    category: data
+    definition: Threat intelligence indicator records pinned into the run bundle (JSONL).
+    aliases:
+      - threat intel indicators
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Threat intel indicator records (inputs/threat_intel/indicators.jsonl).
+  - id: plan
+    term: plan
+    category: workflow
+    definition: Executable unit describing stage work.
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_031_plan_execution_model.important_terms
+        excerpt: Executable unit describing stage work.
+  - id: plan_step
+    term: step
+    category: workflow
+    definition: Atomic plan node within execution.
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_031_plan_execution_model.important_terms
+        excerpt: Atomic plan node within execution.
+  - id: plan_graph
+    term: plan graph
+    category: workflow
+    definition: Step dependency structure.
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_031_plan_execution_model.important_terms
+        excerpt: Step dependency structure.
+  - id: target_cardinality
+    term: target cardinality
+    category: workflow
+    definition: How many targets a step addresses (single vs many).
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_031_plan_execution_model.important_terms
+        excerpt: How many targets a step addresses.
+  - id: execution_semantics
+    term: execution semantics
+    category: workflow
+    definition: Deterministic ordering and handling expectations for plan execution.
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_031_plan_execution_model.important_terms
+        excerpt: Deterministic ordering and handling expectations.
   - id: ground_truth_jsonl
     term: ground_truth.jsonl
     category: data
     definition: Line-delimited ground truth events/labels for a run; used for labeling and scoring and as a required BDP artifact.
     aliases: []
     evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Baseline Detection Package format", excerpt: "A BDP MUST include ... run/ground_truth.jsonl."}
-
+      - file: 086_detection_baseline_library.md
+        section_heading: Baseline Detection Package format
+        excerpt: A BDP MUST include ... run/ground_truth.jsonl.
+  - id: runner_executor_evidence_json
+    term: runner/actions/<action_id>/executor.json
+    category: data
+    definition: Per-action runner executor evidence (executor metadata and invocation details).
+    aliases:
+      - executor.json
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Per-action runner executor evidence (runner/actions/<action_id>/executor.json).
+  - id: requirements_evaluation_json
+    term: runner/actions/<action_id>/requirements_evaluation.json
+    category: data
+    definition: Per-action requirements evaluation output.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Per-action requirements evaluation output (runner/actions/<action_id>/requirements_evaluation.json).
+  - id: side_effect_ledger_json
+    term: runner/actions/<action_id>/side_effect_ledger.json
+    category: data
+    definition: Per-action append-only side-effect ledger.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Per-action append-only side-effect ledger (runner/actions/<action_id>/side_effect_ledger.json).
+  - id: cleanup_verification_json
+    term: runner/actions/<action_id>/cleanup_verification.json
+    category: data
+    definition: Cleanup verification results per action.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Cleanup verification results per action (runner/actions/<action_id>/cleanup_verification.json).
+  - id: state_reconciliation_report_json
+    term: runner/actions/<action_id>/state_reconciliation_report.json
+    category: data
+    definition: Per-action state reconciliation report.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Per-action state reconciliation report (runner/actions/<action_id>/state_reconciliation_report.json).
+  - id: resolved_inputs_redacted_json
+    term: runner/actions/<action_id>/resolved_inputs_redacted.json
+    category: security
+    definition: Redaction-safe resolved inputs evidence for an action.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Redaction-safe resolved inputs evidence (runner/actions/<action_id>/resolved_inputs_redacted.json).
+  - id: principal_context_json
+    term: runner/principal_context.json
+    category: data
+    definition: Run-level principal context evidence.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Run-level principal context evidence (runner/principal_context.json).
+  - id: health_json
+    term: logs/health.json
+    category: data
+    definition: Run-level health/status log updated alongside manifest/status.
+    aliases:
+      - health log
+    evidence:
+      - file: teardown.yaml
+        section_heading: teardown
+        excerpt: logs/health.json
+  - id: criteria_pack
+    term: criteria pack
+    category: data
+    definition: Pack-like artifact selected and pinned for a run to evaluate expected signals.
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_035_validation_criteria.important_terms
+        excerpt: Pack-like artifact selected/pinned for a run.
+  - id: criteria_manifest_json
+    term: criteria/manifest.json
+    category: data
+    definition: Criteria pack manifest snapshot pinned into the run bundle.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Criteria pack manifest snapshot (criteria/manifest.json).
+  - id: criteria_criteria_jsonl
+    term: criteria/criteria.jsonl
+    category: data
+    definition: Line-delimited criteria pack entries evaluated by validation.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Per-line schema for criteria/criteria.jsonl.
+  - id: criteria_results_jsonl
+    term: criteria/results.jsonl
+    category: data
+    definition: Line-delimited results of criteria evaluation.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Per-line schema for criteria/results.jsonl.
   - id: lab_provider
     term: lab provider
     category: component
     definition: Component that resolves a concrete set of targets from an external inventory source.
-    aliases: ["provider"]
+    aliases:
+      - provider
     evidence:
-      - {file: "015_lab_providers.md", section_heading: "Key concepts", excerpt: "A component that can resolve a concrete set of targets."}
-
+      - file: 015_lab_providers.md
+        section_heading: Key concepts
+        excerpt: A component that can resolve a concrete set of targets.
   - id: inventory_snapshot
     term: inventory snapshot
     category: data
-    definition: Canonical JSON snapshot written into the run bundle so the run remains reproducible even if provider state changes later.
-    aliases: ["lab_inventory_snapshot.json"]
+    definition: Canonical JSON inventory snapshot written to logs/lab_inventory_snapshot.json for run reproducibility.
+    aliases:
+      - lab_inventory_snapshot.json
+      - logs/lab_inventory_snapshot.json
     evidence:
-      - {file: "015_lab_providers.md", section_heading: "Key concepts", excerpt: "A canonical JSON snapshot written into the run bundle."}
-
+      - file: 015_lab_providers.md
+        section_heading: Key concepts
+        excerpt: A canonical JSON snapshot written into the run bundle.
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Deterministic lab inventory snapshot (logs/lab_inventory_snapshot.json).
+  - id: lab_assets
+    term: lab.assets
+    category: data
+    definition: Canonical resolved asset list used by downstream stages.
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_015_lab_providers.important_terms
+        excerpt: Canonical resolved asset list used by downstream stages.
   - id: asset_id
     term: asset_id
     category: data
     definition: Stable Purple Axiom logical asset identifier; inventory assets[] MUST be sorted by asset_id for determinism.
     aliases: []
     evidence:
-      - {file: "015_lab_providers.md", section_heading: "Inventory snapshot schema: lab_inventory_snapshot", excerpt: "`asset_id` (string, required): stable Purple Axiom logical asset id."}
-
+      - file: 015_lab_providers.md
+        section_heading: 'Inventory snapshot schema: lab_inventory_snapshot'
+        excerpt: '`asset_id` (string, required): stable Purple Axiom logical asset id.'
+  - id: provider_asset_ref
+    term: provider_asset_ref
+    category: data
+    definition: Optional reference back to the provider’s native identity.
+    aliases: []
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_015_lab_providers.important_terms
+        excerpt: Optional reference back to the provider’s native identity.
   - id: telemetry_pipeline
     term: telemetry pipeline
     category: workflow
-    definition: ETL spine for collecting telemetry and producing raw/validated artifacts, aligned to OpenTelemetry collector roles.
+    definition: ETL spine for collecting telemetry and producing raw/validated artifacts, aligned to OpenTelemetry collector
+      roles.
     aliases: []
     evidence:
-      - {file: "040_telemetry_pipeline.md", section_heading: "Overview", excerpt: "Defines the telemetry pipeline ETL spine and OTel collector roles."}
-
+      - file: 040_telemetry_pipeline.md
+        section_heading: Overview
+        excerpt: Defines the telemetry pipeline ETL spine and OTel collector roles.
   - id: otel_collector
     term: OpenTelemetry Collector
     category: component
     definition: Telemetry collection component used to ingest and route telemetry data in the pipeline.
-    aliases: ["OTel Collector"]
+    aliases:
+      - OTel Collector
     evidence:
-      - {file: "040_telemetry_pipeline.md", section_heading: "Overview", excerpt: "Defines ... OTel collector roles."}
-
+      - file: 040_telemetry_pipeline.md
+        section_heading: Overview
+        excerpt: Defines ... OTel collector roles.
   - id: otlp
     term: OTLP
     category: interface
-    definition: OpenTelemetry Protocol used for telemetry gateway/collector ingestion endpoints (gRPC 4317, HTTP 4318 in Operator Interface config).
+    definition: OpenTelemetry Protocol used for telemetry gateway/collector ingestion endpoints (gRPC 4317, HTTP 4318 in Operator
+      Interface config).
     aliases: []
     evidence:
-      - {file: "115_operator_interface.md", section_heading: "Configuration surface (v0.2)", excerpt: "otel_gateway ... ports: grpc: 4317 http: 4318."}
-
+      - file: 115_operator_interface.md
+        section_heading: Configuration surface (v0.2)
+        excerpt: 'otel_gateway ... ports: grpc: 4317 http: 4318.'
+  - id: raw_parquet
+    term: raw_parquet/**
+    category: data
+    definition: Run telemetry raw event store published as Parquet dataset(s).
+    aliases:
+      - raw_parquet/
+    evidence:
+      - file: docs_index.yaml
+        section_heading: documents.spec_040_telemetry_pipeline.important_terms
+        excerpt: Raw parquet store path used for telemetry storage.
+  - id: telemetry_validation_json
+    term: logs/telemetry_validation.json
+    category: data
+    definition: Telemetry validation summary evidence emitted by telemetry stage.
+    aliases:
+      - telemetry_validation.json
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Telemetry validation summary (logs/telemetry_validation.json).
+  - id: pcap_manifest_json
+    term: raw/pcap/manifest.json
+    category: data
+    definition: Manifest enumerating pcap capture files for a run (placeholder contract; v0.1).
+    aliases:
+      - pcap manifest
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Manifest enumerating pcap capture files for a run
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: Network sensor manifests (raw/pcap/manifest.json and raw/netflow/manifest.json) are v0.1 placeholder artifacts.
+  - id: netflow_manifest_json
+    term: raw/netflow/manifest.json
+    category: data
+    definition: Manifest enumerating netflow capture/log files for a run (placeholder contract; v0.1).
+    aliases:
+      - netflow manifest
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Manifest enumerating netflow capture/log files for a run
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: Network sensor manifests (raw/pcap/manifest.json and raw/netflow/manifest.json) are v0.1 placeholder artifacts.
+  - id: cache_provenance_json
+    term: logs/cache_provenance.json
+    category: data
+    definition: Run-level cache provenance evidence.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Run-level cache provenance evidence (logs/cache_provenance.json).
+  - id: counters_json
+    term: logs/counters.json
+    category: data
+    definition: Run-level counters and gauges snapshot.
+    aliases: []
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Run-level counters and gauges snapshot (logs/counters.json).
   - id: ocsf
     term: OCSF
     category: data
     definition: Canonical normalized event model used by Purple Axiom; pinned per release.
-    aliases: []
+    aliases:
+      - OCSF schema
     evidence:
-      - {file: "050_normalization_ocsf.md", section_heading: "Key decisions", excerpt: "OCSF is the canonical normalized event model and is pinned."}
-
+      - file: 050_normalization_ocsf.md
+        section_heading: Key decisions
+        excerpt: OCSF is the canonical normalized event model and is pinned.
   - id: ocsf_event_envelope
     term: ocsf_event_envelope
     category: data
     definition: Purple Axiom envelope contract for normalized OCSF events used for Tier 0 validation.
-    aliases: ["ocsf_event_envelope.schema.json"]
+    aliases:
+      - normalized/ocsf_events.jsonl
+      - ocsf_event_envelope
+      - ocsf_event_envelope.schema.json
     evidence:
-      - {file: "050_normalization_ocsf.md", section_heading: "Validation strategy", excerpt: "validate normalized events against ... ocsf_event_envelope.schema.json."}
-
+      - file: 050_normalization_ocsf.md
+        section_heading: Validation strategy
+        excerpt: validate normalized events against ... ocsf_event_envelope.schema.json.
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Minimal required OCSF + provenance for normalized events.
+  - id: normalized_ocsf_events_jsonl
+    term: normalized/ocsf_events.jsonl
+    category: data
+    definition: JSONL stream of normalized events bound to the ocsf_event_envelope contract.
+    aliases:
+      - ocsf_events.jsonl
+    evidence:
+      - file: contract_registry.json
+        section_heading: bindings
+        excerpt: normalized/ocsf_events.jsonl
+  - id: normalized_ocsf_events_parquet
+    term: normalized/ocsf_events/**
+    category: data
+    definition: Parquet dataset containing normalized OCSF events.
+    aliases:
+      - normalized/ocsf_events/
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: 'Normalized store: `normalized/ocsf_events/` (Parquet).'
   - id: metadata_event_id
     term: metadata.event_id
     category: data
     definition: Deterministic event identity used for joins and references; detection instances reference it via matched_event_ids.
-    aliases: ["event_id"]
+    aliases:
+      - event_id
     evidence:
-      - {file: "060_detection_sigma.md", section_heading: "Detection instance schema", excerpt: "matched_event_ids: ... metadata.event_id references."}
-
+      - file: 060_detection_sigma.md
+        section_heading: Detection instance schema
+        excerpt: 'matched_event_ids: ... metadata.event_id references.'
   - id: metadata_uid
     term: metadata.uid
     category: data
-    definition: Internal uniqueness token carried in normalized events; used alongside metadata.event_id in provenance/identity models.
+    definition: Internal uniqueness token carried in normalized events; used alongside metadata.event_id in provenance/identity
+      models.
     aliases: []
     evidence:
-      - {file: "ADR-0002-event-identity-and-provenance.md", section_heading: "Decision", excerpt: "Defines deterministic event identity and provenance rules."}
-
+      - file: ADR-0002-event-identity-and-provenance.md
+        section_heading: Decision
+        excerpt: Defines deterministic event identity and provenance rules.
   - id: identity_tier
     term: identity_tier
     category: security
     definition: Identity tier concept used to classify the strength/basis of event identity by source type.
-    aliases: ["metadata.identity_tier"]
+    aliases:
+      - metadata.identity_tier
     evidence:
-      - {file: "ADR-0002-event-identity-and-provenance.md", section_heading: "Identity basis by source type", excerpt: "Identity basis by source type."}
-
+      - file: ADR-0002-event-identity-and-provenance.md
+        section_heading: Identity basis by source type
+        excerpt: Identity basis by source type.
   - id: mapping_profile_snapshot
     term: normalized/mapping_profile_snapshot.json
     category: data
-    definition: Snapshot artifact freezing normalization mapping profile and enabling deterministic attribution of coverage metrics and downstream alignment.
-    aliases: ["mapping profile snapshot"]
+    definition: Snapshot artifact freezing normalization mapping profile and enabling deterministic attribution of coverage
+      metrics and downstream alignment.
+    aliases:
+      - mapping profile snapshot
     evidence:
-      - {file: "050_normalization_ocsf.md", section_heading: "Observability and coverage", excerpt: "Normalization artifacts must include mapping snapshots and coverage metrics."}
-
+      - file: 050_normalization_ocsf.md
+        section_heading: Observability and coverage
+        excerpt: Normalization artifacts must include mapping snapshots and coverage metrics.
+  - id: mapping_coverage_json
+    term: normalized/mapping_coverage.json
+    category: data
+    definition: Optional normalization mapping coverage statistics emitted by normalization.
+    aliases:
+      - mapping_coverage.json
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Optional mapping coverage stats (normalized/mapping_coverage.json).
   - id: sigma
     term: Sigma
     category: data
     definition: Rule format used for detection evaluation; rules are compiled/evaluated against normalized OCSF events.
-    aliases: ["Sigma rules"]
+    aliases:
+      - Sigma rules
     evidence:
-      - {file: "065_sigma_to_ocsf_bridge.md", section_heading: "Problem statement", excerpt: "Sigma rules typically assume a producer-specific log schema."}
-
+      - file: 065_sigma_to_ocsf_bridge.md
+        section_heading: Problem statement
+        excerpt: Sigma rules typically assume a producer-specific log schema.
   - id: sigma_to_ocsf_bridge
     term: Sigma-to-OCSF bridge
     category: component
-    definition: Contract-driven compatibility layer that makes Sigma rules executable against OCSF events by routing, aliasing, and backend adapters.
-    aliases: ["bridge"]
+    definition: Contract-driven compatibility layer that makes Sigma rules executable against OCSF events by routing, aliasing,
+      and backend adapters.
+    aliases:
+      - bridge
     evidence:
-      - {file: "065_sigma_to_ocsf_bridge.md", section_heading: "Overview", excerpt: "provides a contract-driven compatibility layer ... executable against OCSF events."}
-
+      - file: 065_sigma_to_ocsf_bridge.md
+        section_heading: Overview
+        excerpt: provides a contract-driven compatibility layer ... executable against OCSF events.
   - id: bridge_router_table
     term: bridge/router_table.json
     category: data
     definition: Snapshot artifact that freezes Sigma logsource routing behavior used for a run.
-    aliases: ["router table"]
+    aliases:
+      - router table
     evidence:
-      - {file: "025_data_contracts.md", section_heading: "Bridge router table snapshot", excerpt: "Freezes the Sigma logsource routing behavior used for this run."}
-
+      - file: 025_data_contracts.md
+        section_heading: Bridge router table snapshot
+        excerpt: Freezes the Sigma logsource routing behavior used for this run.
   - id: mapping_pack_snapshot
     term: bridge/mapping_pack_snapshot.json
     category: data
-    definition: Snapshot artifact freezing Sigma-to-OCSF bridge inputs (router, field aliases, fallback policy) used for deterministic compilation and evaluation.
-    aliases: ["mapping_pack_snapshot"]
+    definition: Snapshot artifact freezing Sigma-to-OCSF bridge inputs (router, field aliases, fallback policy) used for deterministic
+      compilation and evaluation.
+    aliases:
+      - mapping_pack_snapshot
     evidence:
-      - {file: "025_data_contracts.md", section_heading: "Bridge mapping pack snapshot", excerpt: "Freezes the full Sigma-to-OCSF bridge inputs used for this run."}
-
+      - file: 025_data_contracts.md
+        section_heading: Bridge mapping pack snapshot
+        excerpt: Freezes the full Sigma-to-OCSF bridge inputs used for this run.
+  - id: bridge_compiled_plan
+    term: bridge/compiled_plans/<rule_id>.plan.json
+    category: data
+    definition: Per-rule compiled plan emitted by the Sigma-to-OCSF bridge.
+    aliases:
+      - compiled plan
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: bridge compiled plan per rule (bridge/compiled_plans/<rule_id>.plan.json).
+  - id: bridge_coverage_json
+    term: bridge/coverage.json
+    category: data
+    definition: Bridge coverage summary emitted during Sigma compilation/evaluation.
+    aliases:
+      - bridge coverage
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Bridge coverage summary (bridge/coverage.json).
   - id: detection_instance
     term: detection instance
     category: data
     definition: Contract-backed record describing a rule match (or match set) including provenance and matched_event_ids.
     aliases: []
     evidence:
-      - {file: "060_detection_sigma.md", section_heading: "Detection instance schema", excerpt: "Detection instances MUST validate against detection_instance.schema.json."}
-
+      - file: 060_detection_sigma.md
+        section_heading: Detection instance schema
+        excerpt: Detection instances MUST validate against detection_instance.schema.json.
   - id: detections_jsonl
     term: detections/detections.jsonl
     category: data
-    definition: JSONL stream where detections are recorded; includes unattributed detections that cannot be linked to ground truth.
+    definition: JSONL stream where detections are recorded; includes unattributed detections that cannot be linked to ground
+      truth.
     aliases: []
     evidence:
-      - {file: "060_detection_sigma.md", section_heading: "Unattributed detections", excerpt: "Are recorded in detections/detections.jsonl."}
-
+      - file: 060_detection_sigma.md
+        section_heading: Unattributed detections
+        excerpt: Are recorded in detections/detections.jsonl.
   - id: scoring_summary_json
     term: scoring/summary.json
     category: data
     definition: Scoring stage output containing metrics used for CI threshold evaluation and deterministic regression comparisons.
-    aliases: ["summary.json"]
+    aliases:
+      - summary.json
     evidence:
-      - {file: "070_scoring_metrics.md", section_heading: "Thresholds (CI gates)", excerpt: "Threshold evaluation MUST be based on metrics emitted in scoring/summary.json."}
-
+      - file: 070_scoring_metrics.md
+        section_heading: Thresholds (CI gates)
+        excerpt: Threshold evaluation MUST be based on metrics emitted in scoring/summary.json.
   - id: gap_category_tokens
     term: gap category tokens
     category: workflow
-    definition: Canonical token set used to classify pipeline health gaps (e.g., missing_telemetry, normalization_gap, bridge_gap_mapping, rule_logic_gap, cleanup_verification_failed).
-    aliases: ["gap taxonomy"]
+    definition: Canonical token set used to classify pipeline health gaps (e.g., missing_telemetry, normalization_gap, bridge_gap_mapping,
+      rule_logic_gap, cleanup_verification_failed).
+    aliases:
+      - gap taxonomy
     evidence:
-      - {file: "070_scoring_metrics.md", section_heading: "Primary metrics (seed)", excerpt: "Pipeline health: missing_telemetry, criteria_unavailable, normalization_gap, bridge_gap_*."}
-
+      - file: 070_scoring_metrics.md
+        section_heading: Primary metrics (seed)
+        excerpt: 'Pipeline health: missing_telemetry, criteria_unavailable, normalization_gap, bridge_gap_*.'
   - id: report_report_json
     term: report/report.json
     category: data
-    definition: Reporting stage artifact representing the run report for reportable runs; mirrors authoritative status recommendation fields.
+    definition: Reporting stage artifact representing the run report for reportable runs; mirrors authoritative status recommendation
+      fields.
     aliases: []
     evidence:
-      - {file: "105_ci_operational_readiness.md", section_heading: "Definitions", excerpt: "mirrored in runs/<run_id>/report/report.json.status for reportable runs."}
-
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: mirrored in runs/<run_id>/report/report.json.status for reportable runs.
+  - id: report_thresholds_json
+    term: report/thresholds.json
+    category: data
+    definition: Reporting artifact containing CI threshold evaluation results and status recommendation.
+    aliases:
+      - thresholds.json
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: report/report.json and report/thresholds.json
   - id: status_recommendation
     term: report/thresholds.json.status_recommendation
     category: data
     definition: Authoritative CI-facing status computed by reporting stage from threshold evaluation.
-    aliases: ["status recommendation"]
+    aliases:
+      - status recommendation
     evidence:
-      - {file: "105_ci_operational_readiness.md", section_heading: "Definitions", excerpt: "Status recommendation ... recorded in report/thresholds.json.status_recommendation (authoritative)."}
-
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: Status recommendation ... recorded in report/thresholds.json.status_recommendation (authoritative).
   - id: security_checksums_txt
     term: security/checksums.txt
     category: security
-    definition: UTF-8 LF file enumerating SHA-256 digests of included files (one per line) for integrity; used by run exports, datasets, and BDPs.
-    aliases: ["checksums.txt"]
+    definition: UTF-8 LF file enumerating SHA-256 digests of included files (one per line) for integrity; used by run exports,
+      datasets, and BDPs.
+    aliases:
+      - checksums.txt
     evidence:
-      - {file: "085_golden_datasets.md", section_heading: "Integrity", excerpt: "Dataset releases MUST include security/checksums.txt."}
-
+      - file: 085_golden_datasets.md
+        section_heading: Integrity
+        excerpt: Dataset releases MUST include security/checksums.txt.
   - id: signature_ed25519
     term: security/signature.ed25519
     category: security
     definition: Optional Ed25519 signature computed over the exact bytes of security/checksums.txt.
-    aliases: ["signature.ed25519"]
+    aliases:
+      - signature.ed25519
     evidence:
-      - {file: "085_golden_datasets.md", section_heading: "Signing (optional)", excerpt: "`security/signature.ed25519` MUST be computed over the exact bytes."}
-
+      - file: 085_golden_datasets.md
+        section_heading: Signing (optional)
+        excerpt: '`security/signature.ed25519` MUST be computed over the exact bytes.'
   - id: baseline_detection_package
     term: Baseline Detection Package (BDP)
     category: data
-    definition: Redaction-safe, lightweight subset of a single completed run bundle retained long-term for detection regression and offline evaluation.
-    aliases: ["BDP", "baseline package"]
+    definition: Redaction-safe, lightweight subset of a single completed run bundle retained long-term for detection regression
+      and offline evaluation.
+    aliases:
+      - BDP
+      - baseline package
     evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Overview", excerpt: "A Baseline Detection Package (BDP) is a redaction-safe, lightweight subset."}
-
+      - file: 086_detection_baseline_library.md
+        section_heading: Overview
+        excerpt: A Baseline Detection Package (BDP) is a redaction-safe, lightweight subset.
   - id: baseline_library
     term: baseline library
     category: data
     definition: Set of BDPs stored under <workspace_root>/exports/baselines/ and managed via the Operator Interface.
-    aliases: ["exports/baselines"]
+    aliases:
+      - exports/baselines
     evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Terminology", excerpt: "Baseline library: The set of BDPs stored under <workspace_root>/exports/baselines/."}
-
+      - file: 086_detection_baseline_library.md
+        section_heading: Terminology
+        excerpt: 'Baseline library: The set of BDPs stored under <workspace_root>/exports/baselines/.'
+  - id: baseline_package_manifest_json
+    term: baseline_package_manifest.json
+    category: data
+    definition: Manifest for a Baseline Detection Package under exports/baselines/<baseline_id>/<baseline_version>/.
+    aliases:
+      - baseline_package_manifest.json
+    evidence:
+      - file: contract_registry.json
+        section_heading: contracts
+        excerpt: Manifest for a Baseline Detection Package stored under exports/baselines
   - id: golden_dataset
     term: golden dataset
     category: data
-    definition: Dataset release derived deterministically from run bundles where labels are derived from first-class ground truth and outcomes and can be stripped/re-attached via join keys.
-    aliases: ["dataset release"]
+    definition: Dataset release derived deterministically from run bundles where labels are derived from first-class ground
+      truth and outcomes and can be stripped/re-attached via join keys.
+    aliases:
+      - dataset release
     evidence:
-      - {file: "085_golden_datasets.md", section_heading: "Purpose", excerpt: "Golden means: labels are derived from first-class ground truth."}
-
+      - file: 085_golden_datasets.md
+        section_heading: Purpose
+        excerpt: 'Golden means: labels are derived from first-class ground truth.'
   - id: dataset_release_id
     term: dataset_release_id
     category: data
-    definition: Deterministic identifier for a dataset release derived from a canonical hash basis (time/host fields must not affect it).
-    aliases: ["pa:dsrel:v1"]
+    definition: Deterministic identifier for a dataset release derived from a canonical hash basis (time/host fields must
+      not affect it).
+    aliases:
+      - pa:dsrel:v1
     evidence:
-      - {file: "085_golden_datasets.md", section_heading: "Manifest canonicalization and hashing", excerpt: "`dataset_release_id` MUST be reproducible across builds given the same inputs."}
-
+      - file: 085_golden_datasets.md
+        section_heading: Manifest canonicalization and hashing
+        excerpt: '`dataset_release_id` MUST be reproducible across builds given the same inputs.'
 open_questions:
-  - question: "030_scenarios.md content is not retrievable from the indexed corpus; extract scenario schema and headings."
+  - question: 030_scenarios.md content is not retrievable from the indexed corpus; extract scenario schema and headings.
     checked_in:
-      - {file: "120_config_reference.md", section_heading: "Configuration files and precedence"}
-      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Scenario identity and version"}
-    impact: "Blocks precise Scenario/Action fields and runner input modeling in diagrams."
-
-  - question: "044_unix_log_ingestion.md content is not retrievable from the indexed corpus; extract unix ingestion declarations and dedupe policy details."
+      - file: 120_config_reference.md
+        section_heading: Configuration files and precedence
+      - file: ADR-0001-project-naming-and-versioning.md
+        section_heading: Scenario identity and version
+      - file: docs_index.yaml
+        section_heading: documents.spec_030_scenarios
+    impact: Blocks precise Scenario/Action fields and runner input modeling in diagrams.
+  - question: 044_unix_log_ingestion.md content is not retrievable from the indexed corpus; extract unix ingestion declarations
+      and dedupe policy details.
     checked_in:
-      - {file: "120_config_reference.md", section_heading: "Top-level keys"}
-      - {file: "ADR-0002-event-identity-and-provenance.md", section_heading: "Identity basis by source type"}
-    impact: "Blocks unix source ingestion workflow and duplication-avoidance provenance modeling."
+      - file: 120_config_reference.md
+        section_heading: Top-level keys
+      - file: ADR-0002-event-identity-and-provenance.md
+        section_heading: Identity basis by source type
+      - file: docs_index.yaml
+        section_heading: documents.spec_044_unix_log_ingestion
+    impact: Blocks unix source ingestion workflow and duplication-avoidance provenance modeling.
+  - question: report/thresholds.json is referenced in workflows but has no entry in contract_registry.json bindings; add a
+      contract?
+    checked_in:
+      - file: scoring_reporting.yaml
+        section_heading: scoring_reporting
+      - file: contract_registry.json
+        section_heading: bindings
+    impact: Blocks contract validation for CI-facing thresholds artifact and consistent schema gating.
+  - question: Both normalized/ocsf_events/** (Parquet) and normalized/ocsf_events.jsonl (JSONL) appear; which is required
+      for v0.1?
+    checked_in:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+      - file: contract_registry.json
+        section_heading: bindings
+    impact: Affects normalization stage outputs, validation strategy, and downstream reader expectations.

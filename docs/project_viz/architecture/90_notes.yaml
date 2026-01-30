@@ -6,18 +6,68 @@ requirements:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: File-based stage coordination (normative)
         excerpt: Stages MUST communicate by reading and writing contract-backed artifacts.
+
   - id: schema_validation
     description: All stage outputs must validate against schemas before publish.
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Staging then atomic publish
         excerpt: validate all required schema contracts before publish
+
+  - id: contract_registry_version_sync
+    description: Contract registry contract_version values must match each schema's contract_version const.
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: contracts[].contract_version MUST be kept in sync with each schema file's contract_version const.
+
+  - id: validation_snapshots_criteria_pack
+    description: Validation stage must snapshot the selected criteria pack into the run bundle.
+    evidence:
+      - file: 035_validation_criteria.md
+        section_heading: Run bundle snapshot
+        excerpt: validation stage MUST snapshot the selected criteria pack into the run bundle.
+
+  - id: threshold_evaluation_from_scoring_summary
+    description: Threshold evaluation must be based on metrics emitted in scoring/summary.json.
+    evidence:
+      - file: 070_scoring_metrics.md
+        section_heading: Thresholds (CI gates)
+        excerpt: Threshold evaluation MUST be based on metrics emitted in scoring/summary.json.
+
+  - id: integrity_checksums_present
+    description: Integrity artifacts must include security/checksums.txt (sha256).
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: 'Checksums: `security/checksums.txt` (sha256).'
+      - file: 085_golden_datasets.md
+        section_heading: Integrity
+        excerpt: Dataset releases MUST include security/checksums.txt.
+
+  - id: integrity_signature_over_checksums
+    description: If present, security/signature.ed25519 must be computed over the exact bytes of the checksums file.
+    evidence:
+      - file: 085_golden_datasets.md
+        section_heading: Signing (optional)
+        excerpt: "`security/signature.ed25519` MUST be computed over the exact bytes."
+
+  - id: stage_outcomes_recorded_in_manifest
+    description: Orchestrator must record stage outcomes in runs/<run_id>/manifest.json.
+    evidence:
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Decision
+        excerpt: The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json.
+
   - id: ci_gating
     description: CI verdict must be derived from thresholds.json when present and valid.
     evidence:
       - file: 105_ci_operational_readiness.md
         section_heading: CI contract
         excerpt: If `runs/<run_id>/report/thresholds.json` exists and validates against its schema.
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: Status recommendation ... recorded in report/thresholds.json.status_recommendation (authoritative).
 
 constraints:
   - id: no_inferred_integrations
@@ -26,24 +76,42 @@ constraints:
       - file: 010_scope.md
         section_heading: Non-goals
         excerpt: Do not assume specific vendor stacks unless explicitly required.
+
   - id: one_shot_local_first
     description: System runs as a one-shot, local-first pipeline.
     evidence:
       - file: 020_architecture.md
         section_heading: Overview
         excerpt: Purple Axiom is a one-shot, local-first pipeline.
+
   - id: single_host_no_internal_rpc
     description: Executed on a single host without internal service-to-service RPC.
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Decision
         excerpt: executed on a single host without internal service-to-service RPC.
+
+  - id: run_lock_required
+    description: Acquire a per-run lock to prevent concurrent writers to the same run bundle.
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Decision
+        excerpt: acquire run lock runs/.locks/<run_id>.lock.
+
   - id: filesystem_contract_boundary
     description: Run bundle directory is the contract boundary between stages.
     evidence:
       - file: 020_architecture.md
         section_heading: Workspace boundary (local-first)
         excerpt: filesystem contract boundary between stages.
+
+  - id: contract_registry_globs_run_relative
+    description: Contract registry artifact_glob values are run-relative (no runs/<run_id> prefix).
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: bindings[].artifact_glob values are run-relative ... do not include the runs/<run_id>/ prefix.
+
   - id: publish_gate_atomic_publish
     description: Artifacts are staged, validated, and published via atomic rename.
     evidence:
@@ -53,6 +121,17 @@ constraints:
       - file: 015_lab_providers.md
         section_heading: Publish and validation gate
         excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+
+  - id: network_sensor_manifests_placeholder
+    description: Network sensor manifests are optional placeholders; paths are reserved and changes are breaking.
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: They MAY be absent unless the corresponding telemetry source is enabled and implemented.
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: changing them MUST be treated as a breaking change.
+
   - id: redaction_safe_by_default
     description: Unredacted artifacts are quarantined and excluded from exports by default.
     evidence:
@@ -63,6 +142,13 @@ constraints:
         section_heading: Policy
         excerpt: Exports MUST exclude `unredacted/**` by default.
 
+  - id: cache_provenance_no_secrets
+    description: Cache provenance artifacts must not contain secrets.
+    evidence:
+      - file: 090_security_safety.md
+        section_heading: Cache provenance
+        excerpt: Cache provenance MUST NOT contain secrets (credentials, tokens, private keys).
+
 glossary:
   - term: run bundle
     definition: Filesystem directory containing all artifacts for a run under runs/<run_id>/.
@@ -70,24 +156,35 @@ glossary:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Run bundle (coordination and evidence plane)
         excerpt: Run bundle (`runs/<run_id>/`) is the authoritative coordination substrate.
+
   - term: stage
     definition: A pipeline unit that reads inputs from the run bundle and writes outputs back.
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: File-based stage coordination (normative)
         excerpt: Stages MUST communicate by reading and writing contract-backed artifacts.
+
   - term: publish gate
     definition: Write to staging, validate, then publish atomically into final locations.
     evidence:
       - file: glossary.yaml
         section_heading: publish_gate
         excerpt: Write to a staging location first, validate, then publish atomically.
+
   - term: baseline library
     definition: Set of BDPs under exports/baselines managed via the Operator Interface.
     evidence:
       - file: glossary.yaml
         section_heading: baseline_library
         excerpt: managed via the Operator Interface.
+
+  - term: artifact_glob
+    definition: Run-relative path pattern used to bind artifacts to schema contracts in the contract registry.
+    evidence:
+      - file: contract_registry.json
+        section_heading: notes
+        excerpt: bindings[].artifact_glob values are run-relative ... do not include the runs/<run_id>/ prefix.
+
 notes:
   open_questions:
     - id: orchestrator_implementation_tech
@@ -97,6 +194,7 @@ notes:
         - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
           section_heading: Orchestrator (execution plane)
           excerpt: SHOULD execute the core pipeline stages in a single process for v0.1.
+
     - id: criteria_engine_implementation
       question: What engine executes validation criteria (custom DSL vs embedded runtime)?
       impact: Affects validation stage container internals and dependency edges.
@@ -104,6 +202,7 @@ notes:
         - file: 035_validation_criteria.md
           section_heading: Execution model
           excerpt: Criteria execution engine details are intentionally abstracted.
+
     - id: operator_interface_authn_authz
       question: What authentication/authorization applies to the operator interface endpoints?
       impact: Affects trust boundaries and auth fields on operator interface relationships.
@@ -111,6 +210,7 @@ notes:
         - file: 115_operator_interface.md
           section_heading: Security
           excerpt: Authentication and authorization model TBD.
+
     - id: golden_dataset_builder_tooling
       question: What tool or process generates golden datasets and when in CI?
       impact: Affects workflows for dataset release and regression.
@@ -118,6 +218,7 @@ notes:
         - file: 085_golden_datasets.md
           section_heading: Generation
           excerpt: Dataset build process is implementation-defined.
+
     - id: baseline_package_generation_flow
       question: How are baseline packages created and versioned for reporting regression?
       impact: Affects reporting workflow steps and baseline library relationships.
@@ -125,6 +226,7 @@ notes:
         - file: 086_detection_baseline_library.md
           section_heading: Baseline package generation
           excerpt: Baseline package generation flow is not specified.
+
     - id: export_bundle_format_and_transport
       question: What is the export bundle format and how is it transported out of CI?
       impact: Affects external integrations and reporting artifact distribution.
@@ -132,6 +234,7 @@ notes:
         - file: ADR-0009-run-export-policy-and-log-classification.md
           section_heading: Run export policy (normative)
           excerpt: Export bundle transport is out of scope for v0.1.
+
     - id: threat_intel_pack_consumers
       question: Which stages consume threat_intel_packs and how represented in workflows?
       impact: Affects additional edges and workflow steps for enrichment.
@@ -139,4 +242,28 @@ notes:
         - file: ADR-0008-Threat-intelligence-integration-model.md
           section_heading: Interaction with run-bundle snapshots
           excerpt: The owning stage MUST materialize them.
-  security_findings: []
+
+    - id: network_sensor_manifest_producers
+      question: Which stage(s) produce raw/pcap and raw/netflow manifests, and when enabled?
+      impact: Affects telemetry stage outputs and network-sensor dataflow edges.
+      evidence:
+        - file: contract_registry.json
+          section_heading: notes
+          excerpt: They MAY be absent unless the corresponding telemetry source is enabled and implemented.
+
+    - id: duckdb_conformance_report_pipeline
+      question: What produces artifacts/duckdb_conformance/<report_id>/report.json and how is it used?
+      impact: Affects CI harness artifacts and (optional) CI workflows/diagrams.
+      evidence:
+        - file: contract_registry.json
+          section_heading: contracts
+          excerpt: CI harness artifact at artifacts/duckdb_conformance/<report_id>/report.json.
+
+  security_findings:
+    - id: operator_interface_auth_model_tbd
+      finding: Operator Interface authentication/authorization is TBD.
+      impact: Trust boundaries and auth fields cannot be finalized.
+      evidence:
+        - file: 115_operator_interface.md
+          section_heading: Security
+          excerpt: Authentication and authorization model TBD.

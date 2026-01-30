@@ -40,6 +40,9 @@ and **file-based stage coordination**.
 - The orchestrator SHOULD execute the core pipeline stages **in a single process** for v0.1
   (monolith implementation), even if some steps invoke external binaries (executors, collectors,
   packagers).
+- To preserve the optional "local multi-process" evolution path (see "Future options"), stage logic
+  SHOULD be implemented as ports-injected cores with optional per-stage CLI wrappers that call the
+  same core.
 - The orchestrator MUST acquire an exclusive run lock before creating or mutating a run bundle.
   - The orchestrator MUST create `runs/.locks/` if absent.
   - Lock primitive (normative): atomic creation of `runs/.locks/<run_id>.lock` (reserved for
@@ -180,6 +183,10 @@ published outputs or logs.
 
 A stage MUST be considered complete only when:
 
+Outcome writer (normative): stage outcome persistence MUST be performed by the orchestrator (the
+run-lock holder) to preserve a single writer for `manifest.json` and `logs/health.json`. Stages and
+any per-stage commands MUST NOT write those files directly.
+
 - its stage outcome has been recorded in the manifest (and in `logs/health.json` when enabled), and
 - its outputs are either:
   - published (when `status="success"`, or when `status="failed"` with `fail_mode="warn_and_skip"`),
@@ -283,6 +290,11 @@ boundaries remain stable:
 
 - A "local multi-process" mode where each stage is a separately invocable command, still reading and
   writing the same run bundle artifact contracts.
+
+  - Stage commands should be thin wrappers over the same ports-injected stage cores used by the
+    in-process orchestrator mode.
+  - Stage outcome recording should remain orchestrator-owned to preserve a single writer for
+    `manifest.json` and `logs/health.json`.
 
 - A long-running daemon that schedules runs and maintains a queue, provided:
 

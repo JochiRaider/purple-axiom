@@ -496,10 +496,10 @@ Minimum publish-gate coverage (v0.1):
 
 Failure behavior (normative):
 
-- If publish-gate contract validation fails for a required artifact, the stage MUST record a failed
-  stage outcome with a stable `reason_code`, and MUST follow the configured `fail_mode` semantics
-  (`fail_closed` halts the run; `warn_and_skip` permits continuation with deterministic degradation
-  evidence).
+- If publish-gate contract validation fails for a required artifact, the orchestrator MUST record a
+  failed stage outcome for the publishing stage with a stable `reason_code`, and MUST follow the
+  configured `fail_mode` semantics (`fail_closed` halts the run; `warn_and_skip` permits
+  continuation with deterministic degradation evidence).
 
 #### Runtime canaries (required only where specified)
 
@@ -2263,9 +2263,9 @@ Required invariants:
      normalized events MUST contain exactly one value.
    - Multi-scenario runs are reserved in v0.1. If more than one distinct scenario ID is observed,
      implementations MUST fail closed.
-     - The enforcing stage MUST record a failed stage outcome with a stable `reason_code` drawn from
-       ADR-0005’s allowed catalog (codes not listed there MUST NOT be emitted). RECOMMENDED:
-       `config_schema_invalid`.
+     - The enforcing stage implementation MUST cause a failed stage outcome to be recorded with a
+       stable `reason_code` drawn from ADR-0005’s allowed catalog (codes not listed there MUST NOT
+       be emitted). RECOMMENDED: `config_schema_invalid`.
 1. Time bounds:
    - All `ground_truth.timestamp_utc` and normalized event times must be within
      `[manifest.started_at_utc, manifest.ended_at_utc]` when `ended_at_utc` is present, allowing a

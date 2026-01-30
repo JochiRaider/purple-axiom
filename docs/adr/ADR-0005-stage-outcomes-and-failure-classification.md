@@ -98,6 +98,16 @@ The orchestrator MUST record the stage outcome in:
 - `runs/<run_id>/manifest.json`, and
 - when enabled, `runs/<run_id>/logs/health.json`
 
+Single-writer invariant (normative):
+
+- `manifest.json` and `logs/health.json` are run-level index artifacts. The orchestrator (the
+  run-lock holder) MUST be the only component that persists outcomes into these files.
+- Stage implementations (including per-stage CLI commands) MUST NOT open, patch, or rewrite these
+  files directly. They MUST surface outcome tuples to the orchestrator (for example by returning an
+  outcome object or emitting via an injected `OutcomeSink` owned by the orchestrator).
+- Outcome writes to `manifest.json` and `logs/health.json` MUST be atomic replace operations (write
+  to a temp file in the same directory, then atomic rename), so the files are always readable JSON.
+
 **Exception:** Outcome recording MUST NOT be attempted when doing so would violate locking
 guarantees or is impossible due to storage I/O failure.
 

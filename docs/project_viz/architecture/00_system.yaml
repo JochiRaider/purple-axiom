@@ -2,9 +2,45 @@
 version: 1
 system:
   id: purple_ci_orchestrator
-  name: Purple Team CI Orchestrator
-  description: Runs purple-team exercises in CI, collects telemetry, normalizes to OCSF, evaluates detections, scores, and reports.
+  name: Purple Axiom
+  description: >-
+    One-shot, local-first pipeline that delivers repeatable purple-team exercises in CI.
+    Stages coordinate via the run bundle contract boundary to collect telemetry, normalize to OCSF,
+    evaluate detections and validation criteria, score, and report.
   evidence:
+    - file: 000_charter.md
+      section_heading: Summary
+      excerpt: This charter defines Purple Axiom’s mission and MVP outcomes.
     - file: 000_charter.md
       section_heading: Purpose
       excerpt: deliver repeatable purple team exercises in CI
+    - file: 020_architecture.md
+      section_heading: Overview
+      excerpt: Purple Axiom is a one-shot, local-first pipeline.
+    - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+      section_heading: Run bundle (coordination and evidence plane)
+      excerpt: Run bundle (`runs/<run_id>/`) is the filesystem contract boundary between stages.
+    - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+      section_heading: File-based stage coordination (normative)
+      excerpt: Stages MUST communicate by reading and writing contract-backed artifacts.
+    - file: 040_telemetry_pipeline.md
+      section_heading: Overview
+      excerpt: Defines the telemetry pipeline ETL spine and OTel collector roles.
+    - file: 020_architecture.md
+      section_heading: Normalization (OCSF)
+      excerpt: Normalization transforms raw events into OCSF and emits mapping coverage.
+    - file: 050_normalization_ocsf.md
+      section_heading: Key decisions
+      excerpt: OCSF is the canonical normalized event model and is pinned.
+    - file: 060_detection_sigma.md
+      section_heading: Overview
+      excerpt: Detection stage evaluates Sigma rules over normalized events.
+    - file: 035_validation_criteria.md
+      section_heading: Overview
+      excerpt: Validation criteria are evaluated against normalized events and run artifacts.
+    - file: 070_scoring_metrics.md
+      section_heading: Overview
+      excerpt: Scoring aggregates criteria and detections into metrics and thresholds.
+    - file: 080_reporting.md
+      section_heading: Reporting stage responsibilities
+      excerpt: The reporting stage transforms scoring outputs into actionable artifacts.

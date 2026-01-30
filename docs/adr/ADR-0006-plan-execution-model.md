@@ -15,7 +15,9 @@ Purple Axiom v0.1 enforces a strict 1:1 relationship between an action and a tar
 > selector matches multiple assets, the runner/provider MUST select deterministically using stable
 > ordering over `lab.assets[].asset_id` (UTF-8 byte order, no locale).
 
-Note: `target_asset_id` is the stable lab asset identifier (`lab.assets[].asset_id`) resolved from the run's pinned inventory snapshot (`logs/lab_inventory_snapshot.json`). v0.1 "single-target" selection is therefore deterministic over that snapshot, not dependent on live provider state.
+Note: `target_asset_id` is the stable lab asset identifier (`lab.assets[].asset_id`) resolved from
+the run's pinned inventory snapshot (`logs/lab_inventory_snapshot.json`). v0.1 "single-target"
+selection is therefore deterministic over that snapshot, not dependent on live provider state.
 
 This design makes it impossible to express scenarios like:
 
@@ -219,7 +221,8 @@ referenced below.
 
 **States (closed set):**
 
-- `node_pending` (node exists in the compiled graph but dependencies/conditions may not yet permit scheduling)
+- `node_pending` (node exists in the compiled graph but dependencies/conditions may not yet permit
+  scheduling)
 - `node_ready` (node is eligible to be scheduled under the plan's dependency/condition semantics)
 - `node_running` (runner has begun the node's action lifecycle)
 - `node_succeeded` (node reached terminal success)
@@ -232,7 +235,8 @@ referenced below.
 - `node_ready -> node_running` (runner starts the action lifecycle for the node)
 - `node_running -> node_succeeded`
 - `node_running -> node_failed`
-- `node_pending | node_ready -> node_skipped` (conditional edge not met, fail-fast policy, or explicit skip policy; reserved)
+- `node_pending | node_ready -> node_skipped` (conditional edge not met, fail-fast policy, or
+  explicit skip policy; reserved)
 
 **Observable signals (informative mapping):**
 
@@ -286,7 +290,8 @@ plan artifacts and their determinism, versioning, and safety requirements. Key r
   secrets or sensitive values).
 - Runtime execution state (node statuses, scheduling decisions) MUST be tracked without mutating the
   compiled plan artifacts (for example via the ground truth timeline and runner evidence, and
-  optionally a separate execution journal such as `plan/execution_log.jsonl` when defined/implemented).
+  optionally a separate execution journal such as `plan/execution_log.jsonl` when
+  defined/implemented).
 - The compiler MUST enforce `plan.max_nodes`, and the runner MUST clamp requested concurrency to
   `plan.max_concurrency` per the configuration reference.
 
@@ -319,13 +324,13 @@ For daemon or UI implementations:
 - [Reporting spec](../spec/080_reporting.md)
 - [ADR-0003: Redaction policy](ADR-0003-redaction-policy.md)
 - [ADR-0005: Stage outcomes and failure classification](ADR-0005-stage-outcomes-and-failure-classification.md)
-- [ADR-0007: State machines](ADR-0007-state-machines.md) 
+- [ADR-0007: State machines](ADR-0007-state-machines.md)
 - [Lab providers spec](../spec/015_lab_providers.md)
 
 ## Changelog
 
 | Date      | Change                                                                    |
 | --------- | ------------------------------------------------------------------------- |
-| 1/28/2026 | update                                                             |
+| 1/28/2026 | update                                                                    |
 | 1/19/2026 | Align ADR with v0.2 plan artifacts, determinism ordering, and safety caps |
 | 1/13/2026 | Initial draft                                                             |

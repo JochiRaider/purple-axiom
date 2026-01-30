@@ -21,7 +21,7 @@ actors:
 
 externals:
   - id: otel_collector_agent
-    name: OTel Collector Agent
+    name: OpenTelemetry Collector (agent tier)
     type: external_agent
     description: OpenTelemetry Collector agent tier deployed on target assets; exports telemetry upstream.
     trust_zone: lab_range
@@ -30,7 +30,7 @@ externals:
         section_heading: Canonical topology
         excerpt: Agent tier exists even if a gateway is later added.
   - id: otel_collector_gateway
-    name: OTel Collector Gateway
+    name: OpenTelemetry Collector (gateway tier)
     type: external_system
     description: Optional OpenTelemetry Collector gateway tier receiving OTLP from agents for buffering and fan-out.
     trust_zone: ci_environment
@@ -92,6 +92,24 @@ externals:
       - file: 050_normalization_ocsf.md
         section_heading: Mapping profiles
         excerpt: Normalization uses mapping profiles to map raw fields into OCSF.
+  - id: ocsf_schema
+    name: OCSF Schema
+    type: external_package
+    description: Canonical normalized event model used by normalization and downstream evaluation; pinned per release.
+    trust_zone: ci_environment
+    evidence:
+      - file: 050_normalization_ocsf.md
+        section_heading: Key decisions
+        excerpt: OCSF is the canonical normalized event model and is pinned.
+  - id: validation_criteria_packs
+    name: Validation Criteria Packs
+    type: external_package
+    description: Criteria packs selected/pinned per run to validate expected signals and drive scoring when enabled.
+    trust_zone: ci_environment
+    evidence:
+      - file: 035_validation_criteria.md
+        section_heading: Run bundle snapshot
+        excerpt: validation stage MUST snapshot the selected criteria pack into the run bundle.
   - id: contract_registry
     name: Contract Registry
     type: external_service
@@ -102,7 +120,7 @@ externals:
         section_heading: Publish and validation gate
         excerpt: "validate the snapshot (schema ... via the contract registry)."
   - id: target_osquery_agent
-    name: Target osquery agent
+    name: Target osquery Agent
     type: external_agent
     description: Optional osquery agent on target hosts producing telemetry.
     trust_zone: lab_range
@@ -137,6 +155,33 @@ externals:
       - file: ADR-0008-Threat-intelligence-integration-model.md
         section_heading: Interaction with run-bundle snapshots
         excerpt: 'inputs/threat_intel/manifest.json and inputs/threat_intel/indicators.jsonl'
+  - id: misp_instance
+    name: MISP
+    type: external_system
+    description: Optional threat intelligence source (v0.2+ extension point).
+    trust_zone: ci_environment
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Extension points
+        excerpt: 'Threat intelligence sources (v0.2+): MISP'
+  - id: caldera_server
+    name: MITRE Caldera
+    type: external_system
+    description: Optional scenario runner framework (v0.2+ extension point).
+    trust_zone: ci_environment
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Extension points
+        excerpt: Caldera agent-based execution
+  - id: ghosts_user_simulation
+    name: GHOSTS
+    type: external_system
+    description: Optional user simulation/noise generation framework (extension point).
+    trust_zone: ci_environment
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Extension points
+        excerpt: GHOSTS user simulation
 
 containers:
   - id: orchestrator_cli
@@ -279,6 +324,46 @@ datastores:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Run bundle (coordination and evidence plane)
         excerpt: Run bundle (`runs/<run_id>/`) is the filesystem contract boundary between stages.
+  - id: run_manifest
+    name: Run Manifest (manifest.json)
+    kind: filesystem_file
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - run_manifest
+    evidence:
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Decision
+        excerpt: The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json.
+      - file: contract_registry.json
+        section_heading: bindings
+        excerpt: manifest.json
+  - id: run_inputs_store
+    name: Run Inputs Store (inputs/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - pinned_inputs
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: materialize/pin operator inputs into `runs/<run_id>/inputs/`.
+      - file: 020_architecture.md
+        section_heading: Build-time input ingestion (normative, v0.1)
+        excerpt: 'must materialize pinned inputs: `inputs/range.yaml` and `inputs/scenario.yaml`.'
+  - id: run_logs_store
+    name: Run Logs Store (logs/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - run_logs
+      - deterministic_evidence_logs
+    evidence:
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Deterministic evidence logs allowlist (normative)
+        excerpt: logs/telemetry_validation.json
   - id: unredacted_quarantine
     name: Unredacted Quarantine
     kind: filesystem_dir
@@ -289,7 +374,7 @@ datastores:
     evidence:
       - file: 090_security_safety.md
         section_heading: Redaction and quarantine
-        excerpt: "Quarantine location: `runs/<run_id>/unredacted/` (default)."      
+        excerpt: "Quarantine location: `runs/<run_id>/unredacted/` (default)."
   - id: run_lock_dir
     name: Run lock directory (runs/.locks/)
     kind: filesystem_dir
@@ -345,7 +430,7 @@ datastores:
     evidence:
       - file: 085_golden_datasets.md
         section_heading: Location
-        excerpt: exports/datasets/<dataset_id>/<dataset_version>/        
+        excerpt: exports/datasets/<dataset_id>/<dataset_version>/
   - id: raw_parquet_store
     name: Raw Parquet Store
     kind: filesystem_dir
@@ -410,9 +495,9 @@ datastores:
       - report
       - thresholds
     evidence:
-      - file: 105_ci_operational_readiness.md
-        section_heading: CI contract
-        excerpt: '`runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json` MUST be'
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: report/report.json and report/thresholds.json
   - id: integrity_artifacts
     name: Integrity Artifacts
     kind: filesystem_dir

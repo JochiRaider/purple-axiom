@@ -86,9 +86,9 @@ Requirements (v0.2+; normative when used):
 
 - If `normalized/ocsf_events/` (or `normalized/ocsf_events.jsonl`) and
   `normalized/mapping_profile_snapshot.json` exist in the candidate run bundle, and the snapshot is
-  compatible with the run's effective version control for normalization (at minimum:
-  `ocsf_version` and `mapping_profile_sha256` match), `replay` MUST begin at `detection` (skipping
-  `normalization` and `validation`).
+  compatible with the run's effective version control for normalization (at minimum: `ocsf_version`
+  and `mapping_profile_sha256` match), `replay` MUST begin at `detection` (skipping `normalization`
+  and `validation`).
 - If compatibility cannot be established (for example, `normalized/mapping_profile_snapshot.json` is
   missing), the orchestrator MUST NOT assume the normalized store is current. It MUST either:
   - execute `normalization` from `raw_parquet/**` (if present), or
@@ -200,7 +200,7 @@ small and useful for debugging):
 - `normalized/mapping_coverage.json` -> `run/normalized/mapping_coverage.json`
 - `normalized/mapping_profile_snapshot.json` -> `run/normalized/mapping_profile_snapshot.json`
   - Strongly RECOMMENDED for `replay` fast-path compatibility checks. If absent, consumers MUST
-    treat the normalized store as lacking version-control provenance for short-circuiting. 
+    treat the normalized store as lacking version-control provenance for short-circuiting.
 - `logs/telemetry_validation.json` -> `run/logs/telemetry_validation.json`
 - `inputs/telemetry_baseline_profile.json` -> `run/inputs/telemetry_baseline_profile.json`
 - `security/redaction_policy_snapshot.json` -> `run/security/redaction_policy_snapshot.json`

@@ -16,7 +16,9 @@ relationships:
   - from: operator
     to: operator_interface
     label: use web UI for manual triggering and artifact browsing
-    views: [context, ui]
+    views:
+      - context
+      - ui
     interaction: request_response
     protocol: unknown
     auth: unknown
@@ -30,7 +32,8 @@ relationships:
   - from: operator_interface
     to: audit_log_store
     label: append UI audit events
-    views: [ui]
+    views:
+      - ui
     interaction: file_drop
     protocol: filesystem
     auth: unknown
@@ -41,12 +44,12 @@ relationships:
     evidence:
       - file: 115_operator_interface.md
         section_heading: Audit
-        excerpt: 'UI audit events are appended to logs/ui_audit.jsonl.'
+        excerpt: UI audit events are appended to logs/ui_audit.jsonl.
   - from: matrix_runner
     to: orchestrator_cli
     label: run orchestrator in CI
     interaction: request_response
-    protocol: unknown
+    protocol: local_process
     auth: unknown
     data: []
     frequency: unknown
@@ -70,20 +73,98 @@ relationships:
         section_heading: Orchestrator (execution plane)
         excerpt: atomic creation of `runs/.locks/<run_id>.lock`.
   - from: orchestrator_cli
-    to: run_bundle_store
-    label: create and mutate run bundle
+    to: run_inputs_store
+    label: materialize pinned inputs
     interaction: file_drop
     protocol: filesystem
     auth: unknown
     data:
-      - runs/<run_id>/**
-      - runs/<run_id>/manifest.json
+      - inputs/range.yaml
+      - inputs/scenario.yaml
     frequency: unknown
     reliability: unknown
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Run bundle (coordination and evidence plane)
-        excerpt: The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate for all core stages.
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: materialize/pin operator inputs into `runs/<run_id>/inputs/`.
+      - file: 020_architecture.md
+        section_heading: Build-time input ingestion (normative, v0.1)
+        excerpt: 'must materialize pinned inputs: `inputs/range.yaml` and `inputs/scenario.yaml`.'
+  - from: orchestrator_cli
+    to: staging_area
+    label: stage outputs under .staging prior to publish
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - .staging/<stage_id>/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 000_charter.md
+        section_heading: Guiding principles
+        excerpt: Stages write to a staging location (`.staging/`).
+  - from: orchestrator_cli
+    to: run_bundle_store
+    label: publish staged outputs by atomic rename
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 000_charter.md
+        section_heading: Guiding principles
+        excerpt: publish them by atomic rename after validation.
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+  - from: orchestrator_cli
+    to: run_logs_store
+    label: emit contract validation report on publish-gate failure
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - logs/contract_validation/<stage_id>.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Staging then atomic publish
+        excerpt: 'emit a deterministic contract validation report at:'
+      - file: teardown.yaml
+        section_heading: teardown
+        excerpt: logs/contract_validation/<stage_id>.json
+  - from: orchestrator_cli
+    to: staging_area
+    label: remove leftover stage staging directories during finalization
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data:
+      - .staging/<stage_id>/
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Staging then atomic publish
+        excerpt: Remove leftover stage staging directories during finalization.
+  - from: orchestrator_cli
+    to: run_manifest
+    label: record stage outcomes in manifest
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - manifest.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Decision
+        excerpt: The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json.
   - from: orchestrator_cli
     to: lab_provider
     label: invoke stage
@@ -219,7 +300,7 @@ relationships:
         excerpt: All operator-facing exports MUST run through the redaction pipeline.
       - file: 020_architecture.md
         section_heading: Range lifecycle verbs
-        excerpt: 'export: package a run bundle for sharing.'        
+        excerpt: 'export: package a run bundle for sharing.'
   - from: lab_provider
     to: lab_provider_sources
     label: import inventory
@@ -248,9 +329,9 @@ relationships:
     evidence:
       - file: 015_lab_providers.md
         section_heading: Publish and validation gate
-        excerpt: "validate the snapshot (schema ... via the contract registry)."        
+        excerpt: validate the snapshot (schema ... via the contract registry).
   - from: lab_provider
-    to: run_bundle_store
+    to: run_logs_store
     label: publish inventory snapshot
     interaction: file_drop
     protocol: filesystem
@@ -321,6 +402,8 @@ relationships:
     data:
       - ground_truth.jsonl
       - runner/actions/<action_id>/**
+      - runner/actions/<action_id>/cleanup_verification.json
+      - runner/actions/<action_id>/state_reconciliation_report.json
     frequency: unknown
     reliability: unknown
     evidence:
@@ -329,7 +412,22 @@ relationships:
         excerpt: '`ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence'
       - file: 032_atomic_red_team_executor_integration.md
         section_heading: Contracted runner artifacts (normative)
-        excerpt: "Action-scoped runner evidence: `runs/<run_id>/runner/actions/<action_id>/`."
+        excerpt: 'Action-scoped runner evidence: `runs/<run_id>/runner/actions/<action_id>/`.'
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Cleanup verification policy (normative)
+        excerpt: write `runner/actions/<action_id>/cleanup_verification.json`.
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Runner stage
+        excerpt: write `runner/actions/<action_id>/state_reconciliation_report.json`.
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Runner stage
+        excerpt: Ground truth MUST record lifecycle phase outcomes ... including a `teardown` phase.
+      - file: contract_registry.json
+        section_heading: bindings
+        excerpt: runner/actions/*/cleanup_verification.json
+      - file: contract_registry.json
+        section_heading: bindings
+        excerpt: runner/actions/*/state_reconciliation_report.json
   - from: runner
     to: telemetry
     label: provide ground truth for collection window
@@ -374,9 +472,9 @@ relationships:
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: "`raw_parquet/**`, `raw/**` (when raw preservation enabled)"        
+        excerpt: '`raw_parquet/**`, `raw/**` (when raw preservation enabled)'
   - from: telemetry
-    to: run_bundle_store
+    to: run_logs_store
     label: write telemetry validation evidence
     interaction: file_drop
     protocol: filesystem
@@ -410,7 +508,7 @@ relationships:
     to: otel_collector_gateway
     label: deliver telemetry to gateway
     interaction: async_message
-    protocol: OTLP
+    protocol: OTLP (gRPC 4317 / HTTP 4318)
     auth: unknown
     data:
       - OTLP telemetry
@@ -420,10 +518,14 @@ relationships:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Telemetry plane
         excerpt: gateway tier receives OTLP from agents
+      - file: 115_operator_interface.md
+        section_heading: Configuration surface (v0.2)
+        excerpt: 'otel_gateway ... ports: grpc: 4317 http: 4318.'
   - from: normalization
     to: mapping_profile_pack
     label: load mapping profiles
-    views: [pipeline]
+    views:
+      - pipeline
     interaction: batch
     protocol: filesystem
     auth: unknown
@@ -437,7 +539,7 @@ relationships:
         excerpt: Normalization uses mapping profiles to map raw fields into OCSF.
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`raw_parquet/**`, mapping profiles'  
+        excerpt: '`raw_parquet/**`, mapping profiles'
   - from: normalization
     to: normalized_ocsf_store
     label: write normalized OCSF events
@@ -503,7 +605,7 @@ relationships:
         excerpt: '`criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`'
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`criteria/results.jsonl`, `criteria/summary.json`'      
+        excerpt: '`criteria/results.jsonl`, `criteria/summary.json`'
       - file: 035_validation_criteria.md
         section_heading: Run bundle snapshot
         excerpt: validation stage MUST snapshot the selected criteria pack into the run bundle.
@@ -552,7 +654,8 @@ relationships:
   - from: detection
     to: sigma_to_ocsf_bridge_adapter
     label: compile/evaluate Sigma via bridge adapter
-    views: [pipeline]
+    views:
+      - pipeline
     interaction: request_response
     protocol: local_process
     auth: unknown
@@ -565,15 +668,28 @@ relationships:
         excerpt: '[detection] compile/evaluate sigma via bridge'
       - file: 060_detection_sigma.md
         section_heading: Overview
-        excerpt: Rules are evaluated against normalized OCSF events (not raw logs) using the Sigma-to-OCSF Bridge.        
+        excerpt: Rules are evaluated against normalized OCSF events (not raw logs) using the Sigma-to-OCSF Bridge.
   - from: detection
     to: run_bundle_store
-    label: publish bridge artifacts and detections
+    label: publish bridge artifacts
     interaction: file_drop
     protocol: filesystem
     auth: unknown
     data:
       - bridge/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`bridge/**`, `detections/detections.jsonl`'
+  - from: detection
+    to: detections_store
+    label: publish detections
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
       - detections/detections.jsonl
     frequency: unknown
     reliability: unknown
@@ -581,6 +697,9 @@ relationships:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
         excerpt: '`bridge/**`, `detections/detections.jsonl`'
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: Detections are stored as JSONL under `detections/`.        
   - from: detection
     to: scoring
     label: provide detections
@@ -596,7 +715,7 @@ relationships:
         section_heading: Minimum v0.1 IO boundaries (stage-local)
         excerpt: '`ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`'
   - from: scoring
-    to: run_bundle_store
+    to: scoring_store
     label: publish scoring summary
     interaction: file_drop
     protocol: filesystem
@@ -653,7 +772,7 @@ relationships:
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[reporting] (optional regression) materialize inputs/baseline/**'        
+        excerpt: '[reporting] (optional regression) materialize inputs/baseline/**'
   - from: reporting
     to: report_artifacts
     label: publish report artifacts
@@ -700,7 +819,7 @@ relationships:
     evidence:
       - file: 020_architecture.md
         section_heading: Signing
-        excerpt: "produces integrity artifacts: `security/checksums.txt` and `security/signature.*`."
+        excerpt: 'produces integrity artifacts: `security/checksums.txt` and `security/signature.*`.'
       - file: 120_config_reference.md
         section_heading: signing
         excerpt: 'algorithm: "ed25519"'

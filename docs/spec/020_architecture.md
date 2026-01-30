@@ -172,8 +172,8 @@ Verb definitions (v0.1):
   - Preconditions: the candidate run bundle MUST already contain `ground_truth.jsonl` and either:
     - `raw_parquet/**` (full replay; `normalization` and `validation` are executed), OR
     - a normalized event store (normalized-input replay; v0.2+):
-      - `normalized/ocsf_events/` (Parquet dataset; MUST include `normalized/ocsf_events/_schema.json`),
-        OR `normalized/ocsf_events.jsonl`, AND
+      - `normalized/ocsf_events/` (Parquet dataset; MUST include
+        `normalized/ocsf_events/_schema.json`), OR `normalized/ocsf_events.jsonl`, AND
       - `normalized/mapping_profile_snapshot.json`.
   - Normalized-input replay fast path (v0.2+; normative when used):
     - If a normalized event store exists and its normalization provenance matches the current
@@ -191,8 +191,8 @@ Verb definitions (v0.1):
         `fail_mode="warn_and_skip"` and `reason_code="normalized_store_reused"`.
       - If the match criteria fail and `raw_parquet/**` is absent, `replay` MUST fail closed with
         `reason_code="normalized_store_incompatible"`.
-  - Input immutability (normative): `replay` MUST treat `ground_truth.jsonl`, `raw_parquet/**`
-    (when present), and `normalized/**` (when present) as read-only.
+  - Input immutability (normative): `replay` MUST treat `ground_truth.jsonl`, `raw_parquet/**` (when
+    present), and `normalized/**` (when present) as read-only.
   - MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or
     `raw_parquet/**` except for operability logs under `logs/**`.
   - When regression comparison is enabled, `replay` MUST treat any pre-existing artifacts under
@@ -583,6 +583,25 @@ across v0.1 stages and extension points. These patterns exist to preserve: (1) d
 contract-backed run bundles, (2) crash-safe reruns/replay behavior, and (3) safety-by-default
 operation in a lab-isolated environment.
 
+### Stage cores and CLI wrappers (v0.1; guidance)
+
+To preserve the optional evolution path to a "local multi-process" stage-per-command mode (see
+[ADR-0004]), implementations SHOULD structure each stage as:
+
+- a ports-injected **core** entrypoint (library function/module) that contains the stage logic and
+  depends only on port interfaces and explicit parameters, and
+- an optional **stage CLI wrapper** that performs argument parsing + composition root wiring and
+  then calls the same core.
+
+Requirements (normative when a stage CLI wrapper exists):
+
+- A stage CLI wrapper MUST NOT re-implement stage logic; it MUST delegate to the stage core.
+- The orchestrator MAY call stage cores directly in-process (v0.1 baseline) and MAY invoke stage CLI
+  wrappers in a future multi-process mode without changing stage semantics.
+- Stage outcome persistence remains orchestrator-owned: stage cores and stage CLI wrappers MUST NOT
+  write `manifest.json` or `logs/health.json` directly; they MUST emit outcomes via `OutcomeSink`
+  (see [ADR-0005]).
+
 ### Cross-cutting ports (interfaces)
 
 Implementations MAY choose any runtime framework, but the orchestrator and each stage MUST be
@@ -640,8 +659,10 @@ Finalize semantics (normative):
   `runs/<run_id>/.staging/<stage_id>/` before returning.
 - Publish-scratch hygiene: once a run is in a terminal state (success/partial/failed),
   `runs/<run_id>/.staging/**` MUST be absent (or empty).
-- After a successful `finalize()`, the stage MUST record a terminal stage outcome in `manifest.json`
-  (and in `logs/health.json` when enabled) before control returns to the orchestrator stage loop.
+- After a successful `finalize()`, the stage core MUST emit a terminal stage outcome via
+  `OutcomeSink` before control returns to the orchestrator stage loop.
+  - Persistence authority: the `OutcomeSink` implementation is orchestrator-owned and is responsible
+    for writing `manifest.json` and, when enabled, `logs/health.json`.
 
 #### Port: `ContractValidator`
 
@@ -666,6 +687,17 @@ Required operations (minimum):
 
 - `record_stage_outcome(stage, status, fail_mode, reason_code?: string|null, details?: object|null) -> void`
 - `record_substage_outcome(stage, status, fail_mode, reason_code?: string|null, details?: object|null) -> void`
+
+Persistence semantics (normative):
+
+- `OutcomeSink` MUST be implemented and owned by the orchestrator (composition root) and MUST be the
+  only component that persists outcomes into `runs/<run_id>/manifest.json` and, when enabled,
+  `runs/<run_id>/logs/health.json`.
+- Stage core logic and stage CLI wrappers MUST NOT open, patch, or rewrite `manifest.json` or
+  `logs/health.json` directly; they MUST emit outcomes only through `OutcomeSink`.
+- Calls to `record_stage_outcome` MUST be durable: when the call returns successfully, the
+  corresponding outcome tuple MUST be present in `manifest.json` and, when enabled, in
+  `logs/health.json`.
 
 Required ordering behavior (normative):
 

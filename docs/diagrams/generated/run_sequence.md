@@ -19,7 +19,7 @@ sequenceDiagram
   participant signing as "Signing Stage"
   operator->>orchestrator_cli: 1. invoke simulate (full pipeline)
   orchestrator_cli->>run_lock_dir: 2. acquire exclusive run lock
-  orchestrator_cli->>run_bundle_store: 3. write manifest skeleton and pin inputs into runs/&lt;run_id&gt;/inputs/
+  orchestrator_cli->>run_bundle_store: 3. write manifest skeleton and pin inputs into runs <run_id>/inputs/
   orchestrator_cli->>lab_provider: 4. run lab_provider and record stage outcome
   orchestrator_cli->>runner: 5. run runner to execute scenario actions
   orchestrator_cli->>telemetry: 6. run telemetry to publish raw_parquet/** and telemetry validation

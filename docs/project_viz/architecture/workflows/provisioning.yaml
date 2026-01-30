@@ -1,0 +1,73 @@
+# file: docs/project_viz/architecture/workflows/provisioning.yaml
+workflows:
+  - id: provisioning
+    name: Provisioning and environment bring-up
+    scope: provisioning
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke build/simulate to provision a run
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Overview
+            excerpt: Operators and CI drive the orchestrator via a small set of verbs.
+      - n: 2
+        from: orchestrator_cli
+        to: run_lock_dir
+        message: acquire exclusive run lock
+        data:
+          - runs/.locks/<run_id>.lock
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Orchestrator (execution plane)
+            excerpt: atomic creation of `runs/.locks/<run_id>.lock`.
+      - n: 3
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: create runs/<run_id>/ and write initial manifest skeleton
+        data:
+          - runs/<run_id>/
+          - runs/<run_id>/manifest.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: create runs/<run_id>/ (staging allowed)
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: write initial manifest.json skeleton
+      - n: 4
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: materialize pinned operator inputs into inputs/
+        data:
+          - inputs/range.yaml
+          - inputs/scenario.yaml
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Build-time input ingestion (normative, v0.1)
+            excerpt: "must materialize pinned inputs: `inputs/range.yaml` and `inputs/scenario.yaml`."
+      - n: 5
+        from: orchestrator_cli
+        to: lab_provider
+        message: execute lab_provider to snapshot lab inventory
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'build: Execute `lab_provider` stage only.'
+      - n: 6
+        from: lab_provider
+        to: run_bundle_store
+        message: publish deterministic inventory snapshot evidence
+        data:
+          - logs/lab_inventory_snapshot.json
+        evidence:
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Deterministic evidence logs allowlist (normative)
+            excerpt: logs/lab_inventory_snapshot.json
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'build: Execute `lab_provider` stage only.'

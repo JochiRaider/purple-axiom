@@ -1,0 +1,19 @@
+# file: docs/project_viz/architecture/workflows/range_destroy.yaml
+workflows:
+  - id: range_destroy
+    name: Destroy (range teardown)
+    scope: provisioning
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke destroy to tear down range resources
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'destroy: tear down range resources.'
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'destroy: tear down range resources.'

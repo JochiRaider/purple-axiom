@@ -1,0 +1,30 @@
+# file: docs/project_viz/architecture/10_trust_zones.yaml
+trust_zones:
+  - id: developer_workstation
+    name: Developer Workstation
+    description: Local machine used by an operator to run the CLI.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Overview
+        excerpt: Operators and CI drive the orchestrator via a small set of verbs.
+  - id: ci_environment
+    name: CI Environment
+    description: CI runner executing the orchestrator pipeline.
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: An external harness (CI workflow, Make target, etc.) that runs purple-axiom.
+  - id: lab_range
+    name: Lab Range
+    description: Lab environment hosting target assets and telemetry collectors.
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Scope
+        excerpt: Support multiple lab providers by normalizing inventory into a canonical snapshot.
+  - id: local_filesystem
+    name: Local Filesystem
+    description: Workspace root containing run bundles and caches.
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: runs/<run_id>/ is the root of a run bundle on disk.

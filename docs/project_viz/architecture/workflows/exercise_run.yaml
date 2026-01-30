@@ -1,0 +1,153 @@
+# file: docs/project_viz/architecture/workflows/exercise_run.yaml
+workflows:
+  - id: exercise_run
+    name: Exercise run (happy path)
+    scope: end_to_end
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke simulate (full pipeline)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: "simulate: full pipeline (end-to-end)."
+      - n: 2
+        from: orchestrator_cli
+        to: run_lock_dir
+        message: acquire exclusive run lock
+        data:
+          - runs/.locks/<run_id>.lock
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Orchestrator (execution plane)
+            excerpt: atomic creation of `runs/.locks/<run_id>.lock`.
+      - n: 3
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: write manifest skeleton and pin inputs into runs/<run_id>/inputs/
+        data:
+          - runs/<run_id>/manifest.json
+          - inputs/range.yaml
+          - inputs/scenario.yaml
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: write initial manifest.json skeleton
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: materialize/pin operator inputs into `runs/<run_id>/inputs/`
+      - n: 4
+        from: orchestrator_cli
+        to: lab_provider
+        message: run lab_provider and record stage outcome
+        data:
+          - logs/lab_inventory_snapshot.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: '[lab_provider] resolve inventory snapshot'
+      - n: 5
+        from: orchestrator_cli
+        to: runner
+        message: run runner to execute scenario actions
+        data:
+          - ground_truth.jsonl
+          - runner/actions/<action_id>/**
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: '[runner] execute scenario actions -> write ground_truth.jsonl'
+      - n: 6
+        from: orchestrator_cli
+        to: telemetry
+        message: run telemetry to publish raw_parquet/** and telemetry validation
+        data:
+          - raw_parquet/**
+          - logs/telemetry_validation.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: publish raw_parquet/** (and raw/** when enabled)
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Deterministic evidence logs allowlist (normative)
+            excerpt: logs/telemetry_validation.json
+      - n: 7
+        from: orchestrator_cli
+        to: normalization
+        message: normalize raw_parquet/** into normalized/**
+        data:
+          - normalized/**
+          - normalized/mapping_coverage.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: '[normalization] map raw_parquet/** -> publish normalized/**'
+      - n: 8
+        from: orchestrator_cli
+        to: validation
+        message: evaluate criteria and publish criteria/results.jsonl
+        data:
+          - criteria/results.jsonl
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: publish criteria/manifest.json + criteria/criteria.jsonl + criteria/results.jsonl
+      - n: 9
+        from: orchestrator_cli
+        to: detection
+        message: evaluate Sigma and publish detections/detections.jsonl
+        data:
+          - bridge/**
+          - detections/detections.jsonl
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: publish bridge/** + detections/detections.jsonl
+      - n: 10
+        from: orchestrator_cli
+        to: scoring
+        message: compute scoring/summary.json
+        data:
+          - scoring/summary.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: publish scoring/summary.json
+      - n: 11
+        from: orchestrator_cli
+        to: reporting
+        message: generate report/report.json and report/thresholds.json
+        data:
+          - report/report.json
+          - report/thresholds.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Minimum v0.1 IO boundaries (stage-local)
+            excerpt: report/report.json and report/thresholds.json
+      - n: 12
+        from: matrix_runner
+        to: report_artifacts
+        message: CI reads thresholds.json for pass/fail gating
+        data:
+          - report/thresholds.json
+        evidence:
+          - file: 105_ci_operational_readiness.md
+            section_heading: CI contract
+            excerpt: If `runs/<run_id>/report/thresholds.json` exists and validates against its schema.
+      - n: 13
+        from: orchestrator_cli
+        to: signing
+        message: (optional) sign run artifacts and publish security/**
+        data:
+          - security/checksums.txt
+          - security/signature.ed25519
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: '[signing] (optional) sign artifacts -> publish security/**'
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: "simulate: full pipeline (end-to-end)."

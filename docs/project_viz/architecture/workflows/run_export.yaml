@@ -1,0 +1,31 @@
+# file: docs/project_viz/architecture/workflows/run_export.yaml
+workflows:
+  - id: run_export
+    name: Export (redaction-safe bundle)
+    scope: export
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke export to package a run bundle for sharing
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'export: package a run bundle for sharing.'
+      - n: 2
+        from: orchestrator_cli
+        to: audit_redactor
+        message: redact operator-facing export
+        data: []
+        evidence:
+          - file: ADR-0003-redaction-policy.md
+            section_heading: Decision
+            excerpt: All operator-facing exports MUST run through the redaction pipeline.
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Policy
+            excerpt: Exports MUST exclude `unredacted/**` by default.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'export: package a run bundle for sharing.'

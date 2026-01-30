@@ -1,0 +1,10 @@
+# file: docs/project_viz/architecture/00_system.yaml
+version: 1
+system:
+  id: purple_ci_orchestrator
+  name: Purple Team CI Orchestrator
+  description: Runs purple-team exercises in CI, collects telemetry, normalizes to OCSF, evaluates detections, scores, and reports.
+  evidence:
+    - file: 000_charter.md
+      section_heading: Purpose
+      excerpt: deliver repeatable purple team exercises in CI

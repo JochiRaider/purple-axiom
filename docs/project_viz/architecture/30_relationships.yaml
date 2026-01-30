@@ -1,0 +1,724 @@
+# file: docs/project_viz/architecture/30_relationships.yaml
+relationships:
+  - from: operator
+    to: orchestrator_cli
+    label: invoke lifecycle verbs
+    interaction: request_response
+    protocol: unknown
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Overview
+        excerpt: Operators and CI drive the orchestrator via a small set of verbs.
+  - from: operator
+    to: operator_interface
+    label: use web UI for manual triggering and artifact browsing
+    views: [context, ui]
+    interaction: request_response
+    protocol: unknown
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Goals
+        excerpt: Provide a web UI for manual triggering and artifact browsing.
+  - from: operator_interface
+    to: audit_log_store
+    label: append UI audit events
+    views: [ui]
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - logs/ui_audit.jsonl
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Audit
+        excerpt: 'UI audit events are appended to logs/ui_audit.jsonl.'
+  - from: matrix_runner
+    to: orchestrator_cli
+    label: run orchestrator in CI
+    interaction: request_response
+    protocol: unknown
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: An external harness (CI workflow, Make target, etc.) that runs purple-axiom.
+  - from: orchestrator_cli
+    to: run_lock_dir
+    label: acquire run lock
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - runs/.locks/<run_id>.lock
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Orchestrator (execution plane)
+        excerpt: atomic creation of `runs/.locks/<run_id>.lock`.
+  - from: orchestrator_cli
+    to: run_bundle_store
+    label: create and mutate run bundle
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - runs/<run_id>/**
+      - runs/<run_id>/manifest.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Run bundle (coordination and evidence plane)
+        excerpt: The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate for all core stages.
+  - from: orchestrator_cli
+    to: lab_provider
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Orchestrator (execution plane)
+        excerpt: execute the core pipeline stages in a single process
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'build: Execute `lab_provider` stage only.'
+  - from: orchestrator_cli
+    to: runner
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[runner] execute scenario actions -> write ground_truth.jsonl'
+  - from: orchestrator_cli
+    to: telemetry
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[telemetry] ensure collection window captured'
+  - from: orchestrator_cli
+    to: normalization
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[normalization] map raw_parquet/** -> publish normalized/**'
+  - from: orchestrator_cli
+    to: validation
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[validation] snapshot criteria pack + evaluate criteria'
+  - from: orchestrator_cli
+    to: detection
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[detection] compile/evaluate sigma via bridge'
+  - from: orchestrator_cli
+    to: scoring
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[scoring] join ground truth, criteria, detections'
+  - from: orchestrator_cli
+    to: reporting
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[reporting] (optional regression) materialize inputs/baseline/**'
+  - from: orchestrator_cli
+    to: signing
+    label: invoke stage
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[signing] (optional) sign artifacts -> publish security/**'
+  - from: orchestrator_cli
+    to: audit_redactor
+    label: export redaction pipeline
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0003-redaction-policy.md
+        section_heading: Decision
+        excerpt: All operator-facing exports MUST run through the redaction pipeline.
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'export: package a run bundle for sharing.'        
+  - from: lab_provider
+    to: lab_provider_sources
+    label: import inventory
+    interaction: batch
+    protocol: unknown
+    auth: unknown
+    data:
+      - ludus export JSON
+      - terraform output
+      - vagrant export
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Lab provider resolvers (v0.1)
+        excerpt: 'terraform: import range inventory from Terraform output.'
+  - from: lab_provider
+    to: contract_registry
+    label: validate inventory snapshot against contracts
+    interaction: batch
+    protocol: unknown
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: "validate the snapshot (schema ... via the contract registry)."        
+  - from: lab_provider
+    to: run_bundle_store
+    label: publish inventory snapshot
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - logs/lab_inventory_snapshot.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Deterministic evidence logs allowlist (normative)
+        excerpt: logs/lab_inventory_snapshot.json
+      - file: 020_architecture.md
+        section_heading: Lab provider (inventory)
+        excerpt: resolves and snapshots lab inventory for a run.
+  - from: lab_provider
+    to: runner
+    label: provide inventory snapshot
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - inventory snapshot
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Inventory snapshot consumption
+        excerpt: inventory snapshot produced by the lab provider stage
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: inventory snapshot, scenario plan
+  - from: runner
+    to: atomic_red_team
+    label: execute Atomic Red Team actions
+    interaction: request_response
+    protocol: unknown
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Runner (adversary emulation)
+        excerpt: v0.1 uses Atomic Red Team
+  - from: runner
+    to: invoke_atomic_red_team
+    label: invoke executor module
+    interaction: request_response
+    protocol: PowerShell
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Invoke-AtomicRedTeam remote mapping
+        excerpt: execute `Invoke-AtomicTest` within that session.
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Definitions
+        excerpt: 'Invoke-AtomicRedTeam module: pinned exact version'
+  - from: runner
+    to: run_bundle_store
+    label: write ground truth and runner evidence
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - ground_truth.jsonl
+      - runner/actions/<action_id>/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence'
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Contracted runner artifacts (normative)
+        excerpt: "Action-scoped runner evidence: `runs/<run_id>/runner/actions/<action_id>/`."
+  - from: runner
+    to: telemetry
+    label: provide ground truth for collection window
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - ground_truth.jsonl
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`ground_truth.jsonl` lifecycle timestamps'
+  - from: telemetry
+    to: raw_parquet_store
+    label: write raw telemetry Parquet
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - raw_parquet/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Telemetry (collection and validation)
+        excerpt: 'Write raw event store: `raw_parquet/**` (Parquet).'
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: '`raw_parquet/` is stored as a Parquet dataset.'
+  - from: telemetry
+    to: raw_artifacts_store
+    label: optionally preserve raw artifacts
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - raw/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: "`raw_parquet/**`, `raw/**` (when raw preservation enabled)"        
+  - from: telemetry
+    to: run_bundle_store
+    label: write telemetry validation evidence
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - logs/telemetry_validation.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Deterministic evidence logs allowlist (normative)
+        excerpt: logs/telemetry_validation.json
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: logs/telemetry_validation.json
+  - from: otel_collector_agent
+    to: otlp_stream
+    label: export telemetry
+    interaction: async_message
+    protocol: OTLP
+    auth: unknown
+    data:
+      - OTLP telemetry
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Telemetry plane
+        excerpt: OTLP MAY be used between Collector tiers
+  - from: otlp_stream
+    to: otel_collector_gateway
+    label: deliver telemetry to gateway
+    interaction: async_message
+    protocol: OTLP
+    auth: unknown
+    data:
+      - OTLP telemetry
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Telemetry plane
+        excerpt: gateway tier receives OTLP from agents
+  - from: normalization
+    to: mapping_profile_pack
+    label: load mapping profiles
+    views: [pipeline]
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data:
+      - mapping profiles
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 050_normalization_ocsf.md
+        section_heading: Mapping profiles
+        excerpt: Normalization uses mapping profiles to map raw fields into OCSF.
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`raw_parquet/**`, mapping profiles'  
+  - from: normalization
+    to: normalized_ocsf_store
+    label: write normalized OCSF events
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - normalized/ocsf_events/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: 'Normalized store: `normalized/ocsf_events/` (Parquet).'
+  - from: normalization
+    to: run_bundle_store
+    label: write mapping coverage and profile snapshot
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - normalized/mapping_coverage.json
+      - normalized/mapping_profile_snapshot.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Normalization (OCSF)
+        excerpt: 'Emit mapping coverage: `normalized/mapping_coverage.json`.'
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`normalized/mapping_profile_snapshot.json`'
+  - from: normalization
+    to: validation
+    label: provide normalized events
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - normalized/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`ground_truth.jsonl`, `normalized/**`, criteria pack snapshot'
+  - from: validation
+    to: run_bundle_store
+    label: publish criteria snapshot and results
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - criteria/manifest.json
+      - criteria/criteria.jsonl
+      - criteria/results.jsonl
+      - criteria/summary.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`'
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`criteria/results.jsonl`, `criteria/summary.json`'      
+      - file: 035_validation_criteria.md
+        section_heading: Run bundle snapshot
+        excerpt: validation stage MUST snapshot the selected criteria pack into the run bundle.
+  - from: validation
+    to: scoring
+    label: provide criteria results
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - criteria/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`'
+  - from: detection
+    to: sigma_rule_packs
+    label: load Sigma rule packs
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data:
+      - Sigma rule packs
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: Sigma rule packs
+  - from: detection
+    to: sigma_to_ocsf_mapping_packs
+    label: resolve mapping pack
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data:
+      - mapping pack
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 065_sigma_to_ocsf_bridge.md
+        section_heading: Mapping packs
+        excerpt: bridge MUST resolve a mapping pack
+  - from: detection
+    to: sigma_to_ocsf_bridge_adapter
+    label: compile/evaluate Sigma via bridge adapter
+    views: [pipeline]
+    interaction: request_response
+    protocol: local_process
+    auth: unknown
+    data: []
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[detection] compile/evaluate sigma via bridge'
+      - file: 060_detection_sigma.md
+        section_heading: Overview
+        excerpt: Rules are evaluated against normalized OCSF events (not raw logs) using the Sigma-to-OCSF Bridge.        
+  - from: detection
+    to: run_bundle_store
+    label: publish bridge artifacts and detections
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - bridge/**
+      - detections/detections.jsonl
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`bridge/**`, `detections/detections.jsonl`'
+  - from: detection
+    to: scoring
+    label: provide detections
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - detections/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`'
+  - from: scoring
+    to: run_bundle_store
+    label: publish scoring summary
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - scoring/summary.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`scoring/summary.json`'
+      - file: 070_scoring_metrics.md
+        section_heading: Threshold evaluation
+        excerpt: metrics emitted in `scoring/summary.json`.
+  - from: scoring
+    to: reporting
+    label: provide scoring outputs
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - scoring/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`scoring/**`, `criteria/**`, `detections/**`, manifest'
+  - from: reporting
+    to: baseline_library
+    label: (optional regression) read baseline packages
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data:
+      - exports/baselines/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Summary
+        excerpt: stores baseline datasets for detections, scoring, and reporting.
+  - from: reporting
+    to: run_bundle_store
+    label: (optional regression) materialize baseline inputs
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - inputs/baseline/**
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: '[reporting] (optional regression) materialize inputs/baseline/**'        
+  - from: reporting
+    to: report_artifacts
+    label: publish report artifacts
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - report/report.json
+      - report/thresholds.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: report/report.json and report/thresholds.json
+      - file: 105_ci_operational_readiness.md
+        section_heading: CI contract
+        excerpt: '`runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json` MUST be'
+  - from: matrix_runner
+    to: report_artifacts
+    label: read report thresholds for CI gating
+    interaction: batch
+    protocol: filesystem
+    auth: unknown
+    data:
+      - report/thresholds.json
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: CI contract
+        excerpt: If `runs/<run_id>/report/thresholds.json` exists and validates against its schema.
+  - from: signing
+    to: integrity_artifacts
+    label: publish checksums and signature
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - security/checksums.txt
+      - security/signature.ed25519
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Signing
+        excerpt: "produces integrity artifacts: `security/checksums.txt` and `security/signature.*`."
+      - file: 120_config_reference.md
+        section_heading: signing
+        excerpt: 'algorithm: "ed25519"'
+  - from: golden_dataset_builder
+    to: golden_dataset_store
+    label: publish golden dataset release
+    interaction: file_drop
+    protocol: filesystem
+    auth: unknown
+    data:
+      - dataset_manifest.json
+      - security/checksums.txt
+    frequency: unknown
+    reliability: unknown
+    evidence:
+      - file: 085_golden_datasets.md
+        section_heading: Location
+        excerpt: exports/datasets/<dataset_id>/<dataset_version>/
+      - file: 085_golden_datasets.md
+        section_heading: Integrity
+        excerpt: Dataset releases MUST include `security/checksums.txt`.

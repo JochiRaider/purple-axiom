@@ -1,0 +1,71 @@
+# file: docs/project_viz/architecture/workflows/teardown.md
+workflows:
+  - id: teardown
+    name: Runner teardown and cleanup evidence
+    scope: runner
+    steps:
+      - n: 1
+        from: runner
+        to: run_bundle_store
+        message: record per-action teardown phase outcome in ground_truth.jsonl
+        data:
+          - ground_truth.jsonl
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Runner stage
+            excerpt: Ground truth MUST record lifecycle phase outcomes ... including a `teardown` phase.
+      - n: 2
+        from: runner
+        to: run_bundle_store
+        message: write per-action cleanup verification evidence (when enabled)
+        data:
+          - runner/actions/<action_id>/cleanup_verification.json
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Cleanup verification policy (normative)
+            excerpt: write `runner/actions/<action_id>/cleanup_verification.json`.
+      - n: 3
+        from: runner
+        to: run_bundle_store
+        message: write state reconciliation report (when enabled)
+        data:
+          - runner/actions/<action_id>/state_reconciliation_report.json
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Runner stage
+            excerpt: write `runner/actions/<action_id>/state_reconciliation_report.json`.
+      - n: 4
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: record runner stage outcome in manifest and health log
+        data:
+          - runs/<run_id>/manifest.json
+          - logs/health.json
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Decision
+            excerpt: The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json.
+      - n: 5
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: emit contract validation report on publish-gate failure
+        data:
+          - logs/contract_validation/<stage_id>.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: 'emit a deterministic contract validation report at:'
+      - n: 6
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: remove leftover .staging/<stage_id>/ directories during finalization
+        data:
+          - runs/<run_id>/.staging/<stage_id>/
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: Implementations SHOULD remove any remaining stage staging directories.
+    evidence:
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Cleanup verification policy (normative)
+        excerpt: Ground truth MUST record lifecycle phase outcomes ... including a `teardown` phase.

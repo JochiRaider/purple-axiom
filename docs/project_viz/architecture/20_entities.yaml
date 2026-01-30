@@ -1,0 +1,460 @@
+
+actors:
+  - id: operator
+    name: Operator
+    type: human
+    description: Runs the orchestrator and inspects artifacts.
+    trust_zone: developer_workstation
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Goals
+        excerpt: Provide a web UI for manual triggering and artifact browsing.
+  - id: ci_system
+    name: CI System
+    type: system
+    description: Executes the orchestrator as a CI job.
+    trust_zone: ci_environment
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: CI contract
+        excerpt: CI MUST capture the run_id and export bundle artifacts.
+
+externals:
+  - id: otel_collector_agent
+    name: OTel Collector Agent
+    type: external_agent
+    description: OpenTelemetry Collector agent tier deployed on target assets; exports telemetry upstream.
+    trust_zone: lab_range
+    evidence:
+      - file: 040_telemetry_pipeline.md
+        section_heading: Canonical topology
+        excerpt: Agent tier exists even if a gateway is later added.
+  - id: otel_collector_gateway
+    name: OTel Collector Gateway
+    type: external_system
+    description: Optional OpenTelemetry Collector gateway tier receiving OTLP from agents for buffering and fan-out.
+    trust_zone: ci_environment
+    evidence:
+      - file: 040_telemetry_pipeline.md
+        section_heading: Collector tiers
+        excerpt: Gateway tier receives OTLP from agents and applies buffering and fan-out.
+  - id: golden_dataset_builder
+    name: Golden Dataset Builder
+    type: external_system
+    description: Implementation-defined job/tooling that generates and publishes golden dataset releases.
+    trust_zone: ci_environment
+    evidence:
+      - file: 085_golden_datasets.md
+        section_heading: Generation
+        excerpt: Dataset build process is implementation-defined.
+  - id: lab_provider_sources
+    name: Lab Provider Sources
+    type: external_system
+    description: Range inventory sources (Ludus export, Terraform output, Vagrant export).
+    trust_zone: lab_range
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Lab provider resolvers (v0.1)
+        excerpt: 'ludus: import range inventory from Ludus export JSON.'
+  - id: detection_baseline_library
+    name: Detection Baseline Library
+    type: external_package
+    description: Baseline dataset library used for regression and reporting comparisons.
+    trust_zone: ci_environment
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Summary
+        excerpt: stores baseline datasets for detections, scoring, and reporting.
+  - id: sigma_rule_packs
+    name: Sigma Rule Packs
+    type: external_package
+    description: Sigma rule repositories evaluated by detection stage.
+    trust_zone: ci_environment
+    evidence:
+      - file: 060_detection_sigma.md
+        section_heading: Inputs
+        excerpt: Detection stage consumes Sigma rule packs and a mapping pack.
+  - id: sigma_to_ocsf_mapping_packs
+    name: Sigma-to-OCSF Mapping Packs
+    type: external_package
+    description: Mapping packs used by sigma-to-ocsf bridge.
+    trust_zone: ci_environment
+    evidence:
+      - file: 065_sigma_to_ocsf_bridge.md
+        section_heading: Mapping packs
+        excerpt: bridge MUST resolve a mapping pack
+  - id: mapping_profile_pack
+    name: Mapping Profile Pack
+    type: external_package
+    description: OCSF mapping profile configuration for normalization.
+    trust_zone: ci_environment
+    evidence:
+      - file: 050_normalization_ocsf.md
+        section_heading: Mapping profiles
+        excerpt: Normalization uses mapping profiles to map raw fields into OCSF.
+  - id: contract_registry
+    name: Contract Registry
+    type: external_service
+    description: Registry providing schemas for contract validation when present.
+    trust_zone: ci_environment
+    evidence:
+      - file: 015_lab_providers.md
+        section_heading: Publish and validation gate
+        excerpt: "validate the snapshot (schema ... via the contract registry)."
+  - id: target_osquery_agent
+    name: Target osquery agent
+    type: external_agent
+    description: Optional osquery agent on target hosts producing telemetry.
+    trust_zone: lab_range
+    evidence:
+      - file: 042_osquery_integration.md
+        section_heading: Overview
+        excerpt: Osquery integration provides host telemetry for the pipeline.
+  - id: atomic_red_team
+    name: Atomic Red Team
+    type: external_package
+    description: Atomic Red Team tests used by runner stage.
+    trust_zone: ci_environment
+    evidence:
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Definitions
+        excerpt: "Atomic Red Team tests: pinned exact version."
+  - id: invoke_atomic_red_team
+    name: Invoke-AtomicRedTeam module
+    type: external_package
+    description: Atomic Red Team PowerShell executor module used by runner.
+    trust_zone: ci_environment
+    evidence:
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Definitions
+        excerpt: 'Invoke-AtomicRedTeam module: pinned exact version.'
+  - id: threat_intel_packs
+    name: Threat Intelligence Packs
+    type: external_package
+    description: Optional threat intel packs used for enrichment and reporting.
+    trust_zone: ci_environment
+    evidence:
+      - file: ADR-0008-Threat-intelligence-integration-model.md
+        section_heading: Interaction with run-bundle snapshots
+        excerpt: 'inputs/threat_intel/manifest.json and inputs/threat_intel/indicators.jsonl'
+
+containers:
+  - id: orchestrator_cli
+    name: Orchestrator CLI
+    kind: service
+    trust_zone: ci_environment
+    description: Main CLI that coordinates stages and manages run bundles.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Orchestrator CLI
+        excerpt: Coordinates pipeline stages and enforces contracts between them.
+  - id: matrix_runner
+    name: Matrix Runner
+    kind: service
+    trust_zone: ci_environment
+    description: CI harness that runs the orchestrator for a scenario matrix and evaluates results.
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: Definitions
+        excerpt: An external harness (CI workflow, Make target, etc.) that runs purple-axiom.
+  - id: operator_interface
+    name: Operator Interface
+    kind: service
+    trust_zone: ci_environment
+    description: Optional web UI and API for running and inspecting runs (v0.2+).
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Packaging model
+        excerpt: A single docker container packs the orchestrator + Operator Interface web server.
+  - id: lab_provider
+    name: Lab Provider Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Resolves and snapshots lab inventory for a run.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Lab provider (inventory)
+        excerpt: resolves and snapshots lab inventory for a run.
+  - id: runner
+    name: Runner Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Executes scenario actions (adversary emulation) and writes ground truth.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Runner (adversary emulation)
+        excerpt: v0.1 uses Atomic Red Team
+  - id: telemetry
+    name: Telemetry Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Collects telemetry and validates presence/quality of signals.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Telemetry (collection and validation)
+        excerpt: 'Write raw event store: `raw_parquet/**` (Parquet).'
+  - id: normalization
+    name: Normalization Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Normalizes raw telemetry into OCSF and emits mapping coverage.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Normalization (OCSF)
+        excerpt: Normalization transforms raw events into OCSF and emits mapping coverage.
+  - id: validation
+    name: Validation Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Evaluates validation criteria and writes results into the run bundle.
+    evidence:
+      - file: 035_validation_criteria.md
+        section_heading: Overview
+        excerpt: Validation criteria are evaluated against normalized events and run artifacts.
+  - id: sigma_to_ocsf_bridge_adapter
+    name: Sigma-to-OCSF Bridge Adapter
+    kind: service
+    trust_zone: ci_environment
+    description: Adapter wrapper that calls sigma-to-ocsf bridge library.
+    evidence:
+      - file: 065_sigma_to_ocsf_bridge.md
+        section_heading: Overview
+        excerpt: The bridge translates Sigma rules into OCSF-compatible query predicates.
+  - id: detection
+    name: Detection Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Evaluates Sigma detections via sigma-to-ocsf bridge and writes detections.
+    evidence:
+      - file: 060_detection_sigma.md
+        section_heading: Overview
+        excerpt: Detection stage evaluates Sigma rules over normalized events.
+  - id: scoring
+    name: Scoring Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Computes scoring metrics and summary for a run.
+    evidence:
+      - file: 070_scoring_metrics.md
+        section_heading: Overview
+        excerpt: Scoring aggregates criteria and detections into metrics and thresholds.
+  - id: reporting
+    name: Reporting Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Produces report artifacts and optional regression comparisons.
+    evidence:
+      - file: 080_reporting.md
+        section_heading: Reporting stage responsibilities
+        excerpt: The reporting stage transforms scoring outputs into actionable artifacts.
+  - id: signing
+    name: Signing Stage
+    kind: stage
+    trust_zone: ci_environment
+    description: Produces integrity artifacts (checksums and signature) for run outputs.
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Signing
+        excerpt: "produces integrity artifacts: `security/checksums.txt` and `security/signature.*`."
+  - id: audit_redactor
+    name: Audit Redaction Pipeline
+    kind: service
+    trust_zone: ci_environment
+    description: Redacts sensitive content from operator-facing exports.
+    evidence:
+      - file: ADR-0003-redaction-policy.md
+        section_heading: Decision
+        excerpt: All operator-facing exports MUST run through the redaction pipeline.
+
+datastores:
+  - id: run_bundle_store
+    name: Run Bundle Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - run_bundle
+      - evidence_artifacts
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Run bundle (coordination and evidence plane)
+        excerpt: Run bundle (`runs/<run_id>/`) is the filesystem contract boundary between stages.
+  - id: unredacted_quarantine
+    name: Unredacted Quarantine
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - unredacted_sensitive
+    evidence:
+      - file: 090_security_safety.md
+        section_heading: Redaction and quarantine
+        excerpt: "Quarantine location: `runs/<run_id>/unredacted/` (default)."      
+  - id: run_lock_dir
+    name: Run lock directory (runs/.locks/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - lockfiles
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Orchestrator (execution plane)
+        excerpt: 'atomic creation of `runs/.locks/<run_id>.lock`.'
+  - id: workspace_cache
+    name: Workspace Cache
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - caches
+      - downloaded_packs
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Workspace boundary (normative, v0.1)
+        excerpt: 'Cache (optional): `<workspace_root>/cache/`.'
+  - id: workspace_exports
+    name: Workspace Exports
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - exports
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Workspace boundary (normative, v0.1)
+        excerpt: "Exports (reserved): `<workspace_root>/exports/`."
+  - id: baseline_library
+    name: Baseline Library
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - baseline_packages
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Storage location and addressing
+        excerpt: stored in `exports/baselines/<baseline_id>/<baseline_version>/`.
+  - id: golden_dataset_store
+    name: Golden Dataset Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - golden_datasets
+    evidence:
+      - file: 085_golden_datasets.md
+        section_heading: Location
+        excerpt: exports/datasets/<dataset_id>/<dataset_version>/        
+  - id: raw_parquet_store
+    name: Raw Parquet Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: parquet
+    data_classes:
+      - raw_events
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: '`raw_parquet/` is stored as a Parquet dataset.'
+  - id: raw_artifacts_store
+    name: Raw Artifact Preservation Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - raw_artifacts
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: "`raw_parquet/**`, `raw/**` (when raw preservation enabled)"        
+  - id: normalized_ocsf_store
+    name: Normalized OCSF Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: parquet
+    data_classes:
+      - normalized_events
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: 'Normalized store: `normalized/ocsf_events/` (Parquet).'
+  - id: detections_store
+    name: Detections Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: jsonl
+    data_classes:
+      - detections
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: Detections are stored as JSONL under `detections/`.
+  - id: scoring_store
+    name: Scoring Store
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - scoring_summary
+    evidence:
+      - file: 045_storage_formats.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: Scoring summary is stored as `scoring/summary.json`.
+  - id: report_artifacts
+    name: Report Artifacts
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - report
+      - thresholds
+    evidence:
+      - file: 105_ci_operational_readiness.md
+        section_heading: CI contract
+        excerpt: '`runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json` MUST be'
+  - id: integrity_artifacts
+    name: Integrity Artifacts
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: text
+    data_classes:
+      - checksums
+      - signature
+    evidence:
+      - file: 120_config_reference.md
+        section_heading: signing
+        excerpt: 'algorithm: "ed25519"'
+  - id: audit_log_store
+    name: Audit Log Store
+    kind: filesystem_file
+    trust_zone: local_filesystem
+    tech: jsonl
+    data_classes:
+      - ui_audit_events
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Audit
+        excerpt: 'UI audit events are appended to logs/ui_audit.jsonl.'
+  - id: staging_area
+    name: Staging Area
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - staging_artifacts
+    evidence:
+      - file: 000_charter.md
+        section_heading: Guiding principles
+        excerpt: 'Stages write to a staging location (`.staging/`).'
+
+buses:
+  - id: otlp_stream
+    name: OTLP Stream
+    kind: telemetry_bus
+    trust_zone: lab_range
+    tech: OTLP
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Telemetry plane
+        excerpt: OTLP MAY be used between Collector tiers

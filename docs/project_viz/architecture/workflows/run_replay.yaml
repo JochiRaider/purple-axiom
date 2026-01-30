@@ -1,0 +1,64 @@
+# file: docs/project_viz/architecture/workflows/run_replay.yaml
+workflows:
+  - id: run_replay
+    name: Replay (analysis-only)
+    scope: analysis
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: invoke replay to rerun downstream analysis stages
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 2
+        from: orchestrator_cli
+        to: normalization
+        message: invoke normalization (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 3
+        from: orchestrator_cli
+        to: validation
+        message: invoke validation (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 4
+        from: orchestrator_cli
+        to: detection
+        message: invoke detection (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 5
+        from: orchestrator_cli
+        to: scoring
+        message: invoke scoring (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 6
+        from: orchestrator_cli
+        to: reporting
+        message: invoke reporting (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'replay: rerun only downstream analysis stages.'

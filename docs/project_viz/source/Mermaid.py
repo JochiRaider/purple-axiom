@@ -83,8 +83,12 @@ def mm_text(text: str) -> str:
     Returns:
         Escaped label text safe for Mermaid.
     """
+    # Mermaid (especially GitHub’s renderer) is line-oriented: an embedded
+    # newline inside a label/message becomes a *new statement* and can break
+    # parsing (e.g., `runs/<run_id>/inputs/` gets treated as a participant id).
+    normalized = re.sub(r"\s+", " ", str(text)).strip()
     return (
-        text.replace("&", "&amp;")
+        normalized.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', '\\"')
@@ -325,6 +329,13 @@ def validate_model(model: dict[str, Any]) -> Tuple[list[str], list[str]]:
                         f"workflow {wf_id!r} contains a non-mapping step; skipping"
                     )
                     continue
+
+                msg = step.get("message")
+                if isinstance(msg, str) and ("\n" in msg or "\r" in msg):
+                    warnings.append(
+                        f"workflow {wf_id!r} step n={step.get('n')!r} message contains a newline; "
+                        "this can break Mermaid rendering (consider folding to one line)"
+                    )
 
                 src, dst = step.get("from"), step.get("to")
                 if isinstance(src, str) and src and src not in entity_ids:

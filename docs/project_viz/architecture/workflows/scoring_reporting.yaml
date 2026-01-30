@@ -1,0 +1,91 @@
+# file: docs/project_viz/architecture/workflows/scoring_reporting.yaml
+workflows:
+  - id: scoring_reporting
+    name: Telemetry ingest to scoring and reporting
+    scope: analysis
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: telemetry
+        message: publish raw_parquet/** and telemetry validation evidence
+        data:
+          - raw_parquet/**
+          - logs/telemetry_validation.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Minimum v0.1 IO boundaries (stage-local)
+            excerpt: '`raw_parquet/**`, `raw/**` (when raw preservation enabled)'
+      - n: 2
+        from: orchestrator_cli
+        to: normalization
+        message: map raw_parquet/** to normalized/** and mapping coverage
+        data:
+          - normalized/**
+          - normalized/mapping_coverage.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Minimum v0.1 IO boundaries (stage-local)
+            excerpt: '`normalized/**`, `normalized/mapping_coverage.json`'
+      - n: 3
+        from: orchestrator_cli
+        to: validation
+        message: snapshot criteria pack and publish criteria results
+        data:
+          - criteria/manifest.json
+          - criteria/results.jsonl
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Minimum v0.1 IO boundaries (stage-local)
+            excerpt: '`criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`'
+      - n: 4
+        from: orchestrator_cli
+        to: detection
+        message: compile/evaluate Sigma and publish detections
+        data:
+          - bridge/**
+          - detections/detections.jsonl
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Minimum v0.1 IO boundaries (stage-local)
+            excerpt: '`bridge/**`, `detections/detections.jsonl`'
+      - n: 5
+        from: orchestrator_cli
+        to: scoring
+        message: join ground truth, criteria, detections -> scoring summary
+        data:
+          - scoring/summary.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Minimum v0.1 IO boundaries (stage-local)
+            excerpt: '`scoring/summary.json`'
+      - n: 6
+        from: orchestrator_cli
+        to: reporting
+        message: generate report/report.json and report/thresholds.json
+        data:
+          - report/report.json
+          - report/thresholds.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Minimum v0.1 IO boundaries (stage-local)
+            excerpt: report/report.json and report/thresholds.json
+      - n: 7
+        from: matrix_runner
+        to: report_artifacts
+        message: evaluate thresholds for CI verdict
+        data:
+          - report/thresholds.json
+        evidence:
+          - file: 105_ci_operational_readiness.md
+            section_heading: CI contract
+            excerpt: If `runs/<run_id>/report/thresholds.json` exists and validates against its schema.
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`raw_parquet/**`, mapping profiles'
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: '`scoring/summary.json`'
+      - file: 080_reporting.md
+        section_heading: Reporting stage responsibilities
+        excerpt: The reporting stage transforms scoring outputs into actionable artifacts.

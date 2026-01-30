@@ -1,0 +1,40 @@
+# file: docs/project_viz/architecture/workflows/publish_gate.yaml
+workflows:
+  - id: publish_gate
+    name: Publish gate (staging + atomic publish)
+    scope: control_plane
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: staging_area
+        message: write stage outputs under .staging/ prior to publish
+        data: []
+        evidence:
+          - file: 000_charter.md
+            section_heading: Guiding principles
+            excerpt: Stages write to a staging location (`.staging/`).
+      - n: 2
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: validate required schema contracts before publish
+        data: []
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: validate all required schema contracts before publish
+      - n: 3
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: publish via atomic rename into final run-bundle paths
+        data: []
+        evidence:
+          - file: 000_charter.md
+            section_heading: Guiding principles
+            excerpt: publish them by atomic rename after validation.
+          - file: 015_lab_providers.md
+            section_heading: Publish and validation gate
+            excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+    evidence:
+      - file: glossary.yaml
+        section_heading: publish_gate
+        excerpt: Write to a staging location first, validate, then publish atomically.

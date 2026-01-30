@@ -3,8 +3,8 @@ version: 1
 documents:
   - id: spec_000_charter
     filename: 000_charter.md
-    title: Charter
-    purpose: Defines Purple Axiom’s mission, MVP outcomes, and core principles (determinism, contract-driven stages, safety-by-default) that all other specs build on.
+    title: 'Project charter: continuous purple-team range'
+    purpose: Defines Purple Axiom's mission, MVP outcomes, and core principles (determinism, contract-driven stages, safety-by-default) that all other specs build on.
     key_sections:
       - heading: Summary
         summary: Project mission and what “done” looks like for v0.1.
@@ -24,18 +24,19 @@ documents:
       - term: scenario.safety.allow_network
         note: Scenario-level network intent signal.
     evidence:
-      - {file: "000_charter.md", section_heading: "Summary", excerpt: "This charter defines Purple Axiom’s mission and MVP outcomes."}
-
+      - file: 000_charter.md
+        section_heading: Summary
+        excerpt: Purple Axiom is a local-first cyber range that runs safe adversary-emulation scenarios, captures
   - id: spec_010_scope
     filename: 010_scope.md
-    title: Scope
+    title: Scope and non-goals
     purpose: Declares the v0.1 scope boundaries (in-scope vs out-of-scope) and references the stable stage-based pipeline framing used throughout the system.
     key_sections:
       - heading: Overview
         summary: What the project covers at a high level for v0.1.
-      - heading: In-scope
+      - heading: In scope for v0.1
         summary: Explicit v0.1 deliverables and supported behaviors.
-      - heading: Out-of-scope
+      - heading: Explicit non-goals for v0.1
         summary: Excluded features reserved for later versions.
     important_terms:
       - term: v0.1
@@ -49,8 +50,9 @@ documents:
       - term: local-first
         note: Operating principle for artifacts and workflows.
     evidence:
-      - {file: "010_scope.md", section_heading: "Overview", excerpt: "Defines the v0.1 scope boundaries for Purple Axiom."}
-
+      - file: 010_scope.md
+        section_heading: Overview
+        excerpt: Purple Axiom v0.1 focuses on deterministic, local-first execution with a fixed stage pipeline and
   - id: spec_015_lab_providers
     filename: 015_lab_providers.md
     title: Lab providers and inventory resolution
@@ -72,10 +74,11 @@ documents:
       - term: asset_id
         note: Stable logical asset identifier within Purple Axiom.
       - term: provider_asset_ref
-        note: Optional reference back to the provider’s native identity.
+        note: Optional reference back to the provider's native identity.
     evidence:
-      - {file: "015_lab_providers.md", section_heading: "Purpose", excerpt: "Define a pluggable interface for resolving lab assets."}
-
+      - file: 015_lab_providers.md
+        section_heading: Purpose
+        excerpt: Define a pluggable interface for resolving lab assets without coupling Purple Axiom to any single
   - id: spec_020_architecture
     filename: 020_architecture.md
     title: Architecture
@@ -83,10 +86,10 @@ documents:
     key_sections:
       - heading: Scope
         summary: What the architecture spec covers (and does not cover).
+      - heading: Run bundle layout
+        summary: Run-bundle IO boundaries and run-relative artifact organization.
       - heading: Workspace layout (v0.1+ normative)
-        summary: Reserved directories and how artifacts are organized.
-      - heading: Stage pipeline
-        summary: How stages hand off via the filesystem and contracts.
+        summary: Reserved workspace directories and how artifacts are organized.
     important_terms:
       - term: workspace_root
         note: Filesystem boundary for durable artifacts.
@@ -99,8 +102,9 @@ documents:
       - term: ports and adapters
         note: Extension mechanism for stage implementations.
     evidence:
-      - {file: "020_architecture.md", section_heading: "Scope", excerpt: "Defines the high-level system flow, stage identifiers, IO boundaries."}
-
+      - file: 020_architecture.md
+        section_heading: Scope
+        excerpt: 'This document covers:'
   - id: spec_025_data_contracts
     filename: 025_data_contracts.md
     title: Data contracts
@@ -108,8 +112,8 @@ documents:
     key_sections:
       - heading: Terminology
         summary: Defines core artifact and validation terms (run bundle, contract, etc.).
-      - heading: Contract-backed artifacts
-        summary: Required paths and semantics for run-bundle artifacts.
+      - heading: Run bundle layout
+        summary: Contract-backed artifact paths and reader expectations for run bundles.
       - heading: Cross-artifact invariants
         summary: Invariants enforced in code/CI beyond JSON Schema expressiveness.
     important_terms:
@@ -124,19 +128,20 @@ documents:
       - term: bridge/mapping_pack_snapshot.json
         note: Snapshot artifact for bridge inputs and provenance.
     evidence:
-      - {file: "025_data_contracts.md", section_heading: "Terminology", excerpt: "Defines contract-backed artifacts and reader semantics for run bundles."}
-
+      - file: 025_data_contracts.md
+        section_heading: Terminology
+        excerpt: '- Contract: A schema plus invariants for one artifact type.'
   - id: spec_030_scenarios
     filename: 030_scenarios.md
-    title: Scenarios
+    title: Scenario model
     purpose: Referenced as the authority for scenario model inputs and deterministic action identity (action_id/action_key) used by runner and other stages.
     key_sections:
-      - heading: unknown
-        summary: Source content not retrievable from the current indexed corpus.
-      - heading: unknown
-        summary: Source content not retrievable from the current indexed corpus.
-      - heading: unknown
-        summary: Source content not retrievable from the current indexed corpus.
+      - heading: Overview
+        summary: Scenario model intent, inputs, and boundaries.
+      - heading: Execution model (runner requirements)
+        summary: Runner obligations for action lifecycle, recording, and reconciliation.
+      - heading: Stable action identity (join keys)
+        summary: Deterministic action identity (action_id/action_key) used as join keys across datasets.
     important_terms:
       - term: inputs/scenario.yaml
         note: Scenario-specific configuration input referenced by config precedence.
@@ -149,20 +154,20 @@ documents:
       - term: action_key
         note: Deterministic action key referenced across specs.
     evidence:
-      - {file: "120_config_reference.md", section_heading: "Configuration files and precedence", excerpt: "`inputs/scenario.yaml` (optional, scenario-specific overrides)."}
-      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Scenario identity and version", excerpt: "`scenario_id` MUST be a stable identifier for a logical scenario."}
-
+      - file: 030_scenarios.md
+        section_heading: Overview
+        excerpt: Scenarios specify what to run, how to parameterize it, and which targets should be selected. The
   - id: spec_031_plan_execution_model
     filename: 031_plan_execution_model.md
     title: Plan execution model
     purpose: Defines the plan model used to execute stage work, including steps, target cardinality, and deterministic execution semantics.
     key_sections:
-      - heading: Overview
-        summary: Plan model goals and integration points.
-      - heading: Plan graph and steps
-        summary: Execution units and ordering semantics.
-      - heading: Target cardinality
-        summary: How steps target assets/hosts (single vs many).
+      - heading: Purpose
+        summary: Plan model goals and integration points for stage execution.
+      - heading: Concepts and terminology
+        summary: Plan/step concepts, identifiers, and execution semantics vocabulary.
+      - heading: v0.1 behavior (normative)
+        summary: Deterministic plan execution semantics required for v0.1.
     important_terms:
       - term: plan
         note: Executable unit describing stage work.
@@ -175,19 +180,20 @@ documents:
       - term: execution semantics
         note: Deterministic ordering and handling expectations.
     evidence:
-      - {file: "031_plan_execution_model.md", section_heading: "Overview", excerpt: "Defines the v0.1 plan execution model used by stages."}
-
+      - file: 031_plan_execution_model.md
+        section_heading: Purpose
+        excerpt: 'Define:'
   - id: spec_032_atomic_red_team_executor_integration
     filename: 032_atomic_red_team_executor_integration.md
-    title: Atomic Red Team executor integration
+    title: Atomic Red Team executor integration contract
     purpose: Specifies runner integration expectations for Atomic Red Team, including cleanup invocation/verification and deterministic reconciliation outputs.
     key_sections:
+      - heading: Overview
+        summary: Integration scope for Atomic Red Team execution within the runner.
+      - heading: Contracted runner artifacts (normative)
+        summary: Runner-produced artifacts and minimum required outputs.
       - heading: Cleanup invocation and verification
-        summary: How cleanup is invoked and evidenced.
-      - heading: State reconciliation semantics
-        summary: Deterministic reporting of residue and repair constraints.
-      - heading: Integration boundaries
-        summary: What ART integration does/does not define.
+        summary: How cleanup is invoked and evidenced (including verification checks).
     important_terms:
       - term: Atomic Red Team
         note: External executor referenced by integration spec.
@@ -200,8 +206,9 @@ documents:
       - term: reason_code
         note: Deterministic classification for integration failures.
     evidence:
-      - {file: "032_atomic_red_team_executor_integration.md", section_heading: "Cleanup invocation and verification", excerpt: "Cleanup invocation and verification requirements for the runner."}
-
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Overview
+        excerpt: This spec defines how the runner discovers and parses Atomic YAML, resolves inputs, canonicalizes
   - id: spec_035_validation_criteria
     filename: 035_validation_criteria.md
     title: Validation criteria packs
@@ -209,10 +216,10 @@ documents:
     key_sections:
       - heading: Overview
         summary: What criteria packs are and how they are used.
-      - heading: Criteria pack format
-        summary: Required fields and deterministic hashing rules.
-      - heading: Results and evidence
-        summary: How evaluation outcomes reference evidence artifacts.
+      - heading: Run bundle snapshot
+        summary: Snapshot artifacts, schema validation, and hashing expectations for pinned criteria.
+      - heading: Evaluation outputs
+        summary: How evaluation results are written, ordered, and referenced as evidence.
     important_terms:
       - term: criteria pack
         note: Pack-like artifact selected/pinned for a run.
@@ -225,8 +232,9 @@ documents:
       - term: criteria_misconfigured
         note: Gap category when entry exists but cannot evaluate.
     evidence:
-      - {file: "070_scoring_metrics.md", section_heading: "Primary metrics (seed)", excerpt: "criteria_unavailable: action executed but no matching criteria entry."}
-
+      - file: 035_validation_criteria.md
+        section_heading: Overview
+        excerpt: Criteria packs define expected signals for executed actions, are versioned independently, and are
   - id: spec_040_telemetry_pipeline
     filename: 040_telemetry_pipeline.md
     title: Telemetry pipeline
@@ -234,10 +242,10 @@ documents:
     key_sections:
       - heading: Overview
         summary: Telemetry pipeline responsibilities and boundaries.
-      - heading: Checkpointing & restart
-        summary: Deterministic checkpoint artifacts for resumability.
-      - heading: Related specifications
-        summary: Integration points to osquery, unix ingestion, normalization, and contracts.
+      - heading: Canonical topology
+        summary: Collector roles and dataflow across raw/derived/validated stores.
+      - heading: Checkpointing and replay semantics (required)
+        summary: Deterministic checkpoint artifacts and restart/replay semantics.
     important_terms:
       - term: OpenTelemetry Collector
         note: Telemetry collector component referenced by the pipeline.
@@ -250,19 +258,20 @@ documents:
       - term: unix log ingestion
         note: Referenced integration spec for unix sources.
     evidence:
-      - {file: "040_telemetry_pipeline.md", section_heading: "Overview", excerpt: "Defines the telemetry pipeline ETL spine and OTel collector roles."}
-
+      - file: 040_telemetry_pipeline.md
+        section_heading: Overview
+        excerpt: The telemetry pipeline standardizes collection through OpenTelemetry, preserves raw Windows Event
   - id: spec_042_osquery_integration
     filename: 042_osquery_integration.md
-    title: osquery integration
+    title: osquery integration (telemetry and normalization)
     purpose: Defines how osquery scheduled query results are ingested and normalized, including identity basis and routing expectations.
     key_sections:
       - heading: Overview
         summary: Integration scope for osquery artifacts.
-      - heading: Identity basis
-        summary: Deterministic identity strategy for osquery events.
-      - heading: Routing and normalization
-        summary: How scheduled query names map into normalized representations.
+      - heading: OpenTelemetry Collector ingestion
+        summary: Collector ingestion model and required receiver/exporter behaviors.
+      - heading: Normalization to OCSF
+        summary: Routing and normalization expectations for scheduled query results.
     important_terms:
       - term: osquery
         note: Telemetry source integrated into the pipeline.
@@ -275,19 +284,20 @@ documents:
       - term: normalization
         note: Integration point to OCSF normalization.
     evidence:
-      - {file: "042_osquery_integration.md", section_heading: "Purpose", excerpt: "Defines osquery scheduled query ingestion and deterministic identity basis."}
-
+      - file: 042_osquery_integration.md
+        section_heading: Overview
+        excerpt: osquery results are ingested from the filesystem logger, staged as raw evidence, optionally
   - id: spec_044_unix_log_ingestion
     filename: 044_unix_log_ingestion.md
-    title: Unix log ingestion
+    title: Unix log ingestion (telemetry and normalization)
     purpose: Referenced as the authority for unix log ingestion declarations, duplication avoidance, and provenance recording for syslog/journald sources.
     key_sections:
-      - heading: unknown
-        summary: Source content not retrievable from the current indexed corpus.
-      - heading: unknown
-        summary: Source content not retrievable from the current indexed corpus.
-      - heading: unknown
-        summary: Source content not retrievable from the current indexed corpus.
+      - heading: Overview
+        summary: Unix syslog/journald/audit ingestion model and run-bundle staging.
+      - heading: Duplication avoidance (required)
+        summary: Overlap-dedupe policy and provenance recording requirements.
+      - heading: journald ingestion
+        summary: OTel journald receiver usage and cursor persistence requirements.
     important_terms:
       - term: syslog_files
         note: Unix telemetry source declaration referenced in config.
@@ -300,20 +310,20 @@ documents:
       - term: provenance
         note: Recording duplication-avoidance configuration and decisions.
     evidence:
-      - {file: "120_config_reference.md", section_heading: "Top-level keys", excerpt: "Unix log ingestion declarations used for duplication avoidance validation."}
-      - {file: "ADR-0002-event-identity-and-provenance.md", section_heading: "Identity basis by source type", excerpt: "recorded as provenance (for overlap-dedupe mode; see Unix log ingestion spec)."}
-
+      - file: 044_unix_log_ingestion.md
+        section_heading: Overview
+        excerpt: Linux systems produce logs through multiple subsystems that often overlap. systemd-journald captures
   - id: spec_045_storage_formats
     filename: 045_storage_formats.md
     title: Storage formats
     purpose: Defines canonical storage formats for artifacts (JSON/JSONL/Parquet), including schema snapshotting and determinism requirements for long-term storage.
     key_sections:
-      - heading: Overview
-        summary: Which formats are used where and why.
-      - heading: JSON/JSONL conventions
-        summary: Canonicalization and newline expectations.
-      - heading: Parquet dataset conventions
-        summary: Dataset layout, _schema.json snapshots, and ordering rules.
+      - heading: Storage tiers
+        summary: Tier model (raw vs derived vs validated) for run artifacts.
+      - heading: Format selection by artifact type
+        summary: Canonical format choices (JSON/JSONL/Parquet) by artifact class.
+      - heading: Parquet conventions
+        summary: Dataset layout, schema snapshots, and ordering requirements for Parquet outputs.
     important_terms:
       - term: JSONL
         note: Line-delimited JSON used for event/result streams.
@@ -326,11 +336,12 @@ documents:
       - term: schema_version
         note: Logical schema version recorded for datasets.
     evidence:
-      - {file: "045_storage_formats.md", section_heading: "Overview", excerpt: "Defines canonical storage formats and schema snapshot rules."}
-
+      - file: 045_storage_formats.md
+        section_heading: Storage tiers
+        excerpt: 'Path notation (normative):'
   - id: spec_050_normalization_ocsf
     filename: 050_normalization_ocsf.md
-    title: OCSF normalization
+    title: Normalization to OCSF
     purpose: Defines normalization to OCSF as the canonical event model, including validation tiers, coverage metrics, and mapping snapshot requirements.
     key_sections:
       - heading: Validation strategy
@@ -351,19 +362,20 @@ documents:
       - term: Tier 1 coverage gate
         note: CI gate derived from field tiers and coverage.
     evidence:
-      - {file: "050_normalization_ocsf.md", section_heading: "Key decisions", excerpt: "OCSF is the canonical normalized event model and is pinned."}
-
+      - file: 050_normalization_ocsf.md
+        section_heading: Validation strategy
+        excerpt: '- Tier 0 (CI gate): validate normalized events against the Purple Axiom envelope contract'
   - id: spec_055_ocsf_field_tiers
     filename: 055_ocsf_field_tiers.md
-    title: OCSF field tiers
+    title: 'OCSF field tiers: core vs extended'
     purpose: Defines OCSF field tiers used for validation/coverage gates, especially Tier 1 coverage metrics used by normalization and scoring.
     key_sections:
       - heading: Overview
         summary: Motivation for tiering and what is measured.
-      - heading: Tier definitions
+      - heading: Tier model
         summary: Definitions of Tier 0/1/2/3 expectations.
-      - heading: Coverage computation
-        summary: How tier coverage is computed and reported.
+      - heading: Validation and coverage expectations
+        summary: How tier coverage is computed, reported, and gated.
     important_terms:
       - term: Tier 0
         note: Envelope/schema validity gate.
@@ -376,19 +388,20 @@ documents:
       - term: tier1_field_coverage
         note: Metric used as a gating signal (via scoring thresholds).
     evidence:
-      - {file: "055_ocsf_field_tiers.md", section_heading: "Overview", excerpt: "Defines OCSF field tiers used for coverage gates."}
-
+      - file: 055_ocsf_field_tiers.md
+        section_heading: Overview
+        excerpt: Purple Axiom tiers normalized event content to balance MVP feasibility with long-term fidelity. Tier
   - id: spec_060_detection_sigma
     filename: 060_detection_sigma.md
-    title: Detection rules (Sigma)
-    purpose: Defines the detection stage’s Sigma rule evaluation outputs, including detection instance schema requirements and attribution semantics.
+    title: Detection Rules (Sigma)
+    purpose: Defines the detection stage's Sigma rule evaluation outputs, including detection instance schema requirements and attribution semantics.
     key_sections:
       - heading: Detection instance schema
         summary: Required and recommended fields for detection instances.
       - heading: Unattributed detections
         summary: Handling detections that cannot be attributed to ground truth.
       - heading: Rule provenance
-        summary: What provenance should be recorded for rules.
+        summary: What provenance should be recorded for rules and match context.
     important_terms:
       - term: detections/detections.jsonl
         note: Primary detections stream output.
@@ -401,8 +414,9 @@ documents:
       - term: extensions.bridge
         note: Bridge provenance embedded in detections.
     evidence:
-      - {file: "060_detection_sigma.md", section_heading: "Detection instance schema", excerpt: "Detection instances MUST validate against detection_instance.schema.json."}
-
+      - file: 060_detection_sigma.md
+        section_heading: Detection instance schema
+        excerpt: Detection instances MUST validate against
   - id: spec_065_sigma_to_ocsf_bridge
     filename: 065_sigma_to_ocsf_bridge.md
     title: Sigma-to-OCSF bridge
@@ -426,11 +440,12 @@ documents:
       - term: bridge_mapping_pack_invalid
         note: Fail-closed reason code for invalid mapping packs.
     evidence:
-      - {file: "065_sigma_to_ocsf_bridge.md", section_heading: "Overview", excerpt: "Defines the Sigma-to-OCSF bridge contract for compiling Sigma rules."}
-
+      - file: 065_sigma_to_ocsf_bridge.md
+        section_heading: Core concept
+        excerpt: 'The bridge is a composition of three artifacts:'
   - id: spec_070_scoring_metrics
     filename: 070_scoring_metrics.md
-    title: Scoring metrics
+    title: Scoring and metrics
     purpose: Defines the scoring surface (coverage, latency, fidelity, and pipeline health), CI threshold semantics, and evidence pointer requirements by measurement layer.
     key_sections:
       - heading: Primary metrics (seed)
@@ -451,8 +466,9 @@ documents:
       - term: evidence pointers
         note: Required evidence pointer sets by measurement layer.
     evidence:
-      - {file: "070_scoring_metrics.md", section_heading: "Primary metrics (seed)", excerpt: "detection_latency = first_detection_time - ground_truth_time."}
-
+      - file: 070_scoring_metrics.md
+        section_heading: Primary metrics (seed)
+        excerpt: '- Coverage:'
   - id: spec_080_reporting
     filename: 080_reporting.md
     title: Reporting
@@ -460,9 +476,9 @@ documents:
     key_sections:
       - heading: Overview
         summary: Reporting responsibilities and artifact outputs.
-      - heading: Status and exit codes
-        summary: How status recommendation maps to exit behavior.
-      - heading: Regression reporting
+      - heading: Required reporting outputs (v0.1)
+        summary: Contracted report artifacts emitted for CI and operators.
+      - heading: Regression analysis
         summary: Cross-run diffing surfaces and baseline comparisons.
     important_terms:
       - term: report/report.json
@@ -476,8 +492,9 @@ documents:
       - term: exit code semantics
         note: Standardized exit behavior for CI integration.
     evidence:
-      - {file: "105_ci_operational_readiness.md", section_heading: "Definitions", excerpt: "Status recommendation: recorded in report/thresholds.json.status_recommendation."}
-
+      - file: 080_reporting.md
+        section_heading: Overview
+        excerpt: The reporting stage transforms scoring outputs into actionable artifacts. Reports serve three
   - id: spec_085_golden_datasets
     filename: 085_golden_datasets.md
     title: Golden dataset generation for ML training and evaluation
@@ -501,8 +518,9 @@ documents:
       - term: join keys
         note: Stable keys to re-attach labels to features.
     evidence:
-      - {file: "085_golden_datasets.md", section_heading: "Purpose", excerpt: "Defines a deterministic, reproducible mechanism for generating \"golden datasets\"."}
-
+      - file: 085_golden_datasets.md
+        section_heading: Purpose
+        excerpt: This document defines a deterministic, reproducible mechanism for generating "golden datasets" from
   - id: spec_086_detection_baseline_library
     filename: 086_detection_baseline_library.md
     title: Detection baseline library
@@ -526,19 +544,20 @@ documents:
       - term: profile detection_eval_v1
         note: BDP profile defined by the spec.
     evidence:
-      - {file: "086_detection_baseline_library.md", section_heading: "Overview", excerpt: "A Baseline Detection Package (BDP) is a redaction-safe, lightweight subset."}
-
+      - file: 086_detection_baseline_library.md
+        section_heading: Overview
+        excerpt: A **Baseline Detection Package (BDP)** is a redaction-safe, lightweight subset of a *single*
   - id: spec_090_security_safety
     filename: 090_security_safety.md
     title: Security and safety
     purpose: Defines safety and security constraints across pipeline stages, including cache provenance constraints, reconciliation safety requirements, and failure handling rules.
     key_sections:
-      - heading: Cache provenance
-        summary: Constraints to avoid accidental disclosure in cache provenance artifacts.
-      - heading: Failure handling
-        summary: Fail-closed behavior for safety violations and misconfiguration.
-      - heading: References
-        summary: Links to telemetry pipeline, data contracts, config, and redaction policy.
+      - heading: Safe defaults
+        summary: Default-safe behavior expectations across stages (fail-closed posture).
+      - heading: Secrets
+        summary: Constraints to avoid accidental disclosure (credentials, tokens, private keys).
+      - heading: Failure modes
+        summary: Failure handling and classification for safety violations and misconfiguration.
     important_terms:
       - term: logs/cache_provenance.json
         note: Run-level cache provenance artifact and constraints.
@@ -551,19 +570,20 @@ documents:
       - term: unexpected network egress
         note: Safety violation that must fail the run.
     evidence:
-      - {file: "090_security_safety.md", section_heading: "Cache provenance", excerpt: "Cache provenance MUST NOT contain secrets (credentials, tokens, private keys)."}
-
+      - file: 090_security_safety.md
+        section_heading: Safe defaults
+        excerpt: '- Runs SHOULD use isolated network ranges.'
   - id: spec_100_test_strategy_ci
     filename: 100_test_strategy_ci.md
-    title: Test strategy (CI)
+    title: Test strategy and CI
     purpose: Defines the conformance and determinism test strategy required for CI, including fixtures and stable output comparisons.
     key_sections:
       - heading: Overview
         summary: Testing objectives for deterministic CI validation.
-      - heading: Fixture strategy
-        summary: Required fixture types and what they validate.
-      - heading: Conformance checks
-        summary: What must be asserted for contracts and deterministic ordering.
+      - heading: Integration tests
+        summary: End-to-end fixtures validating stage handoffs and contracted artifacts.
+      - heading: CI gates
+        summary: What must be asserted for contracts, determinism, and publish gates.
     important_terms:
       - term: conformance tests
         note: CI-suitable tests for deterministic outputs.
@@ -576,8 +596,9 @@ documents:
       - term: regression tests
         note: Diffing comparable surfaces across baselines/candidates.
     evidence:
-      - {file: "100_test_strategy_ci.md", section_heading: "Overview", excerpt: "Defines CI conformance tests and determinism fixtures for v0.1."}
-
+      - file: 100_test_strategy_ci.md
+        section_heading: Overview
+        excerpt: '**Summary**: Purple Axiom requires deterministic, reproducible pipeline outputs. This spec defines'
   - id: spec_105_ci_operational_readiness
     filename: 105_ci_operational_readiness.md
     title: CI and Operational Readiness
@@ -601,19 +622,20 @@ documents:
       - term: evidence surfaces
         note: Mapping from gates to required artifacts/reports/health files.
     evidence:
-      - {file: "105_ci_operational_readiness.md", section_heading: "Overview", excerpt: "Defines the normative CI pipeline contract for Purple Axiom v0.1."}
-
+      - file: 105_ci_operational_readiness.md
+        section_heading: Overview
+        excerpt: This document defines the normative CI pipeline contract for Purple Axiom v0.1 implementations by
   - id: spec_110_operability
     filename: 110_operability.md
     title: Operability
     purpose: Defines operational health signals, health files, counters, and safeguards to support deterministic observability and CI-friendly diagnosis.
     key_sections:
-      - heading: Overview
-        summary: Operability objectives and produced health signals.
-      - heading: Health files
-        summary: health.json/counters.json and their roles.
-      - heading: Safeguards
-        summary: Operational constraints to reduce risk and drift.
+      - heading: Service health model
+        summary: Operational health model and how health is represented.
+      - heading: Health files (normative, v0.1)
+        summary: health.json/counters.json and their roles as deterministic observability signals.
+      - heading: Resource budgets
+        summary: Operational constraints (budgets, limits) to reduce risk and drift.
     important_terms:
       - term: logs/health.json
         note: Health signal artifact referenced by scoring evidence rules.
@@ -626,8 +648,9 @@ documents:
       - term: CI diagnosis
         note: Evidence surfaces for CI troubleshooting.
     evidence:
-      - {file: "105_ci_operational_readiness.md", section_heading: "Overview", excerpt: "Run health and operational safeguards (110_operability.md)."}
-
+      - file: 110_operability.md
+        section_heading: Service health model
+        excerpt: Each major pipeline stage exposes a minimal health signal and MUST record a stage outcome in the run
   - id: spec_115_operator_interface
     filename: 115_operator_interface.md
     title: Operator Interface
@@ -651,8 +674,9 @@ documents:
       - term: otel_gateway
         note: OTLP gateway configuration and mTLS expectations.
     evidence:
-      - {file: "115_operator_interface.md", section_heading: "Goals", excerpt: "Defines an Operator Interface that is web-based, local-first, and contract-aligned."}
-
+      - file: 115_operator_interface.md
+        section_heading: Version scope
+        excerpt: This specification is **v0.2+ (normative)** unless explicitly marked as reserved or future work.
   - id: spec_120_config_reference
     filename: 120_config_reference.md
     title: Configuration reference
@@ -676,8 +700,87 @@ documents:
       - term: reserved workspace directories
         note: cache/, exports/, and other reserved roots.
     evidence:
-      - {file: "120_config_reference.md", section_heading: "Configuration files and precedence", excerpt: "This document defines the configuration surface for Purple Axiom."}
-
+      - file: 120_config_reference.md
+        section_heading: Configuration files and precedence
+        excerpt: 'Recommended sources (lowest to highest precedence):'
+  - id: ref_contract_registry
+    filename: contract_registry.json
+    title: Contract registry
+    purpose: Registry of contract schemas and run-relative artifact bindings used for artifact validation and publish-gate conformance.
+    key_sections:
+      - heading: contracts
+        summary: Contract identifiers, schema paths, and contract versions.
+      - heading: bindings
+        summary: Run-relative artifact globs mapped to required contracts.
+      - heading: notes
+        summary: Additional registry notes used by tooling.
+    important_terms:
+      - term: registry_version
+        note: Version string for the registry format/content.
+      - term: contracts
+        note: List of contract identifiers and schema pointers.
+      - term: bindings
+        note: Artifact-to-contract association list.
+      - term: contract_id
+        note: Stable identifier for a schema/contract.
+      - term: artifact_glob
+        note: Glob used to match run-bundle artifact paths.
+    evidence:
+      - file: contract_registry.json
+        section_heading: registry_version
+        excerpt: '"registry_version": "0.1.0",'
+  - id: ref_coverage_matrix
+    filename: coverage_matrix.md
+    title: OCSF field mapping completeness matrix v0.1 MVP
+    purpose: Defines the v0.1 mapping-profile conformance checklist for Tier 1 and Tier 2 fields (coverage matrix used for CI gating and regression tracking).
+    key_sections:
+      - heading: Scope
+        summary: What this matrix covers for v0.1 and how it is intended to be used.
+      - heading: Cell semantics (normative)
+        summary: Normative interpretation of matrix cells and conformance meaning.
+      - heading: CI conformance requirements for this matrix
+        summary: How CI must validate and assert conformance against the matrix.
+    important_terms:
+      - term: Tier 1 matrix
+        note: Core common field coverage expectations for v0.1.
+      - term: Tier 2 matrices
+        note: Class/source minimums for v0.1 (Tier 2A–2D subsets).
+      - term: rationale codes
+        note: Short tokens explaining why a mapping is missing or deferred.
+      - term: cell semantics
+        note: Meaning of 'Y', 'N', and rationale-coded cells.
+      - term: conformance assertions
+        note: CI assertions derived from the matrix.
+    evidence:
+      - file: coverage_matrix.md
+        section_heading: Scope
+        excerpt: 'In scope `source_type` rows (v0.1 MVP):'
+  - id: ref_supported_versions
+    filename: SUPPORTED_VERSIONS.md
+    title: Supported versions
+    purpose: Pinned external dependency versions tested and supported for Purple Axiom v0.1 (runtime, CI toolchain, and drift policy).
+    key_sections:
+      - heading: Runtime version pins (normative)
+        summary: Stage/runtime dependency pins required for reproducible builds and runs.
+      - heading: Toolchain and CI pins (normative for CI and guidance for local)
+        summary: CI-enforced pins for Python and key tools used to produce/baseline fixtures.
+      - heading: Version drift policy (normative)
+        summary: Fail-closed behavior and update process when versions drift.
+    important_terms:
+      - term: pinned versions
+        note: Top-level dependency versions that MUST match in CI and supported runs.
+      - term: uv.lock
+        note: Lockfile pinning transitive dependencies (not enumerated in this doc).
+      - term: CI fail closed
+        note: Policy that CI MUST fail if enabled-stage versions differ from pins.
+      - term: toolchain baseline
+        note: Pinned versions for Python/uv and test/lint tooling used in CI.
+      - term: OCSF schema pin
+        note: Pinned OCSF schema version used by normalization and coverage fixtures.
+    evidence:
+      - file: SUPPORTED_VERSIONS.md
+        section_heading: Runtime version pins (normative)
+        excerpt: For v0.1 builds and CI runs, the implementation MUST use the pinned versions below, unless a spec
   - id: adr_0001_project_naming_and_versioning
     filename: ADR-0001-project-naming-and-versioning.md
     title: ADR-0001 Project naming and versioning
@@ -701,17 +804,18 @@ documents:
       - term: id_slug_v1
         note: Canonical ID format for *_id fields.
     evidence:
-      - {file: "ADR-0001-project-naming-and-versioning.md", section_heading: "Decision", excerpt: "Purple Axiom MUST implement the naming, versioning, and pinning conventions."}
-
+      - file: ADR-0001-project-naming-and-versioning.md
+        section_heading: Context
+        excerpt: Purple Axiom needs stable identifiers and explicit version pins for scenarios, rules, mappings, and
   - id: adr_0002_event_identity_and_provenance
     filename: ADR-0002-event-identity-and-provenance.md
-    title: ADR-0002 Event identity and provenance
+    title: 'ADR-0002: Event identity and provenance'
     purpose: Defines deterministic event identity (metadata.event_id) and provenance rules, including identity basis by source type and handling conflicting identities.
     key_sections:
       - heading: Decision
         summary: Normative event identity and provenance requirements.
-      - heading: Identity basis by source type
-        summary: Source-specific identity strategies and tiering.
+      - heading: Identity basis (v1)
+        summary: Source-specific identity basis strategies and tiering.
       - heading: Consequences
         summary: Required producer behaviors and consumer expectations.
     important_terms:
@@ -726,11 +830,12 @@ documents:
       - term: overlap-dedupe mode
         note: Unix dedupe/provenance requirement referenced by ADR.
     evidence:
-      - {file: "ADR-0002-event-identity-and-provenance.md", section_heading: "Decision", excerpt: "Defines deterministic event identity and provenance rules."}
-
+      - file: ADR-0002-event-identity-and-provenance.md
+        section_heading: Decision
+        excerpt: 'Define two identifiers:'
   - id: adr_0003_redaction_policy
     filename: ADR-0003-redaction-policy.md
-    title: ADR-0003 Redaction policy
+    title: 'ADR-0003: Redaction policy'
     purpose: Defines the redaction policy model, redaction-safe posture, and handling of withheld/quarantined artifacts in exports and sharing.
     key_sections:
       - heading: Context
@@ -751,18 +856,19 @@ documents:
       - term: policy snapshot
         note: Snapshot artifact pinned for auditability.
     evidence:
-      - {file: "ADR-0003-redaction-policy.md", section_heading: "Decision", excerpt: "Defines the redaction policy model and handling rules."}
-
+      - file: ADR-0003-redaction-policy.md
+        section_heading: Context
+        excerpt: Purple Axiom artifacts intentionally preserve high-fidelity telemetry and runner evidence for
   - id: adr_0004_deployment_architecture_and_inter_component_communication
     filename: ADR-0004-deployment-architecture-and-inter-component-communication.md
-    title: ADR-0004 Deployment architecture and inter-component communication
+    title: 'ADR-0004: Deployment architecture and inter-component communication'
     purpose: Defines the deployment model and filesystem-mediated inter-component communication (staging + atomic publish, locks, and no RPC between stages).
     key_sections:
       - heading: Context
         summary: Constraints for local-first, deterministic coordination.
       - heading: Decision
         summary: Run lock, staging, and publish semantics.
-      - heading: Canonical run sequence
+      - heading: Canonical run sequence (v0.1)
         summary: Stage ordering and required pinned inputs/snapshots.
     important_terms:
       - term: runs/.locks/<run_id>.lock
@@ -776,19 +882,20 @@ documents:
       - term: file-based coordination
         note: No cross-stage RPC; filesystem is coordination plane.
     evidence:
-      - {file: "ADR-0004-deployment-architecture-and-inter-component-communication.md", section_heading: "Canonical run sequence", excerpt: "The canonical v0.1 run sequence is:"}
-
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Context
+        excerpt: Purple Axiom v0.1 specifies a staged pipeline (lab provider, runner, telemetry, normalization,
   - id: adr_0005_stage_outcomes_and_failure_classification
     filename: ADR-0005-stage-outcomes-and-failure-classification.md
-    title: ADR-0005 Stage outcomes and failure classification
+    title: 'ADR-0005: Stage outcomes and failure classification'
     purpose: Defines how stages emit outcomes (status/fail_mode/reason_code), and how manifest.status is derived for reportability and CI interpretation.
     key_sections:
       - heading: Decision
-        summary: Normative stage outcome event model and required fields.
-      - heading: Reason code registry
-        summary: Canonical tokens for failure classification.
-      - heading: Status derivation
-        summary: Rules for deriving manifest.status from outcomes.
+        summary: Normative stage outcome model and required fields.
+      - heading: Manifest status derivation (normative)
+        summary: Rules for deriving manifest.status from recorded outcomes.
+      - heading: Failure taxonomy (normative reason codes)
+        summary: Canonical reason-code sets for consistent failure classification.
     important_terms:
       - term: stage outcome
         note: Stage-level outcome record emitted for each stage/substage.
@@ -801,11 +908,12 @@ documents:
       - term: substage
         note: Dotted substage naming convention.
     evidence:
-      - {file: "ADR-0005-stage-outcomes-and-failure-classification.md", section_heading: "Decision", excerpt: "manifest.status is derived from stage outcomes per ADR-0005."}
-
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Decision
+        excerpt: 1. **Every enabled stage MUST produce a deterministic stage outcome** (or a deterministic fatal exit
   - id: adr_0006_plan_execution_model_and_target_cardinality
     filename: ADR-0006-plan-execution-model.md
-    title: ADR-0006 Plan execution model and target cardinality
+    title: 'ADR-0006: Plan execution model and target cardinality'
     purpose: Records the decision on plan execution semantics and how steps target one or more assets, aligning with the plan execution spec.
     key_sections:
       - heading: Context
@@ -826,11 +934,12 @@ documents:
       - term: plan preview
         note: Used by operator-facing tooling (v0.2+).
     evidence:
-      - {file: "ADR-0006-plan-execution-model.md", section_heading: "Decision", excerpt: "Defines plan execution semantics and target cardinality rules."}
-
+      - file: ADR-0006-plan-execution-model.md
+        section_heading: Context
+        excerpt: 'Purple Axiom v0.1 enforces a strict 1:1 relationship between an action and a target asset:'
   - id: adr_0007_state_machines_for_lifecycle_semantics
     filename: ADR-0007-state-machines.md
-    title: ADR-0007 State machines
+    title: ADR-0007 State machines for lifecycle semantics
     purpose: Defines guidance for lifecycle state machines (normative vs representational), shaping how run/stage lifecycle semantics are modeled and validated.
     key_sections:
       - heading: Context
@@ -851,8 +960,9 @@ documents:
       - term: determinism
         note: State reporting and transitions must be deterministic.
     evidence:
-      - {file: "ADR-0007-state-machines.md", section_heading: "Decision", excerpt: "Distinguishes normative vs representational state machines."}
-
+      - file: ADR-0007-state-machines.md
+        section_heading: Context
+        excerpt: Purple Axiom is specified as a stage-scoped pipeline where each stage reads inputs from the run
   - id: adr_0008_threat_intelligence_integration_model
     filename: ADR-0008-Threat-intelligence-integration-model.md
     title: ADR-0008 Threat intelligence integration model
@@ -876,11 +986,12 @@ documents:
       - term: provenance pins
         note: Required pins for reproducibility.
     evidence:
-      - {file: "ADR-0008-Threat-intelligence-integration-model.md", section_heading: "Decision", excerpt: "Threat intelligence packs are selected and pinned per run."}
-
+      - file: ADR-0008-Threat-intelligence-integration-model.md
+        section_heading: Context
+        excerpt: Operators often want to incorporate threat intelligence (TI) into evaluation and reporting
   - id: adr_0009_run_export_policy_and_log_classification
     filename: ADR-0009-run-export-policy-and-log-classification.md
-    title: ADR-0009 Run export policy and log classification
+    title: 'ADR-0009: Run export policy and log classification'
     purpose: Defines export policy (what is included/excluded), classifies logs (deterministic evidence vs volatile diagnostics), and specifies integrity/signing behavior for exports.
     key_sections:
       - heading: Context
@@ -901,33 +1012,435 @@ documents:
       - term: export_manifest.json
         note: Export output referenced by operator tooling (v0.2+).
     evidence:
-      - {file: "ADR-0009-run-export-policy-and-log-classification.md", section_heading: "Decision", excerpt: "Exclude volatile diagnostics under runs/<run_id>/logs/ from default exports."}
-
-  - id: model_glossary
-    filename: glossary.yaml
-    title: Canonical glossary
-    purpose: Canonical vocabulary (terms, definitions, aliases) and tracked open questions to prevent naming drift across specs and diagrams.
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Context
+        excerpt: 'Multiple v0.1 specifications currently mix two different interpretations of `runs/<run_id>/logs/`:'
+  - id: proj_viz_readme
+    filename: project_viz/readme.md
+    title: Project Viz (README)
+    purpose: Explains how Project Viz maps specs into an evidence-backed system model and generates consistent Mermaid diagrams.
+    key_sections:
+      - heading: What lives here
+        summary: Primary inputs (system_model.yaml, Mermaid.py) and generated diagram outputs.
+      - heading: System model format
+        summary: Expected YAML keys/shapes for trust zones, entities, relationships, workflows, and states.
+      - heading: Evidence pointers
+        summary: Evidence pointer schema and the “evidence or it doesn't exist” rule.
+    important_terms:
+      - term: architecture/system_model.yaml
+        note: Primary YAML model input for diagram generation.
+      - term: source/Mermaid.py
+        note: Generator script that validates and renders Mermaid markdown.
+      - term: Mermaid-safe IDs
+        note: ID regex enforced for Mermaid emission.
+      - term: --workflow
+        note: CLI flag selecting which workflow to render for stage/run sequence views.
+      - term: --strict
+        note: Treat validation warnings as failures (CI-friendly).
+    evidence:
+      - file: project_viz/readme.md
+        section_heading: What lives here
+        excerpt: YAML system model used to generate Mermaid diagrams.
+  - id: proj_viz_system_model
+    filename: project_viz/architecture/system_model.yaml
+    title: System model (Project Viz)
+    purpose: Canonical, evidence-backed architecture model consumed by Mermaid.py to render diagram views.
+    key_sections:
+      - heading: system
+        summary: System identity, description, and top-level evidence pointers.
+      - heading: trust_zones and entities
+        summary: Trust zones and entity inventory (actors/containers/datastores/externals/buses).
+      - heading: relationships and workflows
+        summary: Directed edges and ordered workflow steps used for diagram generation.
+    important_terms:
+      - term: trust_zones
+        note: Trust boundary clustering basis for diagrams.
+      - term: entities
+        note: Inventory of actors/containers/datastores/externals/buses referenced by edges.
+      - term: relationships
+        note: Labeled directed edges between entities.
+      - term: workflows[].steps[].n
+        note: Step ordering key used for deterministic sequencing.
+      - term: evidence
+        note: Evidence pointers attached to model elements.
+    evidence:
+      - file: project_viz/architecture/system_model.yaml
+        section_heading: system
+        excerpt: 'id: purple_ci_orchestrator'
+  - id: proj_viz_arch_00_system
+    filename: project_viz/architecture/00_system.yaml
+    title: System fragment (Project Viz)
+    purpose: Defines the system identity/description section of the Project Viz architecture model, including evidence pointers.
+    key_sections:
+      - heading: system
+        summary: System id/name/description and stage list references.
+      - heading: evidence
+        summary: Spec/ADR evidence pointers justifying system-level claims.
+    important_terms:
+      - term: purple_ci_orchestrator
+        note: Stable system identifier used by the model.
+      - term: stages
+        note: High-level stage inventory referenced across workflows/relationships.
+      - term: evidence pointers
+        note: '{file, section_heading, excerpt} triplets backing model assertions.'
+    evidence:
+      - file: project_viz/architecture/00_system.yaml
+        section_heading: system
+        excerpt: 'id: purple_ci_orchestrator'
+  - id: proj_viz_arch_10_trust_zones
+    filename: project_viz/architecture/10_trust_zones.yaml
+    title: Trust zones fragment (Project Viz)
+    purpose: Defines the trust-zone inventory used to cluster entities and relationships in trust-boundary diagrams.
+    key_sections:
+      - heading: trust_zones
+        summary: Trust zone definitions (id/name/description) with evidence pointers.
+    important_terms:
+      - term: developer_workstation
+        note: Operator endpoint trust zone (where CLI/UI runs).
+      - term: ci_environment
+        note: CI execution trust zone.
+      - term: lab_range
+        note: Lab/range trust zone for provisioned assets.
+      - term: local_filesystem
+        note: Workspace/run-bundle storage trust zone.
+      - term: evidence
+        note: Evidence pointers justifying trust-zone definitions.
+    evidence:
+      - file: project_viz/architecture/10_trust_zones.yaml
+        section_heading: trust_zones
+        excerpt: 'id: developer_workstation'
+  - id: proj_viz_arch_20_entities
+    filename: project_viz/architecture/20_entities.yaml
+    title: Entities fragment (Project Viz)
+    purpose: Defines the entity inventory (actors/containers/datastores/externals/buses) referenced by relationships and workflows.
+    key_sections:
+      - heading: actors
+        summary: Human and system actors that invoke or observe runs.
+      - heading: containers
+        summary: Pipeline components (stages and tools) that produce/consume artifacts.
+      - heading: datastores and buses
+        summary: Storage locations and queues/buses used as boundaries in diagrams.
+    important_terms:
+      - term: actors
+        note: Modeled initiators/observers of orchestrator workflows.
+      - term: containers
+        note: Modeled components (including pipeline stages) in the workflow.
+      - term: datastores
+        note: Storage boundaries (e.g., run bundles, caches, exports).
+      - term: externals
+        note: External systems/providers integrated via adapters.
+      - term: buses
+        note: Message/event buses used as logical boundaries.
+    evidence:
+      - file: project_viz/architecture/20_entities.yaml
+        section_heading: containers
+        excerpt: 'id: orchestrator_cli'
+  - id: proj_viz_arch_30_relationships
+    filename: project_viz/architecture/30_relationships.yaml
+    title: Relationships fragment (Project Viz)
+    purpose: Defines labeled, directed relationships between modeled entities (including evidence pointers per edge).
+    key_sections:
+      - heading: relationships
+        summary: from/to edges with labels, messages, and optional data annotations.
+    important_terms:
+      - term: from
+        note: Source entity id for a directed relationship.
+      - term: to
+        note: Destination entity id for a directed relationship.
+      - term: label
+        note: Relationship type used by diagram views (e.g., "invoke stage").
+      - term: message
+        note: Human-readable edge label emitted in Mermaid.
+      - term: evidence
+        note: Evidence pointers justifying the relationship.
+    evidence:
+      - file: project_viz/architecture/30_relationships.yaml
+        section_heading: relationships
+        excerpt: 'label: invoke stage'
+  - id: proj_viz_arch_90_notes
+    filename: project_viz/architecture/90_notes.yaml
+    title: Notes and constraints (Project Viz)
+    purpose: Captures model-maintenance requirements, constraints, open questions, and security findings for Project Viz.
+    key_sections:
+      - heading: requirements
+        summary: Normative requirements for model content and diagram generation.
+      - heading: constraints
+        summary: Scope/assumption constraints (including “do not infer” rules).
+      - heading: notes
+        summary: Open questions and other maintenance notes.
+    important_terms:
+      - term: no_inferred_integrations
+        note: Constraint forbidding inferred components/relationships without explicit evidence.
+      - term: evidence pointers
+        note: Required for any modeled element.
+      - term: open_questions
+        note: Items to resolve before adding missing/ambiguous elements.
+      - term: security_findings
+        note: Redaction/safety-related notes discovered during modeling.
+      - term: deterministic IDs
+        note: Stable snake_case identifiers for all elements.
+    evidence:
+      - file: project_viz/architecture/90_notes.yaml
+        section_heading: constraints
+        excerpt: 'id: no_inferred_integrations'
+  - id: proj_viz_arch_glossary
+    filename: project_viz/architecture/glossary.yaml
+    title: Glossary (Project Viz)
+    purpose: Canonical vocabulary (terms, categories, definitions, aliases) used to keep naming consistent across specs and the model.
     key_sections:
       - heading: terms
-        summary: Canonical terms with definitions, aliases, and evidence pointers.
-      - heading: open_questions
-        summary: Explicitly tracked unknowns to avoid guessing in the model/diagrams.
+        summary: Glossary entries with optional aliases and evidence pointers.
     important_terms:
+      - term: terms[]
+        note: List of glossary entries.
+      - term: term
+        note: Human-readable glossary term label.
+      - term: id
+        note: Stable snake_case identifier for the glossary entry.
       - term: aliases
-        note: Synonyms list used to prevent naming drift.
-      - term: category
-        note: Term grouping (general, data, security, workflow, etc.).
+        note: Synonym list to prevent naming drift.
       - term: evidence
-        note: Evidence pointers back to the spec corpus.
-      - term: open_questions
-        note: Recorded gaps that block precise modeling.
-      - term: stable IDs
-        note: Deterministic glossary IDs used by the system model.
+        note: Evidence pointer(s) backing the definition.
     evidence:
-      - {file: "glossary.yaml", section_heading: "terms", excerpt: "term: Purple Axiom"}
-
+      - file: project_viz/architecture/glossary.yaml
+        section_heading: terms
+        excerpt: produces deterministic run bundles
+  - id: proj_viz_contract_registry
+    filename: project_viz/architecture/contract_registry.json
+    title: Contract registry (Project Viz)
+    purpose: Registry of contract schemas and run-relative artifact bindings used for artifact validation.
+    key_sections:
+      - heading: contracts
+        summary: Contract identifiers and schema path metadata.
+      - heading: bindings
+        summary: Run-relative artifact globs mapped to required contracts.
+      - heading: notes
+        summary: Additional registry notes used by tooling.
+    important_terms:
+      - term: registry_version
+        note: Version string for the registry format/content.
+      - term: contracts
+        note: List of contract identifiers and schema pointers.
+      - term: bindings
+        note: Artifact-to-contract association list.
+      - term: contract_id
+        note: Stable identifier for a schema/contract.
+      - term: artifact_glob
+        note: Glob used to match run-bundle artifact paths.
+    evidence:
+      - file: contract_registry.json
+        section_heading: unknown
+        excerpt: '{'
+  - id: proj_viz_workflow_provisioning
+    filename: project_viz/architecture/workflows/provisioning.yaml
+    title: 'Workflow: provisioning'
+    purpose: Defines the provisioning workflow steps and evidence pointers used in Project Viz diagrams.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Deterministic step ordering via steps[].n and from/to/message.
+      - heading: evidence
+        summary: Evidence pointers per workflow and per step.
+    important_terms:
+      - term: provisioning
+        note: Workflow id.
+      - term: lab_provider
+        note: Provider interface used to resolve/provision lab assets.
+      - term: steps[].n
+        note: Explicit step ordering key.
+      - term: from/to
+        note: Endpoint ids for each step edge.
+      - term: message
+        note: Step label emitted in run-sequence diagrams.
+    evidence:
+      - file: project_viz/architecture/workflows/provisioning.yaml
+        section_heading: workflows
+        excerpt: 'id: provisioning'
+  - id: proj_viz_workflow_exercise_run
+    filename: project_viz/architecture/workflows/exercise_run.yaml
+    title: 'Workflow: exercise_run'
+    purpose: Defines the end-to-end exercise-run workflow used for stage flow and run-sequence diagrams.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Orchestrator and stage execution sequence for an end-to-end run.
+      - heading: evidence
+        summary: Evidence pointers per step back to specs/ADRs.
+    important_terms:
+      - term: exercise_run
+        note: Workflow id for the end-to-end run.
+      - term: simulate
+        note: Orchestrator verb referenced in step messages.
+      - term: publish gate
+        note: Staging + validate + atomic publish pattern referenced in steps.
+      - term: run bundle
+        note: Filesystem artifact boundary across stages.
+      - term: steps[].n
+        note: Explicit step ordering key.
+    evidence:
+      - file: project_viz/architecture/workflows/exercise_run.yaml
+        section_heading: workflows
+        excerpt: 'id: exercise_run'
+  - id: proj_viz_workflow_scoring_reporting
+    filename: project_viz/architecture/workflows/scoring_reporting.yaml
+    title: 'Workflow: scoring_reporting'
+    purpose: Defines the analysis workflow from telemetry ingest through scoring and reporting.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Telemetry ingestion, normalization, detection, scoring, and reporting sequence.
+      - heading: evidence
+        summary: Evidence pointers per step back to specs/ADRs.
+    important_terms:
+      - term: scoring_reporting
+        note: Workflow id for analysis stages.
+      - term: telemetry
+        note: Telemetry ingest stage referenced by steps.
+      - term: normalization
+        note: Normalization stage referenced by steps.
+      - term: scoring
+        note: Scoring stage referenced by steps.
+      - term: reporting
+        note: Reporting stage referenced by steps.
+    evidence:
+      - file: project_viz/architecture/workflows/scoring_reporting.yaml
+        section_heading: workflows
+        excerpt: 'id: scoring_reporting'
+  - id: proj_viz_workflow_publish_gate
+    filename: project_viz/architecture/workflows/publish_gate.yaml
+    title: 'Workflow: publish_gate'
+    purpose: Defines the publish-gate pattern (staging + validation + atomic publish) as an explicit control-plane workflow.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Stage writes to .staging then atomically publishes after validation.
+      - heading: evidence
+        summary: Evidence pointers backing publish-gate semantics.
+    important_terms:
+      - term: .staging
+        note: Staging location for publish-gated writes.
+      - term: validation
+        note: Contract validation step prior to publish.
+      - term: atomic rename
+        note: Publish mechanism into final artifact paths.
+      - term: publish gate
+        note: Pattern used across stages for atomic artifact publication.
+      - term: steps[].n
+        note: Explicit step ordering key.
+    evidence:
+      - file: project_viz/architecture/workflows/publish_gate.yaml
+        section_heading: workflows
+        excerpt: 'id: publish_gate'
+  - id: proj_viz_workflow_run_replay
+    filename: project_viz/architecture/workflows/run_replay.yaml
+    title: 'Workflow: run_replay'
+    purpose: Defines the replay workflow for re-running downstream stages from an existing run bundle.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Replay stage selection and deterministic reprocessing sequence.
+      - heading: evidence
+        summary: Evidence pointers per step back to specs/ADRs.
+    important_terms:
+      - term: run_replay
+        note: Workflow id.
+      - term: replay
+        note: Orchestrator verb referenced in step messages.
+      - term: analysis-only
+        note: Replay scope indicated by the workflow name/steps.
+      - term: deterministic
+        note: Replay step messages call out determinism requirements.
+      - term: steps[].n
+        note: Explicit step ordering key.
+    evidence:
+      - file: project_viz/architecture/workflows/run_replay.yaml
+        section_heading: workflows
+        excerpt: 'id: run_replay'
+  - id: proj_viz_workflow_run_export
+    filename: project_viz/architecture/workflows/run_export.yaml
+    title: 'Workflow: run_export'
+    purpose: Defines the export workflow for packaging a run bundle for sharing.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Export invocation and redaction step sequence.
+      - heading: evidence
+        summary: Evidence pointers backing export behavior.
+    important_terms:
+      - term: run_export
+        note: Workflow id.
+      - term: export
+        note: Orchestrator verb referenced in step messages.
+      - term: redaction-safe
+        note: Export packaging posture referenced by steps.
+      - term: redact
+        note: Redaction action referenced by step messages.
+      - term: steps[].n
+        note: Explicit step ordering key.
+    evidence:
+      - file: project_viz/architecture/workflows/run_export.yaml
+        section_heading: workflows
+        excerpt: 'id: run_export'
+  - id: proj_viz_workflow_range_destroy
+    filename: project_viz/architecture/workflows/range_destroy.yaml
+    title: 'Workflow: range_destroy'
+    purpose: Defines the destroy workflow for tearing down provisioned lab/range resources.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Destroy invocation and teardown boundary.
+      - heading: evidence
+        summary: Evidence pointers backing destroy semantics.
+    important_terms:
+      - term: range_destroy
+        note: Workflow id.
+      - term: destroy
+        note: Orchestrator verb referenced in step messages.
+      - term: lab_provider
+        note: Provider invoked to destroy range resources.
+      - term: lab_range
+        note: Trust zone referenced by related model elements.
+      - term: steps[].n
+        note: Explicit step ordering key.
+    evidence:
+      - file: project_viz/architecture/workflows/range_destroy.yaml
+        section_heading: workflows
+        excerpt: 'id: range_destroy'
+  - id: proj_viz_workflow_teardown
+    filename: project_viz/architecture/workflows/teardown.yaml
+    title: 'Workflow: teardown'
+    purpose: Defines runner teardown/cleanup evidence steps, including cleanup invocation and verification boundaries.
+    key_sections:
+      - heading: workflows
+        summary: Workflow metadata (id/name/scope) and ordered steps.
+      - heading: steps
+        summary: Runner cleanup/verification sequence and outcome recording.
+      - heading: evidence
+        summary: Evidence pointers per step back to integration and safety specs.
+    important_terms:
+      - term: teardown
+        note: Workflow id.
+      - term: cleanup verification
+        note: Verification step to evidence cleanup checks.
+      - term: state reconciliation
+        note: Residue reporting step referenced by the workflow.
+      - term: publish gate
+        note: Staging/publish semantics used for teardown evidence artifacts.
+      - term: steps[].n
+        note: Explicit step ordering key.
+    evidence:
+      - file: project_viz/architecture/workflows/teardown.yaml
+        section_heading: workflows
+        excerpt: 'id: teardown'
   - id: tool_mermaid_diagram_generator
-    filename: Mermaid.py
+    filename: project_viz/source/Mermaid.py
     title: Mermaid diagram generator
     purpose: Script that renders Mermaid diagrams from system_model.yaml into docs/diagrams/generated/.
     key_sections:
@@ -935,8 +1448,8 @@ documents:
         summary: Reads system_model.yaml and emits multiple diagram views.
       - heading: Outputs
         summary: Writes stage_flow.md, trust_boundaries.md, run_sequence.md, and run_status_state.md.
-      - heading: YAML parsing notes
-        summary: Sanitizes YAML excerpts that include colon-space patterns for Mermaid emission.
+      - heading: Validation behavior
+        summary: Validates model IDs, edge endpoints, and evidence pointers (optionally strict).
     important_terms:
       - term: docs/diagrams/generated/
         note: Output directory for generated diagram markdown.
@@ -948,5 +1461,7 @@ documents:
         note: Canonical run sequence diagram view.
       - term: run_status_state.md
         note: Run lifecycle state machine diagram view.
-    evidence:      
-      - {file: "Mermaid.py", section_heading: "Docstring", excerpt: "Generate Mermaid diagrams from system_model.yaml"}      
+    evidence:
+      - file: project_viz/source/Mermaid.py
+        section_heading: Docstring
+        excerpt: Generate Mermaid diagrams from system_model.yaml.

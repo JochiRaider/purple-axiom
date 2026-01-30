@@ -2,53 +2,87 @@
 trust_zones:
   - id: developer_workstation
     name: Developer Workstation
-    description: Operator endpoint used to invoke orchestration verbs and access the Operator Interface.
+    description:  Operator endpoint (CLI and/or browser) used to invoke orchestration verbs and access the Operator Interface.
     evidence:
       - file: 020_architecture.md
-        section_heading: Overview
-        excerpt: Operators and CI drive the orchestrator via a small set of verbs.
+        section_heading: Range lifecycle verbs (v0.1; normative where stated)
+        excerpt: The orchestrator MAY expose a small set of stable range lifecycle verbs that define how operators and CI drive the pipeline.
       - file: 115_operator_interface.md
         section_heading: Goals
-        excerpt: Provide a web UI for manual triggering and artifact browsing.
+        excerpt: run creation and verb execution (`build`, `simulate`, `replay`, `export`, `destroy`).
 
   - id: ci_environment
     name: CI Environment
-    description: Automation runner/harness that executes the orchestrator pipeline (e.g., CI workflow or Make target).
+    description: Automation runner/harness that executes the orchestrator pipeline and derives a machine-readable verdict for the run.
     evidence:
       - file: 105_ci_operational_readiness.md
-        section_heading: Definitions
-        excerpt: An external harness (CI workflow, Make target, etc.) that runs purple-axiom.
+        section_heading: CI decision surface
+        excerpt: CI MUST compute a single verdict for each `run_id` using only contracted artifacts and the exit-code mapping defined by v0.1.
+      - file: 080_reporting.md
+        section_heading: Exit codes
+        excerpt: "The reporting stage MUST set exit codes aligned with [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md):"
       - file: 000_charter.md
-        section_heading: Purpose
-        excerpt: deliver repeatable purple team exercises in CI
-      - file: 105_ci_operational_readiness.md
-        section_heading: CI contract
-        excerpt: CI MUST capture the run_id and export bundle artifacts.
+        section_heading: Determinism and reproducibility
+        excerpt: Runs intended to be diffable (CI, regression, trending) MUST pin and record effective versions and content hashes for pack-like inputs.
 
   - id: lab_range
     name: Lab Range
-    description: Lab environment containing target assets and telemetry agents; inventory is snapshot into a canonical form.
+    description: Isolated lab environment containing target assets and telemetry agents; inventory is snapshotted into a canonical form.
     evidence:
       - file: 015_lab_providers.md
-        section_heading: Scope
-        excerpt: Support multiple lab providers by normalizing inventory into a canonical snapshot.
+        section_heading: Goals
+        excerpt: "Support multiple lab providers: Ludus (core), and Terraform/Vagrant/Ansible inventory exports (best-effort)."
       - file: 040_telemetry_pipeline.md
         section_heading: Canonical topology
-        excerpt: Agent tier exists even if a gateway is later added.
+        excerpt: Purple Axiom assumes the agent tier exists even if a gateway is later added.
+      - file: 010_scope.md
+        section_heading: Operating assumptions
+        excerpt: Enforcement of outbound egress posture is performed at the lab boundary by the lab provider or equivalent lab controls.
 
   - id: local_filesystem
     name: Local Filesystem
-    description: Workspace-root filesystem boundary (<workspace_root>/) where run bundles and durable artifacts are written.
+    description: Workspace-root filesystem boundary (<workspace_root>/) where run bundles and other reserved durable artifacts are written.
     evidence:
       - file: 120_config_reference.md
         section_heading: Workspace boundary rules (normative)
         excerpt: Tooling MUST NOT write persistent artifacts outside <workspace_root>/.
+      - file: 020_architecture.md
+        section_heading: Workspace layout (v0.1+ normative)
+        excerpt: "Reserved workspace-root children (v0.1+): runs/, state/, exports/, cache/, logs/, plans/."      
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Run bundle (coordination and evidence plane)
-        excerpt: Run bundle (`runs/<run_id>/`) is the filesystem contract boundary between stages.
+        excerpt: The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate for all core stages.
       - file: 045_storage_formats.md
         section_heading: Run bundle filesystem layout (v0.1)
         excerpt: runs/<run_id>/ is the root of a run bundle on disk.
       - file: 090_security_safety.md
-        section_heading: Redaction and quarantine
-        excerpt: "Quarantine location: `runs/<run_id>/unredacted/` (default)."
+        section_heading: Definitions
+        excerpt: "quarantine directory: `runs/<run_id>/<security.redaction.unredacted_dir>` used only when unredacted evidence storage is explicitly permitted (default: `runs/<run_id>/unredacted/`)."
+
+  - id: run_host
+    name: Run Host
+    description: Compute boundary that runs the orchestrator and core stages for a given run_id; may be a developer machine, CI runner, or local appliance host.
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Canonical run sequence (v0.1)
+        excerpt: Orchestrator (one-shot, run host)
+      - file: 000_charter.md
+        section_heading: Summary
+        excerpt: In v0.1, the pipeline is specified as a one-shot orchestrator that executes a fixed stage sequence.
+      - file: 090_security_safety.md
+        section_heading: Orchestrator boundary
+        excerpt: Adapter implementations (including packaged / third-party adapters) execute inside the orchestrator trust boundary.
+
+  - id: external_network
+    name: External Network
+    description: Networks outside the lab boundary (internet/vendor endpoints). Treated as untrusted; outbound access is denied by default and must be explicitly allowed.
+    evidence:
+      - file: 090_security_safety.md
+        section_heading: Core principles
+        excerpt: No outbound calls except explicitly allowed (provisioning-time package updates, required vendor endpoints).
+      - file: 120_config_reference.md
+        section_heading: Security and safety gates
+        excerpt: "`security.network.allow_outbound` (boolean; default: false): gates any outbound network egress during a run."
+      - file: 010_scope.md
+        section_heading: Operating assumptions
+        excerpt: When outbound egress is denied by effective policy, telemetry validation performs a deterministic egress canary check and treats an observed violation as run-fatal under default policy.

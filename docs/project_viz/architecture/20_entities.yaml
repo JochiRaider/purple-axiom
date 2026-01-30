@@ -6,9 +6,9 @@ actors:
     description: Runs the orchestrator and inspects artifacts.
     trust_zone: developer_workstation
     evidence:
-      - file: 115_operator_interface.md
-        section_heading: Goals
-        excerpt: Provide a web UI for manual triggering and artifact browsing.
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs (v0.1; normative where stated)
+        excerpt: operators and CI drive the pipeline.
   - id: ci_system
     name: CI System
     type: system
@@ -111,14 +111,14 @@ externals:
         section_heading: Run bundle snapshot
         excerpt: validation stage MUST snapshot the selected criteria pack into the run bundle.
   - id: contract_registry
-    name: Contract Registry
-    type: external_service
-    description: Registry providing schemas for contract validation when present.
+    name: Contract Registry (docs/contracts)
+    type: external_package
+    description: Schema-backed index and schema set used for contract validation of run artifacts.
     trust_zone: ci_environment
     evidence:
-      - file: 015_lab_providers.md
-        section_heading: Publish and validation gate
-        excerpt: "validate the snapshot (schema ... via the contract registry)."
+      - file: 025_data_contracts.md
+        section_heading: Authoritative contract registry index (normative)
+        excerpt: Implementations MUST treat `docs/contracts/contract_registry.json` as the single source of truth
   - id: target_osquery_agent
     name: Target osquery Agent
     type: external_agent
@@ -211,6 +211,15 @@ containers:
       - file: 020_architecture.md
         section_heading: Packaging model
         excerpt: A single docker container packs the orchestrator + Operator Interface web server.
+  - id: reverse_proxy
+    name: Reverse Proxy
+    kind: service
+    trust_zone: ci_environment
+    description: Bundled reverse proxy within the appliance container; terminates HTTPS and gates access to the Operator Interface.
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Network profile: LAN UI via bundled reverse proxy
+        excerpt: The reverse proxy MUST be the only process binding the external UI port (default 443).
   - id: lab_provider
     name: Lab Provider Stage
     kind: stage
@@ -534,6 +543,15 @@ datastores:
         excerpt: 'Stages write to a staging location (`.staging/`).'
 
 buses:
+  - id: run_bundle_filesystem
+    name: Run Bundle Filesystem Plane
+    kind: artifact_plane
+    trust_zone: local_filesystem
+    tech: filesystem
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Communication patterns
+        excerpt: 1. **Filesystem artifacts in the run bundle** (required).
   - id: otlp_stream
     name: OTLP Stream
     kind: telemetry_bus

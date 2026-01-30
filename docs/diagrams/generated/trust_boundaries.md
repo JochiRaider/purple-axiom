@@ -14,7 +14,7 @@ flowchart TB
     matrix_runner["Matrix Runner"]
     operator_interface["Operator Interface"]
     orchestrator_cli["Orchestrator CLI"]
-    otel_collector_gateway["OTel Collector Gateway"]
+    otel_collector_gateway["OpenTelemetry Collector (gateway tier)"]
   end
   subgraph lab_range["Lab Range"]
     direction TB
@@ -33,7 +33,7 @@ flowchart TB
   operator -->|invoke lifecycle verbs| orchestrator_cli
   operator_interface -->|append UI audit events| agg_ci_workspace
   orchestrator_cli -->|invoke stage| agg_ci_pipeline
-  orchestrator_cli -->|acquire run lock; create and mutate run bundle| agg_ci_workspace
+  orchestrator_cli -->|acquire run lock; emit contract validation report on publish-gate failure; +5 more| agg_ci_workspace
   otlp_stream -->|deliver telemetry to gateway| otel_collector_gateway
   classDef aggregate stroke-dasharray: 6 3
   class agg_ci_pipeline,agg_ci_workspace aggregate

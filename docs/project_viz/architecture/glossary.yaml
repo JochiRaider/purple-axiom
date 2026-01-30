@@ -59,23 +59,29 @@ terms:
   - id: action_id
     term: action_id
     category: data
-    definition: Ground-truth action instance identifier; reserved as a stable join key in dataset exports (v0.2+ / multi-action
-      runs).
+    definition: Per-action instance identifier within a run. v0.1 format: `s<positive_integer>` (e.g., `s1`). v0.2+ reserves
+      deterministic tokens (e.g., `pa_aid_v1_<32hex>`). Used with `run_id` as an action-level join key in exports.
     aliases: []
     evidence:
+      - file: 030_scenarios.md
+        section_heading: Stable action identity (join keys)
+        excerpt: 'action_id: Per-action instance identifier within a run. v0.1 format: `s<positive_integer>` (e.g., `s1`); v0.2+ reserved for deterministic token `pa_aid_v1_<32hex>`.'
       - file: 085_golden_datasets.md
         section_heading: Terminology
         excerpt: 'Action-level: (run_id, action_id) (ground truth action instance id).'
   - id: action_key
     term: action_key
     category: data
-    definition: 'Deterministic action identity key referenced for reproducible action instance semantics (authority: scenarios
-      spec).'
+    definition: Stable, cross-run action identity join key computed as sha256_hex(canonical_json_bytes(action_key_basis_v1)).
+      The basis MUST exclude run-unique and time-varying fields.
     aliases: []
     evidence:
+      - file: 030_scenarios.md
+        section_heading: Stable action identity (join keys)
+        excerpt: '`action_key` is the stable identity join key for cross-run evaluation. It is computed as sha256_hex(canonical_json_bytes(action_key_basis_v1)).'
       - file: 000_charter.md
-        section_heading: Safety-by-default operation
-        excerpt: Deterministic action identity (action_id, action_key) ... see scenarios.
+        section_heading: Determinism and reproducibility
+        excerpt: Action identity MUST support deterministic joins across runs via a stable `action_key` basis canonicalized using RFC 8785 (JCS).
   - id: workspace_root
     term: workspace_root
     category: infra
@@ -103,13 +109,13 @@ terms:
   - id: run_relative_path
     term: run-relative path
     category: data
-    definition: A path interpreted relative to the run bundle root (omit runs/<run_id>/ prefix).
+    definition: A path interpreted relative to the run bundle root (MUST NOT include the `runs/<run_id>/` prefix).
     aliases:
       - run-relative
     evidence:
-      - file: contract_registry.json
-        section_heading: notes
-        excerpt: do not include the runs/<run_id>/ prefix
+      - file: 025_data_contracts.md
+        section_heading: Artifact path requirements (normative)
+        excerpt: Paths MUST be run-relative and MUST NOT include the `runs/<run_id>/` prefix.
   - id: manifest_json
     term: manifest.json
     category: data
@@ -265,13 +271,13 @@ terms:
   - id: contract_validation_report
     term: logs/contract_validation/<stage_id>.json
     category: data
-    definition: Deterministic contract validation report emitted on publish-gate failure.
+    definition: Deterministic contract validation report emitted when a stage fails publish-gate contract validation.
     aliases:
       - contract validation report
     evidence:
-      - file: teardown.yaml
-        section_heading: teardown
-        excerpt: logs/contract_validation/<stage_id>.json
+      - file: 020_architecture.md
+        section_heading: Publish gate (normative, v0.1)
+        excerpt: On contract validation failure, the stage MUST emit a contract validation report at `runs/<run_id>/logs/contract_validation/<stage_id>.json`.
   - id: contract
     term: contract
     category: data
@@ -416,24 +422,26 @@ terms:
         section_heading: Decision
         excerpt: Defines the redaction policy model and handling rules.
   - id: redaction_safe
-    term: redaction-safe
+    term: redacted-safe
     category: security
-    definition: Posture permitting broad distribution of artifacts after applying redaction policy.
+    definition: Artifact state indicating it satisfies the effective redaction policy and required post-checks and is eligible
+      for redaction-safe exports.
     aliases:
+      - redaction-safe
       - public posture
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.adr_0003_redaction_policy.important_terms
-        excerpt: Posture permitting broad distribution.
+      - file: 090_security_safety.md
+        section_heading: Definitions
+        excerpt: 'Redacted-safe: Satisfies the effective redaction policy and post-checks (see ADR-0003).'
   - id: release_posture
     term: release posture
     category: security
-    definition: Policy token controlling dataset/export contents (public | gated | internal).
+    definition: Policy token controlling dataset/export contents (`public` | `gated` | `internal`).
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_085_golden_datasets.important_terms
-        excerpt: public|gated|internal posture policy for contents.
+      - file: 085_golden_datasets.md
+        section_heading: Terminology
+        excerpt: 'Release posture: `public` (redaction-safe only), `gated` (access-controlled), `internal` (may include non-public artifacts).'
   - id: placeholder_artifact
     term: placeholder artifact
     category: security
@@ -474,9 +482,9 @@ terms:
     aliases:
       - sha256 digest
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_025_data_contracts.important_terms
-        excerpt: Digest string format used throughout.
+      - file: 025_data_contracts.md
+        section_heading: Canonical SHA-256 digest strings (normative)
+        excerpt: Digest string format used throughout is `sha256:<lowercase_hex>`.
   - id: control_audit_jsonl
     term: control/audit.jsonl
     category: data
@@ -486,7 +494,7 @@ terms:
     evidence:
       - file: contract_registry.json
         section_heading: contracts
-        excerpt: Audit event row schema (control/audit.jsonl
+        excerpt: Audit event row schema (control/audit.jsonl).
   - id: ui_audit_jsonl
     term: logs/ui_audit.jsonl
     category: data
@@ -520,13 +528,18 @@ terms:
   - id: scenario_safety_allow_network
     term: scenario.safety.allow_network
     category: security
-    definition: Scenario-level network intent signal (allow or disallow network activity).
+    definition: Scenario-level network intent flag (boolean; default false). In scenario YAML this is `safety.allow_network`
+      and is used to compute effective outbound network allowance.
     aliases:
       - allow_network
+      - safety.allow_network
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_000_charter.important_terms
-        excerpt: Scenario-level network intent signal.
+      - file: 030_scenarios.md
+        section_heading: Safety controls
+        excerpt: '`safety.allow_network` (bool; default false) indicates whether the scenario intends to produce network activity.'
+      - file: 000_charter.md
+        section_heading: Safety-by-default operation
+        excerpt: Scenario-level network intent is expressed by `scenario.safety.allow_network` and enforced at the lab boundary.
   - id: telemetry_baseline_profile_json
     term: inputs/telemetry_baseline_profile.json
     category: data
@@ -563,45 +576,45 @@ terms:
     definition: Executable unit describing stage work.
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_031_plan_execution_model.important_terms
-        excerpt: Executable unit describing stage work.
+      - file: 031_plan_execution_model.md
+        section_heading: Key definitions
+        excerpt: 'Plan: A user-facing specification that selects templates and declares expansion and execution semantics.'
   - id: plan_step
     term: step
     category: workflow
-    definition: Atomic plan node within execution.
+    definition: Atomic plan graph node within execution (an action instance produced by plan expansion).
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_031_plan_execution_model.important_terms
-        excerpt: Atomic plan node within execution.
+      - file: 031_plan_execution_model.md
+        section_heading: Key definitions
+        excerpt: 'Action instance: A run-scoped instantiation of an action template after plan expansion.'
   - id: plan_graph
     term: plan graph
     category: workflow
     definition: Step dependency structure.
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_031_plan_execution_model.important_terms
-        excerpt: Step dependency structure.
+      - file: 031_plan_execution_model.md
+        section_heading: Key definitions
+        excerpt: 'Plan graph: The compiled internal representation (nodes + edges) that the runner executes.'
   - id: target_cardinality
     term: target cardinality
     category: workflow
     definition: How many targets a step addresses (single vs many).
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_031_plan_execution_model.important_terms
-        excerpt: How many targets a step addresses.
+      - file: ADR-0006-plan-execution-model.md
+        section_heading: Context
+        excerpt: v0.1 enforces a strict 1:1 relationship between an action and a target asset (target cardinality is always single).
   - id: execution_semantics
     term: execution semantics
     category: workflow
     definition: Deterministic ordering and handling expectations for plan execution.
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_031_plan_execution_model.important_terms
-        excerpt: Deterministic ordering and handling expectations.
+      - file: 031_plan_execution_model.md
+        section_heading: 'Phase 6: Canonical ordering and `node_ordinal` assignment'
+        excerpt: The system MUST compute a deterministic canonical ordering and assign `node_ordinal` deterministically.
   - id: ground_truth_jsonl
     term: ground_truth.jsonl
     category: data
@@ -682,18 +695,18 @@ terms:
     aliases:
       - health log
     evidence:
-      - file: teardown.yaml
-        section_heading: teardown
-        excerpt: logs/health.json
+      - file: 110_operability.md
+        section_heading: Health files (normative, v0.1)
+        excerpt: '`logs/health.json` is the canonical health document and `health.status` MUST equal `manifest.status`.'
   - id: criteria_pack
     term: criteria pack
     category: data
     definition: Pack-like artifact selected and pinned for a run to evaluate expected signals.
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_035_validation_criteria.important_terms
-        excerpt: Pack-like artifact selected/pinned for a run.
+      - file: 035_validation_criteria.md
+        section_heading: Overview
+        excerpt: Criteria packs define expected signals (criteria) and are snapshotted into the run bundle for deterministic evaluation.
   - id: criteria_manifest_json
     term: criteria/manifest.json
     category: data
@@ -751,9 +764,9 @@ terms:
     definition: Canonical resolved asset list used by downstream stages.
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_015_lab_providers.important_terms
-        excerpt: Canonical resolved asset list used by downstream stages.
+      - file: 015_lab_providers.md
+        section_heading: Key concepts
+        excerpt: Purple Axiom uses the resolved asset list (`lab.assets`) as the canonical shape for targets and stage-to-stage identity.
   - id: asset_id
     term: asset_id
     category: data
@@ -769,9 +782,9 @@ terms:
     definition: Optional reference back to the provider’s native identity.
     aliases: []
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_015_lab_providers.important_terms
-        excerpt: Optional reference back to the provider’s native identity.
+      - file: 015_lab_providers.md
+        section_heading: 'Inventory snapshot schema: lab_inventory_snapshot'
+        excerpt: '`provider_asset_ref` (string, optional).'
   - id: telemetry_pipeline
     term: telemetry pipeline
     category: workflow
@@ -809,9 +822,9 @@ terms:
     aliases:
       - raw_parquet/
     evidence:
-      - file: docs_index.yaml
-        section_heading: documents.spec_040_telemetry_pipeline.important_terms
-        excerpt: Raw parquet store path used for telemetry storage.
+      - file: 020_architecture.md
+        section_heading: Run bundle layout
+        excerpt: '`raw_parquet/`: raw telemetry datasets (Parquet).'
   - id: telemetry_validation_json
     term: logs/telemetry_validation.json
     category: data
@@ -894,20 +907,28 @@ terms:
   - id: normalized_ocsf_events_jsonl
     term: normalized/ocsf_events.jsonl
     category: data
-    definition: JSONL stream of normalized events bound to the ocsf_event_envelope contract.
+    definition: JSONL stream of normalized events bound to the ocsf_event_envelope contract. Used as the small/fixture alternative
+      representation; when producing an OCSF event store, normalization MUST emit exactly one of JSONL or the Parquet dataset.
     aliases:
       - ocsf_events.jsonl
     evidence:
+      - file: 050_normalization_ocsf.md
+        section_heading: Run bundle artifacts (normative)
+        excerpt: When normalization produces an OCSF event store, the normalizer MUST emit exactly one of `normalized/ocsf_events/` (Parquet) or `normalized/ocsf_events.jsonl` (small fixtures).
       - file: contract_registry.json
         section_heading: bindings
         excerpt: normalized/ocsf_events.jsonl
   - id: normalized_ocsf_events_parquet
     term: normalized/ocsf_events/**
     category: data
-    definition: Parquet dataset containing normalized OCSF events.
+    definition: Parquet dataset directory containing normalized OCSF events. When used, normalization MUST include
+      `normalized/ocsf_events/_schema.json` and MUST NOT also emit the JSONL representation.
     aliases:
       - normalized/ocsf_events/
     evidence:
+      - file: 050_normalization_ocsf.md
+        section_heading: Run bundle artifacts (normative)
+        excerpt: The Parquet representation is `normalized/ocsf_events/` and MUST include `normalized/ocsf_events/_schema.json`.
       - file: 045_storage_formats.md
         section_heading: Run bundle filesystem layout (v0.1)
         excerpt: 'Normalized store: `normalized/ocsf_events/` (Parquet).'
@@ -1169,39 +1190,3 @@ terms:
       - file: 085_golden_datasets.md
         section_heading: Manifest canonicalization and hashing
         excerpt: '`dataset_release_id` MUST be reproducible across builds given the same inputs.'
-open_questions:
-  - question: 030_scenarios.md content is not retrievable from the indexed corpus; extract scenario schema and headings.
-    checked_in:
-      - file: 120_config_reference.md
-        section_heading: Configuration files and precedence
-      - file: ADR-0001-project-naming-and-versioning.md
-        section_heading: Scenario identity and version
-      - file: docs_index.yaml
-        section_heading: documents.spec_030_scenarios
-    impact: Blocks precise Scenario/Action fields and runner input modeling in diagrams.
-  - question: 044_unix_log_ingestion.md content is not retrievable from the indexed corpus; extract unix ingestion declarations
-      and dedupe policy details.
-    checked_in:
-      - file: 120_config_reference.md
-        section_heading: Top-level keys
-      - file: ADR-0002-event-identity-and-provenance.md
-        section_heading: Identity basis by source type
-      - file: docs_index.yaml
-        section_heading: documents.spec_044_unix_log_ingestion
-    impact: Blocks unix source ingestion workflow and duplication-avoidance provenance modeling.
-  - question: report/thresholds.json is referenced in workflows but has no entry in contract_registry.json bindings; add a
-      contract?
-    checked_in:
-      - file: scoring_reporting.yaml
-        section_heading: scoring_reporting
-      - file: contract_registry.json
-        section_heading: bindings
-    impact: Blocks contract validation for CI-facing thresholds artifact and consistent schema gating.
-  - question: Both normalized/ocsf_events/** (Parquet) and normalized/ocsf_events.jsonl (JSONL) appear; which is required
-      for v0.1?
-    checked_in:
-      - file: 045_storage_formats.md
-        section_heading: Run bundle filesystem layout (v0.1)
-      - file: contract_registry.json
-        section_heading: bindings
-    impact: Affects normalization stage outputs, validation strategy, and downstream reader expectations.

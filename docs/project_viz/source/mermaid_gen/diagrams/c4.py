@@ -93,12 +93,14 @@ def gen_c4_context(
     actor_ids = _section_ids(model, "actors")
     external_ids = _section_ids(model, "externals")
     container_ids = _section_ids(model, "containers")
+    datastore_ids = _section_ids(model, "datastores")
 
     external_container_ids = set(defaults.context_external_container_ids)
     internal_container_ids = set(container_ids) - external_container_ids
+    internal_node_ids = internal_container_ids | datastore_ids
     external_node_ids = set(actor_ids) | set(external_ids) | external_container_ids
 
-    # Collapse internal-container edges to the system boundary.
+    # Collapse internal-boundary edges to the system boundary.
     ordered_external: list[str] = []
     seen_external: set[str] = set()
     ordered_rels: list[tuple[str, str, str, str]] = []
@@ -123,10 +125,10 @@ def gen_c4_context(
         if not isinstance(protocol, str):
             protocol = ""
 
-        if src in external_node_ids and dst in internal_container_ids:
+        if src in external_node_ids and dst in internal_node_ids:
             note_external(src)
             edge = (src, system_id, label, protocol)
-        elif src in internal_container_ids and dst in external_node_ids:
+        elif src in internal_node_ids and dst in external_node_ids:
             note_external(dst)
             edge = (system_id, dst, label, protocol)
         else:
@@ -190,16 +192,23 @@ def gen_c4_container(
     for actor_id in defaults.container_actor_ids:
         ent = entities.get(actor_id)
         if not isinstance(ent, dict):
-            continue
-        lines.append(
-            f"Person({actor_id}, {_q(ent.get('name', actor_id))}, {_q(ent.get('description', ''))})"
-        )
+            raise KeyError(f"Missing actor entity: {actor_id}")
+
+        # Default list is "actors", but keep this robust if a system actor appears.
+        if ent.get("type") == "human":
+            lines.append(
+                f"Person({actor_id}, {_q(ent.get('name', actor_id))}, {_q(ent.get('description', ''))})"
+            )
+        else:
+            lines.append(
+                f"System_Ext({actor_id}, {_q(ent.get('name', actor_id))}, {_q(ent.get('description', ''))})"
+            )
         declared_ids.add(actor_id)
 
     for sys_id in defaults.container_external_system_ids:
         ent = entities.get(sys_id)
         if not isinstance(ent, dict):
-            continue
+            raise KeyError(f"Missing external system entity: {sys_id}")
         lines.append(
             f"System_Ext({sys_id}, {_q(ent.get('name', sys_id))}, {_q(ent.get('description', ''))})"
         )
@@ -233,7 +242,7 @@ def gen_c4_container(
 
     lines.append("}")
 
-    # Relationships (only those between declared nodes)
+    # Relationships (only those between declared nodes), deduped.
     for rel in model.get("relationships", []) or []:
         if not isinstance(rel, dict):
             continue
@@ -335,6 +344,7 @@ def gen_c4_component_orchestrator_internals(
     agg_store_id = defaults.component_aggregate_store_id
 
     container_items = [c for c in (model.get("containers", []) or []) if isinstance(c, dict)]
+    container_ids = _section_ids(model, "containers")
     datastore_ids = _section_ids(model, "datastores")
     external_ids = _section_ids(model, "externals")
 
@@ -350,9 +360,9 @@ def gen_c4_component_orchestrator_internals(
         src, dst = rel.get("from"), rel.get("to")
         if not isinstance(src, str) or not isinstance(dst, str):
             continue
-        if src in stage_ids and dst in entities and dst != root_container_id:
+        if src in stage_ids and dst in container_ids and dst != root_container_id:
             helper_ids.add(dst)
-        if dst in stage_ids and src in entities and src != root_container_id:
+        if dst in stage_ids and src in container_ids and src != root_container_id:
             helper_ids.add(src)
 
     component_ids: set[str] = stage_ids | helper_ids
@@ -398,6 +408,11 @@ def gen_c4_component_orchestrator_internals(
         if not isinstance(protocol, str):
             protocol = ""
 
+        edge = (src, dst, label, protocol)
+        if edge in seen_rels:
+            continue
+        seen_rels.add(edge)
+
         # Collect external dependencies.
         if src in component_ids and dst in external_ids:
             note_ext(dst)
@@ -405,7 +420,12 @@ def gen_c4_component_orchestrator_internals(
             note_ext(src)
 
         # Collect stage outputs to local filesystem datastores for aggregation.
-        if src in stage_ids and dst in datastore_ids and protocol == "filesystem":
+        if (
+            src in stage_ids
+            and dst in datastore_ids
+            and protocol == "filesystem"
+            and rel.get("interaction") == "file_drop"
+        ):
             data = rel.get("data")
             if isinstance(data, list):
                 stage_artifacts[src].extend([d for d in data if isinstance(d, str)])

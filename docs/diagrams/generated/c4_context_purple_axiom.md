@@ -12,6 +12,7 @@ System_Ext(invoke_atomic_red_team, "Invoke-AtomicRedTeam module", "Atomic Red Te
 System_Ext(mapping_profile_pack, "Mapping Profile Pack", "OCSF mapping profile configuration for normalization.")
 System_Ext(sigma_rule_packs, "Sigma Rule Packs", "Sigma rule repositories evaluated by detection stage.")
 System_Ext(sigma_to_ocsf_mapping_packs, "Sigma-to-OCSF Mapping Packs", "Mapping packs used by sigma-to-ocsf bridge.")
+System_Ext(golden_dataset_builder, "Golden Dataset Builder", "Implementation-defined job/tooling that generates and publishes golden dataset releases.")
 System(purple_ci_orchestrator, "Purple Axiom", "One-shot, local-first pipeline that delivers repeatable purple-team exercises in CI. Stages coordinate via the run bundle contract boundary…")
 Rel(operator, purple_ci_orchestrator, "invoke lifecycle verbs (build/simulate/replay/export/destroy)", "cli")
 Rel(operator, purple_ci_orchestrator, "use web UI for manual triggering and artifact browsing", "https (lan_reverse_proxy:443)")
@@ -23,4 +24,5 @@ Rel(purple_ci_orchestrator, invoke_atomic_red_team, "invoke executor module in r
 Rel(purple_ci_orchestrator, mapping_profile_pack, "load mapping profiles", "filesystem")
 Rel(purple_ci_orchestrator, sigma_rule_packs, "load Sigma rule packs", "filesystem")
 Rel(purple_ci_orchestrator, sigma_to_ocsf_mapping_packs, "resolve Sigma-to-OCSF mapping pack", "filesystem")
+Rel(golden_dataset_builder, purple_ci_orchestrator, "publish golden dataset release", "filesystem")
 ```

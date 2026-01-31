@@ -7,6 +7,7 @@ from .run_sequence import gen_sequence
 from .run_status_state import gen_run_status_state
 from .stage_flow import gen_stage_flow
 from .trust_boundaries import gen_trust_boundaries
+from .publish_gate_contracts import gen_publish_gate_contracts_flow
 
 Model = dict[str, Any]
 RenderFn = Callable[[Model, "RenderConfig"], str]
@@ -42,6 +43,9 @@ def _render_run_status_state(model: Model, _: RenderConfig) -> str:
     return gen_run_status_state(model)
 
 
+def _render_publish_gate_contracts(model: Model, cfg: RenderConfig) -> str:
+    return gen_publish_gate_contracts_flow(model, cfg.workflow_id)
+
 DIAGRAMS: list[DiagramSpec] = [
     DiagramSpec(
         diagram_id="stage_flow",
@@ -67,4 +71,10 @@ DIAGRAMS: list[DiagramSpec] = [
         filename="run_status_state.md",
         render=_render_run_status_state,
     ),
+    DiagramSpec(
+    diagram_id="publish_gate_contracts",
+    title="Publish gate + contract seams",
+    filename="publish_gate_contracts.md",
+    render=_render_publish_gate_contracts,
+),
 ]

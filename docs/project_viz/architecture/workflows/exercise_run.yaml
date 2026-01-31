@@ -62,9 +62,10 @@ workflows:
       - n: 6
         from: orchestrator_cli
         to: telemetry
-        message: run telemetry to publish raw_parquet/** and telemetry validation
+        message: run telemetry to publish raw_parquet/** (and raw/** when enabled) and telemetry validation
         data:
           - raw_parquet/**
+          - raw/**
           - logs/telemetry_validation.json
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
@@ -76,10 +77,11 @@ workflows:
       - n: 7
         from: orchestrator_cli
         to: normalization
-        message: normalize raw_parquet/** into normalized/**
+        message: normalize raw_parquet/** into normalized/** and publish mapping coverage + profile snapshot
         data:
           - normalized/**
           - normalized/mapping_coverage.json
+          - normalized/mapping_profile_snapshot.json
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)
@@ -87,8 +89,10 @@ workflows:
       - n: 8
         from: orchestrator_cli
         to: validation
-        message: evaluate criteria and publish criteria/results.jsonl
+        message: evaluate criteria and publish criteria/manifest.json + criteria/criteria.jsonl + criteria/results.jsonl
         data:
+          - criteria/manifest.json
+          - criteria/criteria.jsonl        
           - criteria/results.jsonl
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
@@ -118,10 +122,11 @@ workflows:
       - n: 11
         from: orchestrator_cli
         to: reporting
-        message: generate report/report.json and report/thresholds.json
+        message: generate report/report.json, report/thresholds.json, and report/run_timeline.md
         data:
           - report/report.json
           - report/thresholds.json
+          - report/run_timeline.md
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Minimum v0.1 IO boundaries (stage-local)
@@ -133,6 +138,7 @@ workflows:
         data:
           - security/checksums.txt
           - security/signature.ed25519
+          - security/public_key.ed25519
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)

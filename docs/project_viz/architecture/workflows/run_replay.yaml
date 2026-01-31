@@ -17,7 +17,10 @@ workflows:
         from: orchestrator_cli
         to: normalization
         message: invoke normalization (replay)
-        data: []
+        data:
+          - normalized/**
+          - normalized/mapping_coverage.json
+          - normalized/mapping_profile_snapshot.json
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
@@ -26,7 +29,10 @@ workflows:
         from: orchestrator_cli
         to: validation
         message: invoke validation (replay)
-        data: []
+        data:
+          - criteria/manifest.json
+          - criteria/criteria.jsonl
+          - criteria/results.jsonl
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
@@ -35,7 +41,9 @@ workflows:
         from: orchestrator_cli
         to: detection
         message: invoke detection (replay)
-        data: []
+        data:
+          - bridge/**
+          - detections/detections.jsonl
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
@@ -44,7 +52,8 @@ workflows:
         from: orchestrator_cli
         to: scoring
         message: invoke scoring (replay)
-        data: []
+        data:
+          - scoring/summary.json
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
@@ -53,11 +62,22 @@ workflows:
         from: orchestrator_cli
         to: reporting
         message: invoke reporting (replay)
-        data: []
+        data:
+          - report/report.json
+          - report/thresholds.json
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
             excerpt: 'replay: rerun only downstream analysis stages.'
+      - n: 7
+        from: orchestrator_cli
+        to: signing
+        message: (optional) invoke signing (replay)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'replay: rerun only downstream analysis stages.'          
     evidence:
       - file: 020_architecture.md
         section_heading: Range lifecycle verbs

@@ -20,11 +20,11 @@ sequenceDiagram
   orchestrator_cli->>run_bundle_store: 3. write manifest skeleton and pin inputs into runs/#lt;run_id#gt;/inputs/
   orchestrator_cli->>lab_provider: 4. run lab_provider and record stage outcome
   orchestrator_cli->>runner: 5. run runner to execute scenario actions
-  orchestrator_cli->>telemetry: 6. run telemetry to publish raw_parquet/** and telemetry validation
-  orchestrator_cli->>normalization: 7. normalize raw_parquet/** into normalized/**
-  orchestrator_cli->>validation: 8. evaluate criteria and publish criteria/results.jsonl
+  orchestrator_cli->>telemetry: 6. run telemetry to publish raw_parquet/** (and raw/** when enabled) and telemetry validation
+  orchestrator_cli->>normalization: 7. normalize raw_parquet/** into normalized/** and publish mapping coverage + profile snapshot
+  orchestrator_cli->>validation: 8. evaluate criteria and publish criteria/manifest.json + criteria/criteria.jsonl + criteria/results.jsonl
   orchestrator_cli->>detection: 9. evaluate Sigma and publish detections/detections.jsonl
   orchestrator_cli->>scoring: 10. compute scoring/summary.json
-  orchestrator_cli->>reporting: 11. generate report/report.json and report/thresholds.json
+  orchestrator_cli->>reporting: 11. generate report/report.json, report/thresholds.json, and report/run_timeline.md
   orchestrator_cli->>signing: 12. (optional) sign run artifacts and publish security/**
 ```

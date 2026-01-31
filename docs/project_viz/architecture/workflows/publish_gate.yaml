@@ -35,6 +35,6 @@ workflows:
             section_heading: Publish and validation gate
             excerpt: The stage MUST publish by atomic rename into the final run bundle location.
     evidence:
-      - file: glossary.yaml
-        section_heading: publish_gate
+      - file: 000_charter.md
+        section_heading: Guiding principles
         excerpt: Write to a staging location first, validate, then publish atomically.

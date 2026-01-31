@@ -1,4 +1,4 @@
-# file: docs/project_viz/architecture/workflows/teardown.md
+# file: docs/project_viz/architecture/workflows/teardown.yaml
 workflows:
   - id: teardown
     name: Runner teardown and cleanup evidence
@@ -19,6 +19,7 @@ workflows:
         to: run_bundle_store
         message: write per-action cleanup verification evidence (when enabled)
         data:
+          - runner/actions/<action_id>/**
           - runner/actions/<action_id>/cleanup_verification.json
         evidence:
           - file: ADR-0005-stage-outcomes-and-failure-classification.md

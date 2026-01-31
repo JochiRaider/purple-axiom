@@ -39,12 +39,10 @@ def mm_init(**config_sections: dict[str, Any]) -> str:
 
 def mm_edge_label(text: str) -> str:
     """Format a Mermaid *edge label* (the text inside `-->|...|`) safely."""
-    raw = str(text)
-    escaped = mm_text(raw)
-    stripped = raw.lstrip()
-    if stripped and not re.match(r"[A-Za-z0-9_]", stripped[0]):
-        return f'"{escaped}"'
-    return escaped
+    # Mermaid flowchart edge-label tokenization is stricter on some renderers (notably GitHub).
+    # Parentheses and other punctuation may be parsed as syntax unless the label is quoted.
+    # Quoting is safe and does not change the rendered label text.
+    return f"\"{mm_text(str(text))}\""
 
 def assert_mm_id(value: str) -> str:
     if not MERMAID_ID_RE.match(value):

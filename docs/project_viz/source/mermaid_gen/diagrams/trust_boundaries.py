@@ -1,3 +1,4 @@
+# docs/project_viz/source/mermaid_gen/diagrams/trust_boundaries.py
 from __future__ import annotations
 
 import re

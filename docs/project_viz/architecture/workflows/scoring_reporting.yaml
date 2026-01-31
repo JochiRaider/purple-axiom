@@ -69,16 +69,6 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Minimum v0.1 IO boundaries (stage-local)
             excerpt: report/report.json and report/thresholds.json
-      - n: 7
-        from: matrix_runner
-        to: report_artifacts
-        message: evaluate thresholds for CI verdict
-        data:
-          - report/thresholds.json
-        evidence:
-          - file: 105_ci_operational_readiness.md
-            section_heading: CI contract
-            excerpt: If `runs/<run_id>/report/thresholds.json` exists and validates against its schema.
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)

@@ -127,16 +127,6 @@ workflows:
             section_heading: Minimum v0.1 IO boundaries (stage-local)
             excerpt: report/report.json and report/thresholds.json
       - n: 12
-        from: matrix_runner
-        to: report_artifacts
-        message: CI reads thresholds.json for pass/fail gating
-        data:
-          - report/thresholds.json
-        evidence:
-          - file: 105_ci_operational_readiness.md
-            section_heading: CI contract
-            excerpt: If `runs/<run_id>/report/thresholds.json` exists and validates against its schema.
-      - n: 13
         from: orchestrator_cli
         to: signing
         message: (optional) sign run artifacts and publish security/**

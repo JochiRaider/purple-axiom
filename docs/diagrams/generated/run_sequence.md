@@ -14,8 +14,6 @@ sequenceDiagram
   participant detection as "Detection Stage"
   participant scoring as "Scoring Stage"
   participant reporting as "Reporting Stage"
-  participant matrix_runner as "Matrix Runner"
-  participant report_artifacts as "Report Artifacts"
   participant signing as "Signing Stage"
   operator->>orchestrator_cli: 1. invoke simulate (full pipeline)
   orchestrator_cli->>run_lock_dir: 2. acquire exclusive run lock
@@ -28,6 +26,5 @@ sequenceDiagram
   orchestrator_cli->>detection: 9. evaluate Sigma and publish detections/detections.jsonl
   orchestrator_cli->>scoring: 10. compute scoring/summary.json
   orchestrator_cli->>reporting: 11. generate report/report.json and report/thresholds.json
-  matrix_runner->>report_artifacts: 12. CI reads thresholds.json for pass/fail gating
-  orchestrator_cli->>signing: 13. (optional) sign run artifacts and publish security/**
+  orchestrator_cli->>signing: 12. (optional) sign run artifacts and publish security/**
 ```

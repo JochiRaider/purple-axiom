@@ -11,7 +11,6 @@ flowchart TB
     direction TB
     agg_ci_pipeline["CI Pipeline (all stages)"]
     golden_dataset_builder["Golden Dataset Builder"]
-    matrix_runner["Matrix Runner"]
     operator_interface["Operator Interface"]
     orchestrator_cli["Orchestrator CLI"]
     otel_collector_gateway["OpenTelemetry Collector (gateway tier)"]
@@ -28,7 +27,6 @@ flowchart TB
   agg_ci_pipeline -->|write/publish artifacts| agg_ci_workspace
   agg_ci_pipeline -->|import inventory (resolver-specific)| lab_provider_sources
   golden_dataset_builder -->|publish golden dataset release| agg_ci_workspace
-  matrix_runner -->|read report artifacts for CI gating (threshold coupling)| agg_ci_workspace
   operator -->|use web UI for manual triggering and artifact browsing| operator_interface
   operator -->|invoke lifecycle verbs (build/simulate/replay/export/destroy)| orchestrator_cli
   operator_interface -->|append UI audit events (append-only; write-ahead for gated actions); manage baseline detection packages (create/list/delete/download) (optional; v0.2+ when enabled); +1 more| agg_ci_workspace

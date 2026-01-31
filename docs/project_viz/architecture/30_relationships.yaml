@@ -867,23 +867,6 @@ relationships:
         section_heading: Required artifacts
         excerpt: "report/report.json, report/thresholds.json, and report/run_timeline.md are required outputs."
 
-  - from: matrix_runner
-    to: report_artifacts
-    label: read report artifacts for CI gating (threshold coupling)
-    interaction: batch
-    protocol: filesystem
-    auth: ci_job_context
-    data:
-      - report/thresholds.json
-      - report/report.json
-      - report/run_timeline.md
-    frequency: per_ci_job
-    reliability: fail_closed
-    evidence:
-      - file: 105_ci_operational_readiness.md
-        section_heading: Reporting output coupling (fail closed)
-        excerpt: "If any of thresholds.json, report.json, or run_timeline.md are present, CI MUST require all three."
-
   - from: signing
     to: integrity_artifacts
     label: publish checksums, signature, and public key

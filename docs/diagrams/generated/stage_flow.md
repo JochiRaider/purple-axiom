@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart LR
-  subgraph ci_environment["CI Environment"]
+  subgraph ci_environment["CI Environment (pipeline stages)"]
     lab_provider["Lab Provider Stage"]
     runner["Runner Stage"]
     telemetry["Telemetry Stage"]

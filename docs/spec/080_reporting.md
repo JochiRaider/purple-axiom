@@ -14,6 +14,66 @@ related:
 
 # Reporting
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `reporting`
+
+### Owned output roots (published paths)
+
+- `report/`
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id     | path/glob            | Required?                                  |
+| --------------- | -------------------- | ------------------------------------------ |
+| `report.schema` | `report/report.json` | required (when `reporting.emit_json=true`) |
+
+#### Required inputs
+
+| contract_id    | Where found            | Required? |
+| -------------- | ---------------------- | --------- |
+| `range_config` | `inputs/range.yaml`    | required  |
+| `manifest`     | `manifest.json`        | required  |
+| `summary`      | `scoring/summary.json` | required  |
+
+Notes:
+
+- Reporting emits additional **non-contract** outputs in v0.1:
+  - `report/report.html` when `reporting.emit_html=true`
+  - `report/thresholds.json` (policy/gating surface; TODO: add as a contract-backed artifact)
+- When `reporting.regression.enabled=true`, reporting also consumes a baseline reference (see
+  `120_config_reference.md`, `reporting.regression.*`) and materializes deterministic baseline
+  snapshots under `inputs/` per `045_storage_formats.md`.
+
+### Config keys used
+
+- `reporting.*` (emit flags, regression, rendering/detail toggles)
+- `reporting.redaction.*` (report rendering redaction policy; distinct from `security.redaction.*`)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `fail_closed`
+- Stage outcome reason codes:
+  - reporting stage: see [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) §
+    "Reporting stage (`reporting`)"
+  - regression substage: see ADR-0005 § "Regression compare substage
+    (`reporting.regression_compare`)"
+
+### Isolation test fixture(s)
+
+- `tests/fixtures/reporting/defense_outcomes/`
+- TODO: specify fixture roots for regression comparability and thresholds rendering.
+
 This document defines the reporting artifacts, required outputs, and trending keys for Purple Axiom
 runs. It specifies both machine-readable JSON outputs for CI integration and human-readable report
 structures for operator review.

@@ -13,6 +13,60 @@ related:
 
 # Lab providers and inventory resolution
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `lab_provider`
+
+### Owned output roots (published paths)
+
+- `logs/` (contracted: `logs/lab_inventory_snapshot.json`)
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id              | path/glob                          | Required? |
+| ------------------------ | ---------------------------------- | --------- |
+| `lab_inventory_snapshot` | `logs/lab_inventory_snapshot.json` | required  |
+
+#### Required inputs
+
+| contract_id    | Where found         | Required? |
+| -------------- | ------------------- | --------- |
+| `range_config` | `inputs/range.yaml` | required  |
+
+Notes:
+
+- Provider-specific inventory sources MAY live outside the run bundle (`lab.inventory.path`,
+  provider APIs, etc.). The resolved, canonical snapshot MUST be written to
+  `logs/lab_inventory_snapshot.json`.
+
+### Config keys used
+
+- `lab.*` (especially `lab.provider`, `lab.assets`, `lab.inventory.*`)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `fail_closed`
+- Stage outcome reason codes: see
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Lab provider stage
+  (`lab_provider`)".
+
+### Isolation test fixture(s)
+
+- TODO: specify fixture root for lab provider inventory parsing and snapshotting (see
+  `100_test_strategy_ci.md`, "Lab provider parser tests").
+- TODO: specify fixture used by scenario target-selector tests ("Scenario selection tests") for
+  deterministic target resolution.
+
 ## Purpose
 
 Define a pluggable interface for resolving lab assets without coupling Purple Axiom to any single

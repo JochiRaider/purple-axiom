@@ -15,6 +15,68 @@ related:
 
 # Detection Rules (Sigma)
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `detection`
+
+### Owned output roots (published paths)
+
+- `bridge/` (compiled evaluation plans + mapping pack snapshot + coverage)
+- `detections/` (detection instances)
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id            | path/glob                           | Required?                            |
+| ---------------------- | ----------------------------------- | ------------------------------------ |
+| `bridge_compiled_plan` | `bridge/compiled_plans/*.plan.json` | required (when detection is enabled) |
+| `bridge_coverage`      | `bridge/coverage.json`              | required (when detection is enabled) |
+| `bridge_mapping_pack`  | `bridge/mapping_pack_snapshot.json` | required (when detection is enabled) |
+| `bridge_router_table`  | `bridge/router_table.json`          | required (when detection is enabled) |
+| `detection_instance`   | `detections/detections.jsonl`       | required (when detection is enabled) |
+
+#### Required inputs
+
+| contract_id           | Where found                    | Required?                            |
+| --------------------- | ------------------------------ | ------------------------------------ |
+| `range_config`        | `inputs/range.yaml`            | required                             |
+| `manifest`            | `manifest.json`                | required (version pins + provenance) |
+| `ocsf_event_envelope` | `normalized/ocsf_events.jsonl` | required                             |
+
+Notes:
+
+- Detection evaluation is defined over the normalized store. v0.1 binds the normalized stream as
+  JSONL (`normalized/ocsf_events.jsonl`).
+- Rule inputs (Sigma YAML) and mapping packs are pack-like **non-contract** inputs; the stage
+  snapshots the effective mapping pack material to `bridge/mapping_pack_snapshot.json`.
+
+### Config keys used
+
+- `detection.*` (mode, join tolerance)
+- `detection.sigma.*` (rule inputs)
+- `detection.sigma.bridge.*` (mapping pack selection, backend selection, caching, fail mode)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `fail_closed`
+- Stage outcome reason codes: see
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Detection stage
+  (`detection`)".
+
+### Isolation test fixture(s)
+
+- TODO: specify fixture roots for Sigma compilation and router-table conformance (see
+  `100_test_strategy_ci.md`, "Sigma compilation (bridge)").
+
 This specification defines how Purple Axiom compiles and evaluates Sigma rules against normalized
 OCSF events using the Sigma-to-OCSF Bridge.
 

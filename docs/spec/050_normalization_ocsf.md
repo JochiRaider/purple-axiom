@@ -6,6 +6,65 @@ status: draft
 
 # Normalization to OCSF
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `normalization`
+
+### Owned output roots (published paths)
+
+- `normalized/` (analytics-tier normalized store + mapping coverage/provenance)
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id                | path/glob                                  | Required? |
+| -------------------------- | ------------------------------------------ | --------- |
+| `ocsf_event_envelope`      | `normalized/ocsf_events.jsonl`             | required  |
+| `mapping_coverage`         | `normalized/mapping_coverage.json`         | required  |
+| `mapping_profile_snapshot` | `normalized/mapping_profile_snapshot.json` | required  |
+
+#### Required inputs
+
+| contract_id    | Where found         | Required?                            |
+| -------------- | ------------------- | ------------------------------------ |
+| `range_config` | `inputs/range.yaml` | required                             |
+| `manifest`     | `manifest.json`     | required (version pins + provenance) |
+
+Notes:
+
+- This stage consumes **non-contract** inputs in v0.1, notably `raw_parquet/**` (telemetry
+  analytics-tier store) and mapping profiles.
+- If an implementation emits normalized events as Parquet under `normalized/ocsf_events/`, it MUST
+  either:
+  - also emit `normalized/ocsf_events.jsonl` for contract conformance, or
+  - update the contract registry + schemas and treat the change as a contract version bump.
+
+### Config keys used
+
+- `normalization.*` (OCSF pinning, mapping profiles, dedupe, output format)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `fail_closed` when `normalization.strict_mode=true`; otherwise
+  `warn_and_skip`
+- Stage outcome reason codes: see
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Normalization stage
+  (`normalization`)".
+
+### Isolation test fixture(s)
+
+- TODO: specify fixture roots for mapping unit tests and mapping pack conformance tests (see
+  `100_test_strategy_ci.md`, "Normalization and mapping").
+
 This document defines the normalization rules and mapping approach for producing OCSF events in
 Purple Axiom. It specifies versioning policy, required envelopes, and the run bundle artifacts that
 make normalization deterministic and auditable.

@@ -6,6 +6,64 @@ status: draft
 
 # Scoring and metrics
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `scoring`
+
+### Owned output roots (published paths)
+
+- `scoring/`
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id | path/glob              | Required?                              |
+| ----------- | ---------------------- | -------------------------------------- |
+| `summary`   | `scoring/summary.json` | required (when `scoring.enabled=true`) |
+
+#### Required inputs
+
+| contract_id           | Where found                        | Required?                                        |
+| --------------------- | ---------------------------------- | ------------------------------------------------ |
+| `range_config`        | `inputs/range.yaml`                | required                                         |
+| `ground_truth`        | `ground_truth.jsonl`               | required                                         |
+| `criteria_result`     | `criteria/results.jsonl`           | required (when `validation.enabled=true`)        |
+| `detection_instance`  | `detections/detections.jsonl`      | required (when detection is enabled)             |
+| `mapping_coverage`    | `normalized/mapping_coverage.json` | required                                         |
+| `ocsf_event_envelope` | `normalized/ocsf_events.jsonl`     | required (Tier 1 coverage + latency attribution) |
+
+Notes:
+
+- Scoring consumes additional stage outputs (for example `bridge/**`,
+  `normalized/mapping_profile_snapshot.json`) but those are not required for the minimal contracted
+  scoring summary.
+
+### Config keys used
+
+- `scoring.*` (gap taxonomy selection, thresholds, weights)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `fail_closed`
+- Stage outcome reason codes: see
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Scoring stage
+  (`scoring`)".
+
+### Isolation test fixture(s)
+
+- TODO: specify fixture roots for scoring summary conformance.
+- See also: `tests/fixtures/reporting/defense_outcomes/` and the measurement contract fixtures
+  described in `100_test_strategy_ci.md` (scoring inputs exercised end-to-end).
+
 This document defines how Purple Axiom computes scoring metrics, applies quality gates, and
 interprets results for CI and operator reporting. It establishes default thresholds and weightings
 for v0.1 while keeping evaluation deterministic and auditable.

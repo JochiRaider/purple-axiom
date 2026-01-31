@@ -6,6 +6,72 @@ status: draft
 
 # Scenario model
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `runner`
+
+### Owned output roots (published paths)
+
+- `ground_truth.jsonl`
+- `runner/` (contracted action evidence under `runner/actions/*/`)
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id                   | path/glob                                           | Required?                                                           |
+| ----------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
+| `ground_truth`                | `ground_truth.jsonl`                                | required                                                            |
+| `principal_context`           | `runner/principal_context.json`                     | optional (default-on; see `runner.identity.emit_principal_context`) |
+| `runner_executor_evidence`    | `runner/actions/*/executor.json`                    | required (per action attempted)                                     |
+| `requirements_evaluation`     | `runner/actions/*/requirements_evaluation.json`     | required (per action evaluated, including skipped)                  |
+| `resolved_inputs_redacted`    | `runner/actions/*/resolved_inputs_redacted.json`    | optional (executor-dependent)                                       |
+| `side_effect_ledger`          | `runner/actions/*/side_effect_ledger.json`          | optional                                                            |
+| `state_reconciliation_report` | `runner/actions/*/state_reconciliation_report.json` | optional (when state reconciliation is enabled)                     |
+| `cleanup_verification`        | `runner/actions/*/cleanup_verification.json`        | optional (when cleanup verification is enabled)                     |
+
+#### Required inputs
+
+| contract_id              | Where found                        | Required? |
+| ------------------------ | ---------------------------------- | --------- |
+| `range_config`           | `inputs/range.yaml`                | required  |
+| `lab_inventory_snapshot` | `logs/lab_inventory_snapshot.json` | required  |
+
+Notes:
+
+- The runner consumes additional **non-contract** inputs (v0.1), notably:
+  - `inputs/scenario.yaml` (scenario selection + plan selection)
+  - pack-like assets referenced by `inputs/scenario.yaml` (Atomic tests, adapters, etc.)
+
+### Config keys used
+
+- `runner.*` (see `120_config_reference.md`)
+- `scenario.*` (from `inputs/scenario.yaml`; non-contract input in v0.1)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `fail_closed`
+- Stage outcome reason codes: see
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Runner stage
+  (`runner`)" (and substage `runner.environment_config`).
+
+### Isolation test fixture(s)
+
+- `tests/fixtures/runner/atomic/`
+- `tests/fixtures/runner/requirements/`
+- `tests/fixtures/runner/principal_context/`
+- `tests/fixtures/runner/state_reconciliation/`
+- `tests/fixtures/runner/lifecycle/`
+- `tests/fixtures/runner/synthetic_marker/`
+
 This document defines the scenario model used by Purple Axiom, covering how scenarios describe
 targets, actions, and execution constraints. It also specifies the runner requirements for identity,
 determinism, and ground truth artifacts.

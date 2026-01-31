@@ -1,3 +1,4 @@
+# docs/project_viz/source/mermaid_gen/constants.py
 from __future__ import annotations
 
 ENTITY_SECTIONS: tuple[str, ...] = (

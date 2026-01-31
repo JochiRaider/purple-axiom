@@ -6,6 +6,70 @@ status: draft
 
 # Telemetry pipeline
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `telemetry`
+
+### Owned output roots (published paths)
+
+- `raw_parquet/` (analytics-tier telemetry; non-contract in v0.1)
+- `raw/` (evidence-tier raw preservation; optional)
+- `logs/` (contracted validator outputs)
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id            | path/glob                        | Required?                                               |
+| ---------------------- | -------------------------------- | ------------------------------------------------------- |
+| `counters`             | `logs/counters.json`             | required                                                |
+| `telemetry_validation` | `logs/telemetry_validation.json` | optional (when telemetry validation is enabled)         |
+| `pcap_manifest`        | `raw/pcap/manifest.json`         | optional (placeholder source; when enabled/implemented) |
+| `netflow_manifest`     | `raw/netflow/manifest.json`      | optional (placeholder source; when enabled/implemented) |
+
+#### Required inputs
+
+| contract_id                  | Where found                              | Required?                                                 |
+| ---------------------------- | ---------------------------------------- | --------------------------------------------------------- |
+| `range_config`               | `inputs/range.yaml`                      | required                                                  |
+| `lab_inventory_snapshot`     | `logs/lab_inventory_snapshot.json`       | required                                                  |
+| `ground_truth`               | `ground_truth.jsonl`                     | required (run window selection)                           |
+| `telemetry_baseline_profile` | `inputs/telemetry_baseline_profile.json` | optional (when `telemetry.baseline_profile.enabled=true`) |
+
+Notes:
+
+- The primary telemetry dataset under `raw_parquet/**` is an **analytics-tier** store and is not
+  contract-backed in v0.1. Stage boundaries for `raw_parquet/**` are defined in ADR-0004 and
+  `045_storage_formats.md`.
+
+### Config keys used
+
+- `telemetry.*` (OTel, baseline profile gate, and source enablement)
+- `operability.*` (run limits, budgets, health files)
+- `security.network.*` (egress policy canary)
+- `security.redaction.*` (raw preservation / quarantine behavior)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `fail_closed` (v0.1 baseline)
+- Stage outcome reason codes (including substages): see
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Telemetry stage
+  (`telemetry`)".
+
+### Isolation test fixture(s)
+
+- `tests/fixtures/telemetry/synthetic_marker/` (marker observability)
+- TODO: specify fixture root for raw Windows event XML corpus used by telemetry collection tests
+  (see `100_test_strategy_ci.md`, "Telemetry collection").
+
 Purple Axiom treats telemetry as an input dataset that must be reproducible and analyzable without
 vendor lock-in. The telemetry stage prioritizes capture fidelity, deterministic fields, resilience
 under replay, and predictable operations.

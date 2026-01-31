@@ -1,3 +1,4 @@
+# docs/project_viz/source/mermaid_gen/diagrams/registry.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from .run_status_state import gen_run_status_state
 from .stage_flow import gen_stage_flow
 from .trust_boundaries import gen_trust_boundaries
 from .publish_gate_contracts import gen_publish_gate_contracts_flow
+from .c4 import gen_c4_context, gen_c4_container, gen_c4_component_orchestrator_internals
 
 Model = dict[str, Any]
 RenderFn = Callable[[Model, "RenderConfig"], str]
@@ -46,6 +48,18 @@ def _render_run_status_state(model: Model, _: RenderConfig) -> str:
 def _render_publish_gate_contracts(model: Model, cfg: RenderConfig) -> str:
     return gen_publish_gate_contracts_flow(model, cfg.workflow_id)
 
+
+def _render_c4_context(model: Model, _: RenderConfig) -> str:
+    return gen_c4_context(model)
+
+
+def _render_c4_container(model: Model, _: RenderConfig) -> str:
+    return gen_c4_container(model)
+
+
+def _render_c4_component_orchestrator_internals(model: Model, _: RenderConfig) -> str:
+    return gen_c4_component_orchestrator_internals(model)
+
 DIAGRAMS: list[DiagramSpec] = [
     DiagramSpec(
         diagram_id="stage_flow",
@@ -72,9 +86,27 @@ DIAGRAMS: list[DiagramSpec] = [
         render=_render_run_status_state,
     ),
     DiagramSpec(
-    diagram_id="publish_gate_contracts",
-    title="Publish gate + contract seams",
-    filename="publish_gate_contracts.md",
-    render=_render_publish_gate_contracts,
-),
+        diagram_id="publish_gate_contracts",
+        title="Publish gate + contract seams",
+        filename="publish_gate_contracts.md",
+        render=_render_publish_gate_contracts,
+    ),
+    DiagramSpec(
+        diagram_id="c4_context",
+        title="Purple Axiom — C4 Context",
+        filename="c4_context_purple_axiom.md",
+        render=_render_c4_context,
+    ),
+    DiagramSpec(
+        diagram_id="c4_container",
+        title="Purple Axiom — C4 Container",
+        filename="c4_container_purple_axiom.md",
+        render=_render_c4_container,
+    ),
+    DiagramSpec(
+        diagram_id="c4_component_orchestrator_internals",
+        title="Purple Axiom — C4 Component (Orchestrator Internals)",
+        filename="c4_component_orchestrator_internals.md",
+        render=_render_c4_component_orchestrator_internals,
+    ),
 ]

@@ -983,6 +983,39 @@ The fixture set MUST include at least:
   matching contracts bundle fixture (directory or tarball) and assert that contract validation
   succeeds with (a) network access disabled and (b) no repository checkout available (only the two
   bundles on disk).
+- `stage_isolation_fixture_per_stage` (per-stage seam fixtures; independent stage build)
+  - Normative rule: Each stage MUST have at least one stage-isolation fixture that contains the
+    minimum upstream artifacts required to run that stage and produces contract-valid outputs for
+    that stage.
+  - Scope (normative):
+    - "Stage" means each v0.1 `stage_id` defined in ADR-0005 ("Stage identifiers").
+    - The `signing` stage is in-scope only when signing is enabled/implemented.
+  - Fixture contents (normative):
+    - The stage-isolation fixture input bundle MUST be a pruned run bundle rooted at
+      `runs/<run_id>/` containing only the upstream artifacts required by the stage under test for
+      the fixture's enabled feature set.
+    - The input bundle MUST NOT include artifacts produced by the stage under test or any later
+      stage(s) (prevents hidden coupling on downstream outputs).
+    - The fixture MUST include an expected outputs manifest for the stage under test, used to make
+      "artifact manifest completeness" checks deterministic and to support offline stage
+      development.
+      - RECOMMENDED location: `expected_outputs.json` adjacent to the fixture input bundle.
+      - Manifest format (normative): JSON array of objects, each containing:
+        - `artifact_path` (string; run-relative; POSIX separators)
+        - `contract_id` (string; resolvable via the contracts bundle)
+        - `required` (boolean)
+      - The array MUST be sorted by `artifact_path` ascending (bytewise lexicographic).
+  - Verification (normative; fail closed):
+    - CI MUST execute the stage under test using only the fixture input bundle (no upstream stages
+      executed).
+    - CI MUST validate produced outputs offline against the pinned contracts bundle (network
+      disabled; no repository checkout), consistent with
+      `offline_contract_validation_with_schema_bundle`.
+    - CI MUST assert:
+      - every `required=true` expected output exists at its declared `artifact_path`,
+      - each produced expected output validates against its contract, and
+      - deterministic artifact path rules hold for produced contracted directories (timestamped
+        filenames blocked).
 
 Report generation sanity checks validate that reports render without errors.
 

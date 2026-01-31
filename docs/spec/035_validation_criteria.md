@@ -6,6 +6,64 @@ status: draft
 
 # Validation criteria packs
 
+## Stage contract header
+
+### Stage ID
+
+- `stage_id`: `validation`
+
+### Owned output roots (published paths)
+
+- `criteria/` (criteria pack snapshot + evaluation results)
+
+### Inputs/Outputs
+
+This section is the stage-local view of:
+
+- the stage boundary table in
+  [ADR-0004](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md), and
+- the contract bindings in [contract_registry.json](../contracts/contract_registry.json).
+
+#### Contract-backed outputs
+
+| contract_id              | path/glob                 | Required?                                 |
+| ------------------------ | ------------------------- | ----------------------------------------- |
+| `criteria_pack_manifest` | `criteria/manifest.json`  | required (when `validation.enabled=true`) |
+| `criteria_entry`         | `criteria/criteria.jsonl` | required (when `validation.enabled=true`) |
+| `criteria_result`        | `criteria/results.jsonl`  | required (when `validation.enabled=true`) |
+
+#### Required inputs
+
+| contract_id           | Where found                    | Required?                                  |
+| --------------------- | ------------------------------ | ------------------------------------------ |
+| `range_config`        | `inputs/range.yaml`            | required                                   |
+| `ground_truth`        | `ground_truth.jsonl`           | required                                   |
+| `ocsf_event_envelope` | `normalized/ocsf_events.jsonl` | required (criteria evaluation query layer) |
+
+Notes:
+
+- This stage consumes additional **non-contract** inputs in v0.1:
+  - the criteria pack source material from configured `validation.criteria_pack.paths`
+  - optional runner artifacts such as `runner/actions/*/cleanup_verification.json`
+
+### Config keys used
+
+- `validation.*` (criteria pack selection + evaluation windows + fail mode)
+- `operability.run_limits.*` (recorded as substage `validation.run_limits` per ADR-0005)
+
+### Default fail mode and outcome reasons
+
+- Default `fail_mode`: `warn_and_skip` (v0.1 baseline)
+- Stage outcome reason codes: see
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Validation stage
+  (`validation`)".
+
+### Isolation test fixture(s)
+
+- TODO: specify fixture roots for criteria pack conformance and criteria query evaluation.
+
+## Purpose
+
 Purple Axiom externalizes expected telemetry and cleanup verification expectations into criteria
 packs. This decouples execution definitions from validation logic while preserving determinism and
 reproducibility.

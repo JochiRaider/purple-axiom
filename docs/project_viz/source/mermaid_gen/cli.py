@@ -1,3 +1,4 @@
+# docs/project_viz/source/mermaid_gen/cli.py
 from __future__ import annotations
 
 import argparse

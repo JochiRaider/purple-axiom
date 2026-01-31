@@ -1,3 +1,4 @@
+# docs/project_viz/source/mermaid_gen/diagrams/publish_gate_contracts.py
 from __future__ import annotations
 
 import re

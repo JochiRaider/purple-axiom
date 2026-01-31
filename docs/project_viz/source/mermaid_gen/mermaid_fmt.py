@@ -66,10 +66,29 @@ def mm_flow_node(node_id: str, label: str) -> str:
 def mm_subgraph_open(subgraph_id: str, title: str) -> str:
     return f'  subgraph {subgraph_id}["{mm_text(title)}"]'
 
+def _mm_normalize_flow_arrow(arrow: str) -> str:
+    """Normalize common (often accidental) flowchart arrows to valid Mermaid syntax.
+
+    Mermaid flowcharts use `-->` for a normal arrow and `-.->` for a dotted arrow.
+    Callers sometimes (accidentally) pass `->` or `.->`; normalize those to the
+    correct Mermaid flowchart forms.
+    """
+    a = str(arrow).strip()
+    if a == "->":
+        return "-->"
+    if a == ".->":
+        return "-.->"
+    return a
+
 def mm_flow_edge(src: str, dst: str, label: str | None = None, arrow: str = "-->") -> str:
+    a = _mm_normalize_flow_arrow(arrow)
     if label:
-        return f"  {src} {arrow}|{mm_edge_label(label)}| {dst}"
-    return f"  {src} {arrow} {dst}"
+        lbl = mm_edge_label(label)
+        # Mermaid flowchart dotted edge labels must be in the middle.
+        if a == "-.->":
+            return f"  {src} -. {lbl} .-> {dst}"
+        return f"  {src} {a}|{lbl}| {dst}"
+    return f"  {src} {a} {dst}"
 
 def mm_participant(pid: str, label: str) -> str:
     return f'  participant {pid} as "{mm_text(label)}"'

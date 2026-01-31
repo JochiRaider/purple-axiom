@@ -107,6 +107,24 @@ The registry instance MUST include, at minimum:
 - `bindings[]`:
   - `artifact_glob` (run-relative POSIX glob, for example `runner/actions/*/executor.json`)
   - `contract_id` (must exist in `contracts[]`)
+  - `stage_owner` (owning stage ID, or `orchestrator`, for deterministic stage → contract-backed
+    output discovery)
+    - Allowed values (v0.1): `lab_provider`, `runner`, `telemetry`, `normalization`, `validation`,
+      `detection`, `scoring`, `reporting`, `signing`, `orchestrator`
+
+#### Stage ownership metadata (normative)
+
+- Each `bindings[]` entry MUST include `stage_owner` (required starting in
+  `contract_registry.json.registry_version` `0.1.1`).
+- `stage_owner` declares which canonical stage is responsible for publishing any artifact matching
+  `artifact_glob` into the run bundle.
+  - `orchestrator` is reserved for orchestrator-owned artifacts that are published outside any stage
+    boundary (for example pinned inputs and control-plane/audit artifacts).
+- The orchestrator (or stage wrapper) MUST derive the per-stage `expected_outputs[]` list for
+  `PublishGate.finalize(...)` by filtering `bindings[]` on `stage_owner == stage_id` and mapping
+  concrete artifact paths to `contract_id`.
+- Verification hook: CI MUST fail if any `bindings[]` entry is missing `stage_owner`, or if
+  `stage_owner` is not in the allowed set for the current release train.
 
 #### Contract version constant (normative)
 

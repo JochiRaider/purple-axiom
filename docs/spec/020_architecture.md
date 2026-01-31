@@ -646,11 +646,33 @@ Where:
   - `contract_id` (schema/contract identity as used by the contract validator)
   - `required: bool` (default `true`)
 
+Deterministic stage → contract-backed outputs (normative):
+
+- The contract registry (`contract_registry.json`) is the source of truth for stage ownership of
+  contract-backed artifacts via `bindings[].stage_owner`.
+- The orchestrator (or stage wrapper) MUST construct `expected_outputs[]` by joining the current
+  `stage_id` to `bindings[].stage_owner` and mapping concrete artifact paths to `contract_id` via
+  `artifact_glob`.
+  - Expansion rule: for any binding with glob metacharacters (for example `*`), the stage wrapper
+    MUST expand to the concrete set of matching staged files under
+    `runs/<run_id>/.staging/<stage_id>/`.
+  - Ordering rule: the resulting `expected_outputs[]` list MUST be sorted by `artifact_path`
+    (ascending, bytewise/lexicographic) to keep validation and reporting deterministic.
+- Ownership invariant: a stage MUST NOT publish any contract-backed output whose registry binding
+  has `stage_owner != stage_id` (fail closed).
+
 Finalize semantics (normative):
 
 - All outputs for a stage MUST be written under `runs/<run_id>/.staging/<stage_id>/` first.
+- Output-root guardrail: a stage MUST NOT write or promote any run-bundle output outside its
+  declared output roots (see "Stage IO boundaries" above). Violations MUST fail closed.
 - `finalize()` MUST validate all `expected_outputs[]` using `ContractValidator` before any atomic
   promotion.
+- `finalize()` MUST treat missing required outputs as a validation failure: if any
+  `expected_outputs[]` entry with `required=true` is absent, `finalize()` MUST fail closed and MUST
+  NOT promote any staged outputs.
+- When `finalize()` fails, the orchestrator MUST record a fail-closed stage outcome (see
+  `ADR-0005-stage-outcomes-and-failure-classification.md`).
 - If validation fails, `finalize()` MUST NOT promote any staged outputs into their final run bundle
   locations.
 - If validation succeeds, `finalize()` MUST promote outputs using atomic publish semantics (atomic

@@ -39,6 +39,10 @@ Conformance anchors (v0.1):
   (`manifest.json` and `logs/health.json` when enabled) and do not necessarily match output
   directory names (for example, stage `reporting` publishes under `report/`, and stage `signing`
   publishes under `security/`).
+- **Stage ↔ contract-backed outputs (machine-readable):**
+  `contract_registry.json.bindings[].stage_owner` declares ownership for each contract-backed
+  `artifact_glob` and MUST be used to construct publish-gate `expected_outputs[]` without hardcoding
+  stage→contract mappings.
 
 Stages MUST publish via deterministic filesystem semantics: write into a staging location, validate
 contract-backed outputs at the publish gate, then atomically publish into the run bundle. A stage is

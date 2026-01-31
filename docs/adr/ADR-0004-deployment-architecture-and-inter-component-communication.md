@@ -164,6 +164,12 @@ For any stage that writes a directory or multi-file artifact set:
    - `runs/<run_id>/.staging/<stage_id>/`
 1. The stage MUST validate required contracts for the outputs it intends to publish (presence +
    schema validation where applicable).
+   - Stage ↔ contract-backed outputs MUST be machine-discoverable via the contract registry:
+     - `contract_registry.json.bindings[].stage_owner` declares the owning stage ID (or
+       `orchestrator`) for each contract-backed `artifact_glob`.
+     - Orchestrator/stage wrappers MUST construct the publish gate `expected_outputs[]` list by
+       filtering `bindings[]` on `stage_owner == <stage_id>` and mapping concrete artifact paths to
+       `contract_id`.
 1. On contract validation failure, the stage MUST emit a deterministic contract validation report
    at:
    - `runs/<run_id>/logs/contract_validation/<stage_id>.json`

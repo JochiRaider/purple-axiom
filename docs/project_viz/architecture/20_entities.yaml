@@ -218,7 +218,7 @@ containers:
     description: Bundled reverse proxy within the appliance container; terminates HTTPS and gates access to the Operator Interface.
     evidence:
       - file: 115_operator_interface.md
-        section_heading: Network profile: LAN UI via bundled reverse proxy
+        section_heading: Network profile LAN UI via bundled reverse proxy
         excerpt: The reverse proxy MUST be the only process binding the external UI port (default 443).
   - id: lab_provider
     name: Lab Provider Stage
@@ -531,16 +531,155 @@ datastores:
         section_heading: Audit
         excerpt: 'UI audit events are appended to logs/ui_audit.jsonl.'
   - id: staging_area
-    name: Staging Area
+    name: Stage Staging Area (runs/<run_id>/.staging/<stage_id>/)
     kind: filesystem_dir
     trust_zone: local_filesystem
     tech: filesystem
     data_classes:
       - staging_artifacts
     evidence:
-      - file: 000_charter.md
-        section_heading: Guiding principles
-        excerpt: 'Stages write to a staging location (`.staging/`).'
+      - file: 020_architecture.md
+        section_heading: Lifecycle state machine integrations (v0.1; guidance)
+        excerpt: Canonical artifact anchors include runs/<run_id>/.staging/<stage_id>/
+  - id: ground_truth
+    name: Ground Truth (ground_truth.jsonl)
+    kind: filesystem_file
+    trust_zone: local_filesystem
+    tech: jsonl
+    data_classes:
+      - ground_truth
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Lifecycle state machine integrations (v0.1; guidance)
+        excerpt: Canonical artifact anchors include `ground_truth.jsonl`.
+  - id: runner_evidence_store
+    name: Runner Evidence Store (runner/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - runner_actions_evidence
+      - principal_context
+    evidence:
+      - file: 025_data_contracts.md
+        section_heading: Runner evidence
+        excerpt: runner/actions/<action_id>/... and runs/<run_id>/runner/principal_context.json
+  - id: criteria_store
+    name: Criteria Store (criteria/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: jsonl
+    data_classes:
+      - criteria_pack_snapshot
+      - criteria_results
+    evidence:
+      - file: 035_validation_criteria.md
+        section_heading: Run bundle snapshot
+        excerpt: runs/<run_id>/criteria/manifest.json, criteria.jsonl, results.jsonl
+  - id: bridge_store
+    name: Bridge Store (bridge/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - bridge_router_table
+      - bridge_mapping_pack_snapshot
+      - bridge_compiled_plans
+      - bridge_coverage
+    evidence:
+      - file: 065_sigma_to_ocsf_bridge.md
+        section_heading: Bridge artifacts in the run bundle
+        excerpt: bridge MUST emit artifacts under runs/<run_id>/bridge/
+  - id: health_log
+    name: Health Log (logs/health.json)
+    kind: filesystem_file
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - health
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs (v0.1; normative where stated)
+        excerpt: outcomes recorded in logs/health.json when enabled
+  - id: cache_provenance_log
+    name: Cache Provenance (logs/cache_provenance.json)
+    kind: filesystem_file
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - cache_provenance
+    evidence:
+      - file: 025_data_contracts.md
+        section_heading: Runner evidence
+        excerpt: runs/<run_id>/logs/cache_provenance.json
+  - id: workspace_state
+    name: Workspace State (<workspace_root>/state/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - workspace_state
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Run listing and monitoring (v0.2 normative)
+        excerpt: state/run_registry.json
+  - id: run_registry
+    name: Run Registry (state/run_registry.json)
+    kind: filesystem_file
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - run_registry
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Run listing and monitoring (v0.2 normative)
+        excerpt: state/run_registry.json
+  - id: workspace_logs
+    name: Workspace Logs (<workspace_root>/logs/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: filesystem
+    data_classes:
+      - workspace_logs
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Audit
+        excerpt: logs/ui_audit.jsonl
+  - id: ui_audit_log
+    name: UI Audit Log (logs/ui_audit.jsonl)
+    kind: filesystem_file
+    trust_zone: local_filesystem
+    tech: jsonl
+    data_classes:
+      - ui_audit_events
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Audit
+        excerpt: UI audit events appended to logs/ui_audit.jsonl.
+  - id: run_control_store
+    name: Run Control Store (control/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - run_control_requests
+      - run_control_decisions
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Open items and required follow-ups for implementation
+        excerpt: runs/<run_id>/control/*.json
+  - id: run_plan_store
+    name: Run Plan Store (plan/)
+    kind: filesystem_dir
+    trust_zone: local_filesystem
+    tech: json
+    data_classes:
+      - plan_artifacts
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Open items and required follow-ups for implementation
+        excerpt: runs/<run_id>/plan/{expanded_graph.json,plan_summary.json,trace.jsonl,plan_timeline.md}
+
 
 buses:
   - id: run_bundle_filesystem

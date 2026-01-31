@@ -10,23 +10,19 @@ import yaml
 from .constants import MODEL_PART_FILES
 
 
-def _sanitize_yaml_for_pyyaml(raw: str) -> str:
-    """Sanitize YAML to improve compatibility with PyYAML parsing.
+def _sanitize_yaml_for_pyyaml(raw: str) -> tuple[str, list[tuple[int, str, str]]]:
+    """Return (sanitized_yaml, changes).
 
-    Some YAML parsers reject plain scalars containing ': ' (colon-space). In the
-    model corpus this most commonly appears in evidence `excerpt:` and glossary
-    `definition:` lines.
-
-    This sanitizer only quotes *unquoted* scalar values for a small allow-list of
-    keys when those values contain ': '. It does not modify other fields.
+    Each change is (line_number_1_based, original_line, new_line).
     """
+    changes: list[tuple[int, str, str]] = []
     out_lines: list[str] = []
-    for line in raw.splitlines():
+
+    for i, line in enumerate(raw.splitlines(), start=1):
         match = re.match(
-            r"^(\s*(?:-\s*)?(?:excerpt|definition|description|section_heading|message|name|purpose|title):\s*)(.+)$",
+            r"^(\s*(?:-\s*)?(?:excerpt|definition|description|section_heading|message|name|purpose|title|label):\s*)(.+)$",
             line,
         )
-
         if not match:
             out_lines.append(line)
             continue
@@ -38,13 +34,25 @@ def _sanitize_yaml_for_pyyaml(raw: str) -> str:
             out_lines.append(line)
             continue
 
-        if ": " in value:
-            escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-            out_lines.append(f'{prefix}"{escaped}"')
+        # PyYAML rejects plain scalars containing ":" followed by whitespace or EOL
+        # (e.g., "Network profile: LAN UI", "foo:", "foo:\tbar").
+        # Preserve any trailing inline comment (space-# ...).
+        body, comment = value, ""
+        m = re.match(r"^(.*?)(\s+#.*)$", value)
+        if m:
+            body, comment = m.group(1), m.group(2)
+
+        if re.search(r":(?=\s|$)", body):
+            escaped = body.replace("\\", "\\\\").replace('"', '\\"')
+            new_line = f'{prefix}"{escaped}"{comment}'
+            out_lines.append(new_line)
+            if new_line != line:
+                changes.append((i, line, new_line))
         else:
             out_lines.append(line)
 
-    return "\n".join(out_lines) + ("\n" if raw.endswith("\n") else "")
+    sanitized = "\n".join(out_lines) + ("\n" if raw.endswith("\n") else "")
+    return sanitized, changes
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
@@ -53,19 +61,24 @@ def _load_yaml_mapping(path: Path) -> dict[str, Any]:
     try:
         data = yaml.safe_load(raw)
     except Exception:
-        sanitized = _sanitize_yaml_for_pyyaml(raw)
+        sanitized, changes = _sanitize_yaml_for_pyyaml(raw)
         try:
             data = yaml.safe_load(sanitized)
         except Exception as e2:
             raise ValueError(f"Failed to parse YAML {path}: {e2}") from e2
 
-        print(
-            (
-                f"warning: parsed {path} after sanitizing unquoted scalars; "
-                "consider quoting values containing ': '"
-            ),
-            file=sys.stderr,
-        )
+        # Warn with specifics (cap to avoid spam)
+        if changes:
+            print(
+                f"warning: parsed {path} after sanitizing {len(changes)} line(s); "
+                "consider quoting values containing ':' followed by whitespace",
+                file=sys.stderr,
+            )
+            for (ln, old, new) in changes[:10]:
+                print(f"warning: {path}:{ln}: {old}", file=sys.stderr)
+                print(f"warning: {path}:{ln}: {new}", file=sys.stderr)
+            if len(changes) > 10:
+                print(f"warning: (and {len(changes) - 10} more)", file=sys.stderr)
 
     if not isinstance(data, dict):
         raise TypeError(

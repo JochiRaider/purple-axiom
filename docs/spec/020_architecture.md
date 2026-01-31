@@ -664,6 +664,16 @@ Finalize semantics (normative):
   - Persistence authority: the `OutcomeSink` implementation is orchestrator-owned and is responsible
     for writing `manifest.json` and, when enabled, `logs/health.json`.
 
+Reference publisher SDK requirement (normative):
+
+- The repository MUST provide a reference publisher implementation ("pa.publisher.v1") that
+  implements the `PublishGate` and `ContractValidator` ports exactly as specified.
+- The orchestrator composition root and any first-party stage CLI wrappers MUST bind these ports to
+  the reference publisher SDK and MUST NOT ship divergent implementations.
+- The semantics/versioning and CI conformance fixtures are defined in `025_data_contracts.md`
+  ("Producer tooling: reference publisher semantics") and `100_test_strategy_ci.md` ("Producer
+  tooling conformance").
+
 #### Port: `ContractValidator`
 
 Purpose: deterministic schema/contract validation for run-bundle artifacts.

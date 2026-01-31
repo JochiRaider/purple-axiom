@@ -2,842 +2,925 @@
 relationships:
   - from: operator
     to: orchestrator_cli
-    label: invoke lifecycle verbs
+    label: invoke lifecycle verbs (build/simulate/replay/export/destroy)
     interaction: request_response
-    protocol: unknown
-    auth: unknown
+    protocol: cli
+    auth: local_os_user
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: on_demand
+    reliability: deterministic_exit_code
     evidence:
       - file: 020_architecture.md
         section_heading: Overview
-        excerpt: Operators and CI drive the orchestrator via a small set of verbs.
+        excerpt: "Operators and CI drive the orchestrator via a small set of verbs."
+
   - from: operator
     to: operator_interface
     label: use web UI for manual triggering and artifact browsing
-    views:
-      - context
-      - ui
+    views: [context, ui]
     interaction: request_response
-    protocol: unknown
-    auth: unknown
+    protocol: https (lan_reverse_proxy:443)
+    auth: local_auth + session_cookie
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: on_demand
+    reliability: policy_enforced
     evidence:
       - file: 115_operator_interface.md
         section_heading: Goals
-        excerpt: Provide a web UI for manual triggering and artifact browsing.
+        excerpt: "Provide a web UI for manual triggering and artifact browsing."
+
   - from: operator_interface
-    to: audit_log_store
-    label: append UI audit events
-    views:
-      - ui
-    interaction: file_drop
-    protocol: filesystem
-    auth: unknown
-    data:
-      - logs/ui_audit.jsonl
-    frequency: unknown
-    reliability: unknown
-    evidence:
-      - file: 115_operator_interface.md
-        section_heading: Audit
-        excerpt: UI audit events are appended to logs/ui_audit.jsonl.
-  - from: matrix_runner
     to: orchestrator_cli
-    label: run orchestrator in CI
+    label: start orchestrator verbs (spawn verb process)
+    views: [ui]
     interaction: request_response
     protocol: local_process
-    auth: unknown
+    auth: local_os_user
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: on_demand
+    reliability: fail_closed_on_reject
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Functional surfaces (v0.2 normative)
+        excerpt: "Run management: start verbs: build/simulate/replay/export/destroy."
+      - file: 115_operator_interface.md
+        section_heading: Run creation and verb execution (v0.2 normative)
+        excerpt: "Additional verb-start requests MUST be rejected with 429 without spawning a new verb process."
+
+  - from: operator_interface
+    to: run_bundle_store
+    label: read and serve run artifacts (manifest, health, logs, report) with path traversal defenses
+    views: [ui]
+    interaction: batch
+    protocol: filesystem
+    auth: local_fs_permissions
+    data:
+      - manifest.json
+      - logs/health.json
+      - logs/run.log
+      - report/report.json
+      - report/report.html
+      - report/run_timeline.md
+      - report/thresholds.json
+    frequency: per_request
+    reliability: policy_enforced
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Functional surfaces (v0.2 normative)
+        excerpt: "Status monitoring: stage outcome view derived from logs/health.json when present; otherwise ... fall back ... manifest.json; Report viewing: view report/report.json and report/report.html."
+
+  - from: operator_interface
+    to: audit_log_store
+    label: append UI audit events (append-only; write-ahead for gated actions)
+    views: [ui]
+    interaction: file_drop
+    protocol: filesystem
+    auth: local_fs_permissions
+    data:
+      - logs/ui_audit.jsonl
+    frequency: per_ui_action
+    reliability: append_only_write_ahead
+    evidence:
+      - file: 115_operator_interface.md
+        section_heading: Audit logging (normative)
+        excerpt: "Append-only UI audit log at: logs/ui_audit.jsonl."
+
+  - from: operator_interface
+    to: baseline_library
+    label: manage baseline detection packages (create/list/delete/download) (optional; v0.2+ when enabled)
+    views: [ui]
+    interaction: batch
+    protocol: filesystem
+    auth: local_fs_permissions
+    data:
+      - exports/baselines/<baseline_id>/<baseline_version>/**
+      - exports/baselines/<baseline_id>/<baseline_version>/baseline_package_manifest.json
+      - exports/baselines/<baseline_id>/<baseline_version>/security/checksums.txt
+    frequency: on_demand
+    reliability: fail_closed_on_invalid
+    evidence:
+      - file: 086_detection_baseline_library.md
+        section_heading: Location
+        excerpt: "BDPs are stored at: exports/baselines/<baseline_id>/<baseline_version>/."
+      - file: 086_detection_baseline_library.md
+        section_heading: Managed via Operator Interface
+        excerpt: "The baseline library is managed via the Operator Interface."
+
+  - from: matrix_runner
+    to: orchestrator_cli
+    label: run orchestrator in CI harness
+    interaction: request_response
+    protocol: local_process
+    auth: ci_job_context
+    data: []
+    frequency: per_ci_job
+    reliability: deterministic_exit_code
     evidence:
       - file: 105_ci_operational_readiness.md
-        section_heading: Definitions
-        excerpt: An external harness (CI workflow, Make target, etc.) that runs purple-axiom.
+        section_heading: Terminology
+        excerpt: "A matrix runner is an external harness ... that invokes the orchestrator once per matrix cell."
+
   - from: orchestrator_cli
     to: run_lock_dir
-    label: acquire run lock
+    label: acquire run lock (exclusive single-writer)
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - runs/.locks/<run_id>.lock
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Orchestrator (execution plane)
-        excerpt: atomic creation of `runs/.locks/<run_id>.lock`.
+      - file: 020_architecture.md
+        section_heading: Workspace layout (normative, v0.1)
+        excerpt: "During acquisition, the orchestrator creates a filesystem lock file at runs/.locks/<run_id>.lock and MUST acquire this lock before starting build."
+
   - from: orchestrator_cli
     to: run_inputs_store
-    label: materialize pinned inputs
+    label: materialize pinned inputs into run bundle inputs/
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - inputs/range.yaml
       - inputs/scenario.yaml
-    frequency: unknown
-    reliability: unknown
+      - inputs/plan_draft.yaml # when plan compilation/execution enabled (v0.2+)
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Canonical run sequence (v0.1)
-        excerpt: materialize/pin operator inputs into `runs/<run_id>/inputs/`.
       - file: 020_architecture.md
         section_heading: Build-time input ingestion (normative, v0.1)
-        excerpt: 'must materialize pinned inputs: `inputs/range.yaml` and `inputs/scenario.yaml`.'
+        excerpt: "must materialize pinned inputs: inputs/range.yaml and inputs/scenario.yaml; when plan compilation/execution is enabled (v0.2+), it MUST also materialize inputs/plan_draft.yaml."
+
   - from: orchestrator_cli
     to: staging_area
-    label: stage outputs under .staging prior to publish
+    label: stage contract-backed outputs under .staging/ prior to publish
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - .staging/<stage_id>/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_stage
+    reliability: fail_closed
     evidence:
-      - file: 000_charter.md
-        section_heading: Guiding principles
-        excerpt: Stages write to a staging location (`.staging/`).
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Staging then atomic publish
+        excerpt: "Stages write to a staging location (.staging/) and publish by atomic rename after validation."
+
   - from: orchestrator_cli
     to: run_bundle_store
-    label: publish staged outputs by atomic rename
+    label: publish staged outputs by atomic rename (PublishGate; no partial promotion)
     interaction: batch
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_stage
+    reliability: fail_closed
     evidence:
-      - file: 000_charter.md
-        section_heading: Guiding principles
-        excerpt: publish them by atomic rename after validation.
-      - file: 015_lab_providers.md
-        section_heading: Publish and validation gate
-        excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+      - file: 020_architecture.md
+        section_heading: Publish-gate only for contract-backed outputs
+        excerpt: "Any write to a contract-backed location MUST go through PublishGate; partial promotion is forbidden."
+
   - from: orchestrator_cli
     to: run_logs_store
-    label: emit contract validation report on publish-gate failure
+    label: emit deterministic contract validation report on validation failure
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - logs/contract_validation/<stage_id>.json
-    frequency: unknown
-    reliability: unknown
+    frequency: on_validation_failure
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Staging then atomic publish
-        excerpt: 'emit a deterministic contract validation report at:'
-      - file: teardown.yaml
-        section_heading: teardown
-        excerpt: logs/contract_validation/<stage_id>.json
+      - file: 020_architecture.md
+        section_heading: Publish gate (normative, v0.1)
+        excerpt: "If validation fails, it MUST emit a deterministic contract validation report at runs/<run_id>/logs/contract_validation/<stage_id>.json."
+
   - from: orchestrator_cli
     to: staging_area
-    label: remove leftover stage staging directories during finalization
+    label: ensure publish-scratch hygiene (no leftover .staging/ on finalized runs)
     interaction: batch
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - .staging/<stage_id>/
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Staging then atomic publish
-        excerpt: Remove leftover stage staging directories during finalization.
+      - file: 025_data_contracts.md
+        section_heading: Publish-scratch hygiene
+        excerpt: "Finalized runs MUST NOT contain a non-empty runs/<run_id>/.staging/ directory."
+
   - from: orchestrator_cli
     to: run_manifest
     label: record stage outcomes in manifest
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - manifest.json
-    frequency: unknown
-    reliability: unknown
+    frequency: per_stage
+    reliability: fail_closed
     evidence:
       - file: ADR-0005-stage-outcomes-and-failure-classification.md
         section_heading: Decision
-        excerpt: The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json.
+        excerpt: "The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json."
+
+  - from: orchestrator_cli
+    to: run_logs_store
+    label: write health mirror (when enabled)
+    interaction: file_drop
+    protocol: filesystem
+    auth: local_fs_permissions
+    data:
+      - logs/health.json
+    frequency: per_stage
+    reliability: fail_closed
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Outcome-sourced status
+        excerpt: "When health files are enabled, it MUST also record the same ordered outcomes in logs/health.json."
+
+  - from: orchestrator_cli
+    to: run_logs_store
+    label: write cache provenance (when cross-run caching enabled)
+    interaction: file_drop
+    protocol: filesystem
+    auth: local_fs_permissions
+    data:
+      - logs/cache_provenance.json
+    frequency: per_run
+    reliability: fail_closed
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Determinism-sensitive features are explicitly gated
+        excerpt: "If cross-run caching is enabled, cache usage MUST be recorded deterministically in logs/cache_provenance.json."
+
   - from: orchestrator_cli
     to: lab_provider
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Orchestrator (execution plane)
-        excerpt: execute the core pipeline stages in a single process
-      - file: 020_architecture.md
-        section_heading: Range lifecycle verbs
-        excerpt: 'build: Execute `lab_provider` stage only.'
+        excerpt: "execute the core pipeline stages in a single process"
+
   - from: orchestrator_cli
     to: runner
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[runner] execute scenario actions -> write ground_truth.jsonl'
+        excerpt: "[runner] execute scenario actions -> write ground_truth.jsonl"
+
   - from: orchestrator_cli
     to: telemetry
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[telemetry] ensure collection window captured'
+        excerpt: "[telemetry] ensure collection window captured"
+
   - from: orchestrator_cli
     to: normalization
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[normalization] map raw_parquet/** -> publish normalized/**'
+        excerpt: "[normalization] map raw_parquet/** -> publish normalized/**"
+
   - from: orchestrator_cli
     to: validation
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[validation] snapshot criteria pack + evaluate criteria'
+        excerpt: "[validation] snapshot criteria pack + evaluate criteria"
+
   - from: orchestrator_cli
     to: detection
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[detection] compile/evaluate sigma via bridge'
+        excerpt: "[detection] compile/evaluate sigma via bridge"
+
   - from: orchestrator_cli
     to: scoring
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[scoring] join ground truth, criteria, detections'
+        excerpt: "[scoring] join ground truth, criteria, detections"
+
   - from: orchestrator_cli
     to: reporting
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[reporting] (optional regression) materialize inputs/baseline/**'
+        excerpt: "[reporting] (optional regression) materialize inputs/baseline/**"
+
   - from: orchestrator_cli
     to: signing
     label: invoke stage
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Canonical run sequence (v0.1)
-        excerpt: '[signing] (optional) sign artifacts -> publish security/**'
+        excerpt: "[signing] (optional) sign artifacts -> publish security/**"
+
   - from: orchestrator_cli
     to: audit_redactor
-    label: export redaction pipeline
+    label: export package run bundle for sharing via redaction pipeline
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: on_export
+    reliability: fail_closed
     evidence:
       - file: ADR-0003-redaction-policy.md
         section_heading: Decision
-        excerpt: All operator-facing exports MUST run through the redaction pipeline.
-      - file: 020_architecture.md
-        section_heading: Range lifecycle verbs
-        excerpt: 'export: package a run bundle for sharing.'
+        excerpt: "All operator-facing exports MUST run through the redaction pipeline."
+
   - from: lab_provider
     to: lab_provider_sources
-    label: import inventory
+    label: import inventory (resolver-specific)
     interaction: batch
-    protocol: unknown
-    auth: unknown
+    protocol: filesystem_or_api
+    auth: provider_credentials
     data:
       - ludus export JSON
       - terraform output
       - vagrant export
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: best_effort
     evidence:
       - file: 015_lab_providers.md
         section_heading: Lab provider resolvers (v0.1)
-        excerpt: 'terraform: import range inventory from Terraform output.'
+        excerpt: "terraform: import range inventory from Terraform output."
+
   - from: lab_provider
     to: contract_registry
     label: validate inventory snapshot against contracts
     interaction: batch
-    protocol: unknown
-    auth: unknown
-    data: []
-    frequency: unknown
-    reliability: unknown
+    protocol: filesystem
+    auth: n/a
+    data:
+      - docs/contracts/contract_registry.json
+      - docs/contracts/lab_inventory_snapshot.schema.json
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: 015_lab_providers.md
         section_heading: Publish and validation gate
-        excerpt: validate the snapshot (schema ... via the contract registry).
+        excerpt: "validate the snapshot (schema ... via the contract registry)."
+
   - from: lab_provider
     to: run_logs_store
-    label: publish inventory snapshot
+    label: publish inventory snapshot (deterministic evidence log)
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - logs/lab_inventory_snapshot.json
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0009-run-export-policy-and-log-classification.md
-        section_heading: Deterministic evidence logs allowlist (normative)
-        excerpt: logs/lab_inventory_snapshot.json
       - file: 020_architecture.md
         section_heading: Lab provider (inventory)
-        excerpt: resolves and snapshots lab inventory for a run.
+        excerpt: "resolves and snapshots lab inventory for a run."
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Deterministic evidence logs allowlist (normative)
+        excerpt: "logs/lab_inventory_snapshot.json"
+
   - from: lab_provider
     to: runner
-    label: provide inventory snapshot
+    label: provide inventory snapshot via run bundle logs/
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
-      - inventory snapshot
-    frequency: unknown
-    reliability: unknown
+      - logs/lab_inventory_snapshot.json
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: 032_atomic_red_team_executor_integration.md
-        section_heading: Inventory snapshot consumption
-        excerpt: inventory snapshot produced by the lab provider stage
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: inventory snapshot, scenario plan
+        excerpt: "inventory snapshot, scenario plan"
+
   - from: runner
     to: atomic_red_team
-    label: execute Atomic Red Team actions
+    label: execute Atomic Red Team tests (v0.1)
     interaction: request_response
-    protocol: unknown
+    protocol: framework_usage
     auth: unknown
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_action
+    reliability: best_effort
     evidence:
       - file: 020_architecture.md
         section_heading: Runner (adversary emulation)
-        excerpt: v0.1 uses Atomic Red Team
+        excerpt: "v0.1 uses Atomic Red Team"
+
   - from: runner
     to: invoke_atomic_red_team
-    label: invoke executor module
+    label: invoke executor module in remote session
     interaction: request_response
-    protocol: PowerShell
+    protocol: PowerShell Remoting
     auth: unknown
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_action
+    reliability: best_effort
     evidence:
       - file: 032_atomic_red_team_executor_integration.md
         section_heading: Invoke-AtomicRedTeam remote mapping
-        excerpt: execute `Invoke-AtomicTest` within that session.
-      - file: 032_atomic_red_team_executor_integration.md
-        section_heading: Definitions
-        excerpt: 'Invoke-AtomicRedTeam module: pinned exact version'
+        excerpt: "execute Invoke-AtomicTest within that session."
+
   - from: runner
     to: run_bundle_store
-    label: write ground truth and runner evidence
+    label: write ground truth, plan artifacts (v0.2+), and runner evidence
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - ground_truth.jsonl
+      - runner/principal_context.json # when enabled
+      - plan/** # v0.2+
       - runner/actions/<action_id>/**
+      - runner/actions/<action_id>/executor.json
+      - runner/actions/<action_id>/stdout.txt
+      - runner/actions/<action_id>/stderr.txt
+      - runner/actions/<action_id>/requirements_evaluation.json
+      - runner/actions/<action_id>/resolved_inputs_redacted.json
+      - runner/actions/<action_id>/attire.json
+      - runner/actions/<action_id>/side_effect_ledger.json
       - runner/actions/<action_id>/cleanup_verification.json
       - runner/actions/<action_id>/state_reconciliation_report.json
-    frequency: unknown
-    reliability: unknown
+    frequency: per_action
+    reliability: fail_closed_for_contracted
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence'
-      - file: 032_atomic_red_team_executor_integration.md
-        section_heading: Contracted runner artifacts (normative)
-        excerpt: 'Action-scoped runner evidence: `runs/<run_id>/runner/actions/<action_id>/`.'
-      - file: ADR-0005-stage-outcomes-and-failure-classification.md
-        section_heading: Cleanup verification policy (normative)
-        excerpt: write `runner/actions/<action_id>/cleanup_verification.json`.
-      - file: ADR-0005-stage-outcomes-and-failure-classification.md
-        section_heading: Runner stage
-        excerpt: write `runner/actions/<action_id>/state_reconciliation_report.json`.
-      - file: ADR-0005-stage-outcomes-and-failure-classification.md
-        section_heading: Runner stage
-        excerpt: Ground truth MUST record lifecycle phase outcomes ... including a `teardown` phase.
-      - file: contract_registry.json
-        section_heading: bindings
-        excerpt: runner/actions/*/cleanup_verification.json
-      - file: contract_registry.json
-        section_heading: bindings
-        excerpt: runner/actions/*/state_reconciliation_report.json
+      - file: 020_architecture.md
+        section_heading: Canonical stage boundaries (IO)
+        excerpt: "Runner stage outputs include ground_truth.jsonl, runner/principal_context.json (when enabled), runner/actions/**, and (v0.2+) plan/**."
+      - file: 025_data_contracts.md
+        section_heading: Runner evidence per action (recommended minimum)
+        excerpt: "Minimum recommended runner evidence includes stdout/stderr, executor.json, requirements evaluation, resolved inputs redacted, and (when present) side-effect ledger and cleanup verification."
+
   - from: runner
     to: telemetry
-    label: provide ground truth for collection window
+    label: provide ground truth timestamps for telemetry collection window
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - ground_truth.jsonl
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`ground_truth.jsonl` lifecycle timestamps'
+        excerpt: "ground_truth.jsonl lifecycle timestamps"
+
   - from: telemetry
     to: raw_parquet_store
-    label: write raw telemetry Parquet
+    label: write raw telemetry Parquet dataset
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - raw_parquet/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: 020_architecture.md
         section_heading: Telemetry (collection and validation)
-        excerpt: 'Write raw event store: `raw_parquet/**` (Parquet).'
-      - file: 045_storage_formats.md
-        section_heading: Run bundle filesystem layout (v0.1)
-        excerpt: '`raw_parquet/` is stored as a Parquet dataset.'
+        excerpt: "Write raw event store: raw_parquet/** (Parquet)."
+
   - from: telemetry
     to: raw_artifacts_store
     label: optionally preserve raw artifacts
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - raw/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: best_effort
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`raw_parquet/**`, `raw/**` (when raw preservation enabled)'
+        excerpt: "raw_parquet/**, raw/** (when raw preservation enabled)"
+
   - from: telemetry
     to: run_logs_store
-    label: write telemetry validation evidence
+    label: write telemetry validation evidence (deterministic evidence log)
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - logs/telemetry_validation.json
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0009-run-export-policy-and-log-classification.md
         section_heading: Deterministic evidence logs allowlist (normative)
-        excerpt: logs/telemetry_validation.json
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: logs/telemetry_validation.json
+        excerpt: "logs/telemetry_validation.json"
+
   - from: otel_collector_agent
     to: otlp_stream
     label: export telemetry
     interaction: async_message
     protocol: OTLP
-    auth: unknown
+    auth: mTLS
     data:
       - OTLP telemetry
-    frequency: unknown
-    reliability: unknown
+    frequency: streaming_during_run
+    reliability: best_effort
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Telemetry plane
-        excerpt: OTLP MAY be used between Collector tiers
+        excerpt: "OTLP MAY be used between Collector tiers"
+
   - from: otlp_stream
     to: otel_collector_gateway
-    label: deliver telemetry to gateway
+    label: deliver telemetry to gateway (ports 4317/4318)
     interaction: async_message
     protocol: OTLP (gRPC 4317 / HTTP 4318)
-    auth: unknown
+    auth: mTLS (required)
     data:
       - OTLP telemetry
-    frequency: unknown
-    reliability: unknown
+    frequency: streaming_during_run
+    reliability: best_effort
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Telemetry plane
-        excerpt: gateway tier receives OTLP from agents
       - file: 115_operator_interface.md
-        section_heading: Configuration surface (v0.2)
-        excerpt: 'otel_gateway ... ports: grpc: 4317 http: 4318.'
+        section_heading: OTLP gateway (optional, v0.2+)
+        excerpt: "OTLP ingress must require mTLS; ports grpc: 4317 and http: 4318."
+
   - from: normalization
     to: mapping_profile_pack
     label: load mapping profiles
-    views:
-      - pipeline
+    views: [pipeline]
     interaction: batch
     protocol: filesystem
-    auth: unknown
+    auth: n/a
     data:
-      - mapping profiles
-    frequency: unknown
-    reliability: unknown
+      - mappings/normalizer/ocsf/**
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: 050_normalization_ocsf.md
         section_heading: Mapping profiles
-        excerpt: Normalization uses mapping profiles to map raw fields into OCSF.
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`raw_parquet/**`, mapping profiles'
+        excerpt: "Normalization uses mapping profiles to map raw fields into OCSF."
+
   - from: normalization
     to: normalized_ocsf_store
-    label: write normalized OCSF events
+    label: write normalized OCSF events (Parquet dataset dir OR JSONL, per config)
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
-      - normalized/ocsf_events/**
-    frequency: unknown
-    reliability: unknown
+      - normalized/ocsf_events/** # Parquet dataset dir
+      - normalized/ocsf_events.jsonl # JSONL representation (optional)
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: 045_storage_formats.md
         section_heading: Run bundle filesystem layout (v0.1)
-        excerpt: 'Normalized store: `normalized/ocsf_events/` (Parquet).'
+        excerpt: "Normalized store uses normalized/ocsf_events/ (Parquet); JSONL may be used as an alternate representation."
+
   - from: normalization
     to: run_bundle_store
     label: write mapping coverage and profile snapshot
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - normalized/mapping_coverage.json
       - normalized/mapping_profile_snapshot.json
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: 020_architecture.md
         section_heading: Normalization (OCSF)
-        excerpt: 'Emit mapping coverage: `normalized/mapping_coverage.json`.'
+        excerpt: "Emit mapping coverage: normalized/mapping_coverage.json."
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`normalized/mapping_profile_snapshot.json`'
+        excerpt: "normalized/mapping_profile_snapshot.json"
+
   - from: normalization
     to: validation
     label: provide normalized events
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - normalized/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`ground_truth.jsonl`, `normalized/**`, criteria pack snapshot'
+        excerpt: "ground_truth.jsonl, normalized/**, criteria pack snapshot"
+
   - from: validation
     to: run_bundle_store
     label: publish criteria snapshot and results
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - criteria/manifest.json
       - criteria/criteria.jsonl
       - criteria/results.jsonl
       - criteria/summary.json
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`'
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`criteria/results.jsonl`, `criteria/summary.json`'
       - file: 035_validation_criteria.md
         section_heading: Run bundle snapshot
-        excerpt: validation stage MUST snapshot the selected criteria pack into the run bundle.
+        excerpt: "validation stage MUST snapshot the selected criteria pack into the run bundle."
+
   - from: validation
     to: scoring
     label: provide criteria results
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - criteria/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`'
+        excerpt: "ground_truth.jsonl, criteria/**, detections/**, normalized/**"
+
   - from: detection
     to: sigma_rule_packs
     label: load Sigma rule packs
     interaction: batch
     protocol: filesystem
-    auth: unknown
+    auth: n/a
     data:
       - Sigma rule packs
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: Sigma rule packs
+        excerpt: "Sigma rule packs"
+
   - from: detection
     to: sigma_to_ocsf_mapping_packs
-    label: resolve mapping pack
+    label: resolve Sigma-to-OCSF mapping pack
     interaction: batch
     protocol: filesystem
-    auth: unknown
+    auth: n/a
     data:
       - mapping pack
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: 065_sigma_to_ocsf_bridge.md
         section_heading: Mapping packs
-        excerpt: bridge MUST resolve a mapping pack
+        excerpt: "bridge MUST resolve a mapping pack"
+
   - from: detection
     to: sigma_to_ocsf_bridge_adapter
     label: compile/evaluate Sigma via bridge adapter
-    views:
-      - pipeline
+    views: [pipeline]
     interaction: request_response
-    protocol: local_process
-    auth: unknown
+    protocol: in_process
+    auth: n/a
     data: []
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Canonical run sequence (v0.1)
-        excerpt: '[detection] compile/evaluate sigma via bridge'
       - file: 060_detection_sigma.md
         section_heading: Overview
-        excerpt: Rules are evaluated against normalized OCSF events (not raw logs) using the Sigma-to-OCSF Bridge.
+        excerpt: "Rules are evaluated against normalized OCSF events (not raw logs) using the Sigma-to-OCSF Bridge."
+
   - from: detection
     to: run_bundle_store
     label: publish bridge artifacts
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
+      - bridge/router_table.json
+      - bridge/mapping_pack_snapshot.json
+      - bridge/compiled_plans/** # v0.2+ (optional)
       - bridge/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`bridge/**`, `detections/detections.jsonl`'
+      - file: 025_data_contracts.md
+        section_heading: Run bundle filesystem layout (v0.1)
+        excerpt: "Bridge artifacts are stored under runs/<run_id>/bridge/ (e.g., router_table.json and mapping_pack_snapshot.json)."
+
   - from: detection
     to: detections_store
     label: publish detections
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - detections/detections.jsonl
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`bridge/**`, `detections/detections.jsonl`'
       - file: 045_storage_formats.md
         section_heading: Run bundle filesystem layout (v0.1)
-        excerpt: Detections are stored as JSONL under `detections/`.        
+        excerpt: "Detections are stored as JSONL under detections/."
+
   - from: detection
     to: scoring
     label: provide detections
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - detections/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`'
+        excerpt: "ground_truth.jsonl, criteria/**, detections/**, normalized/**"
+
   - from: scoring
     to: scoring_store
     label: publish scoring summary
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - scoring/summary.json
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`scoring/summary.json`'
       - file: 070_scoring_metrics.md
         section_heading: Threshold evaluation
-        excerpt: metrics emitted in `scoring/summary.json`.
+        excerpt: "metrics emitted in scoring/summary.json."
+
   - from: scoring
     to: reporting
     label: provide scoring outputs
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - scoring/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: '`scoring/**`, `criteria/**`, `detections/**`, manifest'
-  - from: reporting
-    to: baseline_library
-    label: (optional regression) read baseline packages
-    interaction: batch
-    protocol: filesystem
-    auth: unknown
-    data:
-      - exports/baselines/**
-    frequency: unknown
-    reliability: unknown
-    evidence:
-      - file: 086_detection_baseline_library.md
-        section_heading: Summary
-        excerpt: stores baseline datasets for detections, scoring, and reporting.
+        excerpt: "scoring/**, criteria/**, detections/**, manifest"
+
   - from: reporting
     to: run_bundle_store
-    label: (optional regression) materialize baseline inputs
+    label: (optional regression) materialize baseline inputs from baseline run
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
+      - inputs/baseline_run_ref.json
+      - inputs/baseline/manifest.json
       - inputs/baseline/**
-    frequency: unknown
-    reliability: unknown
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Canonical run sequence (v0.1)
-        excerpt: '[reporting] (optional regression) materialize inputs/baseline/**'
+      - file: 045_storage_formats.md
+        section_heading: Evidence references (normative)
+        excerpt: "Regression-related evidence pointers SHOULD commonly reference inputs/baseline_run_ref.json and inputs/baseline/manifest.json (when present)."
+
   - from: reporting
     to: report_artifacts
     label: publish report artifacts
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - report/report.json
       - report/thresholds.json
-    frequency: unknown
-    reliability: unknown
+      - report/run_timeline.md
+      - report/report.html # when report HTML enabled
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
-        section_heading: Minimum v0.1 IO boundaries (stage-local)
-        excerpt: report/report.json and report/thresholds.json
-      - file: 105_ci_operational_readiness.md
-        section_heading: CI contract
-        excerpt: '`runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json` MUST be'
+      - file: 080_reporting.md
+        section_heading: Required artifacts
+        excerpt: "report/report.json, report/thresholds.json, and report/run_timeline.md are required outputs."
+
   - from: matrix_runner
     to: report_artifacts
-    label: read report thresholds for CI gating
+    label: read report artifacts for CI gating (threshold coupling)
     interaction: batch
     protocol: filesystem
-    auth: unknown
+    auth: ci_job_context
     data:
       - report/thresholds.json
-    frequency: unknown
-    reliability: unknown
+      - report/report.json
+      - report/run_timeline.md
+    frequency: per_ci_job
+    reliability: fail_closed
     evidence:
       - file: 105_ci_operational_readiness.md
-        section_heading: CI contract
-        excerpt: If `runs/<run_id>/report/thresholds.json` exists and validates against its schema.
+        section_heading: Reporting output coupling (fail closed)
+        excerpt: "If any of thresholds.json, report.json, or run_timeline.md are present, CI MUST require all three."
+
   - from: signing
     to: integrity_artifacts
-    label: publish checksums and signature
+    label: publish checksums, signature, and public key
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - security/checksums.txt
       - security/signature.ed25519
-    frequency: unknown
-    reliability: unknown
+      - security/public_key.ed25519
+    frequency: per_run
+    reliability: fail_closed
     evidence:
-      - file: 020_architecture.md
-        section_heading: Signing
-        excerpt: 'produces integrity artifacts: `security/checksums.txt` and `security/signature.*`.'
-      - file: 120_config_reference.md
-        section_heading: signing
-        excerpt: 'algorithm: "ed25519"'
+      - file: 025_data_contracts.md
+        section_heading: Signing artifacts (optional)
+        excerpt: "Integrity artifacts are stored under security/: checksums.txt, signature.ed25519, and public_key.ed25519."
+
   - from: golden_dataset_builder
     to: golden_dataset_store
     label: publish golden dataset release
     interaction: file_drop
     protocol: filesystem
-    auth: unknown
+    auth: local_fs_permissions
     data:
       - dataset_manifest.json
+      - views/**
+      - splits/**
+      - docs/**
       - security/checksums.txt
-    frequency: unknown
-    reliability: unknown
+      - security/signature.ed25519 # optional
+      - security/public_key.ed25519 # optional
+    frequency: on_release
+    reliability: fail_closed
     evidence:
       - file: 085_golden_datasets.md
         section_heading: Location
-        excerpt: exports/datasets/<dataset_id>/<dataset_version>/
+        excerpt: "exports/datasets/<dataset_id>/<dataset_version>/"
       - file: 085_golden_datasets.md
         section_heading: Integrity
-        excerpt: Dataset releases MUST include `security/checksums.txt`.
+        excerpt: "Dataset releases MUST include security/checksums.txt; signature/public key are optional."

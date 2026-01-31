@@ -592,6 +592,71 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
 
 The manifest is the authoritative index for what exists in the bundle and which versions were used.
 
+## Producer tooling: reference publisher semantics (pa.publisher.v1)
+
+Purple Axiom intentionally treats the run bundle (layout + contracts + invariants) as a first-class
+API surface. That requires a shared writer semantics surface for publishing contract-backed
+artifacts into the bundle (staging + validation + canonical serialization + deterministic error
+reporting + atomic promotion).
+
+This section defines the canonical publisher semantics for producing run bundles and requires a
+reference implementation.
+
+### Reference publisher SDK requirement (normative)
+
+- The repository MUST provide a reference publisher implementation that conforms to this section
+  ("pa.publisher.v1") and to the port semantics in the architecture specification (`PublishGate` and
+  `ContractValidator`).
+- First-party producer tooling (at minimum: the orchestrator composition root and any stage CLI
+  wrappers that publish artifacts) MUST:
+  - bind the `PublishGate` and `ContractValidator` ports to the reference publisher SDK, and
+  - MUST NOT re-implement publish-gate behavior (staging layout, validation, report emission, atomic
+    promotion) in stage-local code.
+- Stage core implementations MUST publish contract-backed artifacts only via the `PublishGate`
+  instance supplied by the reference publisher SDK. Direct writes to final run-bundle paths are
+  forbidden.
+
+Publisher semantics versioning (normative):
+
+- This section defines publisher semantics version `pa.publisher.v1`.
+- Any change that alters staging layout, canonical serialization, validation behavior, report
+  emission, or atomic publish behavior in a way that could cause two conforming producers to publish
+  different bytes for the same logical output MUST bump the semantics version (for example
+  `pa.publisher.v2`) and MUST include explicit compatibility notes.
+
+### Canonical publish-gate behavior (normative)
+
+The reference publisher SDK MUST implement the publish-gate contract as specified in this document
+("Publish-gate contract validation (required)") and in the architecture specification ("Port:
+`PublishGate` / `ContractValidator`"), including at minimum:
+
+- staging under `runs/<run_id>/.staging/<stage_id>/`,
+- validate-before-publish using the local-only contract registry and `$ref` restrictions,
+- deterministic error ordering and truncation (`max_errors_per_artifact`),
+- emission of the deterministic contract validation report artifact at:
+  - `runs/<run_id>/logs/contract_validation/<stage_id>.json` on validation failure, and
+- atomic promotion into final run-bundle paths on success (no partial publish).
+
+### Canonical serialization rules (normative)
+
+To prevent subtle producer drift, the reference publisher SDK MUST be the single authority for the
+on-disk byte representation of contract-backed JSON and JSONL artifacts published via `PublishGate`:
+
+- For contract-backed JSON artifacts, `StagePublishSession.write_json(..., canonical=true)` MUST
+  write exactly `canonical_json_bytes(obj)` as defined in "Canonical JSON (normative)" (RFC 8785 /
+  JCS), with no trailing newline.
+- For contract-backed JSONL artifacts, `StagePublishSession.write_jsonl(rows_iterable)` MUST:
+  - serialize each row object as `canonical_json_bytes(row)` (one JSON object per line),
+  - join lines with LF (`\n`) (CRLF and CR MUST NOT be emitted),
+  - write UTF-8 bytes with no BOM,
+  - omit blank lines, and
+  - follow the end-of-file newline rule:
+    - if at least one row is written, the file MUST end with a trailing LF,
+    - if zero rows are written, the file MUST be zero bytes.
+- Stage cores MUST NOT use `write_bytes(...)` to publish contract-backed JSON or JSONL artifacts.
+  (They MAY use `write_bytes(...)` for non-contracted artifacts under explicitly non-contracted
+  locations such as `logs/scratch/`.)
+
 ## Consumer tooling: reference reader semantics (pa.reader.v1)
 
 Purple Axiom intentionally treats the run bundle (layout + contracts + invariants) as a first-class

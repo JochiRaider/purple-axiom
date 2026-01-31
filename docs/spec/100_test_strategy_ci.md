@@ -1046,6 +1046,53 @@ Fixture set (normative):
     - identical `error_domain` and `error_code`, and
     - deterministic error ordering when multiple errors are emitted.
 
+### Producer tooling conformance (reference publisher semantics)
+
+Run bundles are produced by multiple entrypoints (the orchestrator and any per-stage CLIs/wrappers).
+CI MUST enforce that first-party producers share a single publisher semantics surface
+(`pa.publisher.v1`) defined in `025_data_contracts.md` ("Producer tooling: reference publisher
+semantics").
+
+For CI enforcement, any first-party producer entrypoint that can publish contract-backed artifacts
+MUST either:
+
+- use the reference publisher SDK directly, or
+- demonstrate semantic conformance via CI fixtures that compare publish behavior and emitted
+  validation reports against the reference publisher output.
+
+Fixture set (normative):
+
+- `publisher_publish_gate_no_partial_promotion` (validation failure does not publish)
+
+  - Provide a minimal run bundle fixture and a deliberately invalid contract-backed artifact written
+    via `PublishGate` staging.
+  - Assertions (normative):
+    - `finalize()` reports failure,
+    - no final-path contracted output is present (all stage outputs remain unpublished),
+    - the contract validation report exists at
+      `runs/<run_id>/logs/contract_validation/<stage_id>.json`, and
+    - errors in the report follow the deterministic ordering + truncation rules in
+      `025_data_contracts.md` ("Deterministic error ordering and error caps").
+
+- `publisher_publish_gate_success_atomic_promotion` (success publishes and cleans staging)
+
+  - Provide a minimal run bundle fixture and a valid contract-backed artifact.
+  - Assertions (normative):
+    - `finalize()` reports success,
+    - the final-path artifact exists and matches the canonical serialization rules required by
+      `pa.publisher.v1`, and
+    - `runs/<run_id>/.staging/<stage_id>/` is absent (or empty) after publish.
+
+- `publisher_canonical_json_and_jsonl_bytes` (serialization lock)
+
+  - Using the reference publisher SDK:
+    - publish one JSON artifact via `write_json(..., canonical=true)`, and
+    - publish one JSONL artifact via `write_jsonl(rows_iterable)`.
+  - Assertions (normative):
+    - JSON bytes equal `canonical_json_bytes(...)`,
+    - JSONL uses LF, no BOM, no blank lines, and the end-of-file newline rule from
+      `025_data_contracts.md` ("Producer tooling: reference publisher semantics").
+
 ### Export and checksums scope
 
 The run bundle `logs/` directory is intentionally mixed: it contains both deterministic evidence and

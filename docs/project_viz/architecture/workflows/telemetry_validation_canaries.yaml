@@ -1,0 +1,193 @@
+# file: docs/project_viz/architecture/workflows/telemetry_validation_canaries.yaml
+workflows:
+  - id: telemetry_validation_canaries
+    name: Telemetry validation canaries (egress + checkpoint integrity)
+    scope: telemetry
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: telemetry
+        message: run telemetry with required runtime canaries enabled for this run
+        data:
+          - inputs/range.yaml
+          - inputs/scenario.yaml
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Runtime canaries (required only where specified)
+            excerpt: A stage MUST execute any runtime canaries that are required by the applicable stage specs when the corresponding feature is enabled.
+          - file: 025_data_contracts.md
+            section_heading: Runtime canaries (required only where specified)
+            excerpt: Canary outcomes MUST be recorded as stage outcomes (including dotted substages where specified).
+
+      - n: 2
+        from: telemetry
+        to: telemetry_validator
+        message: initialize telemetry validation evidence (contract-backed) and canary plan
+        data:
+          - logs/telemetry_validation.json
+        evidence:
+          - file: 040_telemetry_pipeline.md
+            section_heading: Validation results and evidence pointers (normative)
+            excerpt: Record validation results as part of a run bundle under `logs/telemetry_validation.json`.
+          - file: contract_registry.json
+            section_heading: contracts
+            excerpt: '{ "artifact_glob": "logs/telemetry_validation.json", "contract_id": "telemetry_validation", "validation_mode": "json_document" }'
+
+      - n: 3
+        from: telemetry_validator
+        to: egress_sentinel
+        message: "(when outbound egress is denied) configure / select an egress-canary probe endpoint (fail_closed if missing: reason_code=egress_canary_missing)"
+        data: []
+        evidence:
+          - file: 120_config_reference.md
+            section_heading: Outbound gating (normative)
+            excerpt: If outbound is denied (effective_allow_outbound=false) and an egress canary is required, missing the canary MUST fail closed with `reason_code=egress_canary_missing`.
+
+      - n: 4
+        from: target_asset
+        to: egress_sentinel
+        message: attempt outbound egress probe (expected blocked under deny-by-default policy)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Safety policy is enforced, not advisory
+            excerpt: Unexpected network egress MUST be denied by default and treated as run-fatal when violated.
+
+      - n: 5
+        from: telemetry_validator
+        to: run_bundle_store
+        message: "record egress-canary outcome in telemetry_validation and emit substage outcome telemetry.network.egress_policy (fail_closed on unexpected reachability: reason_code=egress_violation)"
+        data:
+          - logs/telemetry_validation.json
+          - logs/health.json
+        evidence:
+          - file: 040_telemetry_pipeline.md
+            section_heading: Failure classification for `telemetry.network.egress_policy`
+            excerpt: If the probe succeeds while `effective_allow_outbound=false`, the substage MUST fail closed with `reason_code=egress_violation`.
+          - file: 110_operability.md
+            section_heading: Egress canary
+            excerpt: If the canary can reach the endpoint while `effective_allow_outbound=false`, the outcome MUST be `reachable` and the run MUST fail (fail closed).
+
+      - n: 6
+        from: telemetry_validator
+        to: run_bundle_store
+        message: "run agent liveness (dead-on-arrival) canary and emit substage outcome telemetry.agent.liveness (fail_closed if no heartbeat: reason_code=agent_heartbeat_missing)"
+        data:
+          - logs/telemetry_validation.json
+          - logs/health.json
+        evidence:
+          - file: 110_operability.md
+            section_heading: Agent liveness (push-only DOA detection)
+            excerpt: If no heartbeat is observed within `startup_grace_seconds` from telemetry start, the substage MUST fail closed.
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: "Agent liveness (substage: `telemetry.agent.liveness`)"
+            excerpt: If this substage fails, the telemetry stage MUST fail closed.
+
+      - n: 7
+        from: telemetry_validator
+        to: run_bundle_store
+        message: "(optional; Windows Event Log) run raw-mode canary and emit substage outcome telemetry.windows_eventlog.raw_mode (fail_closed: reason_code=winlog_raw_missing|winlog_rendering_detected)"
+        data:
+          - logs/telemetry_validation.json
+          - logs/health.json
+        evidence:
+          - file: 040_telemetry_pipeline.md
+            section_heading: Windows raw-mode canary (required when collecting Windows Event Log)
+            excerpt: If raw XML is not present or cannot be parsed, fail closed with `reason_code=winlog_raw_missing`.
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Telemetry stage
+            excerpt: "FATAL - `winlog_raw_missing`; `winlog_rendering_detected`."
+
+      - n: 8
+        from: telemetry_collector
+        to: checkpoint_store
+        message: persist receiver bookmarks via stable storage extension and compute checkpoint store fingerprint
+        data: []
+        evidence:
+          - file: 040_telemetry_pipeline.md
+            section_heading: Checkpointing and replay semantics (required)
+            excerpt: Receiver bookmarks MUST be persisted via a stable storage extension so that restarts do not silently reset cursor state.
+
+      - n: 9
+        from: telemetry_validator
+        to: run_bundle_store
+        message: "validate checkpoint store integrity and emit substage outcome telemetry.checkpointing.storage_integrity (fail_closed if unwritable/corrupt: reason_code=checkpoint_store_corrupt)"
+        data:
+          - logs/telemetry_validation.json
+          - logs/health.json
+        evidence:
+          - file: 040_telemetry_pipeline.md
+            section_heading: Checkpointing and replay semantics (required)
+            excerpt: If the checkpoint store is unwritable or corrupt, the stage MUST fail closed with `reason_code=checkpoint_store_corrupt`.
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: "Checkpointing storage integrity (substage: `telemetry.checkpointing.storage_integrity`)"
+            excerpt: If this substage fails, the telemetry stage MUST fail closed.
+
+      - n: 10
+        from: telemetry_validator
+        to: run_bundle_store
+        message: detect checkpoint loss/reset and record deterministic NON_FATAL warning (reason_code=checkpoint_loss) with replay_start_mode + counters
+        data:
+          - logs/telemetry_validation.json
+          - logs/health.json
+        evidence:
+          - file: 040_telemetry_pipeline.md
+            section_heading: Checkpoint loss as a warning (non-fatal)
+            excerpt: Checkpoint loss should be surfaced as a NON-FATAL telemetry warning with `reason_code=checkpoint_loss`.
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: "Telemetry stage (`telemetry`)"
+            excerpt: checkpoint_loss (NON_FATAL) - Checkpoint store lost or reset; replay occurred.
+
+      - n: 11
+        from: telemetry
+        to: run_bundle_store
+        message: on success, publish raw_parquet/** (and raw/** when enabled) plus logs/telemetry_validation.json
+        data:
+          - raw_parquet/**
+          - raw/**
+          - logs/telemetry_validation.json
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: publish raw_parquet/** (and raw/** when enabled)
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Deterministic evidence logs allowlist (normative)
+            excerpt: logs/telemetry_validation.json
+          - file: 025_data_contracts.md
+            section_heading: Runtime canaries (required only where specified)
+            excerpt: "`logs/telemetry_validation.json` (required, validated at publish time)."
+
+      - n: 12
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: record telemetry stage outcome (and dotted substages) in manifest + health; on fail_closed, do not publish final-path telemetry outputs (egress_canary_missing|egress_violation|agent_heartbeat_missing|winlog_raw_missing|winlog_rendering_detected|checkpoint_store_corrupt)
+        data:
+          - runs/<run_id>/manifest.json
+          - logs/health.json
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Decision
+            excerpt: The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json.
+          - file: 025_data_contracts.md
+            section_heading: Failure behavior (normative)
+            excerpt: If publish-gate contract validation fails for a required artifact, the orchestrator MUST record a failed stage outcome for the publishing stage with a stable `reason_code`.
+          - file: 020_architecture.md
+            section_heading: Safety policy is enforced, not advisory
+            excerpt: Stages are not permitted to partially publish final-path artifacts. They write to a staging area and only promote the final path on success.
+
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Safety policy is enforced, not advisory
+        excerpt: Unexpected network egress MUST be denied by default and treated as run-fatal when violated.
+      - file: 025_data_contracts.md
+        section_heading: Runtime canaries (required only where specified)
+        excerpt: Canary outcomes MUST be recorded as stage outcomes (including dotted substages where specified).
+      - file: 040_telemetry_pipeline.md
+        section_heading: Failure classification for `telemetry.network.egress_policy`
+        excerpt: If the probe succeeds while `effective_allow_outbound=false`, the substage MUST fail closed with `reason_code=egress_violation`.
+      - file: 040_telemetry_pipeline.md
+        section_heading: Checkpointing and replay semantics (required)
+        excerpt: If the checkpoint store is unwritable or corrupt, the stage MUST fail closed with `reason_code=checkpoint_store_corrupt`.
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Deterministic evidence logs allowlist (normative)
+        excerpt: logs/telemetry_validation.json

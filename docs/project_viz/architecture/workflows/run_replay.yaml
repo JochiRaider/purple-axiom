@@ -7,13 +7,65 @@ workflows:
       - n: 1
         from: operator
         to: orchestrator_cli
-        message: invoke replay to rerun downstream analysis stages
+        message: invoke replay to rerun downstream analysis stages (analysis-only; no runner/telemetry)
         data: []
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'replay: rerun only downstream analysis stages.'
+            excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
       - n: 2
+        from: orchestrator_cli
+        to: run_lock
+        message: acquire exclusive run lock for target run bundle (single-writer invariant)
+        data:
+          - runs/.locks/<run_id>.lock
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'Every verb invocation MUST target exactly one run bundle (`runs/<run_id>/`) and MUST acquire the run lock (atomic create of `runs/.locks/<run_id>.lock` per [ADR-0004: Deployment architecture and inter-component communication][adr-0004]) before creating or mutating any run bundle artifacts (including `manifest.json`).'
+      - n: 3
+        from: orchestrator_cli
+        to: run_bundle
+        message: materialize/verify pinned operator inputs under inputs/ (read-only; MUST NOT rewrite)
+        data:
+          - inputs/range.yaml
+          - inputs/scenario.yaml
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'Materialize/pin operator inputs under `runs/<run_id>/inputs/` (at minimum `inputs/range.yaml` and `inputs/scenario.yaml`) before running the first stage.'
+      - n: 4
+        from: orchestrator_cli
+        to: run_bundle
+        message: deterministically reconcile run state; enforce replay constraints (analysis-only); (re)run stages via publish gate and record stage outcomes
+        data:
+          - manifest.json
+          - logs/health.json
+          - inputs/**
+          - ground_truth.jsonl
+          - raw_parquet/**
+          - runner/**
+          - logs/**
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: State reconciliation rules (normative)
+            excerpt: 'The orchestrator MUST perform a deterministic reconciliation pass after acquiring the run lock and before executing any stage.'
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'Any verb that executes one or more stages MUST record stage outcomes in `manifest.json` per [ADR-0005: Stage outcomes and failure classification][adr-0005]. When health files are enabled (`operability.health.emit_health_files=true`), it MUST also record the same ordered outcomes in `logs/health.json`.'
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'Any verb that writes contract-backed artifacts MUST follow the publish gate rules in this document (staging + validation + atomic publish).'
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'Preconditions: the candidate run bundle MUST already contain `raw_parquet/**` and `ground_truth.jsonl`. `replay` MUST treat these inputs as read-only.'
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or `raw_parquet/**` except for operability logs under `logs/**`.'
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: 'When regression comparison is enabled, `replay` MUST treat any pre-existing artifacts under `inputs/**` as read-only and MUST NOT rewrite them.'
+      - n: 5
         from: orchestrator_cli
         to: normalization
         message: invoke normalization (replay)
@@ -24,8 +76,8 @@ workflows:
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'replay: rerun only downstream analysis stages.'
-      - n: 3
+            excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
+      - n: 6
         from: orchestrator_cli
         to: validation
         message: invoke validation (replay)
@@ -36,8 +88,8 @@ workflows:
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'replay: rerun only downstream analysis stages.'
-      - n: 4
+            excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
+      - n: 7
         from: orchestrator_cli
         to: detection
         message: invoke detection (replay)
@@ -47,8 +99,8 @@ workflows:
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'replay: rerun only downstream analysis stages.'
-      - n: 5
+            excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
+      - n: 8
         from: orchestrator_cli
         to: scoring
         message: invoke scoring (replay)
@@ -57,8 +109,8 @@ workflows:
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'replay: rerun only downstream analysis stages.'
-      - n: 6
+            excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
+      - n: 9
         from: orchestrator_cli
         to: reporting
         message: invoke reporting (replay)
@@ -68,8 +120,8 @@ workflows:
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'replay: rerun only downstream analysis stages.'
-      - n: 7
+            excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
+      - n: 10
         from: orchestrator_cli
         to: signing
         message: (optional) invoke signing (replay)
@@ -77,8 +129,24 @@ workflows:
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'replay: rerun only downstream analysis stages.'          
+            excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
+      - n: 11
+        from: orchestrator_cli
+        to: run_lock
+        message: release run lock
+        data:
+          - runs/.locks/<run_id>.lock
+        evidence:
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Canonical run sequence (v0.1)
+            excerpt: '|-- release run lock'        
     evidence:
       - file: 020_architecture.md
         section_heading: Range lifecycle verbs
-        excerpt: 'replay: rerun only downstream analysis stages.'
+        excerpt: 'Stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting` (and optional `signing`).'
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'Preconditions: the candidate run bundle MUST already contain `raw_parquet/**` and `ground_truth.jsonl`. `replay` MUST treat these inputs as read-only.'
+      - file: 020_architecture.md
+        section_heading: Range lifecycle verbs
+        excerpt: 'MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or `raw_parquet/**` except for operability logs under `logs/**`.'

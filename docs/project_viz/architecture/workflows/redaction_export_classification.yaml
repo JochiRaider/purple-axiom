@@ -1,0 +1,141 @@
+# file: docs/project_viz/architecture/workflows/redaction_export_classification.yaml
+workflows:
+  - id: redaction_export_classification
+    name: Redaction + export classification (redact vs withhold/quarantine)
+    scope: security_export
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: snapshot effective redaction policy into the run bundle
+        data:
+          - security/redaction_policy_snapshot.json
+        evidence:
+          - file: 120_config_reference.md
+            section_heading: Run bundle layout
+            excerpt: security/redaction_policy_snapshot.json
+
+      - n: 2
+        from: stage_wrapper
+        to: staging_area
+        message: write candidate outputs to .staging (may contain sensitive data prior to handling decision)
+        data:
+          - runs/<run_id>/.staging/<stage_id>/<artifact_path>
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Publish gate (normative, v0.1)
+            excerpt: Stages MUST write candidate outputs under `runs/<run_id>/.staging/<stage_id>/`.
+
+      - n: 3
+        from: orchestrator_cli
+        to: orchestrator_cli
+        message: decide per-artifact handling {redact | withhold | quarantine_only} based on redaction.enabled, disabled_behavior, and determinism constraints
+        data: []
+        evidence:
+          - file: 120_config_reference.md
+            section_heading: security.redaction.enabled
+            excerpt: When false, redaction is bypassed entirely and artifacts are withheld from long-term storage by default.
+          - file: 120_config_reference.md
+            section_heading: security.redaction.disabled_behavior
+            excerpt: "withhold, quarantine_only"
+          - file: 020_architecture.md
+            section_heading: Overview
+            excerpt: If redaction cannot be applied deterministically, the pipeline MUST withhold from standard long-term locations, or quarantine if explicitly allowed.
+
+      - n: 4
+        from: orchestrator_cli
+        to: audit_redactor
+        message: if handling=redact, apply redaction pipeline to staged artifacts and write redacted versions back to staging
+        data:
+          - runs/<run_id>/.staging/<stage_id>/<artifact_path>
+        evidence:
+          - file: ADR-0003-redaction-policy.md
+            section_heading: Processing rules (normative)
+            excerpt: Each output MUST be checked and post-checked.
+
+      - n: 5
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: if handling=withhold or quarantine_only, publish a deterministic placeholder at the standard contracted path and (if permitted) place unredacted originals under runs/<run_id>/<unredacted_dir>/
+        data:
+          - runs/<run_id>/<contracted_output_path>
+          - runs/<run_id>/<unredacted_dir>/<artifact_path>
+        evidence:
+          - file: 120_config_reference.md
+            section_heading: security.redaction.unredacted_dir
+            excerpt: unredacted/ is excluded from default exports and checksumming inputs.
+          - file: 090_security_safety.md
+            section_heading: Quarantine directory
+            excerpt: A run bundle MAY include a quarantine directory for unredacted artifacts.
+
+      - n: 6
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: record evidence_refs.handling (present/withheld/quarantined) in manifest/report metadata for any affected artifacts
+        data:
+          - runs/<run_id>/manifest.json
+          - report/report.json
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: evidence_refs.handling
+            excerpt: "one of: present, absent, withheld, quarantined."
+          - file: 090_security_safety.md
+            section_heading: Standard long-term artifact locations
+            excerpt: MUST disclose the affected artifact relative path and the handling (withheld or quarantined).
+
+      - n: 7
+        from: orchestrator_cli
+        to: publish_gate
+        message: validate contracted outputs and atomically publish from .staging to final run-bundle paths
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Publish gate (normative, v0.1)
+            excerpt: Publishing MUST be an atomic rename/move from staging into final run-bundle paths.
+
+      - n: 8
+        from: operator
+        to: orchestrator_cli
+        message: invoke export; select default export set (Tier 0 deterministic evidence) and exclude .staging, volatile diagnostics, and unredacted/quarantine by default
+        data: []
+        evidence:
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Default export behavior (normative)
+            excerpt: default export set MUST include deterministic evidence logs ... and MUST exclude ... quarantine directory ...
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: By default, exports MUST exclude `unredacted/**` ...
+
+      - n: 9
+        from: orchestrator_cli
+        to: audit_redactor
+        message: run operator-facing export through the redaction pipeline (fail closed if not redaction-safe)
+        data: []
+        evidence:
+          - file: ADR-0003-redaction-policy.md
+            section_heading: Decision
+            excerpt: All operator-facing exports MUST run through the redaction pipeline.
+
+      - n: 10
+        from: orchestrator_cli
+        to: export_packager
+        message: write export bundle outside the run bundle; include quarantine/unredacted only via explicit operator request + policy permission
+        data:
+          - exports/<export_id>/**
+          - exports/<export_id>/export_manifest.json  # TODO: add only if/when export manifest contract is implemented
+        evidence:
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Default export behavior (normative)
+            excerpt: excludes the quarantine directory unless explicitly requested and permitted.
+
+      - n: 11
+        from: signing
+        to: run_bundle_store
+        message: when signing is enabled, exclude unredacted/quarantine directory from checksumming scope but include placeholder artifacts
+        data:
+          - security/checksums.txt
+          - security/signature.ed25519
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: checksums.txt selection rule
+            excerpt: checksums.txt MUST NOT include the quarantine directory ... but MUST include placeholder artifacts.

@@ -1,0 +1,84 @@
+# file: docs/project_viz/architecture/workflows/adapter_binding_and_provenance.yaml
+workflows:
+  - id: adapter_binding_and_provenance
+    name: Adapter binding + provenance recording
+    scope: control_plane
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: adapter_registry
+        message: resolve adapter per port_id (deterministic binding via registry; reject unknown/disallowed adapters)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Adapter registry (selection and inventory)
+            excerpt: 'Purpose: centralize the set of available adapter implementations and resolve port → adapter bindings deterministically.'
+          - file: 020_architecture.md
+            section_heading: Adapter registry (selection and inventory)
+            excerpt: 'Unknown adapters MUST be rejected (fail closed) unless an explicit warn-and-skip policy exists for that port in the effective policy snapshot.'
+          - file: 020_architecture.md
+            section_heading: Third-party adapter policy (decision)
+            excerpt: 'v0.1 default posture: third-party adapters are disabled. A run MUST fail closed if it attempts to select a non-builtin adapter when `security.adapters.allow_third_party=false`.'
+      - n: 2
+        from: orchestrator_cli
+        to: adapter_source
+        message: compute/verify adapter source_ref + source_digest (digest-pinned refs; hash_basis_v1 for local_path)
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'For container images, tag-only references are forbidden; the reference MUST be digest-pinned.'
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'Implementations MUST fail closed if `source_digest` cannot be determined for a non-builtin adapter.'
+      - n: 3
+        from: orchestrator_cli
+        to: signature_verifier
+        message: (optional) verify adapter signature when required by policy snapshot
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'If adapter signatures are required by the effective policy snapshot (`security.adapters.require_signatures=true`), every non-builtin entry MUST include a `signature` object whose `key_id` is in `security.adapters.trusted_key_ids` and whose signature verifies against the canonical payload above.'
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'Compute RFC 8785 (JCS) canonical JSON of the following object (with the exact field names and values shown), then sign the canonical bytes using Ed25519:'
+      - n: 4
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: record manifest.extensions.adapter_provenance.entries[] deterministically (sanitize; optional config_sha256; stable sort)
+        data:
+          - runs/<run_id>/manifest.json
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'The run manifest MUST record adapter provenance under `manifest.extensions.adapter_provenance`.'
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: '`manifest.extensions.adapter_provenance.entries[]` MUST be present even when all selected adapters are built-in.'
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: '`entries[]` MUST be sorted by `(port_id asc, adapter_id asc)` using UTF-8 byte order (no locale).'
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'The provenance record MUST NOT include hostnames, machine-specific absolute paths, or timestamps.'
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'When present, canonical JSON MUST use RFC 8785 (JCS) serialization.'
+      - n: 5
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: on nondeterministic provenance, fail closed and record a deterministic stage/substage outcome
+        data:
+          - runs/<run_id>/manifest.json
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Adapter provenance recording (v0.1)
+            excerpt: 'If adapter provenance cannot be recorded deterministically, the orchestrator MUST fail closed and MUST record a deterministic stage (or dotted substage) outcome.'
+    evidence:
+      - file: 020_architecture.md
+        section_heading: Deterministic adapter selection and provenance
+        excerpt: 'For every resolved port binding, the run manifest MUST include an adapter provenance entry that meets the "Adapter provenance recording (v0.1)" requirements above.'
+      - file: 020_architecture.md
+        section_heading: Adapter provenance recording (v0.1)
+        excerpt: 'For every resolved adapter binding (including built-in adapters), the orchestrator MUST record an adapter provenance entry in the run manifest so runs remain explainable and comparable.'

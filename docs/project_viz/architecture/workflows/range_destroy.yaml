@@ -7,13 +7,106 @@ workflows:
       - n: 1
         from: operator
         to: orchestrator_cli
-        message: invoke destroy to tear down range resources
-        data: []
+        message: invoke destroy for run_id (clean up run-local resources; lab/provider teardown requires explicit enablement)
+        data:
+          - run_id
+          - destroy_options
         evidence:
           - file: 020_architecture.md
             section_heading: Range lifecycle verbs
-            excerpt: 'destroy: tear down range resources.'
+            excerpt: |
+              - Stages executed: none.
+              - Intent: clean up run-local resources and (optionally) tear down lab resources.
+              - Provider mutation (for example, deleting lab resources) MUST be explicitly enabled and MUST be
+                recorded deterministically in operability logs; it MUST NOT be implied by default.
+      - n: 2
+        from: orchestrator_cli
+        to: run_lock
+        message: acquire run lock (runs/.locks/<run_id>.lock) before mutating any run-bundle artifacts (including operability logs)
+        data:
+          - run_id
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: |
+              - Every verb invocation MUST target exactly one run bundle (`runs/<run_id>/`) and MUST acquire the
+                run lock (atomic create of `runs/.locks/<run_id>.lock` per
+                [ADR-0004: Deployment architecture and inter-component communication][adr-0004]) before creating
+                or mutating any run bundle artifacts (including `manifest.json`).
+      - n: 3
+        from: orchestrator_cli
+        to: destroy_policy_gate
+        message: decision: provider mutation enabled? (explicit enablement required; default is no provider mutation)
+        data:
+          - provider_mutation_enabled
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: |
+              - Provider mutation (for example, deleting lab resources) MUST be explicitly enabled and MUST be
+                recorded deterministically in operability logs; it MUST NOT be implied by default.
+      - n: 4
+        from: orchestrator_cli
+        to: operability_log
+        message: record deterministic operability log entry (destroy invoked; provider_mutation_enabled; planned cleanup scope)
+        data:
+          - run_id
+          - provider_mutation_enabled
+          - operability_record
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: |
+              - Provider mutation (for example, deleting lab resources) MUST be explicitly enabled and MUST be
+                recorded deterministically in operability logs; it MUST NOT be implied by default.
+      - n: 5
+        from: orchestrator_cli
+        to: run_local_resources
+        message: clean up run-local resources
+        data:
+          - run_id
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: |
+              - Intent: clean up run-local resources and (optionally) tear down lab resources.
+      - n: 6
+        from: orchestrator_cli
+        to: lab_provider_adapter
+        message: if provider_mutation_enabled, tear down lab resources (provider mutation); otherwise skip
+        data:
+          - provider_mutation_enabled
+          - lab_resource_refs
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: |
+              - Provider mutation (for example, deleting lab resources) MUST be explicitly enabled and MUST be
+                recorded deterministically in operability logs; it MUST NOT be implied by default.
+      - n: 7
+        from: orchestrator_cli
+        to: operability_log
+        message: record deterministic operability log entry (destroy completed; provider teardown attempted/skipped; outcomes)
+        data:
+          - destroy_result
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Range lifecycle verbs
+            excerpt: |
+              - Provider mutation (for example, deleting lab resources) MUST be explicitly enabled and MUST be
+                recorded deterministically in operability logs; it MUST NOT be implied by default.
+      - n: 8
+        from: orchestrator_cli
+        to: run_lock
+        message: release run lock
+        data:
+          - run_id
     evidence:
       - file: 020_architecture.md
         section_heading: Range lifecycle verbs
-        excerpt: 'destroy: tear down range resources.'
+        excerpt: |
+          - `destroy`
+            - Stages executed: none.
+            - Intent: clean up run-local resources and (optionally) tear down lab resources.
+            - Provider mutation (for example, deleting lab resources) MUST be explicitly enabled and MUST be
+              recorded deterministically in operability logs; it MUST NOT be implied by default.

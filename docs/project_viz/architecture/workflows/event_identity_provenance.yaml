@@ -1,0 +1,111 @@
+# file: docs/project_viz/architecture/workflows/event_identity_provenance.yaml
+workflows:
+  - id: event_identity_provenance
+    name: Event identity and provenance (deterministic join keys)
+    scope: normalization
+    steps:
+      - n: 1
+        from: telemetry
+        to: normalization
+        message: >
+          hand off raw_parquet records to the normalizer; if an ingest_id is present, treat it as a
+          volatile, debug-only ingestion-attempt identifier (never used for joins)
+        data:
+          - raw_parquet/**
+        evidence:
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Decision
+            excerpt: >
+              ingest_id is optional (debug only), volatile, never used for joins, and should be omitted
+              from contract-backed stores unless enabled.
+
+      - n: 2
+        from: normalization
+        to: normalization
+        message: >
+          determine metadata.identity_tier and construct identity_basis (identity-family discriminator +
+          tier-specific stable fields); set metadata.source_event_id (null for tier 3)
+        data: []
+        evidence:
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Event ID derivation (normative)
+            excerpt: >
+              select identity_basis by tier (1/2/3); identity_basis.source_type is a stable identity-family discriminator.
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Decision
+            excerpt: >
+              source_event_id must be present; tier 1/2 populated; tier 3 must be null. identity_tier must be 1|2|3.
+
+      - n: 3
+        from: normalization
+        to: normalization
+        message: >
+          compute metadata.event_id deterministically from identity_basis using RFC 8785 canonical JSON and SHA-256 (v1);
+          set metadata.uid = metadata.event_id
+        data: []
+        evidence:
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Event ID derivation (normative)
+            excerpt: >
+              event_id = pa:eid:v1: + hex(first 16 bytes of sha256(canonical_json_bytes(identity_basis))).
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Canonicalization rules (normative)
+            excerpt: >
+              canonical_json_bytes is RFC 8785 JCS; timestamps are normalized and rounded to millisecond precision.
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Decision
+            excerpt: >
+              producers must set metadata.uid equal to metadata.event_id; consumers must not treat them as independent.
+
+      - n: 4
+        from: normalization
+        to: run_bundle_store
+        message: >
+          publish normalized/** with event provenance surfaces (event_id, uid, identity_tier, source_event_id) and
+          embedded identity_basis (and identity_source_type); include ingest_id only if explicitly enabled
+        data:
+          - normalized/**
+        evidence:
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Event ID derivation (normative)
+            excerpt: >
+              write identity_basis into metadata.extensions.purple_axiom.identity_basis and identity_source_type into metadata.extensions.purple_axiom.identity_source_type.
+
+      - n: 5
+        from: normalization
+        to: run_bundle_store
+        message: >
+          enforce within-run deduplication of normalized events keyed by metadata.event_id; persist durable dedupe index;
+          detect non-identical duplicates after volatile field removal and record minimal conflict evidence
+        data:
+          - logs/dedupe_index/ocsf_events.*
+          - logs/health.json
+        evidence:
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Deduplication scope and window (normative)
+            excerpt: >
+              dedupe is enforced within the normalized event store for the run; window is the full run (unbounded).
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Dedupe index persistence (normative)
+            excerpt: >
+              maintain a durable dedupe index keyed by metadata.event_id under runs/<run_id>/logs/dedupe_index/.
+          - file: ADR-0002-event-identity-and-provenance.md
+            section_heading: Non-identical duplicates (normative)
+            excerpt: >
+              remove volatile fields (including ingest_id); if canonical bytes differ, treat as conflict and record minimal evidence.
+
+      - n: 6
+        from: normalization
+        to: normalization
+        message: >
+          ensure reproducibility across marker-blind modes by excluding rendered strings from metadata.event_id computation
+        data: []
+        evidence:
+          - file: 040_telemetry_pipeline.md
+            section_heading: Marker-blind mode (required behavior)
+            excerpt: rendered strings MUST NOT participate in metadata.event_id generation.
+    evidence:
+      - file: ADR-0002-event-identity-and-provenance.md
+        section_heading: Decision
+        excerpt: >
+          defines event_id (join key) vs ingest_id (debug-only), plus required provenance surfaces.

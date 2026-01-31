@@ -1,0 +1,170 @@
+# file: docs/project_viz/architecture/workflows/cache_provenance.yaml
+workflows:
+  - id: cache_provenance
+    name: Cross-run caching gate + cache provenance
+    scope: control_plane
+    steps:
+      - n: 1
+        from: operator
+        to: orchestrator_cli
+        message: (optional) enable cross-run caching + cache provenance emission in inputs/range.yaml
+        data:
+          - inputs/range.yaml
+        evidence:
+          - file: 010_scope.md
+            section_heading: Operating assumptions
+            excerpt: Cross-run caching is disallowed by default and requires deterministic cache provenance recording when enabled.
+          - file: 120_config_reference.md
+            section_heading: Example inputs/range.yaml
+            excerpt: 'cache.cross_run_allowed: true; cache.emit_cache_provenance: true'
+
+      - n: 2
+        from: orchestrator_cli
+        to: cache_policy_gate
+        message: load effective cache policy (default-off) from pinned inputs
+        data:
+          - inputs/range.yaml
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Determinism-sensitive features are explicitly gated
+            excerpt: Cross-run caching MUST be default-off.
+
+      - n: 3
+        from: cache_policy_gate
+        to: cache_enabled_decision
+        message: 'decision: cache enabled?'
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Determinism-sensitive features are explicitly gated
+            excerpt: If cross-run caching is enabled, cache usage MUST be recorded deterministically in logs/cache_provenance.json with stable ordering.
+
+      - n: 4
+        from: cache_enabled_decision
+        to: stage
+        message: 'no: bypass cross-run cache I/O (stages must compute artifacts normally)'
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Determinism-sensitive features are explicitly gated
+            excerpt: Cross-run caching MUST be default-off.
+
+      - n: 5
+        from: cache_enabled_decision
+        to: stage
+        message: 'yes: allow cache-aware execution (all cache interactions go through cache_policy_gate)'
+        data: []
+        evidence:
+          - file: 010_scope.md
+            section_heading: Operating assumptions
+            excerpt: Cross-run caching is disallowed by default and requires deterministic cache provenance recording when enabled.
+
+      - n: 6
+        from: stage
+        to: cache_policy_gate
+        message: for each cacheable artifact (per stage), request cache lookup (component, cache_name, key)
+        data:
+          - cache/**
+        evidence:
+          - file: 100_test_strategy_ci.md
+            section_heading: Determinism and provenance fixtures
+            excerpt: Cache provenance fixtures validate deterministic cache provenance recording for runs/<run_id>/logs/cache_provenance.json when caching is enabled.
+
+      - n: 7
+        from: cache_policy_gate
+        to: workspace_cache_dir
+        message: 'probe <workspace_root>/cache/ using deterministic key -> hit/miss'
+        data:
+          - cache/**
+        evidence:
+          - file: 120_config_reference.md
+            section_heading: detection.sigma.compile_cache_dir
+            excerpt: If compile_cache_dir points to a cross-run location (e.g., under <workspace_root>/cache/), cache.cross_run_allowed MUST be true and an entry MUST be recorded in logs/cache_provenance.json.
+          - file: 020_architecture.md
+            section_heading: Workspace write boundary and permissions
+            excerpt: 'Cross-run caches: <workspace_root>/cache/ (optional; only when cross-run caching enabled)'
+
+      - n: 8
+        from: workspace_cache_dir
+        to: stage
+        message: 'hit: return cached artifact (stage uses cached output)'
+        data:
+          - cache/**
+        evidence:
+          - file: 100_test_strategy_ci.md
+            section_heading: Determinism and provenance fixtures
+            excerpt: 'cache_hit_recorded: hit/miss status reflects a hit'
+
+      - n: 9
+        from: workspace_cache_dir
+        to: stage_artifact_compute
+        message: 'miss: compute artifact (optional: populate cache for future runs)'
+        data:
+          - cache/**
+        evidence:
+          - file: 100_test_strategy_ci.md
+            section_heading: Determinism and provenance fixtures
+            excerpt: 'cache_miss_recorded: hit/miss status MUST reflect a miss'
+
+      - n: 10
+        from: cache_policy_gate
+        to: run_bundle_store
+        message: write logs/cache_provenance.json deterministically (stable ordering + counters) when caching is enabled
+        data:
+          - logs/cache_provenance.json
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Determinism-sensitive features are explicitly gated
+            excerpt: cache usage MUST be recorded deterministically in logs/cache_provenance.json with stable ordering.
+          - file: 100_test_strategy_ci.md
+            section_heading: Determinism and provenance fixtures
+            excerpt: entries[] MUST be sorted lexicographically by (component, cache_name, key).
+          - file: 045_storage_formats.md
+            section_heading: 'Tier 0 export classification: deterministic evidence vs volatile diagnostics (normative)'
+            excerpt: logs/cache_provenance.json is deterministic evidence (when caching enabled).
+          - file: ADR-0009-run-export-policy-and-log-classification.md
+            section_heading: Deterministic evidence logs allowlist (normative)
+            excerpt: logs/cache_provenance.json (when caching is enabled)
+
+      - n: 11
+        from: stage
+        to: cache_policy_gate
+        message: 'forbidden usage: stage attempts cross-run cache access while cache is disabled'
+        data:
+          - cache/**
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Determinism-sensitive features are explicitly gated
+            excerpt: If forbidden cache usage is detected at runtime, the run MUST fail closed.
+
+      - n: 12
+        from: cache_policy_gate
+        to: orchestrator_cli
+        message: fail closed and record deterministic failure outcome (no contracted outputs published)
+        data:
+          - runs/<run_id>/manifest.json
+          - logs/health.json
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Determinism-sensitive features are explicitly gated
+            excerpt: If forbidden cache usage is detected at runtime, the run MUST fail closed.
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Decision
+            excerpt: The orchestrator MUST record the stage outcome in runs/<run_id>/manifest.json.
+
+    evidence:
+      - file: 010_scope.md
+        section_heading: Operating assumptions
+        excerpt: Cross-run caching is disallowed by default.
+      - file: 020_architecture.md
+        section_heading: Determinism-sensitive features are explicitly gated
+        excerpt: cache usage MUST be recorded deterministically in logs/cache_provenance.json with stable ordering.
+      - file: 100_test_strategy_ci.md
+        section_heading: Determinism and provenance fixtures
+        excerpt: entries[] MUST be sorted lexicographically by (component, cache_name, key).
+      - file: 045_storage_formats.md
+        section_heading: 'Tier 0 export classification: deterministic evidence vs volatile diagnostics (normative)'
+        excerpt: logs/cache_provenance.json is deterministic evidence (when caching enabled).
+      - file: ADR-0009-run-export-policy-and-log-classification.md
+        section_heading: Deterministic evidence logs allowlist (normative)
+        excerpt: logs/cache_provenance.json (when caching is enabled)

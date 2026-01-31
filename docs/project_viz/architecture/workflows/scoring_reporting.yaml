@@ -7,16 +7,15 @@ workflows:
       - n: 1
         from: orchestrator_cli
         to: telemetry
-        message: publish raw_parquet/** (and raw/** when enabled) and telemetry validation evidence
+        message: publish raw_parquet/** (and raw/** when enabled) and telemetry validation evidence (when enabled)
         data:
           - raw_parquet/**
-          - raw/**
-          - logs/telemetry_validation.json
-          - normalized/mapping_profile_snapshot.json
+          - raw/**  # when raw preservation enabled
+          - logs/telemetry_validation.json  # when validation enabled
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Minimum v0.1 IO boundaries (stage-local)
-            excerpt: '`raw_parquet/**`, `raw/**` (when raw preservation enabled)'
+            excerpt: '`raw_parquet/**`, `raw/**` (when raw preservation enabled), `logs/telemetry_validation.json` (when validation enabled)'
       - n: 2
         from: orchestrator_cli
         to: normalization
@@ -28,7 +27,7 @@ workflows:
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Minimum v0.1 IO boundaries (stage-local)
-            excerpt: '`normalized/**`, `normalized/mapping_coverage.json`'
+            excerpt: '`normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`'
       - n: 3
         from: orchestrator_cli
         to: validation
@@ -65,7 +64,7 @@ workflows:
       - n: 6
         from: orchestrator_cli
         to: reporting
-        message: generate report/report.json, report/thresholds.json, and report/run_timeline.md
+        message: generate report/report.json, report/thresholds.json, report/run_timeline.md, and report/report.html (when enabled)
         data:
           - report/report.json
           - report/thresholds.json
@@ -73,7 +72,10 @@ workflows:
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Minimum v0.1 IO boundaries (stage-local)
-            excerpt: report/report.json and report/thresholds.json
+            excerpt: '`report/**` (must include `report/report.json`, `report/thresholds.json`); additional may include `report/report.html` (when enabled)'
+          - file: 080_reporting.md
+            section_heading: Required reporting outputs (v0.1)
+            excerpt: '`report/report.json`, `report/thresholds.json`, `report/report.html` (when enabled), `report/run_timeline.md`'
     evidence:
       - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
         section_heading: Minimum v0.1 IO boundaries (stage-local)

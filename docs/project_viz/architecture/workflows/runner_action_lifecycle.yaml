@@ -1,0 +1,199 @@
+# file: docs/project_viz/architecture/workflows/runner_action_lifecycle.yaml
+workflows:
+  - id: runner_action_lifecycle
+    name: Runner action lifecycle (prepare → execute → revert → teardown)
+    scope: runner
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: runner
+        message: select target asset and action template; allocate action_id/action_key for this run
+        data:
+          - inputs/scenario.yaml
+          - logs/lab_inventory_snapshot.json
+        evidence:
+          - file: 030_scenarios.md
+            section_heading: Stable action identity (join keys)
+            excerpt: action_id identifies the action instance; action_key is the cross-run join key.
+
+      - n: 2
+        from: runner
+        to: run_bundle_store
+        message: materialize per-action evidence scaffolding and structured execution record
+        data:
+          - runner/actions/<action_id>/attire.json
+          - runner/actions/<action_id>/executor.json
+          - runner/actions/<action_id>/resolved_inputs_redacted.json
+          - runner/actions/<action_id>/requirements_evaluation.json
+          - runner/actions/<action_id>/side_effect_ledger.json
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Ground truth timeline
+            excerpt: runner derives ground truth from a structured execution record (Atomic uses runner/actions/<action_id>/attire.json).
+          - file: 030_scenarios.md
+            section_heading: "Recording requirements (normative):"
+            excerpt: runner persists per-action evidence under runner/actions/<action_id>/ including executor.json and transcripts.
+          - file: 032_atomic_red_team_executor_integration.md
+            section_heading: Contracted runner artifacts (normative)
+            excerpt: lists required per-action runner evidence artifacts for engine="atomic".
+
+      - n: 3
+        from: runner
+        to: target_asset
+        message: prepare (evaluate prerequisites and satisfy them when applicable)
+        data:
+          - runner/actions/<action_id>/prereqs_stdout.txt
+          - runner/actions/<action_id>/prereqs_stderr.txt
+        evidence:
+          - file: 030_scenarios.md
+            section_heading: Action lifecycle
+            excerpt: prepare resolves inputs and evaluates or satisfies prerequisites.
+          - file: 032_atomic_red_team_executor_integration.md
+            section_heading: Lifecycle phase mapping
+            excerpt: prerequisite evaluation and fetch map to lifecycle phase prepare.
+
+      - n: 4
+        from: runner
+        to: run_bundle_store
+        message: record prepare phase outcome in ground_truth.jsonl (including requirements evaluation attachment when present)
+        data:
+          - ground_truth.jsonl
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Ground truth timeline
+            excerpt: ground truth lines include lifecycle phase records with outcomes and timestamps.
+          - file: 025_data_contracts.md
+            section_heading: Ground truth timeline
+            excerpt: requirements_evaluation.json is attached to the prepare phase record when produced.
+
+      - n: 5
+        from: runner
+        to: target_asset
+        message: execute (invoke technique payload)
+        data:
+          - runner/actions/<action_id>/stdout.txt
+          - runner/actions/<action_id>/stderr.txt
+        evidence:
+          - file: 030_scenarios.md
+            section_heading: Action lifecycle
+            excerpt: execute attempts the technique payload.
+          - file: 032_atomic_red_team_executor_integration.md
+            section_heading: Lifecycle phase mapping
+            excerpt: primary command invocation maps to lifecycle phase execute.
+
+      - n: 6
+        from: runner
+        to: run_bundle_store
+        message: record execute phase outcome in ground_truth.jsonl and attach executor/stdout/stderr evidence refs
+        data:
+          - ground_truth.jsonl
+          - runner/actions/<action_id>/executor.json
+          - runner/actions/<action_id>/stdout.txt
+          - runner/actions/<action_id>/stderr.txt
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Ground truth timeline
+            excerpt: execute phase attaches executor_ref, stdout_ref, and stderr_ref.
+
+      - n: 7
+        from: runner
+        to: target_asset
+        message: revert (invoke cleanup command when plan.cleanup=true and execute was attempted)
+        data:
+          - runner/actions/<action_id>/cleanup_stdout.txt
+          - runner/actions/<action_id>/cleanup_stderr.txt
+        evidence:
+          - file: 030_scenarios.md
+            section_heading: "Allowed transitions (finite-state machine, normative):"
+            excerpt: revert is attempted only after execute; if execute was not attempted, revert is skipped with reason_code prior_phase_blocked.
+          - file: 032_atomic_red_team_executor_integration.md
+            section_heading: Lifecycle phase mapping
+            excerpt: cleanup command invocation maps to lifecycle phase revert.
+
+      - n: 8
+        from: runner
+        to: run_bundle_store
+        message: record revert phase outcome in ground_truth.jsonl and attach cleanup transcript evidence refs
+        data:
+          - ground_truth.jsonl
+          - runner/actions/<action_id>/cleanup_stdout.txt
+          - runner/actions/<action_id>/cleanup_stderr.txt
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Ground truth timeline
+            excerpt: revert phase attaches cleanup_stdout_ref and cleanup_stderr_ref.
+          - file: 030_scenarios.md
+            section_heading: Action lifecycle
+            excerpt: plan.cleanup=false suppresses revert/teardown and records reason_code cleanup_suppressed.
+
+      - n: 9
+        from: runner
+        to: target_asset
+        message: teardown (remove per-action prerequisites when safe; run verification probes when enabled)
+        data: []
+        evidence:
+          - file: 030_scenarios.md
+            section_heading: Action lifecycle
+            excerpt: teardown removes per-action prerequisites (when safe/applicable) and verifies known-good state.
+          - file: 030_scenarios.md
+            section_heading: "Allowed transitions (finite-state machine, normative):"
+            excerpt: teardown SHOULD be attempted even if execute or revert failed (when cleanup is enabled).
+
+      - n: 10
+        from: runner
+        to: run_bundle_store
+        message: write per-action cleanup verification evidence (when enabled)
+        data:
+          - runner/actions/<action_id>/cleanup_verification.json
+        evidence:
+          - file: 030_scenarios.md
+            section_heading: "Recording requirements (normative):"
+            excerpt: runner emits cleanup_verification.json when cleanup verification is enabled.
+
+      - n: 11
+        from: runner
+        to: run_bundle_store
+        message: write per-action state reconciliation report (when enabled)
+        data:
+          - runner/actions/<action_id>/state_reconciliation_report.json
+        evidence:
+          - file: 030_scenarios.md
+            section_heading: State reconciliation policy (per action)
+            excerpt: reconciliation is optional and emits state_reconciliation_report.json when enabled.
+
+      - n: 12
+        from: runner
+        to: run_bundle_store
+        message: record teardown phase outcome in ground_truth.jsonl and attach verification/reconciliation evidence refs (when present)
+        data:
+          - ground_truth.jsonl
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Ground truth timeline
+            excerpt: teardown phase attaches cleanup_verification_ref and state_reconciliation_report_ref when produced.
+
+      - n: 13
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: record runner stage outcome in manifest and health log
+        data:
+          - runs/<run_id>/manifest.json
+          - logs/health.json
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Common invariants (normative, v0.1)
+            excerpt: any verb that executes stages records stage outcomes in manifest.json and logs/health.json when enabled.
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Decision
+            excerpt: orchestrator MUST record stage outcomes for every executed stage.
+
+    evidence:
+      - file: 030_scenarios.md
+        section_heading: Action lifecycle
+        excerpt: action execution is a four-phase lifecycle (prepare, execute, revert, teardown).
+      - file: 025_data_contracts.md
+        section_heading: Ground truth timeline
+        excerpt: ground_truth.jsonl is the canonical action timeline including lifecycle phase outcomes and evidence refs.
+      - file: 032_atomic_red_team_executor_integration.md
+        section_heading: Runner-enforced lifecycle guards (normative)
+        excerpt: runner enforces lifecycle order and deterministic skip semantics (cleanup_suppressed, prior_phase_blocked, unsafe rerun refusal).

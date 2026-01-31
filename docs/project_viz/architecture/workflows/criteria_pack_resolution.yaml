@@ -1,0 +1,135 @@
+# file: docs/project_viz/architecture/workflows/criteria_pack_resolution.yaml
+workflows:
+  - id: criteria_pack_resolution
+    name: Criteria pack resolution and snapshot (validation stage internals)
+    scope: analysis
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: validation
+        message: invoke validation with criteria-pack selection config + required inputs
+        data:
+          - inputs/range.yaml
+          - ground_truth.jsonl
+          - normalized/ocsf_events.jsonl
+        evidence:
+          - file: 035_validation_criteria.md
+            section_heading: Stage contract header
+            excerpt: "the criteria pack source material from configured `validation.criteria_pack.paths`"
+          - file: 120_config_reference.md
+            section_heading: Validation (validation)
+            excerpt: "`criteria_pack_id` (required when enabled): identifier for the criteria pack"
+
+      - n: 2
+        from: validation
+        to: criteria_pack_sources
+        message: resolve criteria pack deterministically (paths[] order, SemVer, duplicate handling)
+        data:
+          - validation.criteria_pack.criteria_pack_id
+          - validation.criteria_pack.criteria_pack_version
+          - validation.criteria_pack.paths[]
+          - criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json
+          - criteria/packs/<criteria_pack_id>/<criteria_pack_version>/criteria.jsonl
+        evidence:
+          - file: 035_validation_criteria.md
+            section_heading: Selection and pinning
+            excerpt: "Let `paths[] = validation.criteria_pack.paths[]` (search order is authoritative; earlier entries win ties when content is identical)."
+          - file: 035_validation_criteria.md
+            section_heading: Selection and pinning
+            excerpt: "Duplicate `(id, version)` handling (normative):"
+          - file: 120_config_reference.md
+            section_heading: Validation (validation)
+            excerpt: "The implementation MUST resolve a version deterministically using SemVer ordering:"
+
+      - n: 3
+        from: validation
+        to: criteria_pack_sources
+        message: validate selected pack before snapshot (schemas + recomputed hashes + id/version match)
+        data:
+          - criteria/packs/<criteria_pack_id>/<criteria_pack_version>/manifest.json
+          - criteria/packs/<criteria_pack_id>/<criteria_pack_version>/criteria.jsonl
+          - manifest_sha256
+          - criteria_sha256
+          - criteria.pack_sha256
+        evidence:
+          - file: 035_validation_criteria.md
+            section_heading: Selection and pinning
+            excerpt: "Pack validation before snapshot (normative):"
+          - file: 035_validation_criteria.md
+            section_heading: Selection and pinning
+            excerpt: "The resolver MUST recompute `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` and MUST fail closed if any recorded hash differs from the recomputed value."
+
+      - n: 4
+        from: validation
+        to: staging_area
+        message: snapshot manifest + criteria into `.staging/validation/criteria/` for run-scoped reproducibility
+        data:
+          - runs/<run_id>/.staging/validation/criteria/manifest.json
+          - runs/<run_id>/.staging/validation/criteria/criteria.jsonl
+        evidence:
+          - file: 035_validation_criteria.md
+            section_heading: Run bundle snapshot
+            excerpt: "The **validation stage** MUST snapshot the selected criteria pack into the run bundle so results remain reproducible even if the repo changes."
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: "The stage MUST write outputs into a staging location under the run bundle:"
+
+      - n: 5
+        from: validation
+        to: staging_area
+        message: evaluate criteria using the snapshot only; write staged `criteria/results.jsonl`
+        data:
+          - runs/<run_id>/.staging/validation/criteria/results.jsonl
+        evidence:
+          - file: 035_validation_criteria.md
+            section_heading: Run bundle snapshot
+            excerpt: "Criteria evaluation MUST use only the run-bundle snapshot (`runs/<run_id>/criteria/**`) and MUST NOT read criteria pack files directly from the repository after snapshotting."
+          - file: 035_validation_criteria.md
+            section_heading: Signal evaluation semantics (deterministic)
+            excerpt: "The sample MUST be deterministic:"
+
+      - n: 6
+        from: validation
+        to: run_bundle_store
+        message: validate snapshot contracts + invariants, then publish by atomic rename to `criteria/`
+        data:
+          - runs/<run_id>/logs/contract_validation/validation.json
+          - criteria/manifest.json
+          - criteria/criteria.jsonl
+          - criteria/results.jsonl
+        evidence:
+          - file: 035_validation_criteria.md
+            section_heading: Snapshot schema validation (normative)
+            excerpt: "The snapshot `criteria/manifest.json` MUST validate against the criteria pack manifest contract:"
+          - file: 035_validation_criteria.md
+            section_heading: Snapshot schema validation (normative)
+            excerpt: "Snapshot file-format invariants (normative):"
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: "The stage MUST publish outputs by an atomic rename/move from staging into the final location under `runs/<run_id>/`."
+
+      - n: 7
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: record resolved criteria-pack pins + validation stage outcome (single-writer manifest policy)
+        data:
+          - runs/<run_id>/manifest.json
+          - logs/health.json
+        evidence:
+          - file: 035_validation_criteria.md
+            section_heading: Selection and pinning
+            excerpt: "the effective criteria pack MUST be pinned by `(criteria_pack_id, criteria_pack_version)` and recorded in the run manifest under:"
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Completion requires outcome recording
+            excerpt: "Outcome writer (normative): stage outcome persistence MUST be performed by the orchestrator"
+
+    evidence:
+      - file: 035_validation_criteria.md
+        section_heading: Selection and pinning
+        excerpt: "Resolution algorithm (normative):"
+      - file: 035_validation_criteria.md
+        section_heading: Run bundle snapshot
+        excerpt: "Criteria evaluation MUST use only the run-bundle snapshot (`runs/<run_id>/criteria/**`) and MUST NOT read criteria pack files directly from the repository after snapshotting."
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Staging then atomic publish
+        excerpt: "validate all required schema contracts before publish"

@@ -1,0 +1,197 @@
+# file: docs/project_viz/architecture/workflows/run_lifecycle_outcome_propagation.yaml
+workflows:
+  - id: run_lifecycle_outcome_propagation
+    name: Run lifecycle and outcome propagation (state-machine oriented)
+    scope: control_plane
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: stage_core
+        message: "stage loop: select next enabled stage in canonical order and invoke stage execution"
+        data: []
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Stable ordering
+            excerpt: "Default ordering MUST follow the canonical pipeline order:"
+
+      - n: 2
+        from: stage_core
+        to: staging_area
+        message: "stage executes: write candidate outputs to staging (pre-publish)"
+        data:
+          - ".staging/<stage_id>/**"
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Publish gate (normative, v0.1)
+            excerpt: "Stages MUST write candidate outputs under `runs/<run_id>/.staging/<stage_id>/`."
+
+      - n: 3
+        from: stage_core
+        to: publish_gate
+        message: "publish gate: validate required contract-backed artifacts (presence + schema) before publish"
+        data:
+          - ".staging/<stage_id>/**"
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Publish gate (normative, v0.1)
+            excerpt: "Before publishing, stages MUST validate required contract-backed artifacts (presence + schema)."
+
+      - n: 4
+        from: publish_gate
+        to: run_bundle_store
+        message: "publish gate success: atomically promote staged artifacts into final run-bundle paths"
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Publish gate (normative, v0.1)
+            excerpt: "Publishing MUST be an atomic rename/move from staging into final run-bundle paths."
+
+      - n: 5
+        from: publish_gate
+        to: run_bundle_store
+        message: "publish gate failure: prevent partial promotion and emit deterministic contract validation report"
+        data:
+          - "logs/contract_validation/<stage_id>.json"
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Publish gate (normative, v0.1)
+            excerpt: "If validation fails, stages MUST NOT partially publish final-path artifacts."
+          - file: 020_architecture.md
+            section_heading: Publish gate (normative, v0.1)
+            excerpt: "On contract validation failure, the stage MUST emit a contract validation report at"
+
+      - n: 6
+        from: stage_core
+        to: outcome_sink
+        message: "record outcomes: emit substage outcomes (optional) and terminal stage outcome tuple"
+        data: []
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Port: `OutcomeSink`
+            excerpt: "`record_substage_outcome(stage, status, fail_mode, reason_code?: string|null, details?: object|null) -> void`"
+          - file: 020_architecture.md
+            section_heading: Port: `OutcomeSink`
+            excerpt: "`record_stage_outcome(stage, status, fail_mode, reason_code?: string|null, details?: object|null) -> void`"
+
+      - n: 7
+        from: outcome_sink
+        to: run_bundle_store
+        message: "persist outcomes: atomically write manifest.json (authoritative) and logs/health.json mirror (when enabled)"
+        data:
+          - "manifest.json"
+          - "logs/health.json"
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Port: `OutcomeSink`
+            excerpt: "`OutcomeSink` MUST be implemented and owned by the orchestrator (composition root) and MUST be the only component that persists outcomes into `runs/<run_id>/manifest.json` and, when enabled, `runs/<run_id>/logs/health.json`."
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Outcome recording requirement
+            excerpt: "Outcome writes to `manifest.json` and `logs/health.json` MUST be atomic replace operations"
+          - file: 000_charter.md
+            section_heading: Summary
+            excerpt: "A stage is considered complete only when its outcome is recorded in the run manifest (and in `logs/health.json` when enabled) and its outputs are either published or absent according to its failure mode."
+
+      - n: 8
+        from: outcome_sink
+        to: run_bundle_store
+        message: "determinism: enforce stable stage/substage ordering in persisted outcome lists"
+        data:
+          - "manifest.json"
+          - "logs/health.json"
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Port: `OutcomeSink`
+            excerpt: "Stage outcomes MUST be emitted in stable ordering (canonical stage order)."
+          - file: 020_architecture.md
+            section_heading: Port: `OutcomeSink`
+            excerpt: "Substages, when present, MUST be ordered immediately after their parent stage, sorted lexicographically by full `stage` string."
+
+      - n: 9
+        from: orchestrator_cli
+        to: orchestrator_cli
+        message: "decision: evaluate (status, fail_mode) to continue stage loop vs stop vs skip downstream"
+        data: []
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Downstream stages on upstream failure
+            excerpt: 'If a stage fails with `fail_mode="fail_closed"`:'
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Downstream stages on upstream failure
+            excerpt: 'If a stage fails with `fail_mode="warn_and_skip"`:'
+
+      - n: 10
+        from: orchestrator_cli
+        to: stage_core
+        message: 'continue path: on success OR `warn_and_skip` failure, proceed to subsequent stages (do not alter downstream configured fail_mode)'
+        data: []
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Downstream stages on upstream failure
+            excerpt: "subsequent stages MUST use their configured `fail_mode` and MUST not silently upgrade or downgrade"
+
+      - n: 11
+        from: orchestrator_cli
+        to: outcome_sink
+        message: 'stop/skip path: on `fail_closed` failure, stop executing subsequent stages and record blocked_by_upstream_failure skips'
+        data:
+          - "manifest.json"
+          - "logs/health.json"
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Downstream stages on upstream failure
+            excerpt: 'all remaining enabled stages MUST be recorded as `status="skipped"`, `fail_mode=<their configured value>`, `reason_code="blocked_by_upstream_failure"`'
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Publish gate on fatal failure
+            excerpt: "the orchestrator SHOULD still attempt to write final `manifest.json` and `logs/health.json` and record downstream skips"
+
+      - n: 12
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: "finalize run: derive manifest.status and deterministic exit code from recorded outcomes"
+        data:
+          - "manifest.json"
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Manifest status derivation (normative)
+            excerpt: "`manifest.status` MUST be derived from stage outcomes:"
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Exit codes
+            excerpt: "The orchestrator MUST use deterministic exit codes:"
+
+      - n: 13
+        from: ci
+        to: run_bundle_store
+        message: "CI conformance: validate deterministic outcome emission (ordering + reason-code catalog)"
+        data:
+          - "manifest.json"
+          - "logs/health.json"
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: CI conformance (normative)
+            excerpt: "CI MUST validate deterministic outcome emission:"
+
+      - n: 14
+        from: operator
+        to: run_bundle_store
+        message: "operator interpretation: read manifest.json (authoritative) + logs/health.json (mirror) to explain success vs partial vs failed vs skipped"
+        data:
+          - "manifest.json"
+          - "logs/health.json"
+        evidence:
+          - file: 080_reporting.md
+            section_heading: Run status summary
+            excerpt: "Stage outcomes are read from `manifest.json` (authoritative); `logs/health.json` is an optional mirror when enabled."
+
+    evidence:
+      - file: 000_charter.md
+        section_heading: Summary
+        excerpt: "A stage is considered complete only when its outcome is recorded in the run manifest (and in `logs/health.json` when enabled) and its outputs are either published or absent according to its failure mode."
+      - file: 020_architecture.md
+        section_heading: Publish gate (normative, v0.1)
+        excerpt: "Publishing MUST be an atomic rename/move from staging into final run-bundle paths."
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Downstream stages on upstream failure
+        excerpt: 'all remaining enabled stages MUST be recorded as `status="skipped"`, `fail_mode=<their configured value>`, `reason_code="blocked_by_upstream_failure"`'
+      - file: ADR-0007-state-machines.md
+        section_heading: Representational requirements (diagram contract)
+        excerpt: "Representational state machines MUST be treated as a closed set."

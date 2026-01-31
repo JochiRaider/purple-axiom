@@ -28,7 +28,7 @@ workflows:
         to: run_bundle_store
         message: write manifest skeleton and pin inputs into runs/<run_id>/inputs/
         data:
-          - runs/<run_id>/manifest.json
+          - manifest.json
           - inputs/range.yaml
           - inputs/scenario.yaml
         evidence:
@@ -51,6 +51,23 @@ workflows:
       - n: 5
         from: orchestrator_cli
         to: runner
+        message: (optional) run environment configuration and record `runner.environment_config` substage outcome
+        data:
+          - manifest.json
+          - logs/health.json
+        evidence:
+          - file: 020_architecture.md
+            section_heading: Stage execution order
+            excerpt: "MUST record an additive `runner` substage `runner.environment_config` after `lab_provider` completes and before any action enters the runner `prepare` lifecycle phase."
+          - file: 020_architecture.md
+            section_heading: Stage execution order
+            excerpt: "This substage MUST be observable via stage outcomes in `manifest.json` and, when health files are enabled, via `logs/health.json`."
+          - file: 120_config_reference.md
+            section_heading: Runner (runner)
+            excerpt: "When `environment_config.mode != off`, the orchestrator records the substage outcome as `runner.environment_config` and emits deterministic evidence under `runs/<run_id>/logs/**`"
+      - n: 6
+        from: orchestrator_cli
+        to: runner        
         message: run runner to execute scenario actions
         data:
           - ground_truth.jsonl
@@ -59,10 +76,10 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)
             excerpt: '[runner] execute scenario actions -> write ground_truth.jsonl'
-      - n: 6
+      - n: 7
         from: orchestrator_cli
         to: telemetry
-        message: run telemetry to publish raw_parquet/** (and raw/** when enabled) and telemetry validation
+        message: run telemetry post-run harvest/validation/publish to materialize raw_parquet/** (and raw/** when enabled)
         data:
           - raw_parquet/**
           - raw/**
@@ -71,10 +88,13 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)
             excerpt: publish raw_parquet/** (and raw/** when enabled)
+          - file: 020_architecture.md
+            section_heading: Stage execution order
+            excerpt: "The `telemetry` stage boundary refers to the post-run harvest/validation/publish step that materializes `raw_parquet/**` for downstream stages."            
           - file: ADR-0009-run-export-policy-and-log-classification.md
             section_heading: Deterministic evidence logs allowlist (normative)
             excerpt: logs/telemetry_validation.json
-      - n: 7
+      - n: 8
         from: orchestrator_cli
         to: normalization
         message: normalize raw_parquet/** into normalized/** and publish mapping coverage + profile snapshot
@@ -86,7 +106,7 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)
             excerpt: '[normalization] map raw_parquet/** -> publish normalized/**'
-      - n: 8
+      - n: 9
         from: orchestrator_cli
         to: validation
         message: evaluate criteria and publish criteria/manifest.json + criteria/criteria.jsonl + criteria/results.jsonl
@@ -98,7 +118,7 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)
             excerpt: publish criteria/manifest.json + criteria/criteria.jsonl + criteria/results.jsonl
-      - n: 9
+      - n: 10
         from: orchestrator_cli
         to: detection
         message: evaluate Sigma and publish detections/detections.jsonl
@@ -109,7 +129,7 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)
             excerpt: publish bridge/** + detections/detections.jsonl
-      - n: 10
+      - n: 11
         from: orchestrator_cli
         to: scoring
         message: compute scoring/summary.json
@@ -119,7 +139,7 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Canonical run sequence (v0.1)
             excerpt: publish scoring/summary.json
-      - n: 11
+      - n: 12
         from: orchestrator_cli
         to: reporting
         message: generate report/report.json, report/thresholds.json, and report/run_timeline.md
@@ -131,7 +151,10 @@ workflows:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Minimum v0.1 IO boundaries (stage-local)
             excerpt: report/report.json and report/thresholds.json
-      - n: 12
+          - file: 080_reporting.md
+            section_heading: Required reporting outputs (v0.1)
+            excerpt: "`report/run_timeline.md` | Deterministic, human-readable run timeline in UTC (operator UI + exports)"            
+      - n: 13
         from: orchestrator_cli
         to: signing
         message: (optional) sign run artifacts and publish security/**

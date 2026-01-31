@@ -1,31 +1,43 @@
 # file: docs/project_viz/architecture/workflows/publish_gate.yaml
 workflows:
   - id: publish_gate
-    name: Publish gate (staging + atomic publish)
+    name: Publish gate (staging + contract validation + atomic publish)
     scope: control_plane
     steps:
       - n: 1
         from: orchestrator_cli
         to: staging_area
-        message: write stage outputs under .staging/ prior to publish
+        message: write stage outputs under runs/<run_id>/.staging/<stage_id>/ prior to publish
         data: []
         evidence:
           - file: 000_charter.md
             section_heading: Guiding principles
             excerpt: Stages write to a staging location (`.staging/`).
+          - file: 000_charter.md
+            section_heading: Summary
+            excerpt: "Stage staging root: stages write to `runs/<run_id>/.staging/<stage_id>/` and MUST publish by atomic rename/move into final run-bundle paths after publish-gate validation."
       - n: 2
         from: orchestrator_cli
         to: run_bundle_store
-        message: validate required schema contracts before publish
+        message: validate required schema contracts before publish (on failure: emit contract validation report, do not publish final paths; see teardown.yaml for .staging cleanup)
         data: []
         evidence:
           - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
             section_heading: Staging then atomic publish
             excerpt: validate all required schema contracts before publish
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: On contract validation failure, the stage MUST emit a deterministic contract validation report at `runs/<run_id>/logs/contract_validation/<stage_id>.json`
+          - file: 020_architecture.md
+            section_heading: Finalize semantics (normative)
+            excerpt: If validation fails, `finalize()` MUST NOT promote any staged outputs into their final run bundle locations.
+          - file: 025_data_contracts.md
+            section_heading: Publish-gate contract validation (required)
+            excerpt: If validation fails, stages MUST NOT partially publish final-path artifacts.            
       - n: 3
         from: orchestrator_cli
         to: run_bundle_store
-        message: publish via atomic rename into final run-bundle paths
+        message: if validation succeeds, publish via atomic rename into final run-bundle paths
         data: []
         evidence:
           - file: 000_charter.md
@@ -34,7 +46,28 @@ workflows:
           - file: 015_lab_providers.md
             section_heading: Publish and validation gate
             excerpt: The stage MUST publish by atomic rename into the final run bundle location.
+      - n: 4
+        from: orchestrator_cli
+        to: staging_area
+        message: after successful publish, cleanup `runs/<run_id>/.staging/<stage_id>/` (delete or leave empty); teardown ensures `runs/<run_id>/.staging/**` is absent on terminal run
+        data: []
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Publish-gate contract validation (required)
+            excerpt: On successful publish, the stage MUST delete (or leave empty) its `runs/<run_id>/.staging/<stage_id>/` directory.
+          - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+            section_heading: Staging then atomic publish
+            excerpt: Implementations SHOULD remove any remaining stage staging directories under `runs/<run_id>/.staging/` during run finalization or resume.
+          - file: 020_architecture.md
+            section_heading: Finalize semantics (normative)
+            excerpt: Publish-scratch hygiene: once a run is in a terminal state (success/partial/failed), `runs/<run_id>/.staging/**` MUST be absent (or empty).
+          - file: 105_ci_operational_readiness.md
+            section_heading: Publish-gate enforcement
+            excerpt: CI SHOULD perform a post-run publish-gate sanity check by asserting that `runs/<run_id>/.staging/<stage_id>/` does not remain populated after orchestrator completion.
     evidence:
       - file: 000_charter.md
         section_heading: Guiding principles
         excerpt: Write to a staging location first, validate, then publish atomically.
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Staging then atomic publish
+        excerpt: If the stage fails before publish, it MUST NOT create or partially populate the final output directory.

@@ -1,0 +1,161 @@
+# file: docs/project_viz/architecture/workflows/reporting_regression_compare.yaml
+workflows:
+  - id: reporting_regression_compare
+    name: Reporting regression compare (baseline vs candidate)
+    scope: analysis
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: reporting
+        message: "invoke regression compare substage as part of reporting (only when reporting.regression.enabled=true)"
+        data:
+          - scoring/summary.json
+          - manifest.json
+          - inputs/baseline_run_ref.json
+          - report/report.json
+          - report/thresholds.json
+        evidence:
+          - file: 080_reporting.md
+            section_heading: Presence rules (normative)
+            excerpt: "If `reporting.regression.enabled=true` and the baseline is resolved and compared, the report JSON MUST include `report/report.json.regression` populated per this contract."
+
+      - n: 2
+        from: reporting
+        to: run_bundle_store
+        message: "decision: baseline reference present + contract-valid? (inputs/baseline_run_ref.json). If missing/unreadable => warn_and_skip baseline_missing + indeterminate regression section"
+        data:
+          - inputs/baseline_run_ref.json
+          - report/report.json
+          - logs/health.json
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Regression baseline reference
+            excerpt: "When reporting.regression.enabled=true, inputs/baseline_run_ref.json MUST exist and MUST be contract-valid."
+          - file: 080_reporting.md
+            section_heading: Presence rules (normative)
+            excerpt: "`comparability.reason_code` MUST be one of `baseline_missing | baseline_incompatible | regression_compare_failed`."
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Regression compare substage (substage: `reporting.regression_compare`)
+            excerpt: "Default `fail_mode`: `warn_and_skip` (quality gate)."
+
+      - n: 3
+        from: reporting
+        to: run_bundle_store
+        message: "baseline load: resolve baseline manifest via pointer form; if snapshot form present, verify sha256 integrity. Snapshot sha mismatch => fail_closed baseline_incompatible"
+        data:
+          - inputs/baseline_run_ref.json
+          - inputs/baseline/manifest.json
+          - runs/<baseline_run_id>/manifest.json
+        evidence:
+          - file: 025_data_contracts.md
+            section_heading: Regression baseline reference
+            excerpt: "If `inputs/baseline/manifest.json` is present and its sha256 does not equal `baseline_manifest_sha256`, the reporting stage MUST fail closed and MUST classify the failure as `baseline_incompatible` in the `reporting.regression_compare` substage."
+          - file: 080_reporting.md
+            section_heading: Baseline field derivation (normative)
+            excerpt: "On mismatch, `comparability.status` MUST be `indeterminate` with `comparability.reason_code=\"baseline_incompatible\"`, `deltas[]` MUST be empty, and the reporting stage MUST emit `reporting.regression_compare` with `reason_code=baseline_incompatible` (ADR-0005)."
+
+      - n: 4
+        from: reporting
+        to: reporting
+        message: "compatibility gate: compute canonical comparability checks over manifest.versions.* pins + policy (allow_mapping_pack_version_drift). Not comparable => warn_and_skip baseline_incompatible + no deltas"
+        data:
+          - manifest.json
+          - runs/<baseline_run_id>/manifest.json
+          - report/report.json.regression.comparability_checks[]
+        evidence:
+          - file: 080_reporting.md
+            section_heading: Regression comparability keys
+            excerpt: "For regression comparability decisions, the authoritative pin source is `manifest.versions.*` (per ADR-0001)."
+          - file: 080_reporting.md
+            section_heading: Presence rules (normative)
+            excerpt: "If `false`, mismatches on `versions.mapping_pack_version` MUST be treated as not comparable (`baseline_incompatible`)."
+          - file: 060_detection_sigma.md
+            section_heading: Required conformance tests (regression comparability)
+            excerpt: "The regression comparability decision MUST be recorded deterministically as not comparable: `comparability.status` is `indeterminate`; `comparability.reason_code` is `baseline_incompatible`."
+
+      - n: 5
+        from: reporting
+        to: reporting
+        message: "delta computation: compute regression deltas (candidate - baseline) for comparable metric surface using deterministic rounding and ordering"
+        data:
+          - scoring/summary.json
+          - runs/<baseline_run_id>/scoring/summary.json
+          - report/report.json.regression.deltas[]
+        evidence:
+          - file: 070_scoring_metrics.md
+            section_heading: Deterministic comparison semantics (normative)
+            excerpt: "Implementations MUST compute `delta_abs = candidate_value - baseline_value`."
+          - file: 070_scoring_metrics.md
+            section_heading: Deterministic comparison semantics (normative)
+            excerpt: "The `candidate_value` and `baseline_value` MUST be rounded per the canonical rounding rules BEFORE computing `delta_abs` and `delta_pct`."
+
+      - n: 6
+        from: reporting
+        to: reporting
+        message: "threshold evaluation: compare deltas to regression thresholds; set regression_alerted + alert_reasons; update report/thresholds.json.status_recommendation per alert_status_recommendation policy"
+        data:
+          - report/thresholds.json
+          - report/report.json.regression.regression_alerted
+          - report/report.json.regression.alert_reasons[]
+          - report/report.json.status_reasons[]
+        evidence:
+          - file: 080_reporting.md
+            section_heading: Interaction with status recommendation (normative)
+            excerpt: "If `regression_alerted=true`, then: `report/thresholds.json.status_recommendation` MUST be set according to the configured policy."
+          - file: 100_test_strategy_ci.md
+            section_heading: Regression gates
+            excerpt: "Regression gates protect against coverage and performance degradation."
+
+      - n: 7
+        from: reporting
+        to: run_bundle_store
+        message: "emit artifacts: write report/report.json regression block + report/thresholds.json; include required evidence_refs; keep indeterminate form on warn_and_skip / fail_closed paths"
+        data:
+          - report/report.json
+          - report/thresholds.json
+          - inputs/baseline_run_ref.json
+          - inputs/baseline/manifest.json
+        evidence:
+          - file: 080_reporting.md
+            section_heading: Presence rules (normative)
+            excerpt: "If `reporting.regression.enabled=true` but baseline resolution or comparison fails, the report JSON MUST still include `report/report.json.regression` in an indeterminate form."
+          - file: 080_reporting.md
+            section_heading: Presence rules (normative)
+            excerpt: "`evidence_refs[]` MUST include entries with: `artifact_path=\"manifest.json\"` (current run) and `artifact_path=\"inputs/baseline_run_ref.json\"`."
+          - file: 080_reporting.md
+            section_heading: Presence rules (normative)
+            excerpt: "Entries MUST be sorted by `artifact_path` ascending (UTF-8 byte order, no locale)."
+
+      - n: 8
+        from: orchestrator_cli
+        to: run_bundle_store
+        message: "outcome mapping: record reporting.regression_compare substage outcome in logs/health.json (ok vs warn_and_skip vs fail_closed) with stable reason_code + deterministic precedence"
+        data:
+          - logs/health.json
+        evidence:
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Regression compare substage (substage: `reporting.regression_compare`)
+            excerpt: "reason_code for `reporting.regression_compare` MUST be constrained to: `baseline_missing`, `baseline_incompatible`, `regression_compare_failed`."
+          - file: ADR-0005-stage-outcomes-and-failure-classification.md
+            section_heading: Regression compare substage (substage: `reporting.regression_compare`)
+            excerpt: "Deterministic selection (normative): 1. If the baseline reference cannot be resolved, select `baseline_missing`."
+          - file: 080_reporting.md
+            section_heading: Presence rules (normative)
+            excerpt: "The reporting stage MUST emit the `reporting.regression_compare` health substage outcome with the same `reason_code` (see ADR-0005)."
+
+    evidence:
+      - file: 080_reporting.md
+        section_heading: Presence rules (normative)
+        excerpt: "If `reporting.regression.enabled=true` but baseline resolution or comparison fails, the report JSON MUST still include `report/report.json.regression` in an indeterminate form."
+      - file: 080_reporting.md
+        section_heading: Regression comparability keys
+        excerpt: "For regression comparability decisions, the authoritative pin source is `manifest.versions.*` (per ADR-0001)."
+      - file: 025_data_contracts.md
+        section_heading: Regression baseline reference
+        excerpt: "When reporting.regression.enabled=true, inputs/baseline_run_ref.json MUST exist and MUST be contract-valid."
+      - file: 070_scoring_metrics.md
+        section_heading: Deterministic comparison semantics (normative)
+        excerpt: "Implementations MUST compute `delta_abs = candidate_value - baseline_value`."
+      - file: ADR-0005-stage-outcomes-and-failure-classification.md
+        section_heading: Regression compare substage (substage: `reporting.regression_compare`)
+        excerpt: "Default `fail_mode`: `warn_and_skip` (quality gate)."

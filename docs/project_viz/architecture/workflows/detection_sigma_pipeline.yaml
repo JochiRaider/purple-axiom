@@ -1,0 +1,74 @@
+# file: docs/project_viz/architecture/workflows/detection_sigma_pipeline.yaml
+workflows:
+  - id: detection_sigma_pipeline
+    name: Detection pipeline (Sigma) - deterministic load + bridge + detections
+    scope: analysis
+    steps:
+      - n: 1
+        from: orchestrator_cli
+        to: detection
+        message: deterministically discover Sigma rules and establish stable evaluation order
+        data: []
+        evidence:
+          - file: 060_detection_sigma.md
+            section_heading: Deterministic rule loading requirements (normative)
+            excerpt: "Treat `detection.sigma.rule_paths[]` as an ordered list, not a set."
+          - file: 060_detection_sigma.md
+            section_heading: Deterministic rule loading requirements (normative)
+            excerpt: "Before parsing/loading, the discovered file list MUST be sorted by the stable tuple key:"
+
+      - n: 2
+        from: detection
+        to: detection
+        message: compute canonical rule hashes (extensions.sigma.rule_sha256)
+        data: []
+        evidence:
+          - file: 060_detection_sigma.md
+            section_heading: Canonical rule hashing (normative)
+            excerpt: "Normalize line endings by converting CRLF (`\\r\\n`) and CR (`\\r`) to LF (`\\n`)."
+          - file: 060_detection_sigma.md
+            section_heading: Canonical rule hashing (normative)
+            excerpt: "Serialize as `sha256:<lowercase_hex>` (64 hex chars, lowercase)."
+
+      - n: 3
+        from: detection
+        to: run_bundle_store
+        message: emit Sigma→OCSF bridge artifacts (routing + compilation + coverage)
+        data:
+          - bridge/router_table.json
+          - bridge/mapping_pack_snapshot.json
+          - bridge/compiled_plans/**
+          - bridge/coverage.json
+        evidence:
+          - file: 065_sigma_to_ocsf_bridge.md
+            section_heading: Required artifacts (v0.1)
+            excerpt: "When Sigma evaluation is enabled, the bridge MUST emit a contract-validated set of artifacts under `runs/<run_id>/bridge/` so routing, compilation, and coverage are reproducible and mechanically testable."
+          - file: 025_data_contracts.md
+            section_heading: Bridge router table snapshot
+            excerpt: "This artifact is stored at `bridge/router_table.json`."
+
+      - n: 4
+        from: detection
+        to: detection
+        message: validate cross-artifact invariants and fail-closed on mismatch before evaluating
+        data: []
+        evidence:
+          - file: 065_sigma_to_ocsf_bridge.md
+            section_heading: Cross-artifact invariants (normative)
+            excerpt: "Any mismatch MUST fail closed and MUST NOT proceed with rule evaluation."
+
+      - n: 5
+        from: detection
+        to: run_bundle_store
+        message: evaluate Sigma over normalized events and emit detections
+        data:
+          - detections/detections.jsonl
+        evidence:
+          - file: 060_detection_sigma.md
+            section_heading: Unattributed detections
+            excerpt: "Are recorded in `detections/detections.jsonl`."
+
+    evidence:
+      - file: ADR-0004-deployment-architecture-and-inter-component-communication.md
+        section_heading: Minimum v0.1 IO boundaries (stage-local)
+        excerpt: "`bridge/**`, `detections/detections.jsonl`"

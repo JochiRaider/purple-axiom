@@ -145,50 +145,27 @@ post-run harvest/validation/publish step that materializes `raw_parquet/**` for 
 For the authoritative v0.1 topology and IO boundaries, see
 `docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md`.
 
-```text
-┌──────────────────────────────┐
-│         Lab Provider         │ ← Inventory resolution (Manual, Ludus, Terraform, Vagrant, other)
-└──────────────┬───────────────┘
-               │ Inventory snapshot (deterministic; referenced by manifest)
-               ▼
-┌──────────────────────────────┐
-│       Scenario Runner        │ ← Execution engine (Atomic Red Team v0.1)
-└──────────────┬───────────────┘
-               │ Ground truth + Runner evidence (transcripts, reconciliation, cleanup verification)
-               ▼
-┌──────────────────────────────┐
-│          Telemetry           │ ← OTel Collector topology + Canaries (harvest/validate/publish)
-└──────────────┬───────────────┘
-               │ Raw datasets (Parquet) + Telemetry validation evidence
-               ▼
-┌──────────────────────────────┐
-│     Normalization (OCSF)     │ ← Schema envelopes + Provenance + Identity
-└──────────────┬───────────────┘
-               │ Normalized event store (Parquet) + Mapping coverage
-               ▼
-┌──────────────────────────────┐
-│          Validation          │ ← Criteria packs + Cleanup verification surfacing (when enabled)
-└──────────────┬───────────────┘
-               │ Criteria evaluation results
-               ▼
-┌──────────────────────────────┐
-│           Detection          │ ← Sigma→OCSF bridge + Evaluation backend (DuckDB v0.1 default)
-└──────────────┬───────────────┘
-               │ Bridge artifacts + Detection outputs
-               ▼
-┌──────────────────────────────┐
-│            Scoring           │ ← Metrics aggregation + Gap classification
-└──────────────┬───────────────┘
-               │ Summary metrics + Threshold inputs
-               ▼
-┌──────────────────────────────┐
-│           Reporting          │ ← HTML/JSON outputs + CI status recommendation
-└──────────────┬───────────────┘
-               │ Optional integrity metadata
-               ▼
-┌──────────────────────────────┐
-│      Signing (Optional)      │ ← Artifact checksums + Digital signatures
-└──────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph ci_environment["CI Environment"]
+    lab_provider["Lab Provider Stage"]
+    runner["Runner Stage"]
+    telemetry["Telemetry Stage"]
+    normalization["Normalization Stage"]
+    validation["Validation Stage"]
+    detection["Detection Stage"]
+    scoring["Scoring Stage"]
+    reporting["Reporting Stage"]
+    signing["Signing Stage (optional)"]
+  end
+  lab_provider --> runner
+  runner --> telemetry
+  telemetry --> normalization
+  normalization --> validation
+  validation --> detection
+  detection --> scoring
+  scoring --> reporting
+  reporting -. "optional" .-> signing
 ```
 
 ## Range lifecycle verbs

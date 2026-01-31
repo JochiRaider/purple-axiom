@@ -51,6 +51,7 @@ Notes:
 - Reporting emits additional **non-contract** outputs in v0.1:
   - `report/report.html` when `reporting.emit_html=true`
   - `report/thresholds.json` (policy/gating surface; TODO: add as a contract-backed artifact)
+  - `report/run_timeline.md` (deterministic operator-facing artifact; see "Run timeline artifact")
 - When `reporting.regression.enabled=true`, reporting also consumes a baseline reference (see
   `120_config_reference.md`, `reporting.regression.*`) and materializes deterministic baseline
   snapshots under `inputs/` per `045_storage_formats.md`.
@@ -204,6 +205,8 @@ Notes:
 - `report/report.json` and `report/thresholds.json` are contracted required artifacts for v0.1
   reportable runs; if an implementation supports `reporting.emit_json`, it MUST be `true` for any
   run intended to be reportable.
+- `report/run_timeline.md` is a required deterministic operator-facing artifact for v0.1 reportable
+  runs.
 
 The reporting stage MUST NOT modify upstream artifacts. It reads from `scoring/summary.json`,
 `bridge/coverage.json`, `normalized/mapping_coverage.json`, and other inputs, then emits derived

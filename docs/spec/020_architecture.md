@@ -650,11 +650,15 @@ Deterministic stage → contract-backed outputs (normative):
 
 - The contract registry (`contract_registry.json`) is the source of truth for stage ownership of
   contract-backed artifacts via `bindings[].stage_owner`.
+- The contract registry (`contract_registry.json`) is also the source of truth for validation
+  dispatch of contract-backed artifacts via `bindings[].validation_mode` (see
+  `025_data_contracts.md`).
 - The orchestrator (or stage wrapper) MUST construct `expected_outputs[]` by joining the current
   `stage_id` to `bindings[].stage_owner` and mapping concrete artifact paths to `contract_id` via
   `artifact_glob`.
-  - Expansion rule: for any binding with glob metacharacters (for example `*`), the stage wrapper
-    MUST expand to the concrete set of matching staged files under
+  - Expansion rule: for any binding with glob metacharacters (for example `*` or `**`), the stage
+    wrapper MUST expand `artifact_glob` using `glob_v1` semantics defined in `025_data_contracts.md`
+    ("Glob semantics (glob_v1)") over the set of staged regular files under
     `runs/<run_id>/.staging/<stage_id>/`.
   - Ordering rule: the resulting `expected_outputs[]` list MUST be sorted by `artifact_path`
     (ascending, bytewise/lexicographic) to keep validation and reporting deterministic.
@@ -704,6 +708,11 @@ Required operations (minimum):
 
 - `validate_artifact(artifact_path, contract_id) -> ValidationResult`
 - `validate_many(expected_outputs: list[ExpectedOutput]) -> ContractValidationReport`
+
+Validation dispatch (normative):
+
+- The validator MUST select the parsing + validation strategy for an artifact using the registry
+  binding's `validation_mode` (not filename extension heuristics).
 
 Required report behavior (normative):
 
@@ -1150,17 +1159,17 @@ are mandatory (names are suggestions; harness/framework is implementation-define
 **Summary**: Each stage reads inputs from the run bundle and writes outputs back. The table below
 defines the minimum IO contract for v0.1.
 
-| Stage ID        | Minimum inputs                                                                                             | Minimum outputs                                                                                                                                                                                                  |
-| --------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lab_provider`  | Run configuration, provider inputs                                                                         | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                  |
-| `runner`        | Inventory snapshot, scenario plan                                                                          | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); (v0.2+: `plan/**`)                                                                               |
-| `telemetry`     | inventory snapshot, `inputs/range.yaml`, `inputs/scenario.yaml`, `ground_truth.jsonl` lifecycle timestamps | `raw_parquet/**`, `raw/**` (when raw preservation is enabled), `logs/telemetry_validation.json` (when telemetry validation is enabled)                                                                           |
-| `normalization` | `raw_parquet/**`, mapping profiles                                                                         | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                  |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                              | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                    |
-| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                     | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                       |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                      | `scoring/summary.json`                                                                                                                                                                                           |
-| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `inputs/**` (when regression enabled)       | `report/report.json`, `report/thresholds.json`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
-| `signing`       | Finalized `manifest.json`, selected artifacts                                                              | `security/**` (checksums, signature, public key)                                                                                                                                                                 |
+| Stage ID        | Minimum inputs                                                                                             | Minimum outputs                                                                                                                                                                                                                            |
+| --------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lab_provider`  | Run configuration, provider inputs                                                                         | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                                            |
+| `runner`        | Inventory snapshot, scenario plan                                                                          | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); (v0.2+: `plan/**`)                                                                                                         |
+| `telemetry`     | inventory snapshot, `inputs/range.yaml`, `inputs/scenario.yaml`, `ground_truth.jsonl` lifecycle timestamps | `raw_parquet/**`, `raw/**` (when raw preservation is enabled), `logs/telemetry_validation.json` (when telemetry validation is enabled)                                                                                                     |
+| `normalization` | `raw_parquet/**`, mapping profiles                                                                         | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                                            |
+| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                              | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                                              |
+| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                     | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                                                 |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                      | `scoring/summary.json`                                                                                                                                                                                                                     |
+| `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `inputs/**` (when regression enabled)       | `report/report.json`, `report/thresholds.json`, `report/run_timeline.md`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
+| `signing`       | Finalized `manifest.json`, selected artifacts                                                              | `security/**` (checksums, signature, public key)                                                                                                                                                                                           |
 
 **Note**: This table defines the **minimum** contract. Implementations MAY produce additional
 artifacts, but MUST produce at least these outputs for the stage to be considered successful.

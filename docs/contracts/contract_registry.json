@@ -317,7 +317,7 @@
     { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "stage_owner": "validation", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "stage_owner": "detection", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "stage_owner": "runner", "validation_mode": "jsonl_lines" },
-    { "artifact_glob": "inputs/range.yaml", "contract_id": "range_config", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "inputs/range.yaml", "contract_id": "range_config", "stage_owner": "orchestrator", "validation_mode": "yaml_document" },
     { "artifact_glob": "inputs/telemetry_baseline_profile.json", "contract_id": "telemetry_baseline_profile", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "inputs/threat_intel/indicators.jsonl", "contract_id": "threat_intel_indicator", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "inputs/threat_intel/manifest.json", "contract_id": "threat_intel_pack_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },

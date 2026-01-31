@@ -105,12 +105,81 @@ The registry instance MUST include, at minimum:
   - `schema_path` (repo-relative path under `docs/contracts/`)
   - `contract_version` (string; MUST match the schema constant)
 - `bindings[]`:
-  - `artifact_glob` (run-relative POSIX glob, for example `runner/actions/*/executor.json`)
+  - `artifact_glob` (run-relative POSIX glob; see "Glob semantics (glob_v1)" below; for example
+    `runner/actions/*/executor.json`)
   - `contract_id` (must exist in `contracts[]`)
+  - `validation_mode` (authoritative parse/validation dispatch key; used by contract validation)
+    - Allowed values (v0.1): `json_document`, `jsonl_lines`, `yaml_document`
   - `stage_owner` (owning stage ID, or `orchestrator`, for deterministic stage → contract-backed
     output discovery)
     - Allowed values (v0.1): `lab_provider`, `runner`, `telemetry`, `normalization`, `validation`,
       `detection`, `scoring`, `reporting`, `signing`, `orchestrator`
+
+#### Glob semantics (glob_v1) (normative)
+
+This section defines the canonical glob grammar and matching rules used for
+`bindings[].artifact_glob`. All components that interpret `artifact_glob` values (producer stage
+wrappers constructing `expected_outputs[]` and consumers discovering contract-backed artifacts) MUST
+implement `glob_v1` exactly so multi-language implementations match.
+
+Definitions:
+
+- Candidate path: a run-relative POSIX path to a **regular file** (directories are traversed during
+  enumeration but are not match results).
+- Pattern: a run-relative POSIX glob pattern.
+- Character: a Unicode scalar value (code point).
+
+Run-relative POSIX requirement (normative):
+
+- Candidate paths and patterns MUST be run-relative POSIX paths:
+  - separator is `/` (backslash `\` is forbidden),
+  - MUST NOT start with `/`,
+  - MUST NOT contain a drive prefix (for example `C:`),
+  - MUST NOT contain a NUL byte,
+  - MUST NOT contain any `..` segment.
+  - MUST NOT contain empty path segments (MUST NOT contain `//`).
+  - MUST NOT end with `/`.
+- Matching is performed against the full candidate path string (the pattern MUST match the entire
+  path, not a substring).
+
+Case sensitivity and normalization (normative):
+
+- Matching MUST be case-sensitive with no locale rules and no Unicode normalization.
+- Implementations MUST NOT use filesystem casefolding behavior as part of glob matching.
+- Metacharacters match `.` like any other character (there is no special "dotfile" behavior).
+
+Metacharacters (normative):
+
+- `*` matches zero or more characters within a single path segment; it MUST NOT match `/`.
+- `?` matches exactly one character within a single path segment; it MUST NOT match `/`.
+- Character classes match exactly one character within a segment:
+  - `!` denotes negation only when it is the first character after `[`; otherwise it is literal.
+  - `[abc]` matches any of `a`, `b`, or `c`.
+  - `[!abc]` matches any character except `a`, `b`, or `c`.
+  - Ranges are supported: `[a-z]` matches any character whose Unicode scalar value is between `a`
+    and `z` (inclusive).
+    - `-` denotes a range only when it appears between two characters; otherwise `-` is literal.
+- Recursive segment `**` is supported and matches zero or more complete path segments (including
+  none), allowing matches across `/`.
+  - `**` is special ONLY when it forms an entire segment (delimited by `/` or string boundaries).
+    Examples: `**/executor.json`, `runner/**/executor.json`, `runner/actions/**`.
+  - Any occurrence of `**` adjacent to other characters in the same segment (for example `a**b`) is
+    invalid in `glob_v1`.
+
+Pattern validity and fail-closed behavior (normative):
+
+- Patterns MUST be well-formed per the rules above:
+  - An unmatched `[` or an empty character class (`[]` or `[!]`) is invalid.
+  - Backslash `\` is invalid (no escape syntax is defined in `glob_v1`).
+- If any `bindings[].artifact_glob` is invalid, the contract registry MUST be treated as invalid
+  configuration and tooling MUST fail closed:
+  - Consumers MUST return `error_code="contract_registry_parse_error"`.
+  - Producers MUST treat publish-gate configuration as invalid and MUST NOT publish outputs.
+
+Deterministic expansion ordering (normative):
+
+- After expansion, concrete matches MUST be sorted by `artifact_path` ascending using UTF-8 byte
+  order (no locale).
 
 #### Stage ownership metadata (normative)
 
@@ -121,10 +190,40 @@ The registry instance MUST include, at minimum:
   - `orchestrator` is reserved for orchestrator-owned artifacts that are published outside any stage
     boundary (for example pinned inputs and control-plane/audit artifacts).
 - The orchestrator (or stage wrapper) MUST derive the per-stage `expected_outputs[]` list for
-  `PublishGate.finalize(...)` by filtering `bindings[]` on `stage_owner == stage_id` and mapping
-  concrete artifact paths to `contract_id`.
+  `PublishGate.finalize(...)` as follows:
+  1. Filter `bindings[]` to entries where `stage_owner == stage_id`.
+  1. For each binding, compute the concrete `artifact_path` set:
+     - If `artifact_glob` contains no glob metacharacters, the set is the single literal path
+       `artifact_glob`.
+     - Otherwise, expand `artifact_glob` over the stage's staged file set under
+       `runs/<run_id>/.staging/<stage_id>/` using `glob_v1` semantics.
+       - Expansion candidates are regular files only; directories are not returned as matches.
+  1. For each concrete `artifact_path`, emit an expected output with `(artifact_path, contract_id)`.
+  1. Sort the resulting `expected_outputs[]` list by `artifact_path` ascending using UTF-8 byte
+     order (no locale).
 - Verification hook: CI MUST fail if any `bindings[]` entry is missing `stage_owner`, or if
   `stage_owner` is not in the allowed set for the current release train.
+
+#### Validation mode metadata (normative)
+
+- Each `bindings[]` entry MUST include `validation_mode`.
+- `validation_mode` defines how the bytes at `artifact_glob` are interpreted for contract
+  validation.
+- Implementations MUST treat `validation_mode` as the only authoritative switch for validation
+  behavior.
+  - Implementations MUST NOT select validation behavior based on file extension (for example
+    `.json`, `.jsonl`, `.yaml`) or based on `contracts[].format`.
+- Supported modes (v0.1):
+  - `json_document`: parse as a UTF-8 JSON document and validate the full document against its
+    schema.
+  - `jsonl_lines`: parse as UTF-8 JSON Lines and validate each line (each JSON object) against its
+    schema.
+  - `yaml_document`: parse as a single UTF-8 YAML document and validate the resulting value against
+    its schema.
+    - YAML documents MUST be decoded into a JSON-compatible in-memory representation (object/array
+      and scalar types) prior to JSON Schema validation.
+- If the registry references a `validation_mode` value that the implementation does not support,
+  contract validation MUST fail closed with a configuration error.
 
 #### Contract version constant (normative)
 
@@ -470,18 +569,38 @@ For any stage that publishes contract-backed artifacts:
     but the stage outcome is missing), implementations MUST fail closed with a cross-cutting
     `reason_code` (`input_missing` or `storage_io_error` per ADR-0005).
 
-Validation by artifact type:
+Validation by `validation_mode` (registry-driven):
 
-- JSON artifacts (single JSON object):
-  - The stage MUST validate the full document against its contract schema before publish.
-- JSONL artifacts:
-  - The stage MUST validate each line (each JSON object) against its contract schema.
+- The publish gate MUST select validation behavior using `bindings[].validation_mode` from
+  `docs/contracts/contract_registry.json` for each contracted artifact.
+- Implementations MUST NOT select validation behavior based on filename extension (for example,
+  `.json`, `.jsonl`, `.yaml`) or `contracts[].format`.
+
+Required `validation_mode` support (v0.1):
+
+- `json_document`:
+  - The stage MUST validate the full JSON document against its contract schema before publish.
+- `jsonl_lines`:
+  - The stage MUST validate each JSONL line (each JSON object) against its contract schema.
   - The stage MAY validate incrementally while writing the JSONL file, but the publish gate MUST
     ensure the complete file has been validated.
-- Parquet datasets:
+- `yaml_document`:
+  - The stage MUST parse the artifact as a single YAML document (UTF-8) and validate the resulting
+    value against its contract schema before publish.
+
+Parquet dataset artifacts (future; registry-driven):
+
+- When a contract-backed artifact uses a Parquet dataset representation, the binding MUST declare a
+  Parquet validation mode defined by `contract_registry.schema.json`.
+- For Parquet dataset validation modes:
   - The stage MUST validate the dataset schema (required columns, types, and nullability rules as
     specified) before publish.
   - Row-by-row validation is not required at publish time unless a contract explicitly requires it.
+
+Unknown validation modes:
+
+- If the registry references a `validation_mode` that the implementation does not support, the
+  publish gate MUST fail closed and MUST treat this as a configuration error.
 
 Minimum publish-gate coverage (v0.1):
 
@@ -489,6 +608,7 @@ Minimum publish-gate coverage (v0.1):
   that publishes them:
   - `manifest.json`
   - `ground_truth.jsonl`
+  - `runs/<run_id>/inputs/range.yaml`
   - `runs/<run_id>/inputs/baseline_run_ref.json` when regression is enabled
   - `runs/<run_id>/inputs/baseline/manifest.json` when produced (regression baseline snapshot form)
   - `runs/<run_id>/inputs/telemetry_baseline_profile.json` when
@@ -755,10 +875,10 @@ Contract-backed artifacts (normative):
   (`docs/contracts/contract_registry.json`).
 - If the registry file cannot be read or parsed, the reader MUST fail closed with:
   - `error_code="contract_registry_missing"` when absent, or
-  - `error_code="contract_registry_parse_error"` when present but invalid JSON.
+  - `error_code="contract_registry_parse_error"` when present but invalid JSON or schema-invalid.
 - For each `bindings[]` entry in the registry:
-  - The reader MUST expand `artifact_glob` relative to the run bundle root using POSIX glob
-    semantics.
+  - The reader MUST expand `artifact_glob` relative to the run bundle root using `glob_v1` semantics
+    (see "Glob semantics (glob_v1)").
   - Matches MUST be sorted by `artifact_path` ascending (UTF-8 byte order, no locale).
   - The reader MUST record a `(artifact_path, contract_id, expected_contract_version)` triple for
     each match, where `expected_contract_version` is the `contracts[].contract_version` value for
@@ -911,7 +1031,7 @@ Required error codes (v1):
 | `manifest_schema_invalid`              | error    | `manifest.json` fails contract validation                                    |
 | `run_id_mismatch`                      | error    | Run directory name is a UUID but differs from `manifest.run_id`              |
 | `contract_registry_missing`            | error    | `docs/contracts/contract_registry.json` is absent                            |
-| `contract_registry_parse_error`        | error    | Contract registry exists but is not valid JSON                               |
+| `contract_registry_parse_error`        | error    | Contract registry exists but is invalid JSON or schema-invalid               |
 | `artifact_path_invalid`                | error    | Any artifact path fails reader path normalization rules                      |
 | `artifact_missing`                     | error    | An evidence ref or required artifact path does not exist                     |
 | `artifact_in_staging`                  | error    | An evidence ref attempts to access `.staging/**`                             |

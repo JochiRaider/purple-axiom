@@ -89,6 +89,40 @@ field detection, and payload limit truncation with SHA-256 computation.
 Linux event identity basis tests use auditd/journald/syslog fixture vectors covering Tier 1 and Tier
 2 fields, plus Tier 3 collision fixtures under `tests/fixtures/event_id/v1/`.
 
+### Glob matching (glob_v1)
+
+Glob expansion and matching is used by both producers (publish-gate `expected_outputs[]` discovery)
+and consumers (contract-backed artifact discovery). To ensure multi-language implementations match,
+tests MUST lock glob semantics to `glob_v1` as defined in `025_data_contracts.md` ("Glob semantics
+(glob_v1)").
+
+Fixture set (normative):
+
+- `glob_v1_vectors` (semantic lock)
+
+  - Provide `tests/fixtures/glob_v1/vectors.json` as canonical JSON with:
+    - `glob_version` (string; MUST equal `glob_v1`)
+    - `cases[]`: array of objects, each containing:
+      - `pattern` (string; run-relative POSIX glob)
+      - `candidates[]` (array of run-relative POSIX paths)
+      - `matches[]` (array of expected matches)
+        - `matches[]` MUST equal the subset of `candidates[]` that match `pattern` under `glob_v1`.
+        - `matches[]` MUST be sorted by UTF-8 byte order ascending (no locale).
+  - The case set MUST include, at minimum:
+    - Each distinct wildcard form currently present in `docs/contracts/contract_registry.json`
+      `bindings[].artifact_glob` (for example `bridge/compiled_plans/*.plan.json` and
+      `runner/actions/*/executor.json`).
+    - At least one recursive `**` case (for example `runner/**/executor.json`).
+    - At least one `?` case and at least one `[...]` case.
+  - Each case's `candidates[]` MUST include both positive and negative examples that enforce:
+    - `*` does not match `/`,
+    - matching is case-sensitive (example: `Executor.json` MUST NOT match `executor.json`), and
+    - `**` matches zero or more path segments.
+  - Verification (normative):
+    - The reference reader SDK (`pa.reader.v1`) and reference publisher SDK (`pa.publisher.v1`) test
+      suites MUST include this fixture and MUST fail if any case does not match.
+    - Any other first-party implementation of `glob_v1` MUST also include this fixture in CI.
+
 ### Redaction
 
 - Redaction policy test vectors validate deterministic truncation, placeholder emission, and
@@ -1125,6 +1159,18 @@ Fixture set (normative):
     - JSON bytes equal `canonical_json_bytes(...)`,
     - JSONL uses LF, no BOM, no blank lines, and the end-of-file newline rule from
       `025_data_contracts.md` ("Producer tooling: reference publisher semantics").
+
+- `publisher_contract_validator_yaml_document` (YAML document validation)
+
+  - Provide a minimal contracted YAML artifact fixture (for example `inputs/range.yaml` bound to
+    `range_config` with `bindings[].validation_mode = "yaml_document"` in the registry).
+  - Assertions (normative):
+    - The reference `ContractValidator` validates YAML documents when
+      `validation_mode=yaml_document`.
+    - A syntactically invalid YAML document OR a schema-invalid YAML document MUST fail validation
+      deterministically, and MUST emit a contract validation report that follows the deterministic
+      ordering + truncation rules in `025_data_contracts.md` ("Deterministic error ordering and
+      error caps").
 
 ### Export and checksums scope
 

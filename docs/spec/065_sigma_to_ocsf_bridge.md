@@ -162,7 +162,7 @@ Each filter object MUST have:
     - `value` MUST be a string. If `value` is not a string, the filter is invalid and the mapping
       pack MUST be rejected as invalid (detection stage fatal `bridge_mapping_pack_invalid`).
     - Resolved VALUE MUST be a string, or an array of strings (any-element semantics).
-    - Patterns MUST be RE2-compatible.
+    - Patterns MUST be compatible with the configured regex dialect (default: PCRE2).
     - `regex` is a search match unless the pattern is explicitly anchored.
 
 Determinism:
@@ -299,7 +299,7 @@ Terminology:
 
 - OCSF field path: a dot-delimited path rooted at the OCSF event object (example: `process.name`).
 - Backend field expression: a backend-specific expression derived deterministically from an OCSF
-  field path (example for DuckDB structs: `process.name`).
+  field path (example for struct-typed values: `process.name`).
 
 ### Structure
 
@@ -401,31 +401,42 @@ The bridge MUST classify Sigma features into one of:
 
 ### Batch backend (v0.1 default)
 
-- For v0.1, if `detection.sigma.bridge.backend` is omitted, the bridge MUST use `duckdb_sql` (DuckDB
-  SQL over Parquet).
-- The `duckdb_sql` backend MUST enforce deterministic DuckDB session settings:
-  - `SET threads = 1;`
-  - `SET TimeZone = 'UTC';`
-- If the implementation allows overriding these settings for performance, it MUST record the
-  effective values in backend provenance (see "Backend provenance").
-- Compile Sigma -> SQL (after routing + aliasing)
-- Execute over OCSF Parquet using DuckDB
-- Output (normative, v0.1):
-  - The backend MUST produce match results at *event granularity*.
-  - Each match group MUST correspond to exactly one matched event id.
-  - The evaluator MUST emit one detection instance per matched event with:
-    - `matched_event_ids = [<event_id>]`
-    - `first_seen_utc == last_seen_utc` (event time derived from the OCSF `time` field; UTC)
+- For v0.1, if `detection.sigma.bridge.backend` is omitted, the bridge MUST use `native_pcre2`
+  (native evaluator with PCRE2 regex).
+- The `native_pcre2` backend MUST evaluate compiled plans in-process over the normalized OCSF event
+  store:
+  - Tier 2: Parquet (preferred when present).
+  - Tier 1: JSONL (fallback when Parquet is absent).
+- Determinism settings (normative):
+  - `threads = 1` (single-thread evaluation).
+  - timezone = `UTC` (interpret event `time` as epoch milliseconds UTC).
+  - regex dialect = `PCRE2` with bounded execution (see "Regex dialect and safety").
+- The backend MUST compile Sigma rules (after routing and alias resolution) to an evaluator plan,
+  then execute that plan over the routed OCSF scope.
+- Output semantics (normative):
+  - **Event rules** (Sigma rules with `logsource` + `detection`):
+    - The backend MUST produce match results at event granularity.
+    - Each match group MUST correspond to exactly one matched event id.
+    - The evaluator MUST emit one detection instance per matched event with:
+      - `matched_event_ids = [<event_id>]`
+      - `first_seen_utc == last_seen_utc` (event time derived from OCSF `time`; UTC)
+  - **Correlation rules** (Sigma rules with `correlation`):
+    - The backend MUST produce match results at window granularity (multi-event).
+    - Each match group MUST correspond to exactly one `(timespan_bucket_start, group_by_key)` pair.
+    - The evaluator MUST emit one detection instance per satisfied group with:
+      - `matched_event_ids = [<event_id>, ...]` (see determinism requirements for ordering)
+      - `first_seen_utc = min(time)` over contributing events
+      - `last_seen_utc = max(time)` over contributing events
 
 Version pinning (normative):
 
-- The `duckdb_sql` backend MUST use the pinned DuckDB version defined in the
+- The `native_pcre2` backend MUST use the pinned PCRE2 version defined in the
   [supported versions reference](../../SUPPORTED_VERSIONS.md).
 - The bridge MUST record the effective runtime versions used for:
-  - DuckDB (library/runtime version),
-  - pySigma (library version), in backend provenance within each compiled plan.
-  - pySigma OCSF pipeline version (e.g., `pySigma-pipeline-ocsf`)
-- If the effective version differs from the pins, the evaluator stage MUST fail closed (see the
+  - PCRE2 (engine version),
+  - pySigma (library version),
+  - pySigma OCSF pipeline version (example: `pySigma-pipeline-ocsf`).
+- If any effective version differs from the pins, the evaluator stage MUST fail closed (see the
   version drift policy in the [supported versions reference](../../SUPPORTED_VERSIONS.md)).
 
 ### Streaming backend (optional v0.2)
@@ -434,40 +445,46 @@ Version pinning (normative):
 - Evaluate over a stream processor (example: Tenzir)
 - Emit matches in near real time
 
+Note: streaming backends MAY implement a smaller regex dialect than `native_pcre2`. Any rule whose
+required constructs are not supported MUST be marked non-executable (fail closed).
+
 ### Decision criteria for adding Tenzir (v0.2)
 
-Tenzir support SHOULD be added only when there is an explicit requirement that the batch backend
-cannot satisfy.
-
-At least one of the following MUST be true to justify adding or enabling Tenzir:
-
-- **Latency**: detections MUST be emitted within a bounded interval (example: 1-10s) from event
-  observation, during an active run.
-- **Streaming semantics**: the evaluator MUST support continuous evaluation over live event streams
-  (not only over stored Parquet).
-- **In-flow evaluation**: detections MUST be computed as part of the telemetry flow (example:
-  operator feedback or pre-storage reduction).
+- Enables streaming evaluation for live lab exercises.
+- Provides a composable pipeline language for derived fields and normalization.
+- Integrates well with parquet + arrow formats.
 
 ### Backend conformance gates (CI)
 
-Any backend implementation (including `duckdb_sql` and `tenzir` in v0.2) MUST satisfy the following.
-Conformance fixtures for these gates are defined in
-[test strategy CI: unit tests](100_test_strategy_ci.md#unit-tests) (rule compilation, multi-class
-routing) and [test strategy CI: integration tests](100_test_strategy_ci.md#integration-tests)
-(DuckDB determinism conformance harness).
+Any backend implementation (including `native_pcre2` and `tenzir` in v0.2) MUST satisfy the
+following.
 
-- **Golden equivalence (supported subset)**: for a pinned fixture corpus and a pinned Sigma subset,
-  backends MUST produce identical `matched event ids` per rule. If a backend intentionally differs,
-  the rule MUST be marked non-executable with an explicit reason.
-- **Deterministic ordering**: any emitted list of `metadata.event_id` MUST be sorted
-  deterministically before writing `detections/detections.jsonl`.
-- **Backend provenance**: each `compiled_plans/<rule_id>.plan.json` MUST record the backend
-  identifier and backend version (or build metadata).
-  - If the backend is `duckdb_sql`, the compiled plan MUST also record:
-    - `backend.settings.threads` (integer)
-    - `backend.settings.timezone` (string; MUST be `UTC` unless explicitly configured)
-- **Explained failure modes**: non-executable compiled plans MUST include a stable, machine-readable
-  `non_executable_reason.reason_code` and a human-readable explanation in `non_executable_reason`.
+Determinism and drift gates:
+
+- Unit tests for compilation output normalization:
+  - JSON output is canonicalized and stable
+  - route selection and alias resolution are deterministic
+- Integration tests:
+  - the evaluator determinism conformance harness (see
+    [test strategy CI: integration tests](../100_test_strategy_ci.md#integration-tests))
+
+Backend provenance requirements:
+
+- Each compiled plan MUST record the backend id and version, and any deterministic settings that can
+  affect match sets.
+- The compiled plan MUST record:
+  - `backend.id` (example: `native_pcre2`)
+  - `backend.version` (semver string; the implementation MAY use the current pipeline version)
+  - `backend.settings` (object; MUST include all determinism-relevant settings)
+
+For `native_pcre2`, `backend.settings` MUST include at minimum:
+
+- `threads` (integer)
+- `timezone` (string; MUST equal `UTC`)
+- `regex_dialect` (string; MUST equal `pcre2`)
+- `regex_engine_version` (string)
+- `regex_match_limit` (integer)
+- `regex_depth_limit` (integer)
 
 ### Backend adapter contract (normative, v0.1)
 
@@ -476,7 +493,7 @@ the evaluator backend adapter. It is authoritative for:
 
 - what the bridge MUST compile and execute in v0.1 (supported subset),
 - how compilation MUST be made deterministic, and
-- which conditions MUST be classified as non-executable (fail-closed).
+- which conditions MUST be classified as non-executable (fail closed).
 
 #### Common requirements (all backends)
 
@@ -498,6 +515,8 @@ the evaluator backend adapter. It is authoritative for:
 
    - Any emitted list of matched `metadata.event_id` MUST be sorted deterministically prior to
      writing `detections/detections.jsonl`.
+   - For correlation detections, each `matched_event_ids` array MUST be sorted by (`event_time` asc,
+     then `event_id` asc).
 
 1. Deterministic compilation inputs:
 
@@ -510,14 +529,16 @@ the evaluator backend adapter. It is authoritative for:
 
 #### Supported Sigma expression subset (bridge-level, v0.1 MVP)
 
-The following MUST be supported by the v0.1 evaluator adapter for the default backend (`duckdb_sql`)
-after routing and alias resolution.
+The following MUST be supported by the v0.1 evaluator adapter for the default backend
+(`native_pcre2`) after routing and alias resolution.
 
-Selector primitives (field-to-value comparisons):
+Event-rule selector primitives (field-to-value comparisons):
 
 - Equality:
   - `field: <scalar>` (string, number, boolean)
   - `field: [<scalar> . .]` (list membership)
+- Inequality:
+  - `field|neq: <scalar>`
 - Existence:
   - `field|exists: true|false`
 - Relational (numeric only):
@@ -526,183 +547,175 @@ Selector primitives (field-to-value comparisons):
   - `field|contains`
   - `field|startswith`
   - `field|endswith`
+- Regex matching:
+  - `field|re` (PCRE2; case-insensitive by default)
+  - `field|re|i`, `field|re|m`, `field|re|s`, and combinations thereof
+
+Modifiers:
+
+- `|cased` MUST be supported for string and regex matching.
 
 Boolean composition:
 
 - `and`, `or`, `not` over selections and subexpressions
 - `1 of selection*` and `all of selection*` (wildcard selection groups)
 
+Sigma correlation rules (supported by default backend):
+
+Rules that include a top-level `correlation` section MUST be supported by the default backend
+(`native_pcre2`) as defined in the Sigma correlation rules specification. Supported correlation
+types:
+
+- `event_count`
+- `value_count`
+- `temporal`
+- `ordered_temporal`
+
+Supported correlation fields (minimum):
+
+- `correlation.rules` (referenced rule names and/or ids)
+- `correlation.type`
+- `correlation.timespan`
+- `correlation.group-by`
+- `correlation.condition` (optional; numeric comparisons, including `gte`, `gt`, `lte`, `lt`, `eq`)
+- `correlation.field` (required for `value_count`)
+- `correlation.aliases` (optional; correlation field unification)
+- `correlation.generate` (optional)
+
 Out of scope in v0.1 (MUST be marked non-executable when encountered):
 
-- Correlation and multi-event sequence semantics (beyond single-event matching)
-- Temporal aggregation semantics (for example: `count()`, `near`, `within`, "threshold" rules)
+- Temporal aggregation semantics inside event rules (example: `count()`, `near`, `within`) unless
+  expressed as a Sigma correlation rule.
 - Field modifiers that require binary transforms (example: `base64`, `utf16`, `windash`) unless the
-  mapping pack has already materialized an equivalent normalized value
-- PCRE-only regex constructs (lookaround, backreferences, etc.). Regex matching is supported only in
-  an RE2-compatible subset; non-conforming patterns MUST be treated as Non-executable.
+  mapping pack has already materialized an equivalent normalized value.
+- Regex patterns that are not compatible with the configured regex dialect or are rejected by the
+  regex safety policy (see "Regex dialect and safety").
 
-#### DuckDB SQL adapter requirements (duckdb_sql, normative)
+#### Native evaluator adapter requirements (native_pcre2, normative)
 
-This section defines the backend adapter contract for compiling Sigma expressions into DuckDB SQL.
-This contract is aligned with research report R-03 (DuckDB backend plugin for pySigma).
+The `native_pcre2` adapter compiles Sigma rules into a JSON evaluator plan that is executed by the
+in-process evaluator.
 
-#### MVP compilation gate
+##### MVP compilation gate
 
-MVP compilation is allowed only when all constructs required by the rule are explicitly listed as
-Supported by this specification and the configured backend section.
+- The adapter MUST treat any Sigma construct not listed in the supported subset as non-executable in
+  v0.1.
+- The adapter MUST emit `executable=false` with an appropriate `non_executable_reason` whenever:
+  - a modifier/operator is not supported,
+  - routing is ambiguous or unmapped,
+  - alias resolution yields unknown fields and raw fallback is disabled,
+  - correlation semantics cannot be represented.
 
-Any construct that is not explicitly listed as Supported MUST be treated as Non-executable and MUST
-map to exactly one `non_executable_reason.reason_code`.
+##### Plan format (pa_eval_v1)
 
-#### Supported capability surface (v0.1)
+When `executable=true`, a compiled plan MUST include backend-specific executable content. For
+`native_pcre2`, this content MUST be represented as a JSON object under `backend.plan` with:
 
-The `duckdb_sql` adapter MUST support the following constructs for v0.1:
+- `backend.id = "native_pcre2"`
+- `backend.plan_kind = "pa_eval_v1"`
+- `backend.plan` (object; schema defined below)
 
-- Boolean OR: list values (default) compile to parenthesized OR chains.
-- Boolean AND: `all` modifier compiles to parenthesized AND chains.
-- Equality: implicit equality comparisons.
-  - For string-typed comparisons, matching MUST be case-insensitive by default.
-- Inequality: `|neq` modifier (NULL-safe).
-- String modifiers: `|contains`, `|startswith`, `|endswith` (case-insensitive).
-- Existence: `|exists` (`IS NOT NULL` / `IS NULL` depending on positive vs negated context).
-- Numeric comparisons: `|lt`, `|lte`, `|gt`, `|gte`.
-- Regex match: `|re` with RE2-compatible patterns only; unsupported constructs are Non-executable.
-  DuckDB regex functions use RE2 and accept option flags.
-- Timestamp extraction: `|hour`, `|day`, `|month`, `|year` against the canonical `time` field.
-- LIST semantics: equality against LIST-typed fields MUST mean any element matches. The adapter MUST
-  use DuckDB list functions when the field is LIST-typed.
+`backend.plan` schema (normative):
 
-#### Deferred (post-MVP)
+- `scope` (object)
+  - `class_uids` (array of integers; derived from routing)
+- `predicate` (object; event-rule predicate AST)
+- `correlation` (object; optional; present only for correlation rules)
 
-The following constructs are explicitly deferred and MUST be treated as Non-executable in v0.1:
+Predicate AST (normative, minimal):
 
-- CIDR match (`|cidr`) pending extension packaging and type policy decisions.
-- Base64 transforms (`|base64`, `|base64offset`).
-- Field reference (`|fieldref`) pending typing policy.
-- Case-sensitive mode (`|cased`) beyond the DuckDB regex option surface.
+- Logical:
+  - `{ "op": "and", "args": [<expr>, ...] }` (args length >= 2)
+  - `{ "op": "or", "args": [<expr>, ...] }` (args length >= 2)
+  - `{ "op": "not", "arg": <expr> }`
+- Field tests:
+  - `{ "op": "exists", "field": "<ocsf_path>", "value": true|false }`
+  - `{ "op": "cmp", "cmp": "eq|neq|lt|lte|gt|gte", "field": "<ocsf_path>", "value": <scalar_or_list> }`
+  - `{ "op": "match", "kind": "contains|startswith|endswith", "field": "<ocsf_path>", "value": "<string>", "cased": true|false }`
+  - `{ "op": "regex", "field": "<ocsf_path>", "pattern": "<string>", "flags": "<string>", "cased": true|false }`
 
-#### SQL compilation requirements (normative)
+Semantics (normative):
 
-##### SQL safety (normative)
+- `<ocsf_path>` uses dot-notation over the normalized OCSF JSON object.
+- Missing paths evaluate as NULL.
+- For scalar comparisons, NULL evaluates as false.
+- For list-typed fields:
+  - `cmp:eq` MUST evaluate as true if any element equals the target value.
+  - `cmp:neq` MUST evaluate as true if no element equals the target value (and field is present).
+- For `field: [v1, v2, ...]` (Sigma list membership), compilation MUST produce an OR over `cmp:eq`
+  comparisons (or a single `cmp:eq` with list value) with equivalent semantics.
 
-- Generated queries MUST be read-only and MUST be a single statement of the form
-  `WITH ... SELECT ...` or `SELECT ...`.
-- The adapter MUST compile against a pre-registered relation containing the normalized OCSF events
-  (table or view), and MUST NOT embed file paths or use DuckDB table functions (for example,
-  `read_csv`, `read_parquet`) in generated SQL.
-- The adapter MUST NOT emit statements that can mutate state or load code (non-exhaustive): `COPY`,
-  `ATTACH`, `DETACH`, `EXPORT`, `IMPORT`, `CREATE`, `INSERT`, `UPDATE`, `DELETE`, `INSTALL`, `LOAD`.
+##### Regex dialect and safety
 
-##### Type policy (normative)
+- The evaluator MUST interpret `regex.pattern` using PCRE2 syntax.
+- The evaluator MUST perform regex matching as a search by default (not implicitly anchored).
+- Case-insensitive matching MUST be the default unless `cased=true` or an explicit flag is present.
+- `regex.flags` MUST be a stable concatenation of single-letter flags in sorted order. Supported
+  flags (minimum):
+  - `i` (case-insensitive)
+  - `m` (multiline)
+  - `s` (dot matches newline)
+- The evaluator MUST enforce bounded execution for all regex matches:
+  - `regex_match_limit` (maximum backtracking steps)
+  - `regex_depth_limit` (maximum recursion depth)
+- Patterns that exceed configured limits (length, compilation failure, unsupported options) MUST be
+  classified as non-executable with `reason_code=unsupported_regex`.
 
-- The adapter MUST determine field types using the normalized store schema snapshot (when present),
-  otherwise it MAY introspect the backend catalog.
-- If a required field’s type is unknown, the rule MUST be non-executable with
-  `reason_code="unsupported_value_type"` (fail closed).
-- The adapter MUST NOT apply implicit casts.
+##### Correlation plan and semantics
 
-1. Identifiers and quoting:
+When present, `backend.plan.correlation` MUST conform to the following minimal schema:
 
-   - Field references MUST be quoted with double quotes when required (reserved keywords,
-     punctuation), using a deterministic quoting function.
+- `type`: `event_count | value_count | temporal | ordered_temporal`
+- `rules`: array of referenced rule ids (resolved at compile time; stable order)
+- `timespan_ms`: integer (parsed from `correlation.timespan`)
+- `group_by`: array of correlation field names (stable order as in source)
+- `condition`: optional object `{ "op": "gte|gt|lte|lt|eq", "value": <number> }`
+- `field`: required for `value_count` (correlation field name)
+- `aliases`: optional mapping:
+  - `<correlation_field_name>` -> object:
+    - `<rule_id>` -> `<sigma_field_name>`
+- `generate`: optional boolean (default false)
 
-1. Nested fields:
+Field resolution and key extraction (normative):
 
-   - Struct access MUST use DuckDB dot notation (for example, `actor.user.uid`).
+- For each referenced rule id, the compiler MUST build a per-rule extraction map from:
+  - each correlation `group_by` field name, and the `field` (for `value_count`),
+  - to an OCSF field path using that rule's resolved field aliases and transforms.
+- If any required field cannot be resolved for any referenced rule, the correlation rule MUST be
+  marked non-executable (`reason_code=unsupported_correlation`).
+- During evaluation, correlation keys MUST be computed per event by extracting the resolved OCSF
+  field values for that rule.
 
-1. Equality, inequality, and membership (scalar fields):
+Time bucketing (normative):
 
-   - Scalar equality MUST compile to `field = value` for non-string types.
-   - For string-typed equality, the adapter MUST compile case-insensitive semantics using:
-     - `lower(field) = lower(value)`
-   - Inequality (`|neq`) MUST compile NULL-safe using:
-     - `field IS DISTINCT FROM value`
-   - List values on scalar fields MUST compile to membership semantics:
-     - For non-string types: `field IN (v1, v2, . .)`
-     - For string-typed membership: `lower(field) IN (lower(v1), lower(v2), . .)`
-   - Ordering: list value expansions MUST preserve the input order from the Sigma rule and MUST NOT
-     be reordered as a "determinism" technique.
+- `timespan_bucket_start` MUST be computed by flooring the event's UTC time to the `timespan_ms`
+  interval anchored at Unix epoch (`1970-01-01T00:00:00Z`).
+- All events with the same `(timespan_bucket_start, group_by_key)` MUST be considered part of the
+  same correlation group.
 
-1. LIST-typed field semantics:
+Correlation types (normative, minimal):
 
-   - If the resolved field expression is LIST-typed, scalar comparisons MUST mean "any element
-     matches" and MUST compile using DuckDB list functions:
-     - Single value: `list_contains(field, value)`
-     - Multiple values (default OR semantics): `list_has_any(field, [values. .])`
-     - `all` modifier: `list_has_all(field, [values. .])`
-   - Pattern matching against LIST-typed fields MUST unnest and use `EXISTS` with a correlated
-     predicate (exact formatting is implementation-defined, semantics are normative).
+- `event_count`: Count the number of matched events across all referenced rules in the group.
+- `value_count`: Count distinct values of the `field` across all matched events in the group.
+- `temporal`: Count distinct referenced rule ids present in the group.
+- `ordered_temporal`: Succeeds if there exists an in-order sequence of matched events whose rule id
+  order matches the order in `correlation.rules` within the same group.
 
-1. Boolean combinations:
+Unless otherwise specified by the Sigma rule, the default `condition` for `temporal` and
+`ordered_temporal` MUST be: `>= len(correlation.rules)`.
 
-   - Default selector expansion MUST compile to parenthesized OR chains.
-   - `all` expansion MUST compile to parenthesized AND chains.
-   - Parentheses are REQUIRED for determinism and to avoid precedence ambiguity.
+##### Non-executable classification mapping (normative)
 
-1. String matching and wildcards:
-
-   - `contains`, `startswith`, and `endswith` MUST compile to `ILIKE` patterns with an explicit
-     `ESCAPE` character.
-   - The adapter MUST use `$` as the escape character and MUST escape `$`, `%`, and `_` in user
-     provided values before embedding them in patterns.
-   - Canonical patterns:
-     - contains: `field ILIKE '%' || value || '%' ESCAPE '$'`
-     - startswith: `field ILIKE value || '%' ESCAPE '$'`
-     - endswith: `field ILIKE '%' || value ESCAPE '$'`
-
-1. Regex (`|re`) support (RE2-only):
-
-   - Regex matching MUST compile to `regexp_matches(field, pattern[, options])`.
-
-   - The adapter MUST validate patterns as RE2-compatible at compile time.
-
-   - PCRE-only constructs (lookahead, lookbehind, backreferences, atomic groups, etc.) MUST be
-     rejected as Non-executable with reason_code `unsupported_regex`.
-
-   - Options mapping:
-
-     - `|re|i` MUST compile with option `i` (case-insensitive).
-     - `|re|m` MUST compile with a newline-sensitive option (`m` or its DuckDB equivalents).
-     - `|re|s` MUST compile with option `s` (non-newline sensitive).
-
-1. Timestamp extraction:
-
-   - The adapter MUST treat `time` as INT64 epoch milliseconds (UTC) and MUST compile date-part
-     operations using `epoch_ms(time)` and `date_part()`.
-
-1. Failure reporting:
-
-   - When a rule cannot be compiled, the bridge MUST record a Non-executable compiled plan entry
-     with:
-     - a stable `reason_code`, and
-     - a deterministic `explanation` string.
-   - For backend-originated compilation failures, the `explanation` MUST include the stable backend
-     error code prefix `PA_SIGMA_. .` (as defined by R-03) to support deterministic aggregation.
-   - `explanation` strings MUST be deterministic and redaction-safe:
-     - MUST NOT include raw event payload fragments or `raw.*` values.
-     - SHOULD avoid embedding volatile backend text (file paths, line numbers, memory addresses);
-       include only stable error tokens plus minimal, non-sensitive context.
-
-1. Determinism requirements:
-
-   - Generated SQL MUST be stable with fixed parenthesization, deterministic literal escaping,
-     deterministic identifier quoting, and preserved input ordering for list expansions.
-
-#### Non-executable classification mapping (normative)
-
-Failure reporting: when a rule cannot be compiled, the adapter MUST record a Non-executable compiled
-plan entry with a stable `non_executable_reason.reason_code` and deterministic explanation string.
-At a minimum, the following mappings MUST apply:
+The bridge MUST use the following `reason_code` values for common failure modes:
 
 - Unknown logsource -> unroutable_logsource
-- Ambiguous field alias resolution -> ambiguous_field_alias
-- Unmapped Sigma field (no alias + fallback disabled) -> unmapped_field
+- Unmapped field without raw fallback -> unmapped_field
 - Raw fallback required but disabled or blocked by policy -> raw_fallback_disabled
 - Unsupported modifier -> unsupported_modifier
 - Unsupported operator -> unsupported_operator
 - Unsupported value type -> unsupported_value_type
-- Regex rejected by backend policy (for example non-RE2 constructs) -> unsupported_regex
-- Correlation / multi-event semantics encountered -> unsupported_correlation
+- Regex rejected by backend policy (example: exceeds regex limits) -> unsupported_regex
+- Correlation semantics encountered but not representable -> unsupported_correlation
 - Aggregation semantics encountered -> unsupported_aggregation
 - Backend compiler exception -> backend_compile_error
 - Backend evaluation error -> backend_eval_error

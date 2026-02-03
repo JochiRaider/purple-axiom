@@ -736,13 +736,22 @@ Common keys:
     - `mapping_pack_id` (required): identifier for the Sigma-to-OCSF mapping pack (router + field
       aliases)
     - `mapping_pack_version` (optional, recommended): pin for reproducibility
-    - `backend` (default: `duckdb_sql`): `duckdb_sql | tenzir | other`
+    - `backend` (default: `native_pcre2`): `native_pcre2 | tenzir | other`
     - `backend_options` (object, optional)
       - Passed through to the selected backend adapter at initialization.
-      - For `duckdb_sql`, the following keys are supported:
-        - `table_name` (string, default: `events`): table or view name used in the `FROM` clause.
-        - `output_format` (string, default: `default`): formatting profile for SQL emission. This
-          option MUST NOT change SQL semantics, only presentation.
+      - For `native_pcre2`, the following keys are supported:
+        - `threads` (integer, default: `1`): evaluator worker threads. v0.1 MUST use `1` for
+          deterministic correlation evaluation.
+        - `timezone` (string, default: `UTC`): timezone for interpreting OCSF `time`. v0.1 MUST use
+          `UTC`.
+        - `max_matched_event_ids` (integer, optional): maximum number of event ids to attach to a
+          single correlation detection instance. If exceeded, the evaluator MUST truncate
+          deterministically.
+        - `regex` (object, optional)
+          - `max_pattern_length` (integer, optional)
+          - `match_limit` (integer, optional)
+          - `depth_limit` (integer, optional)
+      - For `tenzir`, supported keys are backend-defined.
     - `fail_mode` (default: `fail_closed`): `fail_closed | warn_and_skip`
       - `fail_closed`: bridge/backend errors that prevent evaluating enabled rules (routing,
         compilation, backend execution) MUST cause the detection stage outcome to be `failed`.
@@ -1231,7 +1240,7 @@ detection:
     bridge:
       mapping_pack_id: "sigmahq-ocsf"
       mapping_pack_version: "0.1.0"
-      backend: duckdb_sql
+      backend: native_pcre2
       fail_mode: fail_closed
       raw_fallback_enabled: true
       compile_cache_dir: "cache/sigma-compiled"

@@ -1511,7 +1511,7 @@ Purple Axiom is designed for extensibility at defined boundaries:
 | Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles                                   | Mapping profile contract                      |
 | Rule languages            | Sigma, YARA, Suricata (future)                                               | Bridge + evaluator contracts                  |
 | Bridge mapping packs      | Logsource routers, field alias maps                                          | Mapping pack schema                           |
-| Evaluator backends        | DuckDB/SQL, Tenzir, streaming engines                                        | Compiled plan + detection contract            |
+| Evaluator backends        | Native (`native_pcre2`), Tenzir, other engines                               | Compiled plan + detection contract            |
 | Criteria packs            | Default, environment-specific                                                | Criteria pack manifest + entries              |
 | Redaction policies        | Default patterns, custom patterns                                            | Redaction policy contract                     |
 

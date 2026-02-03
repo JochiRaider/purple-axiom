@@ -23,7 +23,7 @@ update explicitly changes the pins.
 | OpenTelemetry Collector Contrib (otelcol-contrib distribution) |        0.143.1 | Telemetry collection                   | Pin the released distribution artifacts (`opentelemetry-collector-releases`). Upstream component source tags may differ by patch due to release automation.                                                      |
 | pySigma                                                        |          1.1.0 | Sigma parsing + compilation            | CI and production MUST use the same pySigma major/minor to avoid compilation drift.                                                                                                                              |
 | pySigma-pipeline-ocsf                                          |          0.1.1 | Sigma-to-OCSF bridge (OCSF pipeline)   | Pin exact version to avoid field/logsource mapping drift that would destabilize compiled plans and golden fixtures.                                                                                              |
-| DuckDB                                                         |          1.4.3 | Batch evaluator backend (`duckdb_sql`) | Pin exact version for stable query planning behavior across "golden run" fixtures.                                                                                                                               |
+| PCRE2 (libpcre2-8)                                            |         10.47 | Regex engine for native evaluator (`native_pcre2`) | Pin exact version for stable regex semantics and bounded execution behavior across "golden run" fixtures.                                                                                                        |
 | pyarrow                                                        |         22.0.0 | Storage formats (Parquet)              | Pin exact version for stable Parquet scanning behavior and deterministic schema inspection across CI and "golden run" fixtures.                                                                                  |
 | jsonschema                                                     |         4.26.0 | Contract validation (JSON/JSONL)       | Pin exact version for stable JSON Schema Draft 2020-12 validation behavior and deterministic error reporting across CI and production.                                                                           |
 | osquery                                                        |         5.14.1 | Endpoint telemetry (osqueryd)          | Pin official packages for lab assets; CI fixtures should record `osqueryd --version` for provenance.                                                                                                             |
@@ -71,8 +71,8 @@ Toolchain baseline (v0.1):
   compilation fixtures and "golden equivalence" backend gates.
 - **pySigma pipeline upgrades:** treat as behavior-changing for logsource routing assumptions and
   field alias behavior; re-run rule compilation fixtures and "golden equivalence" backend gates.
-- **DuckDB upgrades:** treat as behavior-changing for SQL execution and parquet scanning; re-run
-  evaluator fixtures and report generation sanity checks.
+- **PCRE2 upgrades:** treat as behavior-changing for regex semantics and match limits; re-run
+  evaluator fixtures, especially regex-heavy Sigma and correlation fixtures.
 - **osquery upgrades:** treat as potentially behavior-changing for table schemas and event backends;
   re-run mapping fixtures for any affected event tables and update "known limitations" documentation
   as needed.

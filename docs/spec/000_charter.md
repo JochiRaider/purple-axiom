@@ -272,7 +272,7 @@ Normative dependencies are those relied upon by the v0.1 pipeline contracts. Pin
 - **Sigma toolchain (pySigma + pySigma-pipeline-ocsf)** as the detection portability layer and
   Sigma-to-OCSF bridge (evaluated in the detection stage). See the
   [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md).
-- **DuckDB** as the batch evaluator backend.
+- **Native evaluator (`native_pcre2`)** as the batch evaluator backend.
 - **pyarrow** as the Parquet scanning and schema inspection backend.
 - **jsonschema** as the contract validation engine (publish gates, deterministic error reporting).
 - **osquery** as the endpoint telemetry source (osqueryd).

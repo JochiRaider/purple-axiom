@@ -114,10 +114,10 @@
       "format": "jsonl"
     },
     {
-      "contract_id": "duckdb_conformance_report",
-      "schema_path": "docs/contracts/duckdb_conformance_report.schema.json",
+      "contract_id": "evaluator_conformance_report",
+      "schema_path": "docs/contracts/evaluator_conformance_report.schema.json",
       "contract_version": "0.1.0",
-      "purpose": "DuckDB conformance report output (CI harness artifact at artifacts/duckdb_conformance/<report_id>/report.json).",
+      "purpose": "Evaluator conformance report output (CI harness artifact at artifacts/evaluator_conformance/<report_id>/report.json).",
       "artifact_kind": "other",
       "format": "json"
     },

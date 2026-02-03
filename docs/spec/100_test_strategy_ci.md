@@ -207,15 +207,16 @@ Rule compilation tests validate Sigma to evaluation plan compilation for the aut
 subset and non-executable classification defined in
 [Sigma-to-OCSF bridge: backend adapter contract](065_sigma_to_ocsf_bridge.md#backend-adapter-contract-normative-v01).
 
-Fixtures for `duckdb_sql` compilation patterns MUST cover:
+Fixtures for `native_pcre2` compilation patterns MUST cover:
 
-- Case-insensitive equality using `lower(field) = lower(value)` and inequality using
-  `IS DISTINCT FROM`
-- LIKE/ILIKE escaping for `$`, `%`, and `_`
-- Regex acceptance for RE2-compatible patterns and rejection of PCRE-only constructs with
-  `unsupported_regex` and a stable `PA_SIGMA_...` code in the explanation
-- LIST-typed field semantics using `list_contains`, `list_has_any`, and `list_has_all` selection
-  based on schema type
+- Case-insensitive equality and inequality semantics (including list-typed field semantics).
+- Literal substring semantics for `contains`, `startswith`, and `endswith`.
+- Regex acceptance for PCRE2-compatible patterns (including lookaround) and bounded-execution
+  rejection (match limits, depth limits) with `unsupported_regex` and a stable `PA_SIGMA_...` code
+  in the explanation.
+- LIST-typed field semantics (any/all) selection based on schema type.
+- Correlation rule compilation for each supported correlation type (`event_count`, `value_count`,
+  `temporal`, `ordered_temporal`), including `group-by` and `aliases`.
 
 Bridge router multi-class routing tests validate that given a `logsource.category` routed to
 multiple `class_uid` values, compilation MUST scope evaluation to the union (`IN (...)` / OR
@@ -620,281 +621,64 @@ drift reason field.
 harnesses. They cover end-to-end scenarios, platform-specific behaviors, and recovery from failure
 conditions.
 
-### DuckDB conformance harness
+### Evaluator conformance harness
 
-The DuckDB determinism conformance harness qualifies the DuckDB toolchain for deterministic
-evaluation outputs. It is the default backend for
-[Sigma-to-OCSF bridge: evaluator backend adapter](065_sigma_to_ocsf_bridge.md#3-evaluator-backend-adapter).
+The evaluator conformance harness qualifies the configured batch evaluator backend against the
+determinism and compatibility requirements of this repository.
 
-Purpose: qualify DuckDB (version × OS × arch) for deterministic evaluation outputs over fixed
-Parquet fixtures and fixed SQL queries, and record drift across patch/minor upgrades.
+Goals:
 
-The harness MUST run each matrix cell with the following settings:
+- Detect cross-platform and cross-version drift in match sets (regressions and behavior changes).
+- Provide concrete artifacts that allow reviewers to triage changes introduced by:
+  - backend upgrades,
+  - regex engine upgrades,
+  - OCSF mapping pack changes,
+  - schema snapshot changes.
 
-```sql
-SET threads = 1;
-SET TimeZone = 'UTC';
-SET explain_output = 'physical_only';
-```
+#### Inputs
 
-For each query fixture, the harness MUST execute `EXPLAIN (FORMAT json) <query>` and compute
-`plan_jcs_sha256` over a JCS-canonicalized JSON plan representation, execute the query and compute
-`result_jcs_sha256` over a JCS-canonicalized JSON result representation, and require a deterministic
-total ordering of rows (RECOMMENDED: outermost `ORDER BY ALL`).
+- A pinned fixture event set (JSONL and/or Parquet) under `tests/fixtures/evaluator_conformance/`.
+- A pinned rule set under `tests/fixtures/evaluator_conformance/rules/`, including:
+  - event rules (single-event),
+  - correlation rules (all supported correlation types),
+  - regex-heavy rules (PCRE2 constructs).
 
-The harness MUST emit a consolidated report to
-`artifacts/duckdb_conformance/<report_id>/report.json` conforming to the
-[DuckDB conformance report schema](../contracts/duckdb_conformance_report.schema.json).
+#### Execution
 
-Failure classification MUST be explicit per cell and per query. Harness internal failures (init,
-execute, parse, encode) MUST be recorded as `status=fail` with a stable `reason_code`. Observed
-drift MUST be recorded deterministically as `result_hash_mismatch` (result drift) or
-`plan_hash_mismatch` (plan drift). Unsupported cells MAY be recorded as `status=skipped` with a
-stable `reason_code`.
+- The harness MUST run the evaluator end-to-end:
 
-### End-to-end fixtures
+  1. compile rules to `bridge/compiled_plans/`
+  1. execute compiled plans over the fixture event set
+  1. write detections to `detections/detections.jsonl`
 
-The "golden run" fixture uses a deterministic scenario plus captured telemetry to validate
-end-to-end outputs.
+- The harness MUST compute and record the following per backend + fixture version:
 
-The "scenario suite" fixture provides a small, representative set of techniques used as a regression
-pack.
+  - `compiled_plan_hash`:
+    - SHA256 of canonical JSON (JCS) for each `bridge/compiled_plans/<rule_id>.plan.json`
+  - `detections_hash`:
+    - SHA256 of canonical JSON (JCS) for the ordered contents of `detections/detections.jsonl`
 
-The atomic runner conformance fixture (lab-gated) executes a pinned Atomic action twice with
-identical inputs and asserts stable `resolved_inputs_sha256` and stable `action_key`. See
-`tests/integration/test_atomic_runner_conformance.py`.
+#### Output artifacts
 
-The baseline comparison fixture compares current run outputs to a pinned baseline run bundle.
+- The harness MUST emit a conformance report:
 
-The baseline comparison fixture set MUST include at least:
+  - JSON: `artifacts/evaluator_conformance/<report_id>/report.json`
+  - Markdown summary (optional): `artifacts/evaluator_conformance/<report_id>/summary.md`
 
-- `baseline_present_identical_all_zero`
+- The JSON report MUST conform to the evaluator conformance report schema:
 
-  - Input:
-    - Provide a pinned baseline run bundle and a current run executed with identical inputs (same
-      scenario selection, same pins, same captured telemetry fixtures).
-  - Expected:
-    - `report/report.json.regression.deltas[]` MUST be all-zero for the comparable metric surface.
-    - Delta rows MUST be emitted in a deterministic ordering (as defined by reporting/scoring
-      specifications).
-    - The harness SHOULD compute a stable hash over the `report/report.json.regression` subtree
-      (RECOMMENDED: RFC 8785 JCS hash) and assert it is identical across repeated runs with
-      identical inputs.
+  - `../contracts/evaluator_conformance_report.schema.json`
 
-- `baseline_present_intentional_change_detected`
+#### Failure classification
 
-  - Input:
-    - Provide a pinned baseline run bundle and a current run that introduces a controlled, declared
-      change (for example, a mapping profile or ruleset change fixture).
-  - Expected:
-    - At least one entry in `report/report.json.regression.deltas[]` MUST be non-zero.
-    - Delta outputs MUST remain deterministic (stable rounding, stable ordering, stable
-      identifiers).
+The harness MUST classify mismatches with stable categories:
 
-- `baseline_missing`
+- `plan_hash_mismatch`
+- `result_hash_mismatch`
+- `backend_error` (compile or evaluation failure)
 
-  - Input:
-    - Enable regression comparison but provide a missing or unreadable baseline reference.
-  - Expected:
-    - `runs/<run_id>/logs/health.json` MUST include a deterministic stage outcome entry:
-      - `stage="reporting.regression_compare"`
-      - `status="failed"`
-      - `fail_mode="warn_and_skip"`
-      - `reason_code="baseline_missing"`
-    - The report MUST represent the regression section as **indeterminate** and MUST keep deltas
-      empty:
-      - `report/report.json.regression.comparability.status="indeterminate"`
-      - `report/report.json.regression.comparability.reason_code="baseline_missing"`
-      - `report/report.json.regression.deltas[]` MUST be an empty array.
-    - Stage outcome reason codes remain authoritative for `baseline_missing` handling.
-
-- `baseline_present_incompatible`
-
-  - Input:
-    - Enable regression comparison and provide a baseline run bundle, but intentionally introduce an
-      incompatibility (example: `manifest.versions.ocsf_version` mismatch vs the current run).
-  - Expected:
-    - `runs/<run_id>/logs/health.json` MUST include:
-      - `stage="reporting.regression_compare"`
-      - `status="failed"`
-      - `fail_mode="warn_and_skip"`
-      - `reason_code="baseline_incompatible"`
-    - The report MUST represent the regression section as **indeterminate**:
-      - `report/report.json.regression.comparability.status="indeterminate"`
-      - `report/report.json.regression.comparability.reason_code="baseline_incompatible"`
-      - `report/report.json.regression.deltas[]` MUST be an empty array.
-
-The measurement contract fixture set MUST include at least:
-
-- `report_gaps_measurement_layer_and_evidence_refs_present`
-
-  - Input:
-    - Use a fixture that deterministically produces at least one pipeline gap (for example,
-      `marker_missing` in synthetic marker observability).
-  - Expected:
-    - The machine-readable report (`report/report.json`) MUST include a gap entry for the condition.
-    - Each gap entry MUST include:
-      - `measurement_layer` (one of `telemetry | normalization | detection | scoring`), and
-      - at least one `evidence_refs[]` entry with `artifact_path` that is a deterministic relative
-        path into the run bundle.
-    - For each `evidence_refs[]` entry, the referenced artifact MUST exist within the run bundle.
-
-- `gap_taxonomy_tokens_match_scoring_spec`
-
-  - Input:
-    - Provide a minimal configuration fixture that enumerates the supported `scoring.gap_taxonomy[]`
-      tokens.
-  - Expected:
-    - The configured tokens MUST match the scoring specification taxonomy exactly (no aliases, no
-      extra tokens).
-    - The harness MUST reject any drift by asserting schema validation fails for unknown tokens and
-      passes for the canonical token set.
-
-### Telemetry collection
-
-The telemetry fixture provides a raw Windows event XML corpus including missing rendered messages
-and at least one event containing binary-like payload data.
-
-- Raw mode canary injection: during a fixture run on Windows, emit the canary EventCreate event and
-  assert `body` begins with `<Event` and does not contain `<RenderingInfo>`.
-- Agent liveness (dead-on-arrival detection): provide one fixture where collector self-telemetry is
-  present for the expected asset(s) and assert `health.json` includes a successful
-  `telemetry.agent.liveness` outcome; provide a second fixture with no self-telemetry for an
-  expected asset and assert `telemetry.agent.liveness` fails closed with
-  `reason_code=agent_heartbeat_missing`.
-- Checkpoint corruption path: corrupt the checkpoint DB and verify the run fails closed unless the
-  operator has configured `recreate_fresh`, and record which behavior occurred.
-- Out-of-order and duplicates: ensure dedupe uses `metadata.event_id` and remains stable across
-  restarts.
-
-#### Windows Event Log raw-mode conformance
-
-This test validates the collector plus validator integration. Use an OTel collector config where
-every enabled `windowseventlog/*` receiver sets `raw: true` and `suppress_rendering_info: true`.
-Inject a canary event and assert the captured payload begins with `<Event` and MUST NOT contain
-`<RenderingInfo>`. The validator MUST record the outcome as `health.json` stage
-`telemetry.windows_eventlog.raw_mode` (see the [operability specification](110_operability.md)).
-
-#### Windows Event Log failure modes
-
-- Missing publisher/manifest metadata with raw XML present MUST NOT fail ingestion and MUST
-  increment `wineventlog_rendering_metadata_missing_total`.
-- Raw XML unavailable MUST fail telemetry stage under `fail_mode: fail_closed`. Under
-  `fail_mode: warn_and_skip`, it MUST skip the record and increment
-  `wineventlog_raw_unavailable_total`.
-- Oversize raw XML MUST truncate deterministically and create a content-addressed sidecar
-  `${sha256}.xml` with `payload_overflow_ref` pointing to
-  `${telemetry.payload_limits.sidecar.dir}/${metadata.event_id}/${field_path_hash}.xml`.
-  - where `field_path_hash = sha256("event_xml")` (lowercase hex) and the directory includes
-    `metadata.event_id`
-- Binary decode failure MUST NOT drop the record. It MUST emit bounded summary and increment
-  `wineventlog_binary_decode_failed_total`.
-
-#### Defense outcomes derivation
-
-These fixtures validate deterministic derivation of per-tool outcomes and the precedence-based
-reduction to a derived outcome.
-
-The fixture set under `tests/fixtures/reporting/defense_outcomes/` MUST include at least:
-
-- `alerted_logged_none_tbd_not_applicable`:
-
-  - Input:
-
-    - `ground_truth.jsonl` contains at least 5 actions spanning:
-      - executed + detection present
-      - executed + telemetry present + no detection
-      - executed + telemetry absent
-      - skipped (not executed)
-      - criteria unavailable/misconfigured (indeterminate)
-    - `criteria/results.jsonl` includes rows for those actions (or a subset, to test missing rows).
-    - `detections/detections.jsonl` includes at least one detection row attributable to exactly one
-      action.
-    - (Optional) synthetic marker summary or upstream marker-bearing telemetry to enable the marker
-      fallback case.
-
-  - Expected:
-
-    - `report/report.json.extensions.defense_outcomes` exists and validates against
-      `docs/contracts/defense_outcomes.schema.json`.
-    - `by_technique[]` is sorted by `technique_id` ascending.
-    - If `by_action[]` is present, it is sorted by `action_id` ascending, and each row’s
-      `tool_outcomes[]` is sorted deterministically.
-    - Derived outcomes match the precedence reduction rules.
-
-Determinism hook (recommended):
-
-- The harness SHOULD compute a stable hash over the JSON subtree
-  `report/report.json.extensions.defense_outcomes` (RECOMMENDED: RFC 8785 JCS hash) and assert it is
-  identical across repeated runs with identical inputs.
-
-#### Synthetic correlation marker observability
-
-These fixtures validate marker propagation using the same captured-telemetry fixture approach as
-other telemetry validation tests.
-
-The fixture set under `tests/fixtures/telemetry/synthetic_marker/` MUST include at least:
-
-- `marker_observed`:
-
-  - Input:
-    - Runner-side artifacts indicate marker emission is enabled for the run and `execute` is
-      attempted for at least one action.
-    - Captured raw telemetry includes at least one marker-bearing event for that action.
-  - Expected:
-    - Normalized output includes `metadata.extensions.purple_axiom.synthetic_correlation_marker` on
-      the corresponding OCSF envelope and preserves the value verbatim through normalization.
-    - Reporting records the per-action marker status as observed (`yes`) in a stable per-action
-      ordering (sort by `action_id` ascending).
-
-- `marker_missing`:
-
-  - Input:
-    - Runner-side artifacts indicate marker emission is enabled for the run and `execute` is
-      attempted for at least one action.
-    - Captured raw telemetry contains no marker-bearing event for that action.
-  - Expected:
-    - Reporting records the per-action marker status as missing (`no`) and classifies the condition
-      under the existing gap taxonomy as `missing_telemetry`.
-    - Per-action marker results are emitted in a stable ordering (sort by `action_id` ascending).
-
-For both fixtures, the harness SHOULD compute a stable hash over the report’s marker summary
-(RECOMMENDED: RFC 8785 JCS hash of the report JSON subsection) and assert it is identical across
-repeated runs with identical inputs.
-
-### Schema and version migration
-
-The Parquet historical-runs query fixture builds two minimal run bundles with different
-`normalized/ocsf_events/_schema.json` plus Parquet schemas (additive change only) and asserts that
-the scoring/reporting query set completes successfully over both runs without requiring manual
-schema rewrites.
-
-The OCSF migration fixture validates that when bumping the pinned `ocsf_version`, CI MUST
-re-normalize a fixed raw telemetry fixture set and compare to reviewed "golden" normalized outputs.
-
-### Reliability and recovery
-
-#### Checkpoint-loss replay
-
-Run normalization on a fixed raw telemetry fixture. Delete or move
-`runs/<run_id>/logs/telemetry_checkpoints/` and restart normalization over the same inputs. Assert
-that the normalized store remains unique by `metadata.event_id`, that
-`dedupe_duplicates_dropped_total > 0`, and that normalized outputs are deterministic relative to the
-baseline fixture.
-
-#### File-tailed crash and rotation continuity (R-01)
-
-Use a synthetic NDJSON writer that emits a monotonic `seq` field and rotates the file at a fixed
-byte or line threshold. Configure the collector `filelog` receiver with `storage: file_storage`
-(filestorage) and capture the storage directory as a test artifact.
-
-The minimum matrix covers OS (Windows, Linux) × rotation (rename+create, copytruncate) × crash
-(graceful stop, hard kill).
-
-Assert per matrix cell that `loss_pct == 0` for the window spanning pre-rotation, rotation, and
-post-rotation plus the crash boundary. Compute and record `dup_pct` (duplication is acceptable but
-MUST be bounded and observable). Results include collector config hash and a deterministic
-fingerprint of the checkpoint directory contents.
+Where possible, the harness SHOULD include a human-readable diff summary (for example, a small
+sample of added/removed matched event ids).
 
 ## CI gates
 
@@ -941,7 +725,7 @@ authoritative):
 | OpenTelemetry Collector Contrib | 0.143.1 |
 | pySigma                         | 1.1.0   |
 | pySigma-pipeline-ocsf           | 0.1.1   |
-| DuckDB                          | 1.4.3   |
+| PCRE2 (libpcre2-8)              | 10.46   |
 | pyarrow                         | 22.0.0  |
 | jsonschema                      | 4.26.0  |
 | osquery                         | 5.14.1  |
@@ -986,13 +770,14 @@ Notes:
 
 ### Determinism gates
 
-The DuckDB conformance gate (toolchain determinism; configurable) enforces deterministic query
-execution. Default CI behavior (RECOMMENDED): `result_hash_mismatch` MUST fail CI (fail closed) and
-`plan_hash_mismatch` SHOULD warn but MUST NOT fail CI unless explicitly enabled as a gate.
+The evaluator conformance gate (toolchain determinism; configurable) enforces deterministic
+evaluation results for the configured evaluator backend. Default CI behavior (RECOMMENDED):
+`result_hash_mismatch` MUST fail CI (fail closed) and `plan_hash_mismatch` SHOULD warn but MUST NOT
+fail CI unless explicitly enabled as a gate.
 
 CI SHOULD retain the conformance report as a build artifact to support fixture refresh review on
-DuckDB upgrades, platform qualification (OS/arch) changes, and drift triage when golden fixtures
-regress.
+backend and regex engine upgrades, platform qualification (OS/arch) changes, and drift triage when
+golden fixtures regress.
 
 ### Artifact validation
 
@@ -1306,7 +1091,7 @@ machine using the ADR-0007 template and add fixture-driven conformance tests her
 ## Key decisions
 
 - Unit tests are organized by pipeline stage to enable targeted validation and clear ownership.
-- The DuckDB conformance harness provides toolchain qualification across the version × OS × arch
+- The evaluator conformance harness provides toolchain qualification across the version × OS × arch
   matrix.
 - CI gates use fail-closed semantics for version conformance and configurable thresholds for
   regression protection.
@@ -1320,7 +1105,7 @@ machine using the ADR-0007 template and add fixture-driven conformance tests her
 - [Telemetry pipeline specification](040_telemetry_pipeline.md)
 - [Normalization to OCSF specification](050_normalization_ocsf.md)
 - [Data contracts specification](025_data_contracts.md)
-- [DuckDB conformance report schema](../contracts/duckdb_conformance_report.schema.json)
+- [Evaluator conformance report schema](../contracts/evaluator_conformance_report.schema.json)
 - [Supported versions reference](../../SUPPORTED_VERSIONS.md)
 
 ## Changelog

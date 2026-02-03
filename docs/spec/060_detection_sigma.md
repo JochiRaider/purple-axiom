@@ -198,16 +198,21 @@ Sigma evaluation is a two-stage process.
        `detection.sigma.bridge.raw_fallback_enabled` and MAY render the rule non-executable with
        reason code `raw_fallback_disabled` and reason domain `bridge_compiled_plan`.
    - Produce a backend plan:
-     - Batch: SQL over Parquet (`duckdb_sql` MUST be the v0.1 default when
+     - Batch: native evaluator (`native_pcre2` MUST be the v0.1 default when
        `detection.sigma.bridge.backend` is omitted).
-     - Streaming: reserved (v0.2+).
+     - Streaming: optional (v0.2+).
 1. **Evaluate**
    - Execute the plan over the run's OCSF event store.
    - Emit `detection_instance` rows for each match group.
-   - v0.1 constraint (no correlation/aggregation): each match group MUST correspond to exactly one
-     matched event id. The evaluator MUST emit one detection instance per matched event with:
+   - For event rules, each match group MUST correspond to exactly one matched event id. The
+     evaluator MUST emit one detection instance per matched event with:
      - `matched_event_ids = [<event_id>]`
      - `first_seen_utc == last_seen_utc` (event time)
+   - For correlation rules, each match group MUST correspond to exactly one correlation window and
+     group key. The evaluator MUST emit one detection instance per satisfied group with:
+     - `matched_event_ids = [<event_id>, ...]`
+     - `first_seen_utc = min(event time)` over contributing events
+     - `last_seen_utc = max(event time)` over contributing events
 
 ## State machine integration
 
@@ -255,20 +260,20 @@ The `non_executable_reason` object MUST also include a human-readable explanatio
 
 ### Reason codes (normative)
 
-| Reason code               | Category      | Description                                                                            |
-| ------------------------- | ------------- | -------------------------------------------------------------------------------------- |
-| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                              |
-| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                       |
-| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                         |
-| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                     |
-| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                            |
-| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                       |
-| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (RE2-only in v0.1 for `\|re`) |
-| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                  |
-| `unsupported_correlation` | Sigma feature | Correlation rules are out of scope for v0.1                                            |
-| `unsupported_aggregation` | Sigma feature | Aggregation semantics are out of scope for v0.1 (default backend: `duckdb_sql`)        |
-| `backend_compile_error`   | Backend       | Backend compilation failed                                                             |
-| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                   |
+| Reason code               | Category      | Description                                                                                                  |
+| ------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------ |
+| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                                                    |
+| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                                             |
+| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                                               |
+| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                                           |
+| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                                                  |
+| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                                             |
+| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (RE2-only in v0.1 for `\|re`)                       |
+| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                                        |
+| `unsupported_correlation` | Sigma feature | Correlation rules are out of scope for v0.1                                                                  |
+| `unsupported_aggregation` | Sigma feature | Aggregation semantics are out of scope for v0.1 outside Sigma correlations (default backend: `native_pcre2`) |
+| `backend_compile_error`   | Backend       | Backend compilation failed                                                                                   |
+| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                                         |
 
 Non-executable rules do not produce detection instances but are included in bridge coverage
 reporting and contribute to gap classification.
@@ -571,8 +576,10 @@ Rules containing `correlation` blocks MUST be marked non-executable with
 Sigma aggregation keywords (`count`, `sum`, `avg`, `min`, `max`, `near`) are **out of scope for
 v0.1** unless the backend explicitly supports them.
 
-The DuckDB backend (`duckdb_sql`) does not support aggregation in v0.1. Rules requiring aggregation
-MUST be marked non-executable with `non_executable_reason.reason_code: "unsupported_aggregation"`.
+The default backend (`native_pcre2`) supports Sigma correlation rules, but does not necessarily
+support arbitrary Sigma aggregation keywords inside event-rule `condition` expressions in v0.1.
+Rules requiring aggregation MUST be marked non-executable with
+`non_executable_reason.reason_code: "unsupported_aggregation"`.
 
 ### Timeframe modifiers
 

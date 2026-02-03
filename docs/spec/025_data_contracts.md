@@ -364,7 +364,7 @@ The following list is for navigation only. The authoritative mapping is
 - `docs/contracts/redaction_profile_set.schema.json`
 - `docs/contracts/telemetry_baseline_profile.schema.json`
 - `docs/contracts/telemetry_validation.schema.json`
-- `docs/contracts/duckdb_conformance_report.schema.json`
+- `docs/contracts/evaluator_conformance_report.schema.json`
 - `docs/contracts/pcap_manifest.schema.json`
 - `docs/contracts/netflow_manifest.schema.json`
 - `docs/contracts/lab_inventory_snapshot.schema.json`
@@ -2276,7 +2276,7 @@ Recommended (for reproducibility and gap attribution):
 - Populate `rule_source = "sigma"` when the evaluator is Sigma-based.
 - Store Sigma-to-OCSF bridge provenance under `extensions.bridge`:
   - `mapping_pack_id` and `mapping_pack_version` (router + field aliases)
-  - `backend` (example: duckdb-sql v0.1, tenzir v0.2, other v0.3)
+  - `backend` (example: native_pcre2 v0.1, tenzir v0.2, other v0.3)
   - `compiled_at_utc`
   - `fallback_used` (boolean) when any `raw.*` fields were required
   - `unmapped_sigma_fields` (array) when compilation required dropping selectors or failing the rule

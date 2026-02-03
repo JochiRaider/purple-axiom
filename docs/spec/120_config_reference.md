@@ -6,10 +6,6 @@ status: draft
 
 # Configuration reference
 
-This document defines the configuration surface for Purple Axiom and the rules for precedence,
-determinism, and validation. It focuses on operator-facing configuration inputs and their
-expectations across pipeline stages.
-
 This document defines the configuration surface for Purple Axiom. Configuration is intended to be:
 
 - local-first

@@ -2,6 +2,22 @@
 title: Telemetry pipeline
 description: Defines telemetry capture topology, Windows Event Log collection invariants, validation, and payload handling.
 status: draft
+category: spec
+tags: [telemetry, opentelemetry, windows-eventlog, ingestion, validation, determinism]
+related:
+  - 020_architecture.md
+  - 025_data_contracts.md
+  - 035_validation_criteria.md
+  - 042_osquery_integration.md
+  - 044_unix_log_ingestion.md
+  - 045_storage_formats.md
+  - 110_operability.md
+  - 120_config_reference.md
+  - ../../SUPPORTED_VERSIONS.md
+  - ../adr/ADR-0002-event-identity-and-provenance.md
+  - ../adr/ADR-0003-redaction-policy.md
+  - ../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md
+  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
 ---
 
 # Telemetry pipeline
@@ -31,7 +47,7 @@ This section is the stage-local view of:
 | contract_id            | path/glob                        | Required?                                               |
 | ---------------------- | -------------------------------- | ------------------------------------------------------- |
 | `counters`             | `logs/counters.json`             | required                                                |
-| `telemetry_validation` | `logs/telemetry_validation.json` | optional (when telemetry validation is enabled)         |
+| `telemetry_validation` | `logs/telemetry_validation.json` | optional (when `telemetry.otel.enabled=true`)           |
 | `pcap_manifest`        | `raw/pcap/manifest.json`         | optional (placeholder source; when enabled/implemented) |
 | `netflow_manifest`     | `raw/netflow/manifest.json`      | optional (placeholder source; when enabled/implemented) |
 
@@ -78,12 +94,6 @@ under replay, and predictable operations.
 - **Determinism** (stable fields across restarts, replays, and locale differences).
 - **Resilience** (at-least-once delivery is expected; downstream dedupe is required).
 - **Low operational surprise** (bounded resource usage; explicit backpressure behavior).
-
-## Overview
-
-The telemetry pipeline standardizes collection through OpenTelemetry, preserves raw Windows Event
-Log XML, and normalizes events into OCSF for scoring. Validation focuses on determinism under
-restarts, resilience under backpressure, and predictable handling of large or binary payloads.
 
 ### Telemetry ETL spine (normative)
 

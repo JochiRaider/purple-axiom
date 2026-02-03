@@ -151,7 +151,7 @@ When the following artifacts are present, CI MUST fail closed if their status si
   emitted sorted ascending (UTF-8 byte order, no locale) when `runs/<run_id>/report/report.json` is
   present.
 - `manifest.status` from `runs/<run_id>/manifest.json` MUST equal
-  `runs/<run_id>/logs/health.json.status` when health files are enabled and
+  `runs/<run_id>/logs/health.json.status` when `operability.health.emit_health_files=true` and
   `runs/<run_id>/logs/health.json` is present.
 - The CI job step that enforces this contract MUST exit with `(0|10|20)` matching the derived
   verdict.
@@ -212,8 +212,8 @@ Where enabled by v0.1 specs/config:
 
 - `runs/<run_id>/logs/health.json` MUST exist and conform to schema when
   `operability.health.emit_health_files=true` (default).
-- `runs/<run_id>/logs/telemetry_validation.json` MUST exist and conform when telemetry validation is
-  enabled (`telemetry.emit_validation=true` or config-specific).
+- `runs/<run_id>/logs/telemetry_validation.json` MUST exist and conform when the telemetry stage is
+  enabled (`telemetry.otel.enabled=true`; see stage enablement / required outputs matrix).
 - `runs/<run_id>/logs/run.log` MUST exist (human-readable execution log; primary surface for
   warn-only diagnostics).
 - `runs/<run_id>/logs/warnings.jsonl` is OPTIONAL; it may include warn-only entries for non-gating

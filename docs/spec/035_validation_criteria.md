@@ -1,7 +1,20 @@
 ---
 title: Validation criteria packs
-description: Defines criteria pack structure, drift detection, matching, and cleanup verification semantics.
+description: Defines criteria pack structure, selection, drift detection, matching, and cleanup verification semantics.
 status: draft
+category: spec
+tags: [validation, criteria, telemetry, cleanup, determinism]
+related:
+  - 025_data_contracts.md
+  - 030_scenarios.md
+  - 032_atomic_red_team_executor_integration.md
+  - 040_telemetry_pipeline.md
+  - 070_scoring_metrics.md
+  - 080_reporting.md
+  - 120_config_reference.md
+  - ADR-0001-project-naming-and-versioning.md
+  - ADR-0004-deployment-architecture-and-inter-component-communication.md
+  - ADR-0005-stage-outcomes-and-failure-classification.md
 ---
 
 # Validation criteria packs
@@ -62,27 +75,23 @@ Notes:
 
 - TODO: specify fixture roots for criteria pack conformance and criteria query evaluation.
 
-## Purpose
-
-Purple Axiom externalizes expected telemetry and cleanup verification expectations into criteria
-packs. This decouples execution definitions from validation logic while preserving determinism and
-reproducibility.
-
 ## Overview
 
-Criteria packs define expected signals for executed actions, are versioned independently, and are
-snapshotted into the run bundle for reproducibility. The evaluator performs deterministic selection,
-detects drift against upstream execution definitions, and records cleanup verification outcomes with
-stable reason codes.
+Purple Axiom externalizes expected telemetry signals and cleanup verification checks into criteria
+packs. This decouples execution definitions from validation logic while preserving determinism,
+reproducibility, and auditability. Criteria packs define expected signals for executed actions, are
+versioned independently, and are snapshotted into the run bundle for reproducibility. The validation
+stage performs deterministic selection, detects drift against upstream execution definitions, and
+records both criteria outcomes and cleanup verification results with stable reason codes.
 
 ## Goals
 
 - Keep Atomic YAML focused on execution mechanics.
-- Make expected signals explicit, diffable, and versioned.
+- Make expected signals explicit, diffable, versioned, and drift-detectable.
 - Support environment-specific expectations without forking upstream Atomic tests.
-- Provide a deterministic basis for classifying missing telemetry versus downstream mapping or rule
-  gaps.
-- Treat cleanup as a first-class stage and record verification results.
+- Provide a deterministic basis for classifying missing telemetry versus downstream mapping, bridge,
+  or rule gaps.
+- Treat cleanup as a first-class lifecycle concern and record deterministic verification outcomes.
 
 ### Repository layout (source of truth)
 

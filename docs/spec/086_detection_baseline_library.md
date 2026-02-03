@@ -16,7 +16,7 @@ related:
   - ADR-0009-run-export-policy-and-log-classification.md
 ---
 
-# Detection baseline library (v0.2+)
+# Detection baseline library
 
 ## Overview
 
@@ -32,6 +32,8 @@ BDPs exist to support:
 
 BDPs are stored outside of `runs/` under the workspace `exports/` tree and are managed via the
 Operator Interface (UI + API).
+
+version scope: post-OI (v0.2+)
 
 ## Non-goals
 

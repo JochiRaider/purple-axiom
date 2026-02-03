@@ -2,6 +2,23 @@
 title: Scenario model
 description: Defines scenario types, execution model, action identity, and ground truth expectations for runs.
 status: draft
+category: spec
+tags: [scenario, runner, ground-truth, action-identity, determinism]
+related:
+  - 020_architecture.md
+  - 025_data_contracts.md
+  - 031_plan_execution_model.md
+  - 032_atomic_red_team_executor_integration.md
+  - 035_validation_criteria.md
+  - 040_telemetry_pipeline.md
+  - 070_scoring_metrics.md
+  - 080_reporting.md
+  - 120_config_reference.md
+  - ADR-0001-project-naming-and-versioning.md
+  - ADR-0002-event-identity-and-provenance.md
+  - ADR-0004-deployment-architecture-and-inter-component-communication.md
+  - ADR-0005-stage-outcomes-and-failure-classification.md
+  - ADR-0007-state-machines.md
 ---
 
 # Scenario model

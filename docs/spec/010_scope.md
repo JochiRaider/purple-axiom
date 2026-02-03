@@ -12,16 +12,6 @@ This document defines the v0.1 scope boundaries for Purple Axiom and the explici
 shape the initial release. It highlights what the pipeline must support, which contracts are
 reserved for later, and the operating assumptions used throughout the spec set.
 
-## Overview
-
-Purple Axiom v0.1 focuses on deterministic, local-first execution with a fixed stage pipeline and
-contract-backed artifacts in a run bundle. The scope centers on Atomic Red Team-based scenario
-execution, endpoint-first telemetry capture, OCSF normalization, validation, detection, scoring, and
-reporting, including publish-gate validation and deterministic stage outcome recording.
-
-Capabilities that require a distributed control plane, mandatory network sensors, multi-scenario
-orchestration, or cross-stage service-to-service RPC are intentionally out of scope for v0.1.
-
 ## Scope
 
 This document covers:

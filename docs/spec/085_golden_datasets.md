@@ -26,7 +26,7 @@ related:
 
 # Golden dataset generation for ML training and evaluation
 
-## Purpose
+## Overview
 
 This document defines a deterministic, reproducible mechanism for generating "golden datasets" from
 Purple Axiom run bundles for:

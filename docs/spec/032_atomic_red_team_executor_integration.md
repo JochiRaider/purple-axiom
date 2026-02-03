@@ -1,28 +1,41 @@
 ---
 title: Atomic Red Team executor integration contract
-description: Defines the integration contract between Purple Axiom and Invoke-AtomicRedTeam for atomic actions.
+description: Defines the runner integration contract for executing Atomic Red Team tests via Invoke-AtomicRedTeam with deterministic evidence.
 status: draft
+category: spec
+tags: [runner, atomic, invoke-atomicredteam, determinism, evidence, cleanup]
+related:
+  - 025_data_contracts.md
+  - 030_scenarios.md
+  - 035_validation_criteria.md
+  - 045_storage_formats.md
+  - 120_config_reference.md
+  - ../../SUPPORTED_VERSIONS.md
+  - ../adr/ADR-0003-redaction-policy.md
+  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
+  - ../adr/ADR-0007-state-machines.md
 ---
 
 # Atomic Red Team executor integration contract
 
-This document defines the normative integration contract between Purple Axiom and the
-Invoke-AtomicRedTeam executor stack for `engine = "atomic"` actions. It specifies the following and
-is designed to make runs reproducible and cross-run comparable while preserving operator-debuggable
-evidence.
-
-- Deterministic Atomic YAML parsing
-- Deterministic input resolution (defaults, overrides, template expansion)
-- Prerequisites (dependencies) evaluation and optional fetch workflow and evidence artifacts
-- Transcript capture and storage requirements (encoding, redaction, layout)
-- Cleanup invocation and cleanup verification workflow and artifacts
-
 ## Overview
 
-This spec defines how the runner discovers and parses Atomic YAML, resolves inputs, canonicalizes
-identity-bearing materials, evaluates prerequisites, captures transcripts, and records cleanup
-verification. It sets the deterministic behavior, evidence artifacts, and failure modes needed for
-cross-run comparability.
+This document defines the normative integration contract between Purple Axiom's runner and the
+Invoke-AtomicRedTeam executor stack for scenario actions with `engine="atomic"`. It specifies the
+deterministic behavior and evidence artifacts required to make runs reproducible and cross-run
+comparable while preserving operator-debuggable details.
+
+- Deterministic Atomic test discovery and YAML parsing (including template snapshotting)
+- Deterministic input resolution and hashing (defaults, overrides, template expansion)
+- Prerequisites evaluation and optional fetch/install workflow and evidence artifacts
+- Transcript capture and storage requirements (encoding, redaction, layout)
+- Cleanup invocation, cleanup verification, and re-run safety guards
+- Contracted per-action runner evidence artifacts under `runner/actions/<action_id>/`
+
+It defines how the runner discovers and snapshots Atomic test definitions, resolves inputs,
+canonicalizes identity-bearing materials, evaluates prerequisites, captures transcripts, and records
+cleanup verification. It sets the deterministic behavior, contracted evidence artifacts, and failure
+modes needed for reproducible execution and cross-run comparability.
 
 ## Relationship to other specs
 
@@ -30,6 +43,7 @@ This document is additive and MUST be read alongside:
 
 - [Data contracts spec](025_data_contracts.md) for hashing, `parameters.resolved_inputs_sha256`, run
   bundle layout, runner evidence artifact semantics, and ground-truth evidence pointer requirements
+- [Supported versions](../../SUPPORTED_VERSIONS.md) for pinned runner/executor dependency versions
 - [Scenario model spec](030_scenarios.md) for stable `action_key` basis, lifecycle phase semantics,
   and Atomic Test Plan scenarios
 - [Validation criteria spec](035_validation_criteria.md) for cleanup verification semantics
@@ -39,6 +53,8 @@ This document is additive and MUST be read alongside:
   defaults
 - [State machines ADR](../adr/ADR-0007-state-machines.md) for lifecycle state machine integration
   and recovery semantics
+- [Stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) for stable
+  `reason_code` taxonomy and fail-closed classification
 - [Redaction policy ADR](../adr/ADR-0003-redaction-policy.md) for deterministic redaction
   requirements
 

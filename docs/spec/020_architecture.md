@@ -34,6 +34,27 @@ from the run bundle and writes outputs back to the run bundle. The filesystem is
 contract boundary. Operators and CI drive the orchestrator via a small set of range lifecycle verbs
 (build, simulate, replay, export, destroy) that map to deterministic stage subsets.
 
+### Scope
+
+This document covers:
+
+- Deployment topology and orchestration model
+- Stable stage identifiers and execution order
+- Stage IO boundaries (minimum inputs and outputs)
+- Component responsibilities
+- Extension points
+- Run bundle layout overview
+
+This document does NOT cover:
+
+- Detailed artifact schemas (see [data contracts specification][data-contracts])
+- Storage formats and long-term retention rules (see
+  [storage formats specification][storage-formats-spec])
+- Configuration surface area (see [configuration reference][config-ref])
+- Failure classification and reason codes (see
+  [ADR-0005: Stage outcomes and failure classification][adr-0005])
+- Telemetry collection details (see [telemetry pipeline specification][telemetry-spec])
+
 Module boundaries (v0.1; normative where stated):
 
 - **Provision**: resolve and snapshot lab inventory (maps to `lab_provider`).
@@ -60,27 +81,6 @@ Agent navigation (non-normative):
     for artifact schemas, publish-gate validation behavior, hashing rules, and storage layout.
   - If this document conflicts with any of the references above, the referenced ADR/spec is
     authoritative.
-
-## Scope
-
-This document covers:
-
-- Deployment topology and orchestration model
-- Stable stage identifiers and execution order
-- Stage IO boundaries (minimum inputs and outputs)
-- Component responsibilities
-- Extension points
-- Run bundle layout overview
-
-This document does NOT cover:
-
-- Detailed artifact schemas (see [data contracts specification][data-contracts])
-- Storage formats and long-term retention rules (see
-  [storage formats specification][storage-formats-spec])
-- Configuration surface area (see [configuration reference][config-ref])
-- Failure classification and reason codes (see
-  [ADR-0005: Stage outcomes and failure classification][adr-0005])
-- Telemetry collection details (see [telemetry pipeline specification][telemetry-spec])
 
 ## Version scope
 
@@ -535,7 +535,7 @@ post-run harvest/validation/publish step that materializes `raw_parquet/**` for 
 When environment configuration is enabled, the orchestrator MUST record an additive `runner`
 substage `runner.environment_config` after `lab_provider` completes and before any action enters the
 runner `prepare` lifecycle phase. This substage MUST be observable via stage outcomes in
-`manifest.json` and, when health files are enabled, via `logs/health.json`.
+`manifest.json` and, when `operability.health.emit_health_files=true`, via `logs/health.json`.
 
 ## Lifecycle state machine integrations (v0.1; guidance)
 
@@ -646,6 +646,10 @@ Where:
   - `contract_id` (schema/contract identity as used by the contract validator)
   - `required: bool` (default `true`)
 
+`required` MUST be explicitly set by the stage wrapper for every `ExpectedOutput` entry based on the
+stage enablement / required outputs matrix in `025_data_contracts.md` (see “Stage enablement and
+required contract outputs (v0.1)”). Implementations MUST NOT rely on the default.
+
 Deterministic stage → contract-backed outputs (normative):
 
 - The contract registry (`contract_registry.json`) is the source of truth for stage ownership of
@@ -675,6 +679,9 @@ Finalize semantics (normative):
 - `finalize()` MUST treat missing required outputs as a validation failure: if any
   `expected_outputs[]` entry with `required=true` is absent, `finalize()` MUST fail closed and MUST
   NOT promote any staged outputs.
+- `finalize()` MUST treat missing optional outputs as non-failures: if an `expected_outputs[]` entry
+  with `required=false` is absent, `finalize()` MUST NOT fail and MUST NOT attempt contract
+  validation for that entry.
 - When `finalize()` fails, the orchestrator MUST record a fail-closed stage outcome (see
   `ADR-0005-stage-outcomes-and-failure-classification.md`).
 - If validation fails, `finalize()` MUST NOT promote any staged outputs into their final run bundle
@@ -704,7 +711,8 @@ Finalize semantics (normative):
 - After a successful `finalize()`, the stage core MUST emit a terminal stage outcome via
   `OutcomeSink` before control returns to the orchestrator stage loop.
   - Persistence authority: the `OutcomeSink` implementation is orchestrator-owned and is responsible
-    for writing `manifest.json` and, when enabled, `logs/health.json`.
+    for writing `manifest.json` and, when `operability.health.emit_health_files=true`,
+    `logs/health.json`.
 
 Reference publisher SDK requirement (normative):
 
@@ -749,7 +757,7 @@ Persistence semantics (normative):
 
 - `OutcomeSink` MUST be implemented and owned by the orchestrator (composition root) and MUST be the
   only component that persists outcomes into `runs/<run_id>/manifest.json` and, when enabled,
-  `runs/<run_id>/logs/health.json`.
+  `runs/<run_id>/logs/health.json` (see `operability.health.emit_health_files`).
 - Stage core logic and stage CLI wrappers MUST NOT open, patch, or rewrite `manifest.json` or
   `logs/health.json` directly; they MUST emit outcomes only through `OutcomeSink`.
 - Calls to `record_stage_outcome` MUST be durable: when the call returns successfully, the
@@ -1250,10 +1258,10 @@ Environment configuration boundary (normative, v0.1):
   collector configuration placement, baseline desired-state configuration (for example: DSC v3),
   readiness canaries).
 - When such configuration is performed, the orchestrator MUST record an additive substage outcome
-  `runner.environment_config` in `manifest.json` and, when health files are enabled, in
-  `logs/health.json`. It MUST also emit deterministic operability evidence under
-  `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
-  [operability specification][operability-spec]).
+  `runner.environment_config` in `manifest.json` and, when
+  `operability.health.emit_health_files=true`, in `logs/health.json`. It MUST also emit
+  deterministic operability evidence under `runs/<run_id>/logs/**` (schema and filenames are
+  implementation-defined here; see the [operability specification][operability-spec]).
 - Environment configuration is distinct from per-action requirements evaluation in `prepare`. It
   MUST NOT change the semantics of per-action lifecycle outcomes.
 
@@ -1262,8 +1270,8 @@ Preflight / Readiness Gate:
 - Run before scenario execution.
 - Validate resources + config invariants + required collectors/log sources.
 - Implementations MAY emit a `runner.preflight` substage outcome for quick triage.
-  - If emitted, it MUST be recorded in `manifest.json` and, when health files are enabled, in
-    `logs/health.json`.
+  - If emitted, it MUST be recorded in `manifest.json` and, when
+    `operability.health.emit_health_files=true`, in `logs/health.json`.
   - It MUST NOT introduce new stage outcome `reason_code` values without updating
     [ADR-0005: Stage outcomes and failure classification][adr-0005].
 
@@ -1471,9 +1479,9 @@ Responsibilities:
     - MUST write `inputs/baseline_run_ref.json`.
     - SHOULD write `inputs/baseline/manifest.json` when baseline resolution succeeds.
   - Emit regression comparison results under `report/report.json.regression`.
-  - Record a `reporting.regression_compare` substage outcome in `manifest.json` and, when health
-    files are enabled, in `logs/health.json` (even when baseline resolution or comparison is
-    indeterminate).
+  - Record a `reporting.regression_compare` substage outcome in `manifest.json` and, when
+    `operability.health.emit_health_files=true`, in `logs/health.json` (even when baseline
+    resolution or comparison is indeterminate).
 - Support diffing and trending across runs.
 
 Outputs are stored under `report/**`.

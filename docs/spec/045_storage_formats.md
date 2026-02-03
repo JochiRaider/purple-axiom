@@ -2,9 +2,24 @@
 title: Storage formats
 description: Defines storage tiers, formats, and schema evolution expectations for run artifacts.
 status: draft
+category: spec
+tags: [storage, formats, artifacts, export, determinism, schema_evolution]
+related:
+  - 025_data_contracts.md
+  - 040_telemetry_pipeline.md
+  - 080_reporting.md
+  - 086_detection_baseline_library.md
+  - 090_security_safety.md
+  - 110_operability.md
+  - 120_config_reference.md
+  - ../adr/ADR-0003-redaction-policy.md
+  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
+  - ../adr/ADR-0009-run-export-policy-and-log-classification.md
 ---
 
 # Storage formats
+
+## Overview
 
 This document defines how Purple Axiom writes run artifacts to disk, with a focus on long-term,
 queryable storage. The default target for long-term event storage is Parquet.

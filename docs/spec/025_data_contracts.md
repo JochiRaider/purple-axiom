@@ -1,33 +1,48 @@
 ---
 title: Data contracts
-description: Defines data contracts, schemas, and invariants for Purple Axiom run artifacts.
+description: Defines artifact contracts, schemas, and cross-artifact invariants for Purple Axiom run bundles.
 status: draft
+category: spec
+tags: [contracts, schemas, artifacts, determinism, validation]
+related:
+  - 020_architecture.md
+  - 035_validation_criteria.md
+  - 045_storage_formats.md
+  - 080_reporting.md
+  - 110_operability.md
+  - 120_config_reference.md
+  - ADR-0001-project-naming-and-versioning.md
+  - ADR-0002-event-identity-and-provenance.md
+  - ADR-0003-redaction-policy.md
+  - ADR-0004-deployment-architecture-and-inter-component-communication.md
+  - ADR-0005-stage-outcomes-and-failure-classification.md
+  - ADR-0007-state-machines.md
+  - ADR-0009-run-export-policy-and-log-classification.md
 ---
 
 # Data contracts
 
-This document defines the data contracts for Purple Axiom run artifacts. The goal is to make runs
-reproducible, diffable, and CI-validatable while preserving enough provenance to support defensible
-detection evaluation.
+This specification defines the contract-backed artifacts in a Purple Axiom run bundle
+(`runs/<run_id>/`) and the invariants that make runs reproducible, diffable, and CI-validatable.
 
-Contracts are enforced through JSON Schemas in `docs/contracts/` plus a small set of cross-artifact
+Contracts are enforced via JSON Schemas under `docs/contracts/` plus a small set of cross-artifact
 invariants that cannot be expressed in JSON Schema alone.
 
 ## Overview
 
-This spec defines the artifact schemas, run bundle layout, and cross-artifact invariants that make
-runs reproducible and comparable. It covers the normative requirements for manifest status, ground
-truth identity, normalized event envelopes, and optional signing.
+**Summary**: This spec defines the artifact schemas, run bundle layout, and cross-artifact
+invariants required for reproducible and comparable runs. It covers the normative requirements for
+manifest status derivation, ground truth identity, normalized event envelopes, and optional signing.
 
 ### Document boundaries and ownership
 
 This specification is authoritative for:
 
-- contract registry semantics and registry-backed validation (schemas under `docs/contracts/`)
-- run bundle layout and deterministic artifact paths under `runs/<run_id>/`
-- cross-artifact invariants required for joins, reproducibility, and CI validation
-- shared shapes referenced by multiple stage specs (for example, `evidence_refs[]`)
-- optional signing artifact formats and selection rules (when signing is enabled)
+- Contract registry semantics and registry-backed validation (schemas under `docs/contracts/`).
+- Run bundle layout and deterministic artifact paths under `runs/<run_id>/`.
+- Cross-artifact invariants required for joins, reproducibility, and CI validation.
+- Shared shapes referenced by multiple stage specs (for example, `evidence_refs[]`).
+- Optional signing artifact formats and selection rules (when signing is enabled).
 
 This specification is not the primary home for stage implementation behavior beyond what is needed
 to make artifact contracts testable. Detailed stage behavior, feature flags, and failure mapping
@@ -56,6 +71,9 @@ with this document referenced as needed.
 
 ## Terminology
 
+- Artifact: A run-relative file produced or consumed by the pipeline.
+- Contract-backed artifact: An artifact whose path matches `docs/contracts/contract_registry.json`
+  `bindings[]` and therefore has an associated schema and publish-gate validation rules.
 - Contract: A schema plus invariants for one artifact type.
 - Run bundle: The folder `runs/<run_id>/` containing all artifacts for one execution.
 - Run-relative path: A POSIX-style path interpreted as relative to the run bundle root
@@ -565,7 +583,8 @@ For any stage that publishes contract-backed artifacts:
   `runs/<run_id>/`.
 - State machine integration hook (derivability; see ADR-0007):
   - For any stage that records a terminal stage outcome, the outcome plus the presence/absence of
-    the stage’s published contracted outputs (minimum outputs for that stage when enabled) MUST be
+    the stage’s published contracted outputs (minimum required contracted outputs for that stage
+    when enabled; see "Stage enablement and required contract outputs (v0.1)" below) MUST be
     sufficient to derive the stage’s terminal state.
   - If terminal state cannot be derived due to inconsistent artifacts (for example, outputs present
     but the stage outcome is missing), implementations MUST fail closed with a cross-cutting
@@ -635,9 +654,170 @@ Minimum publish-gate coverage (v0.1):
     plans, bridge coverage)
   - `detections/detections.jsonl`
   - `scoring/summary.json`
-  - `logs/telemetry_validation.json` when telemetry validation is enabled
+  - `logs/telemetry_validation.json` when the telemetry stage is enabled
+    (`telemetry.otel.enabled=true`; see "Stage enablement and required contract outputs (v0.1)"
+    below)
   - any optional placeholder artifacts that are emitted in v0.1 (for example, PCAP or NetFlow
     manifests) when present
+
+##### Stage enablement and required contract outputs (v0.1)
+
+This section makes all “required when enabled” statements mechanically checkable by defining:
+
+- a single, explicit **stage enablement matrix** (`enabled_if`) pinned to exact config keys, and
+- a deterministic **requiredness function** used to populate `expected_outputs[].required` for the
+  `PublishGate.finalize()` port.
+
+**Source of truth.** Implementations MUST treat the matrix in this section as the canonical mapping
+from config → (stage enabled/disabled) → (required vs optional contracted outputs). Stage-specific
+documents MAY use shorthand (“when enabled”), but MUST NOT contradict this section.
+
+**Expression language (`expr_v1`).** `enabled_if` and `required_if` use the following total function
+over the effective run config (after defaults are applied):
+
+- `{"const": true|false}`: literal
+- `{"path": "a.b.c"}`: config value at `a.b.c` interpreted as boolean (`true`/`false`)
+  - If the path does not exist, it evaluates to `false`.
+  - If the value exists but is not boolean, the implementation MUST fail closed at config-validate
+    time.
+- `{"any_of": [expr, ...]}`: OR
+- `{"all_of": [expr, ...]}`: AND
+- `{"not": expr}`: NOT
+
+**Requiredness function.** The orchestrator / stage wrapper MUST compute:
+
+- `stage_enabled(stage_id, cfg) -> bool` by evaluating that stage’s `enabled_if`.
+- `output_required(stage_id, contract_id, cfg) -> bool`:
+  - If `stage_enabled(stage_id, cfg)` is `false`: return `false`.
+  - Else, return:
+    - `true` if `contract_id` is listed under `required_contract_ids_when_enabled`
+    - `false` if `contract_id` is listed under `optional_contract_ids_when_enabled`
+    - `eval(required_if)` if `contract_id` is listed under `conditional_required_contracts`
+  - If `contract_id` is not covered by any list for that stage: implementations MUST fail closed
+    (treat as a spec/registry mismatch).
+
+**Publish-gate integration.** For each binding-derived expected output, the stage wrapper MUST pass
+`required=output_required(stage_id, contract_id, cfg)` into `expected_outputs[]`. Missing outputs
+with `required=true` MUST be treated as validation failures (no promotion). Missing outputs with
+`required=false` MUST NOT be treated as failures and MUST NOT be contract-validated.
+
+```yaml
+# stage_enablement_matrix_v1 (normative)
+#
+# Notes:
+# - The contract_ids listed here MUST correspond to entries in ../contracts/contract_registry.json.
+# - This matrix is scoped to v0.1 behavior. v0.2+ features are represented as conditional-required
+#   with reserved config keys that default to false when absent.
+stage_enablement_matrix_v1:
+  orchestrator:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - manifest
+      - range_config
+      - counters
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts:
+      - contract_id: audit_event
+        required_if: { path: control_plane.audit.enabled }
+      - contract_id: cache_provenance
+        required_if: { path: cache.emit_cache_provenance }
+      - contract_id: telemetry_baseline_profile
+        required_if: { path: telemetry.baseline_profile.enabled }
+      # v0.2+ (ADR-0008): default false when absent
+      - contract_id: threat_intel_pack_manifest
+        required_if: { path: threat_intel.enabled }
+      - contract_id: threat_intel_indicator
+        required_if: { path: threat_intel.enabled }
+
+  lab_provider:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - lab_inventory_snapshot
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  runner:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - ground_truth
+      - requirements_evaluation
+      - resolved_inputs_redacted
+      - side_effect_ledger
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts:
+      - contract_id: runner_executor_evidence
+        required_if: { path: runner.atomic.capture_executor_metadata }
+      - contract_id: cleanup_verification
+        required_if: { path: runner.atomic.cleanup.verify }
+      - contract_id: principal_context
+        required_if: { path: runner.identity.emit_principal_context }
+      - contract_id: state_reconciliation_report
+        required_if: { path: runner.atomic.state_reconciliation.enabled }
+
+  telemetry:
+    enabled_if: { path: telemetry.otel.enabled }
+    required_contract_ids_when_enabled:
+      - telemetry_validation
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts:
+      - contract_id: pcap_manifest
+        required_if: { path: telemetry.sources.pcap.enabled }
+      - contract_id: netflow_manifest
+        required_if: { path: telemetry.sources.netflow.enabled }
+
+  normalization:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - ocsf_event_envelope
+      - mapping_coverage
+      - mapping_profile_snapshot
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  validation:
+    enabled_if: { path: validation.enabled }
+    required_contract_ids_when_enabled:
+      - criteria_pack_manifest
+      - criteria_entry
+      - criteria_result
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  detection:
+    enabled_if: { path: detection.sigma.enabled }
+    required_contract_ids_when_enabled:
+      - bridge_coverage
+      - bridge_compiled_plan
+      - bridge_mapping_pack
+      - bridge_router_table
+      - detection_instance
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  scoring:
+    enabled_if: { path: scoring.enabled }
+    required_contract_ids_when_enabled:
+      - summary
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  reporting:
+    enabled_if:
+      any_of:
+        - { path: reporting.emit_json }
+        - { path: reporting.emit_html }
+    required_contract_ids_when_enabled: []
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts:
+      - contract_id: report.schema
+        required_if: { path: reporting.emit_json }
+
+  signing:
+    enabled_if: { path: security.signing.enabled }
+    required_contract_ids_when_enabled: []
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+```
 
 Failure behavior (normative):
 
@@ -1414,11 +1594,20 @@ Stage outcome ordering (normative):
 `manifest.status` MUST be derived from the set of stage outcomes as:
 
 - `failed` if any enabled stage has `status=failed` and `fail_mode=fail_closed`
+
 - else `partial` if any enabled stage has `status=failed` and `fail_mode=warn_and_skip`
+
 - else `success` if all enabled stages have `status=success`
 
-When `health.emit_health_files=true`, stage outcomes MUST also be written to
-`runs/<run_id>/logs/health.json`.
+- When `operability.health.emit_health_files=true`, stage outcomes MUST also be written to
+  `runs/<run_id>/logs/health.json`.
+
+- `runs/<run_id>/logs/health.json` MUST mirror the same ordered stage/substage outcomes as
+  `runs/<run_id>/manifest.json` for the same `run_id`.
+
+- `runs/<run_id>/logs/health.json.status` MUST equal `runs/<run_id>/manifest.json.status`.
+
+When `operability.health.emit_health_files=false`, `runs/<run_id>/logs/health.json` MAY be absent.
 
 Recommended manifest additions (normative in schema when implemented):
 

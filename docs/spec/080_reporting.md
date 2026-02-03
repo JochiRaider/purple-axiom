@@ -79,14 +79,6 @@ This document defines the reporting artifacts, required outputs, and trending ke
 runs. It specifies both machine-readable JSON outputs for CI integration and human-readable report
 structures for operator review.
 
-## Overview
-
-The reporting stage transforms scoring outputs into actionable artifacts. Reports serve three
-primary audiences: CI pipelines that gate on thresholds, operators triaging detection gaps, and
-analysts tracking coverage trends over time. The reporting contract emphasizes determinism,
-traceability to upstream artifacts, and alignment with the normative gap taxonomy defined in
-[Scoring metrics](070_scoring_metrics.md).
-
 ## Scope
 
 This document covers:

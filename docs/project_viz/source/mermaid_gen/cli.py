@@ -1,4 +1,3 @@
-# docs/project_viz/source/mermaid_gen/cli.py
 from __future__ import annotations
 
 import argparse
@@ -10,7 +9,6 @@ from .diagrams.registry import DIAGRAMS, RenderConfig
 from .io import load_model
 from .validate import validate_model
 from .writer import write_md
-from .workflow_suite import WorkflowSuiteConfig, render_workflow_suite
 
 
 def _default_paths() -> tuple[Path, Path]:
@@ -72,25 +70,6 @@ def main() -> None:
             "trust zones). Errors always fail."
         ),
     )
-    parser.add_argument(
-        "--workflow-suite",
-        action="store_true",
-        help=(
-            "Generate per-workflow outputs under workflows/<workflow_id>/ and a "
-            "workflows/index.md page. In this mode, only global diagrams (trust "
-            "boundaries, run status) are written to the out-dir root."
-        ),
-    )
-    parser.add_argument(
-        "--workflow-ids",
-        type=str,
-        default="",
-        help=(
-            "Comma-separated workflow ids to include in --workflow-suite mode "
-            "(default: all workflows in the model)."
-        ),
-    )
-
     args = parser.parse_args()
 
     model = load_model(args.model)
@@ -106,18 +85,7 @@ def main() -> None:
 
     out_dir: Path = args.out_dir
     cfg = RenderConfig(workflow_id=args.workflow, trust_view=args.trust_view)
-    
-    if args.workflow_suite:
-        wf_ids = None
-        if args.workflow_ids.strip():
-            wf_ids = tuple(w.strip() for w in args.workflow_ids.split(",") if w.strip())
-        render_workflow_suite(
-            model,
-            out_dir,
-            cfg=WorkflowSuiteConfig(trust_view=args.trust_view, workflow_ids=wf_ids),
-        )
-        return
-    
+
     for spec in DIAGRAMS:
         diagram_code = spec.render(model, cfg)
         write_md(out_dir / spec.filename, spec.title, diagram_code)

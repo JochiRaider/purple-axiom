@@ -2,6 +2,23 @@
 title: Normalization to OCSF
 description: Defines OCSF normalization rules, versioning policy, and required artifacts.
 status: draft
++category: spec
+tags: [ocsf, normalization, mapping, versioning]
+related:
+  - 025_data_contracts.md
+  - 040_telemetry_pipeline.md
+  - 042_osquery_integration.md
+  - 045_storage_formats.md
+  - 055_ocsf_field_tiers.md
+  - 065_sigma_to_ocsf_bridge.md
+  - 070_scoring_metrics.md
+  - 085_golden_datasets.md
+  - 120_config_reference.md
+  - ../adr/ADR-0001-project-naming-and-versioning.md
+  - ../adr/ADR-0002-event-identity-and-provenance.md
+  - ../adr/ADR-0003-redaction-policy.md
+  - ../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md
+  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
 ---
 
 # Normalization to OCSF
@@ -64,10 +81,6 @@ Notes:
 
 - TODO: specify fixture roots for mapping unit tests and mapping pack conformance tests (see
   `100_test_strategy_ci.md`, "Normalization and mapping").
-
-This document defines the normalization rules and mapping approach for producing OCSF events in
-Purple Axiom. It specifies versioning policy, required envelopes, and the run bundle artifacts that
-make normalization deterministic and auditable.
 
 ## Overview
 

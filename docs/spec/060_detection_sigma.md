@@ -36,13 +36,13 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id            | path/glob                           | Required?                            |
-| ---------------------- | ----------------------------------- | ------------------------------------ |
-| `bridge_compiled_plan` | `bridge/compiled_plans/*.plan.json` | required (when detection is enabled) |
-| `bridge_coverage`      | `bridge/coverage.json`              | required (when detection is enabled) |
-| `bridge_mapping_pack`  | `bridge/mapping_pack_snapshot.json` | required (when detection is enabled) |
-| `bridge_router_table`  | `bridge/router_table.json`          | required (when detection is enabled) |
-| `detection_instance`   | `detections/detections.jsonl`       | required (when detection is enabled) |
+| contract_id            | path/glob                           | Required?                                      |
+| ---------------------- | ----------------------------------- | ---------------------------------------------- |
+| `bridge_compiled_plan` | `bridge/compiled_plans/*.plan.json` | required (when `detection.sigma.enabled=true`) |
+| `bridge_coverage`      | `bridge/coverage.json`              | required (when `detection.sigma.enabled=true`) |
+| `bridge_mapping_pack`  | `bridge/mapping_pack_snapshot.json` | required (when `detection.sigma.enabled=true`) |
+| `bridge_router_table`  | `bridge/router_table.json`          | required (when `detection.sigma.enabled=true`) |
+| `detection_instance`   | `detections/detections.jsonl`       | required (when `detection.sigma.enabled=true`) |
 
 #### Required inputs
 
@@ -77,13 +77,12 @@ Notes:
 - TODO: specify fixture roots for Sigma compilation and router-table conformance (see
   `100_test_strategy_ci.md`, "Sigma compilation (bridge)").
 
-This specification defines how Purple Axiom compiles and evaluates Sigma rules against normalized
-OCSF events using the Sigma-to-OCSF Bridge.
-
 ## Overview
 
-Sigma rules are the default, portable detection language for Purple Axiom. Rules are evaluated
-against **normalized OCSF events** (not raw logs) using the **Sigma-to-OCSF Bridge**.
+This specification defines how Purple Axiom compiles and evaluates Sigma rules against normalized
+OCSF events using the Sigma-to-OCSF Bridge. Sigma rules are the default, portable detection language
+for Purple Axiom. Rules are evaluated against **normalized OCSF events** (not raw logs) using the
+**Sigma-to-OCSF Bridge**.
 
 See the [Sigma-to-OCSF Bridge specification][sigma-bridge].
 

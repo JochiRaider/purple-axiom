@@ -2,6 +2,16 @@
 title: Scoring and metrics
 description: Defines scoring metrics, gates, thresholds, and default weights for run evaluation.
 status: draft
+category: spec
+tags: [scoring, metrics, gates, thresholds]
+related:
+  - 025_data_contracts.md
+  - 055_ocsf_field_tiers.md
+  - 060_detection_sigma.md
+  - 080_reporting.md
+  - 100_test_strategy_ci.md
+  - 120_config_reference.md
+  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
 ---
 
 # Scoring and metrics
@@ -37,7 +47,7 @@ This section is the stage-local view of:
 | `range_config`        | `inputs/range.yaml`                | required                                         |
 | `ground_truth`        | `ground_truth.jsonl`               | required                                         |
 | `criteria_result`     | `criteria/results.jsonl`           | required (when `validation.enabled=true`)        |
-| `detection_instance`  | `detections/detections.jsonl`      | required (when detection is enabled)             |
+| `detection_instance`  | `detections/detections.jsonl`      | required (when `detection.sigma.enabled=true`)   |
 | `mapping_coverage`    | `normalized/mapping_coverage.json` | required                                         |
 | `ocsf_event_envelope` | `normalized/ocsf_events.jsonl`     | required (Tier 1 coverage + latency attribution) |
 

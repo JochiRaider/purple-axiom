@@ -67,7 +67,7 @@ Notes:
 - TODO: specify fixture used by scenario target-selector tests ("Scenario selection tests") for
   deterministic target resolution.
 
-## Purpose
+## Overview
 
 Define a pluggable interface for resolving lab assets without coupling Purple Axiom to any single
 provisioning system.

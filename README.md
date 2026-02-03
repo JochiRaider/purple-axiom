@@ -466,7 +466,6 @@ Configuration and contract validation are first-class parts of the runtime and C
   - OpenTelemetry Collector Contrib 0.143.1
   - pySigma 1.1.0
   - pySigma-pipeline-ocsf 0.1.1
-  - DuckDB 1.4.3
   - pyarrow 22.0.0
   - jsonschema 4.26.0
   - osquery 5.14.1 (for lab endpoints)

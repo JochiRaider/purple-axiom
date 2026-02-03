@@ -2,9 +2,19 @@
 title: osquery integration (telemetry and normalization)
 description: Defines v0.1 osquery ingestion, staging, normalization, and conformance requirements.
 status: draft
++category: spec
+tags: [telemetry, osquery, ingestion, normalization, ocsf]
+related:
+  - 040_telemetry_pipeline.md
+  - 050_normalization_ocsf.md
+  - 045_storage_formats.md
+  - 120_config_reference.md
+  - ../adr/ADR-0002-event-identity-and-provenance.md
 ---
 
 # osquery integration (telemetry and normalization)
+
+## Overview
 
 This document defines the v0.1 integration path for osquery as a telemetry source.
 
@@ -12,12 +22,6 @@ This document defines the v0.1 integration path for osquery as a telemetry sourc
 - OpenTelemetry Collector ingestion.
 - Raw staging layout in the run bundle.
 - Minimal, deterministic normalization to OCSF, including routing semantics.
-
-## Overview
-
-osquery results are ingested from the filesystem logger, staged as raw evidence, optionally
-converted to Parquet, and normalized into OCSF with deterministic routing and identity. Validation
-relies on fixtures and stable output comparisons.
 
 ## Canonical osquery output format (continuous monitoring)
 

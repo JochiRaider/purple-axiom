@@ -2,6 +2,7 @@
 title: Test strategy and CI
 description: Defines the unit, integration, and CI gating expectations for deterministic runs.
 status: draft
+tags: []
 category: spec
 related:
   - 020_architecture.md

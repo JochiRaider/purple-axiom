@@ -679,6 +679,22 @@ Finalize semantics (normative):
   `ADR-0005-stage-outcomes-and-failure-classification.md`).
 - If validation fails, `finalize()` MUST NOT promote any staged outputs into their final run bundle
   locations.
+- Atomicity scope (normative; v0.1):
+  - Filesystem-level atomicity MUST be defined per destination path (per
+    `ExpectedOutput.artifact_path`).
+  - The publish gate MUST NOT claim or rely on filesystem-global atomicity across the entire
+    `expected_outputs[]` set.
+  - Stage-level durability is logical and outcome-driven:
+    - Contract-backed outputs MUST be treated as durable/published only when the terminal stage
+      outcome has been recorded for that stage (the outcome is the commit record).
+    - If a restart observes output/outcome mismatch, the orchestrator MUST apply deterministic
+      reconciliation rules (see ADR-0004).
+- Crash mid-promotion (normative; v0.1):
+  - If, after acquiring the run lock, a restart observes one or more final-path outputs present for
+    a stage but no recorded terminal stage outcome, the orchestrator MUST perform deterministic
+    reconciliation per ADR-0004 (re-validate the final-path outputs; record success if valid;
+    otherwise fail closed and mark downstream stages skipped).
+  - `.staging/**` MUST NOT be treated as published outputs during reconciliation.
 - If validation succeeds, `finalize()` MUST promote outputs using atomic publish semantics (atomic
   rename / replace into final locations).
 - After a successful `finalize()`, the publish gate implementation MUST delete (or leave empty)

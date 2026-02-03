@@ -1150,6 +1150,28 @@ Fixture set (normative):
       `pa.publisher.v1`, and
     - `runs/<run_id>/.staging/<stage_id>/` is absent (or empty) after publish.
 
+- `publisher_crash_mid_promotion_reconciliation` (crash mid-promotion is reconciled
+  deterministically)
+
+  - Provide a minimal run bundle fixture with a stage that has at least two REQUIRED
+    `expected_outputs[]` entries under different run-relative prefixes (for example,
+    `criteria/manifest.json` and `logs/counters.json`) staged under
+    `runs/<run_id>/.staging/<stage_id>/`.
+  - Simulate a crash after promoting at least one expected output into its final path but before
+    promoting all REQUIRED outputs and before recording the terminal stage outcome.
+    - The harness MAY use a test-only failpoint, signal, or injected kill; the mechanism is
+      implementation-defined.
+  - Assertions (normative):
+    - On restart, the orchestrator reconciliation pass MUST re-run publish-gate contract validation
+      over the final-path outputs for the stage (per ADR-0004).
+    - Because at least one REQUIRED output is missing, validation MUST fail and the orchestrator
+      MUST record a fail-closed stage outcome.
+    - The failure MUST use a stable `reason_code` across repeated restarts (RECOMMENDED:
+      `storage_io_error` for partial publish).
+    - Downstream stages MUST be marked `skipped` (blocked by upstream failure), and repeated
+      restarts MUST be idempotent (no additional mutation beyond idempotent outcome recording and
+      `.staging/**` cleanup).
+
 - `publisher_canonical_json_and_jsonl_bytes` (serialization lock)
 
   - Using the reference publisher SDK:

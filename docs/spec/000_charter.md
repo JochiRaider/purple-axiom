@@ -34,7 +34,8 @@ Conformance anchors (v0.1):
   except under explicitly reserved workspace locations (for example `runs/.locks/`, `cache/`, and
   `exports/`). See the Architecture spec "Workspace layout (v0.1+ normative)".
 - **Stage staging root:** stages write to `runs/<run_id>/.staging/<stage_id>/` and MUST publish by
-  atomic rename/move into final run-bundle paths after publish-gate validation.
+  per-path atomic replace (rename/replace) into final run-bundle paths after publish-gate
+  validation.
 - **Stage identifiers vs output directories:** stage identifiers appear in stage outcomes
   (`manifest.json` and `logs/health.json` when enabled) and do not necessarily match output
   directory names (for example, stage `reporting` publishes under `report/`, and stage `signing`

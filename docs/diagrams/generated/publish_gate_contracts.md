@@ -24,7 +24,7 @@ flowchart LR
   end
 
   %% --- canonical stage order ---
-  lab_provider --> runner
+  lab_provider -. "optional" .-> runner
   runner --> telemetry
   telemetry --> normalization
   normalization --> validation
@@ -36,8 +36,8 @@ flowchart LR
   %% --- publish discipline (stage writes -> validate -> atomic promote) ---
   orchestrator_cli --> publish_gate
   orchestrator_cli -->|".staging/#lt;stage_id#gt;/**"| staging_area
-  publish_gate -->|"validate required schema contracts before publish"| staging_area
-  publish_gate -->|"publish via atomic rename into final run-bundle paths"| run_bundle_store
+  publish_gate -->|"validate required schema contracts before publish (on failure: emit contract validation report, do not publish final paths; see teardown.yaml for .staging cleanup)"| staging_area
+  publish_gate -->|"if validation succeeds, publish via atomic rename into final run-bundle paths"| run_bundle_store
   publish_gate -.->|"emit deterministic contract validation report on validation failure: logs/contract_validation/#lt;stage_id#gt;.json"| run_logs_store
 
   %% --- contract seams: each stage owns a run-bundle write subtree ---

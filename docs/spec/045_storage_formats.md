@@ -74,8 +74,10 @@ Path notation (normative):
 - `.staging/**` is non-contracted scratch space:
   - It MUST NOT be referenced by `evidence_refs[]` (or any other evidence pointer fields).
   - It MUST NOT be relied upon for pipeline correctness after publish.
-- Stages MUST publish outputs by an atomic rename/move from `.staging/<stage_id>/` into the final
-  contracted locations under `runs/<run_id>/` (see ADR-0004 and data contracts publish-gate rules).
+- Stages MUST publish outputs using atomic replace semantics per final-path artifact
+  (rename/replace), from `.staging/<stage_id>/` into the final contracted locations under
+  `runs/<run_id>/` (see ADR-0004 and data contracts publish-gate rules). Atomicity is not required
+  across multiple artifact paths.
 - After a stage completes (success or failure), `.staging/<stage_id>/` SHOULD be absent or empty.
   Stages SHOULD remove the staging directory on exit (best-effort). CI MAY lint for any remaining
   `.staging/<stage_id>/**` entries as an incomplete publish-gate signal.

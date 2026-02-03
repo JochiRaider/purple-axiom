@@ -554,8 +554,10 @@ For any stage that publishes contract-backed artifacts:
   - `.staging/**` MUST NOT be referenced by `evidence_refs[]` (or any other contracted evidence
     pointer) and MUST be excluded from signing/checksumming inputs.
 - Atomic publish and cleanup:
-  - Publishing MUST be implemented as an atomic rename/move from staging into final run-bundle
-    paths.
+  - Publishing MUST be implemented as an atomic replace per final-path artifact (per run-relative
+    `artifact_path`; rename/replace semantics).
+  - Atomicity is not required across multiple artifact paths; stage-level durability is governed by
+    the recorded terminal stage outcome and deterministic reconciliation rules (see ADR-0004).
   - On successful publish, the stage MUST delete (or leave empty) its
     `runs/<run_id>/.staging/<stage_id>/` directory.
   - If validation fails, stages MUST NOT partially publish final-path artifacts.
@@ -568,6 +570,11 @@ For any stage that publishes contract-backed artifacts:
   - If terminal state cannot be derived due to inconsistent artifacts (for example, outputs present
     but the stage outcome is missing), implementations MUST fail closed with a cross-cutting
     `reason_code` (`input_missing` or `storage_io_error` per ADR-0005).
+  - For inconsistent artifacts, implementations SHOULD choose a deterministic `reason_code` per
+    ADR-0007’s preference rules:
+    - If the inconsistency implies a missing required artifact, prefer `input_missing`.
+    - If the inconsistency implies partial publish, corruption, or unreadable artifacts, prefer
+      `storage_io_error`.
 
 Validation by `validation_mode` (registry-driven):
 

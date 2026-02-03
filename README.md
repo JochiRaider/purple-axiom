@@ -13,47 +13,46 @@ adversary-emulation scenarios, captures endpoint telemetry from lab assets, norm
 **OCSF 1.7.0**, evaluates detections using **Sigma**, and produces **deterministic, reproducible run
 bundles** suitable for regression testing and trend tracking.
 
-Purple Axiom is specified as a contract-first pipeline: each stage reads inputs from a run bundle
-and publishes contract-backed outputs back into the same run bundle. The **filesystem is the
-inter-stage contract boundary**.
-
-## Project status and version scope
-
 This repository is **spec-first**. The authoritative behavior is defined by the specification set
-under `docs/spec/` and the ADRs under `docs/adr/`.
+under `docs/spec/` and the ADRs under `docs/adr/`. Where this README and the spec set disagree,
+follow the **specs and ADRs**.
 
-- **v0.1 (normative):** single-scenario runs, one-shot orchestrator, filesystem-coordinated stages,
-  Atomic Red Team execution, endpoint-first telemetry, OCSF normalization, criteria validation,
-  Sigma detection evaluation, scoring, and reporting.
-- **v0.2+ (reserved or future):** multi-action plans, matrix expansion, and an operator interface /
-  appliance model (see `docs/spec/115_operator_interface.md`).
+## Part 1: Executive summary
 
-Where this README and the spec set disagree, follow the **spec and ADRs**.
+### What this project does
 
-## Why Purple Axiom
+Purple Axiom defines a repeatable, defensible detection-engineering loop with explicit artifacts you
+can diff, gate, and trend over time:
 
-Most detection engineering loops still look like: run a test, eyeball logs, and call it “good
-enough.” Purple Axiom specifies a repeatable, defensible loop with explicit artifacts you can diff,
-gate, and trend:
+- **Ground truth**: what ran, when, where, and with what resolved inputs
+- **Telemetry**: what was collected (and what was not), including runtime canaries and policy checks
+- **Normalization**: how raw events map into OCSF, including mapping coverage
+- **Validation**: expected vs observed telemetry and cleanup verification (criteria packs)
+- **Detections**: what rules were applicable/executable and what fired (Sigma)
+- **Scoring**: coverage, latency, and deterministic gap classification with threshold gate inputs
+- **Reporting**: a run bundle you can diff, gate in CI, and trend over time
+- **Integrity (optional)**: checksums and signatures over selected artifacts for tamper evidence
 
-- **Ground truth:** what ran, when, where, and with what resolved inputs
-- **Telemetry:** what was collected (and what was not), including runtime canaries and policy checks
-- **Normalization:** how raw events mapped to a portable schema (OCSF), including mapping coverage
-- **Validation:** expected vs observed telemetry and cleanup verification (criteria packs)
-- **Detections:** what rules were applicable, executable, and what fired (Sigma)
-- **Scoring:** coverage, latency, and deterministic gap classification, plus threshold gate inputs
-- **Reporting:** a run bundle you can diff, gate in CI, and trend over time
-- **Integrity (optional):** checksums/signatures over selected artifacts for tamper evidence
+### Why it exists
 
-## Core philosophy
+Most detection engineering loops still look like “run a test, eyeball logs, call it good enough.”
 
-Treat detections as theorems you are trying to prove, and adversary emulation as the axioms (ground
-truth) you build upon.
+Purple Axiom replaces that with a **contract-backed** pipeline where each stage reads its inputs
+from the **run bundle** and publishes schema-validated outputs back into the same run bundle. The
+**filesystem is the inter-stage contract boundary**.
 
-This project prioritizes measurable outcomes tied to specific techniques and behaviors, rather than
-opaque “security scores.”
+### Who it is for
 
-## Scope and explicit non-goals
+- Detection engineers validating visibility and detection logic
+- SOC analysts validating investigative pivots and alert quality
+- Purple teams and continuous security testing operators running unattended lab workflows
+
+### Core philosophy
+
+- Treat detections as theorems you are trying to prove, and adversary emulation as the axioms
+  (ground truth) you build upon.
+
+### What it is not
 
 Purple Axiom is designed for isolated lab environments and emphasizes detectability validation
 rather than stealth, persistence, or destructive outcomes.
@@ -70,58 +69,110 @@ Explicit non-goals for v0.1 include:
 - A required long-running daemon, distributed control plane, or built-in scheduler
 - Service-to-service RPC as a required coordination mechanism between core pipeline stages
 - Required network sensor capture and ingestion as baseline functionality (pcap, NetFlow/IPFIX,
-  Zeek, Suricata); placeholder contracts do not imply required implementation
+  Zeek, Suricata)
 - Network or threat-intelligence enrichment that requires outbound network access by default
 - Runtime self-update or “fetch dependencies at execution time” behavior
-- Pipeline correctness depending on native container exports (for example EVTX export, PCAP
-  retention); any such features require explicit config gates and disclosure semantics
+- Pipeline correctness depending on native container exports (any such features require explicit
+  config gates and disclosure semantics)
 
-See `docs/spec/010_scope.md` for the authoritative v0.1 scope boundary.
+Authoritative v0.1 scope boundary: `docs/spec/010_scope.md`.
 
-## Safety constraints and secure defaults
+### Project status and version scope
+
+- **v0.1 (normative):** single-scenario runs, one-shot orchestrator, filesystem-coordinated stages,
+  Atomic Red Team execution, endpoint-first telemetry, OCSF normalization, criteria validation,
+  Sigma detection evaluation, scoring, reporting, and optional signing.
+- **v0.2+ (reserved / future):** multi-action plans, matrix expansion, threat-intel inputs, and an
+  operator interface / appliance model (see `docs/spec/115_operator_interface.md` and ADR-0006).
+
+### Safety constraints and secure defaults
 
 Purple Axiom intentionally runs adversary emulation. It MUST be safe to run in a lab and MUST fail
 closed when safety controls are violated.
 
 Key constraints:
 
-- The range MUST be operated as an isolated lab, not a production environment.
+- The range MUST be operated as an **isolated lab**, not a production environment.
 
 - Cleanup is required, recorded, and surfaced in reporting and/or validation artifacts.
 
-- Lab assets SHOULD default to an outbound egress-deny posture.
+- Lab assets SHOULD default to an outbound egress-deny posture:
 
   - Scenario-level network intent is expressed via `scenario.safety.allow_network`.
   - Effective outbound policy is the logical AND of `scenario.safety.allow_network` and
     `security.network.allow_outbound`.
-  - Enforcement of outbound posture MUST occur at the lab boundary (provider / lab controls), not as
-    a best-effort runner behavior.
+  - Enforcement MUST occur at the lab boundary (provider / lab controls), not as best-effort runner
+    behavior.
   - Unexpected egress is treated as run-fatal and MUST be surfaced as deterministic validation
     evidence.
 
-- Long-term artifacts MUST avoid storing secrets.
+- Long-term artifacts MUST avoid storing secrets:
 
   - Redaction is configurable and deterministic.
   - When redaction is disabled, unredacted evidence MUST NOT silently land in standard long-term
-    locations; it is either withheld (default) or quarantined under `unredacted/` with explicit
+    locations. It is either withheld (default) or quarantined under `unredacted/` with explicit
     opt-in and disclosure controls.
 
-- The detection subsystem MUST treat Sigma as non-executable content (no arbitrary code execution).
+- The detection subsystem MUST treat Sigma as **non-executable content** (no arbitrary code
+  execution).
 
-See `docs/spec/090_security_safety.md` and `docs/adr/ADR-0003-redaction-policy.md` for the
-authoritative safety and redaction posture.
+Authoritative references: `docs/spec/090_security_safety.md` and
+`docs/adr/ADR-0003-redaction-policy.md`.
 
-## Architecture overview
+## Part 2: Architectural overview
+
+### Topology and coordination model
 
 Purple Axiom v0.1 uses a single-host, local-first topology with a one-shot orchestrator and
-file-based stage coordination. Each stage reads inputs from the run bundle and writes outputs back
-to the run bundle.
+**file-based stage coordination**.
 
-Stages publish via a **publish gate**: outputs are written to staging under the run bundle and then
-atomically renamed into their final locations, so downstream stages never observe partially written
-directories.
+- Each run produces one run bundle at `runs/<run_id>/`.
 
-Stable v0.1 stage identifiers are:
+- Each stage reads inputs from the run bundle and publishes outputs back to the run bundle.
+
+- The orchestrator is responsible for acquiring a per-run lock and for recording stage outcomes in
+  the run manifest.
+
+- Stages publish via a **publish gate**:
+
+  - write outputs to `runs/<run_id>/.staging/<stage_id>/`
+  - validate contract-backed outputs against local schemas
+  - atomically promote staged outputs into their final run-bundle locations
+
+#### Workspace root boundary (v0.1+)
+
+The workspace root is the directory that contains `runs/`. Only reserved workspace directories may
+be written outside a run bundle (for example `runs/.locks/`, and optionally `cache/` and
+`exports/`).
+
+```mermaid
+flowchart TB
+  subgraph W["<workspace_root>/"]
+    runs["runs/ (required)"]
+    cache["cache/ (reserved; optional)"]
+    exports["exports/ (reserved; optional)"]
+    state["state/ (reserved; v0.2+)"]
+    plans["plans/ (reserved; v0.2+)"]
+    wlogs["logs/ (reserved; v0.2+)"]
+    locks["runs/.locks/ (required)"]
+  end
+
+  subgraph R["runs/<run_id>/ (run bundle)"]
+    manifest["manifest.json"]
+    inputs["inputs/ (pinned inputs + baseline refs)"]
+    gt["ground_truth.jsonl"]
+    dirs["stage outputs (runner/, raw_parquet/, normalized/, …)"]
+  end
+
+  runs --> R
+  locks -. exclusive write lock .-> R
+```
+
+Authoritative reference: `docs/spec/020_architecture.md` ("Workspace layout (v0.1+ normative)").
+
+### Pipeline stages (v0.1)
+
+Stable v0.1 stage identifiers:
 
 1. `lab_provider` resolves target inventory and publishes a deterministic inventory snapshot.
 1. `runner` executes scenario actions and emits an append-only ground-truth timeline plus runner
@@ -138,352 +189,392 @@ Stable v0.1 stage identifiers are:
    CI gating.
 1. `signing` (optional) emits integrity artifacts for selected run bundle content.
 
-Note: Telemetry collection may run concurrently with the runner (collectors are typically started
-before `runner` begins and stopped after it completes). The `telemetry` stage boundary refers to the
-post-run harvest/validation/publish step that materializes `raw_parquet/**` for downstream stages.
-
-For the authoritative v0.1 topology and IO boundaries, see
-`docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md`.
+Note: telemetry collection MAY run concurrently with the runner. The `telemetry` stage boundary
+refers to the post-run harvest/validation/publish step that materializes `raw_parquet/**` for
+downstream stages.
 
 ```mermaid
 flowchart LR
-  subgraph ci_environment["CI Environment"]
-    lab_provider["Lab Provider Stage"]
-    runner["Runner Stage"]
-    telemetry["Telemetry Stage"]
-    normalization["Normalization Stage"]
-    validation["Validation Stage"]
-    detection["Detection Stage"]
-    scoring["Scoring Stage"]
-    reporting["Reporting Stage"]
-    signing["Signing Stage (optional)"]
-  end
-  lab_provider --> runner
-  runner --> telemetry
-  telemetry --> normalization
-  normalization --> validation
-  validation --> detection
-  detection --> scoring
-  scoring --> reporting
-  reporting -. "optional" .-> signing
+  lab_provider["lab_provider"] --> runner["runner"]
+  runner --> telemetry["telemetry"]
+  telemetry --> normalization["normalization"]
+  normalization --> validation["validation"]
+  validation --> detection["detection"]
+  detection --> scoring["scoring"]
+  scoring --> reporting["reporting"]
+  reporting -. "optional" .-> signing["signing"]
 ```
 
-## Range lifecycle verbs
+Authoritative topology and IO boundaries:
+`docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md`.
 
-The orchestrator may expose a small set of stable range lifecycle verbs (entry points) that map to
-deterministic subsets of stages. In v0.1, only `simulate` is required for completeness; other verbs
-may exist as an interface surface when implemented.
+### Range lifecycle verbs (entrypoints)
+
+The orchestrator MAY expose stable lifecycle verbs (entrypoints) that map to deterministic subsets
+of stages. In v0.1, `simulate` is the only verb required for completeness; other verbs are allowed
+interface surfaces when implemented.
 
 Common invariants (v0.1):
 
-- Every verb invocation targets exactly one run bundle (`runs/<run_id>/`) and MUST acquire the run
-  lock (atomic create of `runs/.locks/<run_id>.lock`) before creating or mutating run-bundle
-  artifacts (including `manifest.json`).
-- Any verb that writes contract-backed artifacts MUST follow publish-gate semantics
+- Every verb invocation targets exactly one run bundle and MUST acquire the run lock
+  (`runs/.locks/<run_id>.lock`) before mutating run-bundle artifacts.
+- Operator inputs are pinned under `runs/<run_id>/inputs/` (at minimum `inputs/range.yaml` and
+  `inputs/scenario.yaml`) before the first stage runs.
+- Any verb that writes contract-backed artifacts MUST use publish-gate semantics
   (`.staging/<stage_id>/` then atomic publish).
 
 Verb mapping (v0.1):
 
-- `build`: inventory resolution only (`lab_provider`).
-- `simulate`: canonical v0.1 stage sequence (`lab_provider` → `runner` → `telemetry` →
-  `normalization` → `validation` → `detection` → `scoring` → `reporting` → optional `signing`).
-- `replay`: downstream-only recomputation from existing telemetry datasets (`normalization` →
+- `build`: inventory resolution and input pinning (`lab_provider`).
+- `simulate`: canonical stage sequence (`lab_provider` → `runner` → `telemetry` → `normalization` →
   `validation` → `detection` → `scoring` → `reporting` → optional `signing`).
+- `replay`: downstream recomputation from existing datasets (default: `normalization` → `validation`
+  → `detection` → `scoring` → `reporting` → optional `signing`).
 - `export`: package run bundles for sharing (policy-controlled; excludes `unredacted/**` by
   default).
-- `destroy`: clean up run-local resources and (optionally) tear down lab resources (explicit
-  enable).
+- `destroy`: clean up run-local resources and optionally tear down lab resources (explicit enable
+  required).
 
-Authoritative definition: `docs/spec/020_architecture.md`.
+```mermaid
+flowchart TB
+  subgraph verbs["Orchestrator entrypoints"]
+    build["build"]
+    simulate["simulate (required)"]
+    replay["replay"]
+    exportv["export"]
+    destroy["destroy"]
+  end
 
-## Key concepts
+  subgraph stages["Stages"]
+    lp["lab_provider"]
+    run["runner"]
+    tel["telemetry"]
+    norm["normalization"]
+    val["validation"]
+    det["detection"]
+    score["scoring"]
+    rep["reporting"]
+    sign["signing (optional)"]
+  end
 
-- **Scenario:** a planned set of actions/tests executed by the runner.
+  build --> lp
 
-- **Action:** a single scenario step with a run-scoped `action_id` and a stable join key for
-  cross-run comparisons.
+  simulate --> lp --> run --> tel --> norm --> val --> det --> score --> rep
+  rep -. "optional" .-> sign
 
-- **Run:** a single execution instance with a unique `run_id` (UUID, canonical hyphenated form).
+  replay --> norm --> val --> det --> score --> rep
+  rep -. "optional" .-> sign
 
-- **Run bundle:** the on-disk artifact bundle rooted at `runs/<run_id>/`, indexed by
-  `manifest.json`.
+  exportv --> bundle["export bundle (implementation-defined)"]
+  destroy --> cleanup["cleanup (implementation-defined)"]
+```
 
-- **Inventory snapshot:** a deterministic snapshot of resolved lab targets, written per run
-  (recommended: `logs/lab_inventory_snapshot.json`).
+Authoritative definition: `docs/spec/020_architecture.md` ("Range lifecycle verbs (v0.1; normative
+where stated)").
 
-- **Ground truth:** append-only timeline of what executed, with expected-observability hints and
-  runner evidence.
+### Publish gate semantics (why downstream never sees partial outputs)
 
-- **Normalized events:** OCSF envelopes with required provenance fields and deterministic event
-  identity (`metadata.event_id`).
+The publish gate is the contract and crash-safety boundary between stages:
 
-- **Mapping profile:** deterministic mapping definition used by the normalizer; inputs and results
-  are snapshotted for reproducibility.
+- Stages write outputs under `.staging/<stage_id>/`
+- Contract-backed outputs are validated against local schemas
+- Outputs are atomically promoted into final paths
+- Stage outcomes are recorded deterministically (status, fail_mode, reason_code)
 
-- **Criteria pack:** validation rules that evaluate expected vs observed telemetry and cleanup
-  state.
+```mermaid
+sequenceDiagram
+  participant O as Orchestrator
+  participant L as RunLock
+  participant S as Stage core
+  participant G as PublishGate
+  participant FS as Run bundle filesystem
 
-- **Sigma evaluation:** compilation and execution of Sigma rules against normalized OCSF events via
-  the Sigma-to-OCSF bridge.
+  O->>L: acquire(runs/.locks/<run_id>.lock)
+  O->>FS: create runs/<run_id>/ + manifest.json skeleton
+  O->>G: begin_stage(stage_id)
+  O->>S: execute(stage inputs from run bundle)
+  S->>G: write outputs (to .staging/<stage_id>/...)
+  G->>G: validate contract-backed artifacts
+  alt validation passes
+    G->>FS: atomic promote into final paths
+    O->>FS: record stage outcome in manifest (and logs/health.json when enabled)
+  else validation fails
+    O->>FS: record fail_closed outcome + deterministic reason_code
+  end
+  O->>L: release(best-effort)
+```
 
-- **Stage outcome:** per-stage deterministic outcome metadata:
+Authoritative references: `docs/spec/025_data_contracts.md` (publish-gate validation) and
+`docs/adr/ADR-0007-state-machines.md` (lifecycle FSM template).
 
-  - `status`: `success | failed | skipped`
-  - `fail_mode`: `fail_closed | warn_and_skip`
-  - `reason_code`: stable token for CI gating and triage
+## Part 3: Details of interest
 
-- **Evidence reference:** deterministic pointer to a run-relative artifact (and optionally a
-  selector within it) used to justify a conclusion or gate.
+### Determinism and reproducibility (what makes this “diffable”)
 
-- **Run status:** overall status derived from recorded stage outcomes
-  (`success | partial | failed`).
+Purple Axiom treats determinism as a first-class requirement:
 
-## Run bundles
+- **Deterministic paths** for contracted artifacts (no timestamped contracted filenames).
+
+- **Deterministic ordering** for lists and streams that affect diffs and regression fixtures.
+
+- **Canonicalization** for identity keys:
+
+  - action join keys are based on RFC 8785 (JCS) canonical JSON for stable hashes
+
+- **Deterministic event identity**:
+
+  - normalized events carry stable `metadata.event_id` values for cross-stage joins
+
+- **Cache transparency**:
+
+  - any cache that can influence outputs is explicitly gated and must be observable (for example via
+    `logs/cache_provenance.json`)
+
+### Stage outcomes and run status model
+
+Each enabled stage records a deterministic outcome in `manifest.json` (and optionally
+`logs/health.json`):
+
+- `status`: `success | failed | skipped`
+- `fail_mode`: `fail_closed | warn_and_skip`
+- `reason_code`: stable token for CI gating and triage
+
+Run status (`manifest.status`) is derived deterministically from recorded outcomes:
+
+- `failed`: any stage failed with `fail_mode=fail_closed`
+- `partial`: otherwise, any stage failed with `fail_mode=warn_and_skip`
+- `success`: otherwise
+
+### CI posture (reporting as the CI interface)
+
+The reporting stage emits a CI-facing recommendation and exit code:
+
+- exit `0`: success
+- exit `10`: partial (artifacts usable but quality gates failed or were indeterminate)
+- exit `20`: failed (artifacts not mechanically usable)
+
+CI workflows can gate on `report/thresholds.json.status_recommendation`.
+
+Authoritative references: `docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md`,
+`docs/spec/080_reporting.md`, `docs/spec/105_ci_operational_readiness.md`.
+
+### OCSF field tiers and a practical coverage gate
+
+Normalization targets OCSF 1.7.0. Tiered field expectations provide a measurable quality signal
+without turning “SHOULD-level” schema expectations into hard failures.
+
+In v0.1, scoring defines a normalization coverage gate based on **Tier 1 (Core Common)** field
+coverage that can downgrade a run to `partial` when coverage is below threshold or indeterminate
+(for example no events). See:
+
+- `docs/spec/055_ocsf_field_tiers.md`
+- `docs/spec/070_scoring_metrics.md` (Tier 1 coverage gate)
+
+### Export and signing scope (especially `logs/`)
+
+`runs/<run_id>/logs/` is intentionally mixed:
+
+- Some `logs/**` artifacts are **deterministic evidence** required for reproducibility and CI
+  gating.
+- Other `logs/**` artifacts are **volatile diagnostics** that are not required for reproducibility
+  and may be sensitive.
+
+Default export and signing/checksum scope MUST:
+
+- include deterministic evidence logs, and
+- exclude volatile diagnostics,
+- exclude `.staging/**`,
+- exclude `unredacted/**` unless explicitly requested and permitted.
+
+Deterministic evidence logs allowlist (included when present):
+
+- `logs/health.json`
+- `logs/telemetry_validation.json` (when enabled)
+- `logs/counters.json`
+- `logs/cache_provenance.json` (when caching is enabled)
+- `logs/lab_inventory_snapshot.json`
+- `logs/lab_provider_connectivity.json` (optional; when implemented)
+- `logs/contract_validation/**`
+
+Volatile diagnostics (excluded by default) include:
+
+- `logs/run.log`
+- `logs/warnings.jsonl`
+- `logs/telemetry_checkpoints/**`
+- `logs/dedupe_index/**`
+- `logs/scratch/**`
+- and any other `logs/**` path not allowlisted as deterministic evidence
+
+Authoritative reference: `docs/adr/ADR-0009-run-export-policy-and-log-classification.md` and
+`docs/spec/045_storage_formats.md` (Tier 0 classification).
+
+### Evidence references and “why did this gate fail?”
+
+Whenever Purple Axiom degrades status or claims a gap (telemetry missing, normalization gap, Sigma
+compile failure, etc.), outputs are expected to include explicit evidence references:
+
+- `artifact_path` (required): run-relative POSIX path
+- `selector` (optional): selector within the artifact (for example JSON Pointer or JSONL line
+  selector)
+- `handling` (optional): `present | withheld | quarantined | absent`
+
+This ensures CI and operators can answer “why?” using stable pointers to run artifacts that can be
+reviewed and diffed.
+
+## Part 4: Run bundles, artifacts, and where to look
 
 Each run produces a run bundle at `runs/<run_id>/`. The **manifest** (`manifest.json`) is the
 authoritative index of what exists, which versions/config hashes were used, and the derived overall
 run status.
 
-### Normative top-level layout (v0.1)
-
-The run bundle layout is contract-driven. At a high level, you should expect:
+### Run bundle layout (high level)
 
 ```text
 runs/<run_id>/
   manifest.json
   ground_truth.jsonl
 
-  inputs/                      # operator inputs (read-only) + regression baseline references (when enabled)
-    baseline_run_ref.json      # required when regression compare is enabled
-    baseline/                  # optional, recommended snapshot (for example baseline manifest bytes)
+  inputs/                         # pinned operator inputs; baseline refs when regression is enabled
+    range.yaml
+    scenario.yaml
+    baseline_run_ref.json         # required when regression compare is enabled
+    baseline/                     # optional snapshot form (recommended)
+      manifest.json
 
-  runner/                      # runner evidence: per-action artifacts, ledgers, cleanup verification
+  runner/                         # runner evidence: per-action artifacts, ledgers, cleanup verification
     actions/<action_id>/...
-    principal_context.json     # optional run-level evidence (when enabled)
+    principal_context.json        # optional (policy-controlled)
 
-  raw_parquet/                 # analytics tier: structured raw telemetry tables (Parquet)
-  raw/                         # evidence tier: source-native payloads/blobs (when enabled)
+  raw_parquet/                    # analytics tier: structured raw telemetry tables (Parquet)
+  raw/                            # evidence tier: source-native payloads/blobs (optional; policy-controlled)
 
-  normalized/                  # analytics tier: normalized OCSF event store + mapping coverage
-  criteria/                    # criteria pack snapshot + criteria evaluation outputs (when enabled)
+  normalized/                     # normalized OCSF event store + mapping coverage
+    ocsf_events/                  # preferred representation (Parquet dataset)
+    ocsf_events.jsonl             # alternate representation (JSONL); MUST NOT coexist with dataset form
+    mapping_profile_snapshot.json
+    mapping_coverage.json
 
-  bridge/                      # Sigma→OCSF bridge artifacts: mapping pack snapshot, compiled plans, coverage
-  detections/                  # detection outputs (Sigma evaluation results)
+  criteria/                       # criteria pack snapshot + criteria evaluation outputs (when enabled)
+    criteria.jsonl
+    results.jsonl
 
-  scoring/                     # summary metrics + deterministic gap classification
-  report/                      # report outputs (required: report/report.json, report/thresholds.json)
+  bridge/                         # Sigma→OCSF bridge artifacts: mapping pack snapshot, compiled plans, coverage
+  detections/                     # detection outputs (Sigma evaluation results)
+    detections.jsonl
 
-  logs/                        # operability and deterministic failure triage surfaces
-    health.json                # optional stage/substage outcomes mirror (when enabled)
-    telemetry_validation.json  # telemetry validation evidence (when enabled)
+  scoring/                        # summary metrics + deterministic gap classification
+    summary.json
+
+  report/                         # report outputs (required: report.json, thresholds.json)
+    report.json
+    thresholds.json
+    run_timeline.md
+
+  logs/                           # deterministic evidence logs + volatile diagnostics (see ADR-0009)
+    health.json                   # optional (when enabled)
+    telemetry_validation.json     # optional (when enabled)
+    counters.json                 # stable counters surface
     lab_inventory_snapshot.json
-    contract_validation/       # contract validation reports (emitted on publish-gate failure)
-    cache_provenance.json      # emitted when caching can influence outputs (when enabled)
+    contract_validation/
 
-  security/                    # signing + integrity artifacts (when enabled) and policy snapshots
-  unredacted/                  # optional quarantine (explicit opt-in; excluded from exports by default)
+  security/                       # checksums/signatures + policy snapshots (when enabled)
+  unredacted/                     # optional quarantine (explicit opt-in; excluded from exports by default)
 
-  .staging/                    # publish-gate staging dirs (internal; excluded from exports; may be absent)
-  plan/                        # reserved (v0.2+)
+  .staging/                       # internal publish-gate staging dirs (excluded from exports; may be absent)
+  plan/                           # reserved (v0.2+)
 ```
 
 Notes:
 
-- `logs/` is an operability surface. Some files under `logs/` are reproducibility-critical (for
-  example `logs/lab_inventory_snapshot.json`, telemetry validation evidence, and contract validation
-  reports) and are expected to be retained with the run bundle.
-- `.staging/**` is an internal publish-gate mechanism and MUST NOT be included in long-term exports.
+- `.staging/**` is internal scratch space and MUST NOT be included in long-term exports.
+
 - `runs/.locks/<run_id>.lock` is a lock primitive and is not part of any run bundle.
 
-### Storage formats and determinism
+- The normalized OCSF store has multiple allowed representations:
 
-Purple Axiom uses a two-tier storage model:
+  - `normalized/ocsf_events/` (Parquet dataset) is preferred
+  - `normalized/ocsf_events.jsonl` (JSONL) is an alternate representation
+  - if both exist, consumers must fail closed
 
-- **Evidence tier** preserves source-native artifacts when they are valuable for fidelity and
-  reprocessing (under `raw/**` and `runner/**`).
-- **Analytics tier** stores structured, queryable datasets for evaluation and trending (Parquet
-  under `raw_parquet/**` and `normalized/**`).
+### “I want X, where is it?” (common entry points)
 
-Format expectations:
+| Goal                                                                | Start with                       | Then                                                                                    |
+| ------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------- |
+| Determine overall run health and why it is `success/partial/failed` | `manifest.json`                  | `report/thresholds.json`, `logs/health.json` (if enabled), evidence refs inside outputs |
+| See what actually ran (ground truth)                                | `ground_truth.jsonl`             | `runner/actions/<action_id>/...` evidence and ledgers                                   |
+| Inspect telemetry collection validity and canary results            | `logs/telemetry_validation.json` | `raw_parquet/**` datasets                                                               |
+| Query normalized events (OCSF)                                      | `normalized/ocsf_events/`        | `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`          |
+| See which detections fired and why                                  | `detections/detections.jsonl`    | `bridge/**` compiled plans and coverage                                                 |
+| Use the machine-readable scorecard                                  | `scoring/summary.json`           | `report/report.json` (presentation + rollups)                                           |
+| CI gating result and thresholds                                     | `report/thresholds.json`         | exit code mapping in reporting spec                                                     |
 
-- Small, contract-driven artifacts are JSON (for example `manifest.json`, `scoring/summary.json`,
-  and `report/report.json`).
-- Event-like streams are JSONL when line-addressable diffs/fixtures are required (for example
-  `ground_truth.jsonl` and `detections/detections.jsonl`).
-- Long-term event streams and large datasets are Parquet by default (for example the normalized OCSF
-  event store).
+## Part 5: Configuration
 
-Determinism expectations:
+Purple Axiom is configured via `range.yaml` (the normative configuration reference). For each run,
+the orchestrator pins effective inputs into the run bundle under `inputs/` (for reproducibility), at
+minimum:
 
-- Contracted artifacts use deterministic paths (no timestamped contracted filenames).
-- Contract validation uses local-only JSON Schema reference resolution (no network fetches) and
-  deterministic error ordering.
-- Any cache that can influence outputs is explicitly gated and must be observable (for example via
-  `logs/cache_provenance.json`).
+- `inputs/range.yaml`
+- `inputs/scenario.yaml`
 
-Authoritative references:
-
-- `docs/spec/025_data_contracts.md`
-- `docs/spec/045_storage_formats.md`
-- `docs/adr/ADR-0002-event-identity-and-provenance.md`
-
-## Status model and CI posture
-
-Purple Axiom is specified to fail closed on contract violations and to expose deterministic outcomes
-for CI and regression gating.
-
-### Stage outcomes and run status derivation
-
-- Each enabled stage records a deterministic stage outcome in `manifest.json` (and in
-  `logs/health.json` when enabled).
-
-- Run status (`manifest.status`) is derived deterministically from recorded stage outcomes:
-
-  - `failed`: any stage failed with `fail_mode=fail_closed`
-  - `partial`: otherwise, any stage failed with `fail_mode=warn_and_skip`
-  - `success`: otherwise
-
-### CI integration (reporting)
-
-The reporting stage emits a CI-facing recommendation and exit code:
-
-- exit `0`: success
-- exit `10`: partial (artifacts usable but gates failed)
-- exit `20`: failed (artifacts not usable)
-
-CI workflows can gate on `report/thresholds.json.status_recommendation`.
-
-Authoritative references:
-
-- `docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md`
-- `docs/spec/080_reporting.md`
-- `docs/spec/105_ci_operational_readiness.md`
-
-## Evidence references and gap attribution
-
-Whenever Purple Axiom degrades status or claims a gap (telemetry missing, normalization gap, Sigma
-compile failure, etc.), the corresponding outputs are expected to include explicit evidence
-references pointing to run artifacts that justify the conclusion.
-
-Evidence references are run-relative and deterministic:
-
-- `artifact_path` (required): run-relative POSIX path
-- `selector` (optional): selector within the artifact (for example a JSON Pointer or JSONL line)
-- `handling` (optional): `present | withheld | quarantined | absent`
-
-This ensures that “why did this gate fail?” is answered by stable pointers to artifacts that can be
-reviewed and diffed.
-
-## Configuration
-
-Purple Axiom is configured via `range.yaml` (see the normative configuration reference).
-Configuration and contract validation are first-class parts of the runtime and CI model.
+Configuration and contract validation are first-class parts of the runtime and CI model:
 
 - Canonical keys, defaults, and examples: `docs/spec/120_config_reference.md`
 
-- Operational limits, safety toggles, redaction posture, and network isolation policy:
+- Safety toggles, redaction posture, secrets-by-reference rules, and outbound policy:
 
   - `docs/spec/090_security_safety.md`
   - `docs/adr/ADR-0003-redaction-policy.md`
 
-## Documentation
+## Part 6: Documentation map
 
 ### Getting oriented (recommended reading order)
 
 1. `docs/spec/000_charter.md` (what the project is and why it exists)
 1. `docs/spec/010_scope.md` (scope, non-goals, operating assumptions)
-1. `docs/spec/020_architecture.md` (stage model, verbs, run bundle layout)
+1. `docs/spec/020_architecture.md` (stage model, verbs, workspace and run bundle layout)
 1. `docs/spec/025_data_contracts.md` (schemas, publish gates, determinism rules)
 1. `docs/spec/120_config_reference.md` (what you can configure and how)
 
-### Primary specs
+### Primary specs and ADRs
 
-| Spec                         | File                                                    |
-| ---------------------------- | ------------------------------------------------------- |
-| Charter                      | `docs/spec/000_charter.md`                              |
-| Scope and non-goals          | `docs/spec/010_scope.md`                                |
-| Lab providers                | `docs/spec/015_lab_providers.md`                        |
-| Architecture                 | `docs/spec/020_architecture.md`                         |
-| Data contracts               | `docs/spec/025_data_contracts.md`                       |
-| Scenario model               | `docs/spec/030_scenarios.md`                            |
-| Plan execution model         | `docs/spec/031_plan_execution_model.md`                 |
-| Atomic executor integration  | `docs/spec/032_atomic_red_team_executor_integration.md` |
-| Validation criteria          | `docs/spec/035_validation_criteria.md`                  |
-| Telemetry pipeline           | `docs/spec/040_telemetry_pipeline.md`                   |
-| osquery integration          | `docs/spec/042_osquery_integration.md`                  |
-| Unix log ingestion           | `docs/spec/044_unix_log_ingestion.md`                   |
-| Storage formats              | `docs/spec/045_storage_formats.md`                      |
-| OCSF normalization           | `docs/spec/050_normalization_ocsf.md`                   |
-| OCSF field tiers             | `docs/spec/055_ocsf_field_tiers.md`                     |
-| Sigma detection model        | `docs/spec/060_detection_sigma.md`                      |
-| Sigma-to-OCSF bridge         | `docs/spec/065_sigma_to_ocsf_bridge.md`                 |
-| Scoring and metrics          | `docs/spec/070_scoring_metrics.md`                      |
-| Reporting                    | `docs/spec/080_reporting.md`                            |
-| Security and safety          | `docs/spec/090_security_safety.md`                      |
-| Test strategy and CI         | `docs/spec/100_test_strategy_ci.md`                     |
-| CI and operational readiness | `docs/spec/105_ci_operational_readiness.md`             |
-| Operability                  | `docs/spec/110_operability.md`                          |
-| Operator interface (v0.2+)   | `docs/spec/115_operator_interface.md`                   |
-| Configuration reference      | `docs/spec/120_config_reference.md`                     |
+See the tables in this repository under:
 
-### Data contracts and schemas
+- `docs/spec/` for stage and pipeline specifications
+- `docs/adr/` for architectural decisions and normative policy clarifications
 
-- Contract registry (authoritative index): `docs/contracts/contract_registry.json`
-- Contract schemas (Draft 2020-12): `docs/contracts/*.schema.json`
-- Contract versioning and publish-gate validation: `docs/spec/025_data_contracts.md`
-
-### Mapping profiles and coverage
-
-| Document                                 | File                                                    |
-| ---------------------------------------- | ------------------------------------------------------- |
-| Mapping profile authoring guide          | `docs/mappings/ocsf_mapping_profile_authoring_guide.md` |
-| Coverage matrix (sources x OCSF classes) | `docs/mappings/coverage_matrix.md`                      |
-| Windows Sysmon mapping profile           | `docs/mappings/windows-sysmon_to_ocsf_1.7.0.md`         |
-| Windows Security mapping profile         | `docs/mappings/windows-security_to_ocsf_1.7.0.md`       |
-| Linux auditd mapping profile             | `docs/mappings/linux-auditd_to_ocsf_1.7.0.md`           |
-| osquery mapping profile                  | `docs/mappings/osquery_to_ocsf_1.7.0.md`                |
-
-### ADRs
-
-| ADR                                                                              | Decision area                                             |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `docs/adr/ADR-0001-project-naming-and-versioning.md`                             | Project naming rules and versioning policy                |
-| `docs/adr/ADR-0002-event-identity-and-provenance.md`                             | Event identity, provenance model, and determinism rules   |
-| `docs/adr/ADR-0003-redaction-policy.md`                                          | Redaction policy posture and consequences                 |
-| `docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md` | Deployment architecture and inter-component communication |
-| `docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md`                 | Stage outcomes and failure classification rules           |
-| `docs/adr/ADR-0006-plan-execution-model.md`                                      | Plan execution model and reserved multi-target semantics  |
-| `docs/adr/ADR-0007-state-machines.md`                                            | Lifecycle state machines for stages and publish gates     |
-
-## Requirements
+## Part 7: Requirements and pinned versions (v0.1)
 
 - Isolated lab environment (required)
 
-- Python 3.12.3 (pinned; see `SUPPORTED_VERSIONS.md` for toolchain and dependency details)
+- Python **3.12.3** (pinned; see `SUPPORTED_VERSIONS.md`)
 
-- Dependency pins as specified in `SUPPORTED_VERSIONS.md` (non-exhaustive highlights):
+- External dependency pins (authoritative list in `SUPPORTED_VERSIONS.md`), including:
 
-  - OpenTelemetry Collector Contrib 0.143.1
-  - pySigma 1.1.0
-  - pySigma-pipeline-ocsf 0.1.1
-  - pyarrow 22.0.0
-  - jsonschema 4.26.0
-  - osquery 5.14.1 (for lab endpoints)
-  - OCSF schema 1.7.0 (normalization target)
-  - PowerShell 7.4.6 (for Atomic executor)
+  - OpenTelemetry Collector Contrib **0.143.1**
+  - pySigma **1.1.0**
+  - pySigma-pipeline-ocsf **0.1.1**
+  - PCRE2 (libpcre2-8) **10.47**
+  - pyarrow **22.0.0**
+  - jsonschema **4.26.0**
+  - osquery **5.14.1** (for lab endpoints)
+  - OCSF schema **1.7.0**
+  - PowerShell **7.4.6** (Atomic executor)
+  - DSC v3 (`dsc`) **3.1.2** (runner environment configuration when enabled)
+  - asciinema **2.4.0** (runner terminal session recording when enabled)
 
-- Optional packaging: Docker Compose MAY be provided for installation convenience, but it is not a
-  normative requirement for v0.1
+Optional packaging: Docker Compose MAY be provided for installation convenience, but it is not a
+normative requirement for v0.1.
 
-## License
+## Part 8: License
 
 MIT License. See `LICENSE`.
 
-## Contributing
+## Part 9: Contributing
 
 See `CONTRIBUTING.md`. Contributions should preserve:
 
 - deterministic outputs
-- contract-first artifacts
+- contract-first artifacts and publish-gate validation
 - safe-by-default scenario execution
 - clear provenance and reproducibility metadata

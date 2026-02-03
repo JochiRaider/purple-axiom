@@ -41,16 +41,16 @@ Purple Axiom replaces that with a **contract-backed** pipeline where each stage 
 from the **run bundle** and publishes schema-validated outputs back into the same run bundle. The
 **filesystem is the inter-stage contract boundary**.
 
+### Core philosophy
+
+Treat detections as theorems you are trying to prove, and adversary emulation as the axioms
+(ground truth) you build upon.
+
 ### Who it is for
 
 - Detection engineers validating visibility and detection logic
 - SOC analysts validating investigative pivots and alert quality
 - Purple teams and continuous security testing operators running unattended lab workflows
-
-### Core philosophy
-
-- Treat detections as theorems you are trying to prove, and adversary emulation as the axioms
-  (ground truth) you build upon.
 
 ### What it is not
 
@@ -147,7 +147,7 @@ be written outside a run bundle (for example `runs/.locks/`, and optionally `cac
 
 ```mermaid
 flowchart TB
-  subgraph W["<workspace_root>/"]
+  subgraph W["#lt;workspace_root#gt;/"]
     runs["runs/ (required)"]
     cache["cache/ (reserved; optional)"]
     exports["exports/ (reserved; optional)"]
@@ -157,7 +157,7 @@ flowchart TB
     locks["runs/.locks/ (required)"]
   end
 
-  subgraph R["runs/<run_id>/ (run bundle)"]
+  subgraph R["runs/#lt;run_id#gt;/ (run bundle)"]
     manifest["manifest.json"]
     inputs["inputs/ (pinned inputs + baseline refs)"]
     gt["ground_truth.jsonl"]
@@ -289,8 +289,8 @@ sequenceDiagram
   participant G as PublishGate
   participant FS as Run bundle filesystem
 
-  O->>L: acquire(runs/.locks/<run_id>.lock)
-  O->>FS: create runs/<run_id>/ + manifest.json skeleton
+  O->>L: acquire(runs/.locks/#lt;run_id#gt;.lock)
+  O->>FS: create runs/#lt;run_id#gt;/ + manifest.json skeleton
   O->>G: begin_stage(stage_id)
   O->>S: execute(stage inputs from run bundle)
   S->>G: write outputs (to .staging/<stage_id>/...)

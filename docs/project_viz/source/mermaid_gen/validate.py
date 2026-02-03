@@ -235,6 +235,7 @@ def validate_model_issues(
     if workflows and not isinstance(workflows, list):
         emit("error", "E_WORKFLOWS_NOT_LIST", "model.workflows must be a list")
     elif isinstance(workflows, list):
+        wf_ids_seen: dict[str, int] = {}
         for wf_i, wf in enumerate(workflows):
             if not isinstance(wf, dict):
                 emit(
@@ -245,8 +246,37 @@ def validate_model_issues(
                 )
                 continue
 
-            steps = wf.get("steps", []) or []
             wf_id = wf.get("id")
+            if not isinstance(wf_id, str) or not wf_id:
+                emit(
+                    "error",
+                    "E_WORKFLOW_MISSING_ID",
+                    "workflow is missing string `id`",
+                    path=f"/workflows/{wf_i}/id",
+                )
+            else:
+                if wf_id in wf_ids_seen:
+                    emit(
+                        "error",
+                        "E_WORKFLOW_DUPLICATE_ID",
+                        f"duplicate workflow id {wf_id!r} (also in workflows[{wf_ids_seen[wf_id]}])",
+                        path=f"/workflows/{wf_i}/id",
+                    )
+                else:
+                    wf_ids_seen[wf_id] = wf_i
+
+                if not MERMAID_ID_RE.match(wf_id):
+                    emit(
+                        "warning",
+                        "W_WORKFLOW_ID_NOT_MERMAID_SAFE",
+                        "workflow id "
+                        f"{wf_id!r} is not Mermaid-safe (use [A-Za-z0-9_] and cannot "
+                        "start with a digit)",
+                        path=f"/workflows/{wf_i}/id",
+                        hint="Use snake_case (A-Za-z0-9_); do not start with a digit",
+                    )
+
+            steps = wf.get("steps", []) or []
             if not isinstance(steps, list):
                 emit(
                     "error",

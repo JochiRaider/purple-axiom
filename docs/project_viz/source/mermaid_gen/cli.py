@@ -15,7 +15,7 @@ def _default_paths() -> tuple[Path, Path]:
     """Compute default model and output paths based on this package location.
 
     Expected layout:
-      docs/project_viz/source/mermaid_gen/cli.py
+      docs/project_viz/source/mermaid_gen/cli.pya
     """
     pkg_dir = Path(__file__).resolve().parent              # .../source/mermaid_gen
     source_dir = pkg_dir.parent                            # .../source
@@ -63,6 +63,14 @@ def main() -> None:
         help="Workflow id to use for stage flow + run sequence diagrams",
     )
     parser.add_argument(
+        "--workflow-suite",
+        action="store_true",
+        help=(
+            "Also emit per-workflow outputs under workflows/<workflow_id>/ "
+            "(Option A: keep the top-level single-workflow files too)."
+        ),
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help=(
@@ -86,6 +94,17 @@ def main() -> None:
     out_dir: Path = args.out_dir
     cfg = RenderConfig(workflow_id=args.workflow, trust_view=args.trust_view)
 
+    # --- Global / top-level outputs (existing behavior) ---
     for spec in DIAGRAMS:
         diagram_code = spec.render(model, cfg)
         write_md(out_dir / spec.filename, spec.title, diagram_code)
+
+    # --- Per-workflow outputs (workflow suite mode) ---
+    if args.workflow_suite:
+        try:
+            from .workflow_suite import generate_workflow_suite
+
+            generate_workflow_suite(model, out_dir)
+        except Exception as e:
+            print(f"error: workflow suite generation failed: {e}", file=sys.stderr)
+            raise SystemExit(2)

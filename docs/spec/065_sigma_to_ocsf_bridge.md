@@ -645,6 +645,54 @@ Semantics (normative):
 - For `field: [v1, v2, ...]` (Sigma list membership), compilation MUST produce an OR over `cmp:eq`
   comparisons (or a single `cmp:eq` with list value) with equivalent semantics.
 
+##### Compiled plan semantic validation policy
+
+A semantic validation phase MUST run after compilation and before publishing a compiled plan to
+`bridge/compiled_plans/`. The validator ensures that any `executable=true` plan is safe and
+meaningful for the selected backend and the pinned OCSF schema version.
+
+The semantic validator MUST be deterministic for a fixed plan + pinned schema inputs and MUST NOT
+depend on runtime telemetry values.
+
+Checks (normative; apply to `executable=true` plans):
+
+1. **Field existence (pinned OCSF schema)**:
+
+   - Every referenced `field` path in the predicate AST (`exists|cmp|match|regex`) MUST resolve to a
+     valid field path in the pinned OCSF schema version for the run (see `050_normalization_ocsf.md`
+     for the v0.1 pin).
+   - Exception: `raw.*` paths are allowed only when permitted by the raw fallback policy gates (see
+     "Fallback policy (raw field fallback)").
+   - If a referenced non-`raw.*` field path cannot be resolved, the rule MUST be marked
+     non-executable with `reason_code="unmapped_field"` and a stable, machine-actionable error
+     subcode in the explanation (for example `PA_BRIDGE_INVALID_OCSF_PATH`).
+
+1. **Operator allowlist**:
+
+   - Predicate nodes MUST use only the operators enumerated in the Plan format AST above.
+   - Unknown operators MUST be rejected deterministically with `reason_code="unsupported_operator"`.
+
+1. **Scope completeness**:
+
+   - `backend.plan.scope.class_uids` MUST be present and MUST be non-empty.
+   - `class_uids` MUST be emitted in ascending numeric order (determinism requirement).
+   - Missing/empty scope MUST be treated as a compiler/validator error and MUST fail closed as
+     `reason_code="backend_compile_error"`.
+
+1. **Complexity budgets**:
+
+   - Regex nodes MUST satisfy the configured regex safety limits (pattern length, match limits, and
+     depth limits; see `120_config_reference.md`).
+   - Implementations SHOULD also enforce a total predicate AST node budget (default RECOMMENDED:
+     5,000 nodes) to prevent pathological compilation outputs.
+
+Verification hook (normative):
+
+- CI MUST include fixtures that demonstrate deterministic rejection for:
+  - an invalid field reference,
+  - a prohibited regex, and
+  - a plan missing required scope. (See `100_test_strategy_ci.md`.)
+
 ##### Regex dialect and safety
 
 - The evaluator MUST interpret `regex.pattern` using PCRE2 syntax.

@@ -74,6 +74,40 @@ This document does NOT cover:
 - Performance benchmarking beyond latency regression gates
 - Authoritative definitions of lifecycle/state machines (see ADR-0007 and the owning stage specs)
 
+## CI lanes (Content CI vs Run CI)
+
+Purple Axiom CI is intentionally split into two lanes (see `105_ci_operational_readiness.md`):
+
+- **Content CI**: fast, no lab required. Runs static validation, compilation, and fixture-backed
+  unit tests over content-like artifacts.
+- **Run CI**: slow, integration. Runs evaluator replay against a pinned baseline dataset and/or
+  executes at least one end-to-end run in a minimal lab profile.
+
+This spec defines which test categories MUST be runnable in each lane.
+
+### Content CI gate set (normative)
+
+Content CI MUST be runnable without a lab provider and MUST include, at minimum:
+
+- Unit tests that do not require a lab provider (this section).
+- Contract/schema validation for content-like artifacts under test (criteria packs, mapping pack
+  snapshots, compiled plans, etc.).
+- Sigma compilation + semantic validation (see "Sigma compilation (bridge)").
+- Rule-level unit tests when fixtures are present (see "Sigma rule unit tests").
+
+Content CI MUST fail closed when compilation or validation cannot be completed deterministically.
+
+### Run CI gate set (normative)
+
+Run CI MUST include, at minimum:
+
+- The evaluator conformance harness executed against at least one pinned Baseline Detection Package
+  (BDP) or equivalent pinned event fixture set (see "Evaluator conformance harness").
+- At least one end-to-end “golden run” bundle when a lab provider is available (RECOMMENDED).
+
+Run CI MAY be triggered less frequently than Content CI (for example on merge-to-main and/or on
+release), but MUST be executed before release publication.
+
 ## Unit tests
 
 **Summary**: Unit tests validate individual components in isolation using deterministic fixtures.
@@ -223,6 +257,81 @@ Bridge router multi-class routing tests validate that given a `logsource.categor
 multiple `class_uid` values, compilation MUST scope evaluation to the union (`IN (...)` / OR
 semantics) and the routed `class_uid` set MUST be emitted in ascending numeric order for
 deterministic output.
+
+#### Compiled plan semantic validation policy (required)
+
+In addition to syntactic compilation, v0.1 implementations MUST apply a semantic validation phase to
+each compiled plan (see `065_sigma_to_ocsf_bridge.md`, "Compiled plan semantic validation policy").
+
+Unit tests MUST include fixtures that demonstrate deterministic rejection / classification for:
+
+- Invalid field reference: a plan referencing an OCSF path that does not exist in the pinned OCSF
+  schema MUST be rejected deterministically.
+- Prohibited regex: a plan containing a regex that violates the configured regex safety limits MUST
+  be rejected deterministically with `reason_code="unsupported_regex"` and a stable
+  `PA_BRIDGE_REGEX_POLICY_VIOLATION` code in the explanation.
+- Missing required scoping: a plan that is missing required `class_uid` scope MUST fail closed with
+  a stable, machine-classifiable error (treat as a compiler/validator bug).
+
+### Sigma rule unit tests
+
+Rule-level unit tests treat “expected matches” as executable assertions and are intended to run in
+Content CI (fast, no lab required).
+
+Rule unit test fixtures tie together:
+
+- A Sigma rule (by `rule_id` / `id`),
+- A small slice of normalized OCSF events,
+- Expected match semantics (matched event ids and/or counts), and
+- Expected non-executable classification when applicable.
+
+#### Fixture format (v0.1, minimal)
+
+A rule unit test case MUST be representable as a directory:
+
+- `tests/fixtures/sigma_rule_tests/<test_id>/`
+  - `rule.yaml`: Sigma rule under test (MUST include `id`; treated as `rule_id`).
+  - `events.jsonl`: newline-delimited normalized OCSF event envelopes.
+    - Each row MUST validate against the `ocsf_event_envelope` contract.
+    - Each row MUST include `metadata.event_id` (used as the match join key).
+  - `expect.json`: expected result (schema defined below).
+
+`expect.json` MUST follow this shape (future-proofed with an explicit version string):
+
+- `schema_version` (required): `"pa:sigma_rule_test:v1"`
+- `rule_id` (required): string; MUST equal the Sigma `id`.
+- `expect` (required):
+  - `executable` (required): boolean
+  - When `executable: true`:
+    - `matched_event_ids` (required): array of `metadata.event_id` strings expected to match.
+      - MUST be unique and sorted ascending.
+    - `match_count` (optional): integer; when present MUST equal `len(matched_event_ids)`.
+  - When `executable: false`:
+    - `non_executable_reason` (required):
+      - `reason_domain` MUST be `"bridge_compiled_plan"`.
+      - `reason_code` MUST be a stable token from the bridge reason code registry.
+
+#### Execution semantics (normative)
+
+Given a test case:
+
+1. The harness MUST compile `rule.yaml` using the same mapping pack + backend configuration as
+   Content CI.
+1. If compilation yields `executable=false`, the harness MUST compare the emitted
+   `non_executable_reason` to `expect.non_executable_reason` and MUST NOT attempt evaluation.
+1. If compilation yields `executable=true`, the harness MUST evaluate the plan over `events.jsonl`
+   and compute the set of matched `metadata.event_id` values.
+1. The harness MUST fail the test if the matched event id set differs from
+   `expect.matched_event_ids` (set equality; ordering is canonicalized before comparison).
+
+#### Required golden rule test pack (verification hook)
+
+The repository MUST include a golden rule test pack that runs in Content CI and contains at least:
+
+- One rule that should match (non-empty `matched_event_ids`).
+- One rule that should not match (`matched_event_ids: []`).
+- One rule that should be non-executable for a known `reason_code` (for example
+  `reason_code="unroutable_logsource"`).
 
 ### Runner and execution
 
@@ -638,7 +747,11 @@ Goals:
 
 #### Inputs
 
-- A pinned fixture event set (JSONL and/or Parquet) under `tests/fixtures/evaluator_conformance/`.
+- A pinned Baseline Detection Package (BDP) (preferred for Run CI replay), OR an unpacked fixture
+  event set (JSONL and/or Parquet) under `tests/fixtures/evaluator_conformance/`.
+  - When a BDP is used, the harness MUST read normalized events from the BDP normalized event store
+    (see `086_detection_baseline_library.md`).
+  - Run CI MUST execute this harness against at least one pinned BDP version.
 - A pinned rule set under `tests/fixtures/evaluator_conformance/rules/`, including:
   - event rules (single-event),
   - correlation rules (all supported correlation types),
@@ -1010,7 +1123,7 @@ Fixture set (normative):
       - `logs/warnings.jsonl`
       - `logs/eps_baseline.json`
       - `logs/telemetry_checkpoints/**`
-      - `logs/dedupe_index/ocsf_events.duckdb`
+      - `logs/dedupe_index/ocsf_events.jsonl`
       - `logs/scratch/tmp.txt`
     - quarantine example:
       - `unredacted/runner/actions/s1/stdout.txt`

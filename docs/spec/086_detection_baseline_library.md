@@ -30,18 +30,44 @@ BDPs exist to support:
 - Iterative detection development (repeatable offline evaluation)
 - Durable retention of “known good” datasets without retaining full evidence-tier run artifacts
 
-BDPs are stored outside of `runs/` under the workspace `exports/` tree and are managed via the
-Operator Interface (UI + API).
+BDPs are stored outside of `runs/` under the workspace `exports/` tree.
 
-version scope: post-OI (v0.2+)
+- In v0.2+, BDPs are managed via the Operator Interface (UI + API).
+- In v0.1, BDPs MAY be consumed as pinned CI artifacts without an operator-facing baseline catalog.
+
+version scope: v0.1 (CI consumption subset) + post-OI (v0.2+)
 
 ## Non-goals
 
-- Defining a new detection “replay run” execution model. (BDPs are inputs; how they are consumed by
-  a detection evaluation pipeline is reserved.)
+- Defining a new detection “replay run” execution model beyond the minimal CI replay harness
+  requirements in this spec. (BDPs are inputs; how they are consumed by a general detection
+  evaluation pipeline is reserved.)
 - Providing a general-purpose archival format for complete run bundles (see run export policy /
   golden datasets).
 - Defining a remote artifact store or synchronization protocol.
+
+## CI usage (v0.1 subset)
+
+Although the general “replay run” execution model is reserved, v0.1 CI relies on BDPs as a promoted,
+versioned dataset artifact for deterministic detection evaluation without spinning up a lab
+provider.
+
+Run CI requirements (normative; v0.1):
+
+- Run CI MUST be able to consume a pinned BDP identified by `(baseline_id, baseline_version)`.
+- CI consumers MUST validate:
+  - the BDP manifest (`baseline_package_manifest.json`) against the contract, and
+  - integrity material (`security/checksums.txt`; signature when present) before using BDP contents
+    for evaluation.
+- Run CI MUST run detection evaluation deterministically over the BDP normalized event store and
+  MUST compare outputs to a golden expected output (hash- or diff-based), failing closed on
+  mismatch.
+  - The exact golden output surface is owned by the CI harness (see `100_test_strategy_ci.md`).
+
+Pinning requirement (verification hook):
+
+- The repository MUST designate at least one pinned “CI baseline” `(baseline_id, baseline_version)`
+  pair to be used by Run CI.
 
 ## Relationship to reporting regression baselines
 

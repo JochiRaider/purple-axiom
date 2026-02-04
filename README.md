@@ -43,8 +43,8 @@ from the **run bundle** and publishes schema-validated outputs back into the sam
 
 ### Core philosophy
 
-Treat detections as theorems you are trying to prove, and adversary emulation as the axioms
-(ground truth) you build upon.
+Treat detections as theorems you are trying to prove, and adversary emulation as the axioms (ground
+truth) you build upon.
 
 ### Who it is for
 

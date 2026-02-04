@@ -350,36 +350,6 @@ above. A file-backed embedded DB is a natural fit (example: `logs/dedupe_index/o
 because it can enforce uniqueness on `metadata.event_id` and support transactional updates when
 selecting the canonical instance on conflicts.
 
-CI fixture sets already use a DB-file example under this directory (example:
-`logs/dedupe_index/ocsf_events.duckdb`); a SQLite variant is equally conformant as long as the
-behavioral contract is met.
-
-SQLite sketch:
-
-```sql
-CREATE TABLE IF NOT EXISTS dedupe_index (
-  event_id TEXT PRIMARY KEY,
-  conflict_key TEXT NOT NULL
-);
-
--- Upsert pattern to enforce "keep lexicographically smallest conflict_key":
-INSERT INTO dedupe_index(event_id, conflict_key)
-VALUES (:event_id, :conflict_key)
-ON CONFLICT(event_id) DO UPDATE SET
-  conflict_key = CASE
-    WHEN excluded.conflict_key < dedupe_index.conflict_key THEN excluded.conflict_key
-    ELSE dedupe_index.conflict_key
-  END;
-```
-
-Note: If normalization emits the OCSF store incrementally, a non-identical duplicate that introduces
-a smaller\
-`conflict_key` will require deterministically replacing the previously retained instance (for
-example by staging\
-canonical events in an upsertable store keyed by `metadata.event_id` and materializing the final
-Parquet/JSONL output\
-at stage completion).
-
 ### Mapping profile snapshot
 
 Purpose:

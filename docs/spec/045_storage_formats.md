@@ -151,16 +151,28 @@ Evidence references (normative):
 Verification hook (RECOMMENDED): CI SHOULD include a storage-format lint that fails if the
 regression surface deviates from `report/report.json.regression` or uses timestamped filenames.
 
-### Detection baseline packages (v0.2+; optional)
+### Detection baseline packages (v0.1+; promoted CI artifact)
 
-To support long-lived, lightweight “known-good” datasets for detection regression testing, the
-system MAY persist **Baseline Detection Packages (BDPs)** outside of run bundles. A BDP is a
-redaction-safe subset of a single completed run bundle containing only the artifacts needed to
-evaluate detections (typically normalized OCSF events + ground truth), omitting heavy evidence-tier
-artifacts (e.g., `raw/**`, `raw_parquet/**`, runner evidence).
+To support long-lived, lightweight “known-good” datasets for detection regression testing without
+re-running labs, the system MUST support **Baseline Detection Packages (BDPs)** as a first-class
+test artifact.
 
-See `086_detection_baseline_library.md` for the BDP format, lifecycle, integrity rules, and Operator
-Interface expectations.
+A BDP is a redaction-safe subset of a single completed run bundle containing only the artifacts
+needed to evaluate detections (typically normalized OCSF events + ground truth), omitting heavy
+evidence-tier artifacts (for example `raw/**`, `raw_parquet/**`, runner evidence). v0.1 CI
+requirements (normative):
+
+- A compliant implementation MUST make at least one pinned BDP available to Run CI as a replay
+  substrate (see `105_ci_operational_readiness.md`).
+- CI consumers MUST validate BDP integrity (manifest + checksums; signature when present) before
+  using a BDP for evaluation.
+- BDPs MUST be written under the reserved workspace exports root (for example
+  `<workspace_root>/exports/baselines/<baseline_id>/<baseline_version>/`) and MUST NOT be placed
+  under `runs/` because they are not run bundles.
+
+See `086_detection_baseline_library.md` for the BDP format, lifecycle, and integrity rules. Operator
+Interface expectations for managing baseline catalogs are v0.2+; v0.1 CI MAY consume BDPs from an
+out-of-band artifact store as long as the on-disk format and integrity rules conform.
 
 Recommended storage and formats (BDP profile `detection_eval_v1`):
 
@@ -170,10 +182,6 @@ Recommended storage and formats (BDP profile `detection_eval_v1`):
   `run/normalized/ocsf_events.jsonl` (same logical artifact representation rules as run bundles).
 - Integrity: `security/checksums.txt` (and optional Ed25519 signature/public key) following the
   standard checksums/signature rules used for shareable bundles.
-
-BDPs MUST be written under the reserved workspace exports root (for example,
-`<workspace_root>/exports/baselines/<baseline_id>/<baseline_version>/`) and MUST NOT be placed under
-`runs/` because they are not run bundles.
 
 ### Tier 0: Operability logs (structured) and debug logs (ephemeral)
 

@@ -8,9 +8,9 @@ Purpose: route the agent to mapping pack entrypoints with minimal reading.
 
 ## Pack / subsystem map
 
-| Name                                   | Path                            | Entrypoints                                 | Notes                                            |
-| -------------------------------------- | ------------------------------- | ------------------------------------------- | ------------------------------------------------ |
-| OCSF normalizer mappings (OCSF 1.7.0)  | `mappings/normalizer/ocsf/1.7.0/` | `OCSF_1.7.0_INDEX.md`                       | Pack profiles, routing, canonicalization, classes |
+| Name                                  | Path                              | Entrypoints           | Notes                                             |
+| ------------------------------------- | --------------------------------- | --------------------- | ------------------------------------------------- |
+| OCSF normalizer mappings (OCSF 1.7.0) | `mappings/normalizer/ocsf/1.7.0/` | `OCSF_1.7.0_INDEX.md` | Pack profiles, routing, canonicalization, classes |
 
 ## Pack map (OCSF 1.7.0 normalizer packs)
 
@@ -22,8 +22,8 @@ Ordering: rows are sorted lexicographically by `Pack (source_type)`.
 | `windows-security` | `mappings/normalizer/ocsf/1.7.0/windows-security/` | Pack profile, routing, canonicalization, classes |
 | `windows-sysmon`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/`   | Pack profile, routing, canonicalization, classes |
 
-
 ## Sub-indexes
+
 - `mappings/normalizer/ocsf/1.7.0/OCSF_1.7.0_INDEX.md`
 
 ## Update rule (required)

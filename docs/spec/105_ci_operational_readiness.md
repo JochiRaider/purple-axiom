@@ -28,8 +28,7 @@ This document defines the normative CI pipeline contract for Purple Axiom v0.1 i
 stitching together already-specified gates and evidence surfaces into a single, deterministic CI
 verdict model.
 
-This spec MUST NOT introduce new pipeline stages, new artifact classes, or new contract schemas. It
-only consolidates and operationalizes existing v0.1 requirements across:
+This spec SHOULD consolidates and operationalizes the existing requirements across:
 
 - CI gates (100_test_strategy_ci.md)
 - Publish-gate and artifact contracts (025_data_contracts.md)
@@ -45,17 +44,21 @@ In-scope (v0.1):
 - A deterministic CI verdict derived from contracted artifacts and existing exit-code semantics.
 - A single “pipeline contract” view of the already-required CI gates.
 - Explicit mapping from gates to evidence surfaces (schemas, reports, health files, and thresholds).
+- A two-lane CI workflow (Content CI and Run CI) and the required CI entrypoints to run them.
 
 Out-of-scope:
 
-- Continuous deployment to production environments.
-- Adding new stages, new artifact directories, or new schemas beyond v0.1 docs.
 - Mandating a specific CI vendor or workflow engine.
 
 ## Normative sources
 
-All MUST / MUST NOT statements in this spec are restatements or compositions of requirements already
-present in v0.1 documents listed in the frontmatter.
+This spec primarily consolidates and operationalizes requirements already present in v0.1 documents
+listed in the frontmatter.
+
+In addition, this spec defines **CI lane structure** (Content CI vs Run CI) and the minimum CI
+harness entrypoints required to exercise those lanes. These CI lane requirements are CI-only: they
+MUST NOT change run bundle formats, stage boundaries, or contract schemas beyond what is already
+defined elsewhere.
 
 If a conflict is discovered between sources, the implementation MUST follow the more specific
 contract document for the artifact in question (e.g., data contracts for run bundle paths) and MUST
@@ -65,6 +68,12 @@ raise an issue to reconcile the discrepancy.
 
 - Run bundle: The contracted run directory rooted at `runs/<run_id>/`.
 - Gate: A pass/fail rule evaluated by CI over contracted artifacts and v0.1 exit-code semantics.
+- Content CI: A fast CI lane that validates content-like artifacts (rule sets, mapping packs,
+  criteria packs, etc.) and their compilation outputs without requiring a lab provider.
+- Run CI: A slower CI lane that executes integration checks by producing run bundles and/or
+  evaluating detections against a pinned Baseline Detection Package (BDP).
+- Content-like artifact: A repository input that can be validated deterministically without
+  executing a scenario in a lab (for example Sigma rules, mapping packs, criteria packs, and BDPs).
 - Fail-closed gate: A gate where any failure MUST yield a `failed` run status.
 - Threshold gate: A gate where violations degrade the run status to `partial` (or `failed` when the
   underlying contract requires hard failure) while keeping the run mechanically reportable.
@@ -82,6 +91,78 @@ raise an issue to reconcile the discrepancy.
 - Reportable: A run with mechanically usable artifacts and the required reporting outputs for its
   enabled feature set (see reporting “required artifacts / required reporting outputs” and data
   contracts publish-gate requirements).
+
+## CI lanes
+
+Purple Axiom v0.1 CI MUST provide two explicit lanes:
+
+- **Content CI** (fast, no lab required)
+- **Run CI** (slow, integration)
+
+This separation keeps feedback fast for content changes while preserving an integration signal for
+the full pipeline.
+
+### Content CI (fast, no lab required)
+
+Content CI validates content-like artifacts and compilation outputs without invoking a lab provider.
+
+Content CI MUST validate, at minimum:
+
+1. Sigma ruleset determinism + uniqueness + required metadata (see `060_detection_sigma.md`).
+1. Mapping pack resolution, router determinism, and mapping pack schema validation (see
+   `065_sigma_to_ocsf_bridge.md`).
+1. Sigma compilation to `bridge_compiled_plan` artifacts for the selected backend (see
+   `065_sigma_to_ocsf_bridge.md`).
+1. Compiled plan semantic validation (see `065_sigma_to_ocsf_bridge.md`, "Compiled plan semantic
+   validation policy").
+1. Contract/schema validation for any content-like artifacts under test (examples: criteria packs,
+   BDP manifests).
+1. Rule-level unit tests when fixtures are present (see `100_test_strategy_ci.md`, "Sigma rule unit
+   tests").
+
+Verification hook (normative): Content CI MUST fail a pull request that breaks compilation or static
+validation without spinning up a lab provider.
+
+### Run CI (slow, integration)
+
+Run CI executes integration-level checks. A compliant CI pipeline MUST implement at least one of:
+
+- **BDP replay**: evaluate detections against a pinned Baseline Detection Package (BDP) without
+  running a lab provider.
+- **Minimal lab run**: execute at least one scenario end-to-end on a minimal lab profile.
+
+When BDP replay is used, Run CI MUST:
+
+- Fetch a pinned `(baseline_id, baseline_version)` pair.
+- Validate the BDP manifest and integrity material (checksums; signature when present).
+- Run detection evaluation deterministically over the BDP normalized event store.
+- Compare outputs to a golden expected output (hash- or diff-based), failing closed on mismatch.
+
+### Merge and release blocking policy
+
+- Merges to the default branch MUST be blocked unless Content CI passes.
+- Releases MUST be blocked unless both Content CI and Run CI pass.
+
+Projects MAY enforce stricter policies but MUST NOT relax the minimum policy above.
+
+### Required CI entrypoints
+
+Implementations MUST expose stable entrypoints that a CI runner can invoke.
+
+Minimum requirement (v0.1):
+
+The repository MUST expose stable entrypoints named:
+
+- `ci-content`
+  - Runs Content CI validations.
+  - MUST exit `0` on success and `20` on failure.
+- `ci-run`
+  - Runs Run CI (BDP replay and/or minimal lab run).
+  - MUST exit `0|10|20` when producing run bundles, using the orchestrator exit code semantics.
+  - For replay-only modes, MUST exit `0` on success and `20` on failure.
+
+These entrypoints MAY be implemented as Makefile targets (`make ci-content` / `make ci-run`), CLI
+subcommands (`<project_cli> ci content` / `<project_cli> ci run`), or standalone scripts.
 
 ## CI contract
 

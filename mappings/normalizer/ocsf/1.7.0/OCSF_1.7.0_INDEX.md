@@ -4,16 +4,16 @@ Purpose: route the agent to OCSF 1.7.0 normalizer mapping pack entrypoints with 
 
 ## Entrypoints (open these first)
 
-Entrypoints are listed in recommended open order per pack: `profile.yaml`, then `routing.yaml`,
-then `canonicalization.yaml`.
+Entrypoints are listed in recommended open order per pack: `profile.yaml`, then `routing.yaml`, then
+`canonicalization.yaml`.
 
 Ordering: packs are sorted lexicographically by `pack_id` (directory name).
 
-| Pack (source_type) | Pack root                                          | Profile                                                            | Routing                                                            | Canonicalization                                                            |
-| ------------------ | -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `osquery`          | `mappings/normalizer/ocsf/1.7.0/osquery/`          | `mappings/normalizer/ocsf/1.7.0/osquery/profile.yaml`              | `mappings/normalizer/ocsf/1.7.0/osquery/routing.yaml`              | `mappings/normalizer/ocsf/1.7.0/osquery/canonicalization.yaml`              |
-| `windows-security` | `mappings/normalizer/ocsf/1.7.0/windows-security/` | `mappings/normalizer/ocsf/1.7.0/windows-security/profile.yaml`     | `mappings/normalizer/ocsf/1.7.0/windows-security/routing.yaml`     | `mappings/normalizer/ocsf/1.7.0/windows-security/canonicalization.yaml`     |
-| `windows-sysmon`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/profile.yaml`       | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/routing.yaml`       | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/canonicalization.yaml`       |
+| Pack (source_type) | Pack root                                          | Profile                                                        | Routing                                                        | Canonicalization                                                        |
+| ------------------ | -------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `osquery`          | `mappings/normalizer/ocsf/1.7.0/osquery/`          | `mappings/normalizer/ocsf/1.7.0/osquery/profile.yaml`          | `mappings/normalizer/ocsf/1.7.0/osquery/routing.yaml`          | `mappings/normalizer/ocsf/1.7.0/osquery/canonicalization.yaml`          |
+| `windows-security` | `mappings/normalizer/ocsf/1.7.0/windows-security/` | `mappings/normalizer/ocsf/1.7.0/windows-security/profile.yaml` | `mappings/normalizer/ocsf/1.7.0/windows-security/routing.yaml` | `mappings/normalizer/ocsf/1.7.0/windows-security/canonicalization.yaml` |
+| `windows-sysmon`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/profile.yaml`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/routing.yaml`   | `mappings/normalizer/ocsf/1.7.0/windows-sysmon/canonicalization.yaml`   |
 
 ## Inventory (leaf mapping files)
 

@@ -1444,6 +1444,33 @@ not produce detection instances but are included in coverage reporting.
 
 See the [Sigma detection specification][sigma-spec] for evaluation model and output schema.
 
+#### Detection content release bundles (optional input)
+
+To support reproducible CI, supply-chain integrity, and deterministic “what content was used”
+provenance, the detection stage MAY be configured to source its content from a **Detection Content
+Release** (a.k.a. **detection content bundle**) instead of reading rules/mapping material directly
+from a working tree.
+
+A detection content bundle is a non-run artifact that snapshots:
+
+- the effective ruleset used for the run (Sigma rule files keyed by `rule_id`),
+- one or more bridge mapping pack snapshots, and
+- optionally, criteria pack snapshots.
+
+When a detection content bundle is used as an input, implementations MUST:
+
+- Validate the bundle offline before use (manifest schema + integrity material) per the
+  [data contracts specification][data-contracts].
+- Enforce that the run’s pinned versions (for example `manifest.versions.rule_set_id` /
+  `rule_set_version` and `manifest.versions.mapping_pack_id` / `mapping_pack_version`) are
+  compatible with the content bundle manifest.
+- Fail closed if compatibility cannot be established deterministically (do not “best effort” fall
+  back to local content).
+
+This input option enables offline provenance validation using only:
+
+`(run bundle + content bundle + contracts bundle)`.
+
 ### Scoring (metrics computation)
 
 **Summary**: The `scoring` stage joins ground truth, validation results, and detections to produce

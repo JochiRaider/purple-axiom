@@ -467,6 +467,8 @@ Determinism and drift gates:
 - Integration tests:
   - the evaluator determinism conformance harness (see
     [test strategy CI: integration tests](../100_test_strategy_ci.md#integration-tests))
+  - cross-backend conformance on the same BDP fixture when multiple batch backends are implemented
+    (see `100_test_strategy_ci.md`, "Evaluator conformance harness").
 
 Backend provenance requirements:
 
@@ -526,6 +528,49 @@ the evaluator backend adapter. It is authoritative for:
      - mapping pack snapshot (aliases, transforms, fallback policy),
      - backend id and version,
      - backend determinism settings (if any).
+
+1. Backend-neutral compiled-plan IR boundary (normative):
+
+   - To support optional backends without losing determinism, compilation MUST produce a
+     backend-neutral intermediate representation (IR) after routing + alias resolution and before
+     any backend-specific lowering.
+   - For v0.1, the IR is the `pa_eval_v1` plan IR defined below. The IR MUST be stored under
+     `backend.plan_kind="pa_eval_v1"` and `backend.plan`.
+   - Backend adapters MUST treat `pa_eval_v1` as the semantic source of truth. If a backend requires
+     an internal representation (for example SQL, an in-memory bytecode, or a streaming query), it
+     MUST deterministically lower from this IR.
+   - Backends MUST NOT introduce backend-specific semantics at the IR layer. Any backend that cannot
+     preserve the IR semantics MUST mark the rule non-executable (fail closed) using the appropriate
+     `reason_code`.
+
+1. Deterministic lowering requirements (normative):
+
+   - Lowering MUST be a pure function of:
+     - the IR object (`backend.plan`),
+     - `backend.id`, `backend.version`, and
+     - `backend.settings`.
+   - Lowering MUST NOT inspect runtime telemetry values and MUST NOT depend on event distribution.
+   - Lowering MUST NOT use randomized identifiers. Any generated names (aliases, temp columns, etc.)
+     MUST be derived deterministically from stable inputs (RECOMMENDED: hash of the IR subtree).
+   - If lowering fails (compiler exception, unsupported feature), the rule MUST be marked
+     non-executable with `reason_code="backend_compile_error"` (it MUST NOT degrade into "no
+     matches).
+
+1. IR canonicalization rules (normative):
+
+   These rules ensure different implementations and backends emit a byte-stable, backend-neutral IR.
+
+   - For `predicate` nodes with `op in {"and","or"}`:
+     - Implementations MUST flatten nested nodes of the same `op`.
+     - `args[]` MUST be sorted by the ascending RFC 8785 canonical JSON byte sequence (JCS) of each
+       arg node.
+   - For `cmp` nodes:
+     - When `value` is an array (Sigma list membership), the array MUST be de-duplicated and sorted
+       deterministically by `(type_rank, jcs(element))`, where `type_rank` is:
+       `null < false < true < number < string` and `jcs(element)` is the RFC 8785 canonical JSON
+       byte sequence for that element.
+     - Sigma list membership MUST be represented as a single `cmp` node with `value` as an array.
+       Implementations MUST NOT expand membership into an explicit OR tree.
 
 #### Supported Sigma expression subset (bridge-level, v0.1 MVP)
 
@@ -606,14 +651,18 @@ in-process evaluator.
   - alias resolution yields unknown fields and raw fallback is disabled,
   - correlation semantics cannot be represented.
 
-##### Plan format (pa_eval_v1)
+##### Plan IR format (pa_eval_v1)
 
-When `executable=true`, a compiled plan MUST include backend-specific executable content. For
-`native_pcre2`, this content MUST be represented as a JSON object under `backend.plan` with:
+`pa_eval_v1` is the bridge's backend-neutral plan IR for batch evaluation. The `native_pcre2`
+backend executes this IR directly; any other batch backend MUST deterministically lower from this IR
+while preserving the semantics defined below.
 
-- `backend.id = "native_pcre2"`
+When `executable=true`, a compiled plan MUST include IR content under `backend.plan` with:
+
 - `backend.plan_kind = "pa_eval_v1"`
 - `backend.plan` (object; schema defined below)
+
+For `native_pcre2`, `backend.id` MUST equal `"native_pcre2"`.
 
 `backend.plan` schema (normative):
 
@@ -642,8 +691,9 @@ Semantics (normative):
 - For list-typed fields:
   - `cmp:eq` MUST evaluate as true if any element equals the target value.
   - `cmp:neq` MUST evaluate as true if no element equals the target value (and field is present).
-- For `field: [v1, v2, ...]` (Sigma list membership), compilation MUST produce an OR over `cmp:eq`
-  comparisons (or a single `cmp:eq` with list value) with equivalent semantics.
+- For `field: [v1, v2, ...]` (Sigma list membership), compilation MUST produce a single `cmp:eq`
+  node with `value` set to the list (array) of candidate values.
+  - The list MUST be de-duplicated and sorted deterministically (see "IR canonicalization rules").
 
 ##### Compiled plan semantic validation policy
 

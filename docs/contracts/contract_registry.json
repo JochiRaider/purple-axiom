@@ -106,6 +106,14 @@
       "format": "json"
     },
     {
+      "contract_id": "detection_content_bundle_manifest",
+      "schema_path": "docs/contracts/detection_content_bundle_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Manifest for a Detection Content Release bundle (ruleset snapshot + mapping pack snapshot(s) + optional criteria pack snapshots) stored outside runs/.",
+      "artifact_kind": "other",
+      "format": "json"
+    },    
+    {
       "contract_id": "detection_instance",
       "schema_path": "docs/contracts/detection_instance.schema.json",
       "contract_version": "0.1.0",

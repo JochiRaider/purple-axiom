@@ -196,10 +196,15 @@ Sigma evaluation is a two-stage process.
      - If a rule requires `raw.*`, behavior is governed by
        `detection.sigma.bridge.raw_fallback_enabled` and MAY render the rule non-executable with
        reason code `raw_fallback_disabled` and reason domain `bridge_compiled_plan`.
-   - Produce a backend plan:
-     - Batch: native evaluator (`native_pcre2` MUST be the v0.1 default when
-       `detection.sigma.bridge.backend` is omitted).
-     - Streaming: optional (v0.2+).
+   - Produce a backend-neutral compiled-plan IR (bridge IR):
+     - The bridge IR is `pa_eval_v1` and is persisted in `bridge/compiled_plans/<rule_id>.plan.json`
+       under `backend.plan_kind="pa_eval_v1"` and `backend.plan` (see `065_sigma_to_ocsf_bridge.md`,
+       "Plan IR format (pa_eval_v1)").
+   - Select a backend executor to run the IR:
+     - Batch: `native_pcre2` MUST be the v0.1 default when `detection.sigma.bridge.backend` is
+       omitted.
+     - Other batch backends MAY lower deterministically from the IR while preserving semantics.
+     - Streaming: optional (v0.2+; backend-defined).
 1. **Evaluate**
    - Execute the plan over the run's OCSF event store.
    - Emit `detection_instance` rows for each match group.
@@ -212,6 +217,11 @@ Sigma evaluation is a two-stage process.
      - `matched_event_ids = [<event_id>, ...]`
      - `first_seen_utc = min(event time)` over contributing events
      - `last_seen_utc = max(event time)` over contributing events
+
+Note (backend pluralism and determinism): the bridge IR (`pa_eval_v1`) is backend-neutral. Any batch
+backend that claims `pa_eval_v1` support MUST preserve IR semantics and MUST be qualified via the
+cross-backend conformance harness on the same BDP fixture (see `100_test_strategy_ci.md`, "Evaluator
+conformance harness").
 
 ## State machine integration
 
@@ -259,20 +269,20 @@ The `non_executable_reason` object MUST also include a human-readable explanatio
 
 ### Reason codes (normative)
 
-| Reason code               | Category      | Description                                                                                                  |
-| ------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------ |
-| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                                                    |
-| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                                             |
-| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                                               |
-| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                                           |
-| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                                                  |
-| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                                             |
-| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (RE2-only in v0.1 for `\|re`)                       |
-| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                                        |
-| `unsupported_correlation` | Sigma feature | Correlation rules are out of scope for v0.1                                                                  |
-| `unsupported_aggregation` | Sigma feature | Aggregation semantics are out of scope for v0.1 outside Sigma correlations (default backend: `native_pcre2`) |
-| `backend_compile_error`   | Backend       | Backend compilation failed                                                                                   |
-| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                                         |
+| Reason code               | Category      | Description                                                                                                      |
+| ------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                                                        |
+| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                                                 |
+| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                                                   |
+| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                                               |
+| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                                                      |
+| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                                                 |
+| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (v0.1 default: PCRE2 with bounded execution for `\|re`) |
+| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                                            |
+| `unsupported_correlation` | Sigma feature | Correlation rule uses unsupported correlation type or semantics for the selected backend                         |
+| `unsupported_aggregation` | Sigma feature | Aggregation semantics are out of scope for v0.1 outside Sigma correlations (default backend: `native_pcre2`)     |
+| `backend_compile_error`   | Backend       | Backend compilation failed                                                                                       |
+| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                                             |
 
 Non-executable rules do not produce detection instances but are included in bridge coverage
 reporting and contribute to gap classification.

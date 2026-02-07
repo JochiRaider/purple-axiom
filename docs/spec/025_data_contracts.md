@@ -345,6 +345,234 @@ trusted expected value when one is available (for example, a signed sidecar `<bu
 explicit manifest pin if recorded). If verification fails or resolution is ambiguous, consumers MUST
 fail closed.
 
+### Detection content bundle distribution and validation (normative)
+
+Mature detection ecosystems treat detection content as a releasable package: versioned, integrity
+checked, and independently consumable by CI and offline validators. Purple Axiom formalizes this as
+a **detection content bundle** (also called a **Detection Content Release**).
+
+A detection content bundle is a **non-run artifact** stored outside `runs/` that contains immutable
+snapshots of:
+
+- a ruleset (Sigma YAML) used by the detection stage,
+- one or more Sigma-to-OCSF bridge mapping pack snapshots, and
+- optionally, one or more criteria pack snapshots (for evaluation workflows that want a single
+  “content + criteria” release).
+
+A conforming implementation MUST be able to validate a detection content bundle without network
+access, and MUST be able to validate a run’s detection provenance given only:
+
+`(run bundle + content bundle + contracts bundle)`.
+
+#### Storage location and addressing
+
+Detection content bundles are stored outside of `runs/`. The bundle format is defined as an on-disk
+directory tree; implementations MAY package/distribute it as a tar/zip artifact as long as
+extraction yields the same directory layout and byte contents.
+
+RECOMMENDED workspace-local store layout (non-normative):
+
+- `<workspace_root>/exports/content_bundles/<content_bundle_id>/<content_bundle_version>/`
+
+Identifiers (normative):
+
+- `content_bundle_id` MUST be `id_slug_v1` (ADR-0001).
+- `content_bundle_version` MUST be `semver_v1` (SemVer 2.0.0).
+
+#### Bundle layout and contents (normative)
+
+A detection content bundle directory MUST have the following structure:
+
+```text
+<content_bundle_root>/
+  detection_content_bundle_manifest.json
+  CHANGELOG.md                       # optional
+  security/
+    checksums.txt
+    signature.ed25519                # optional
+    public_key.ed25519               # optional
+  rulesets/
+    <rule_set_id>/<rule_set_version>/
+      rules/
+        <rule_id>.yaml               # one file per rule (canonical rule bytes; see below)
+  bridge/
+    mapping_packs/
+      <mapping_pack_id>/<mapping_pack_version>/
+        mapping_pack_snapshot.json
+  criteria_packs/                    # optional
+    <criteria_pack_id>/<criteria_pack_version>/
+      manifest.json
+      criteria.jsonl
+```
+
+Where:
+
+- `<content_bundle_root>` is the bundle root directory.
+- `<rule_set_id>`, `<mapping_pack_id>`, `<criteria_pack_id>` MUST be `id_slug_v1`.
+- `<rule_set_version>`, `<mapping_pack_version>`, `<criteria_pack_version>` MUST be `semver_v1`.
+- `<rule_id>` MUST be the Sigma rule identifier string as used in run artifacts
+  (`detections/detections.jsonl.rule_id` and `bridge/compiled_plans/<rule_id>.plan.json.rule_id`).
+  - Producers MUST fail closed if a selected rule lacks a stable `rule_id`.
+
+Ruleset snapshot normalization (normative):
+
+- Each rule file MUST be written as the **canonical rule bytes** defined by `060_detection_sigma.md`
+  ("Canonical rule hashing"):
+  - strip a UTF-8 BOM if present, and
+  - normalize line endings to LF (`\n`).
+- Producers MUST name the output file `<rule_id>.yaml` and MUST NOT rely on source-repo filenames.
+  - This ensures deterministic lookup of rule content by `rule_id` without additional indices.
+
+Mapping pack snapshots (normative):
+
+- Each `mapping_pack_snapshot.json` MUST validate against the existing `bridge_mapping_pack`
+  contract.
+- Consumers MUST treat `mapping_pack_snapshot.json.mapping_pack_sha256` as the authoritative stable
+  hash of the mapping pack’s semantic content (see `065_sigma_to_ocsf_bridge.md` and this spec’s
+  canonical hashing rules). Timestamp fields such as `generated_at_utc` are not stable and MUST NOT
+  be used for compatibility checks.
+
+Criteria pack snapshots (optional; normative when present):
+
+- If `criteria_packs/` is present, each `manifest.json` MUST validate against the existing
+  `criteria_pack_manifest` contract and `criteria.jsonl` lines MUST validate against the existing
+  `criteria_entry` contract.
+- Consumers MUST treat `criteria.pack_sha256` (in the snapped manifest) as the authoritative stable
+  content fingerprint (see `035_validation_criteria.md`).
+
+#### Content bundle manifest contract (normative)
+
+- File path: `detection_content_bundle_manifest.json`
+- Contract ID: `detection_content_bundle_manifest`
+- Contract version: `0.1.0`
+- Format: JSON (`canonical_json_bytes(obj)`; RFC 8785 JCS; UTF-8; no BOM; no trailing newline)
+
+The manifest MUST include, at minimum:
+
+- `contract_version` (MUST be `0.1.0`)
+- `schema_version` (MUST be `pa:detection_content_bundle_manifest:v1`)
+- `content_bundle_id`, `content_bundle_version`
+- `created_at` (UTC RFC 3339 with `Z`)
+- `profile` (MUST be `detection_content_release_v1`)
+- `components`:
+  - `rule_sets[]` (>=1):
+    - `rule_set_id`, `rule_set_version`
+    - `root_path` (MUST be `rulesets/<rule_set_id>/<rule_set_version>/rules/`)
+    - `rule_count` (optional but RECOMMENDED)
+  - `mapping_packs[]` (>=1):
+    - `mapping_pack_id`, `mapping_pack_version`
+    - `snapshot_path`
+    - `mapping_pack_sha256` (`sha256:<lowercase_hex>`)
+  - `criteria_packs[]` (optional):
+    - `criteria_pack_id`, `criteria_pack_version`
+    - `manifest_path`, `criteria_path`
+    - `pack_sha256` (`sha256:<lowercase_hex>`)
+- `integrity`:
+  - `checksums_path` (MUST be `security/checksums.txt`)
+  - `package_tree_sha256` (`sha256:<lowercase_hex>`; see below)
+
+#### Integrity and signing (normative)
+
+Detection content bundles reuse the standard checksums/signing rules used for shareable bundles (see
+"Optional invariants: run bundle signing" in this document):
+
+- `security/checksums.txt` MUST exist and MUST enumerate file digests one per line using the
+  format:\
+  `sha256:<lowercase_hex><space><relative_path><LF>` (single space), sorted by `relative_path`
+  ascending using UTF-8 byte order (no locale).
+- `<relative_path>` MUST be bundle-root-relative (POSIX separators), MUST NOT start with `/`, and
+  MUST NOT contain `..` path segments.
+- The checksums enumerator MUST only process regular files. If a symlink (or platform-equivalent
+  reparse point) or other non-regular file type (block/char device, FIFO, socket) is encountered
+  anywhere under the bundle root, integrity computation MUST fail closed.
+
+Checksums selection (normative):
+
+- The checksums selection MUST include every file under the bundle root except:
+  - `.staging/**` (if present)
+  - `security/checksums.txt`
+  - `security/signature.ed25519` (if present)
+
+Signature semantics (optional; normative when present):
+
+- If `security/signature.ed25519` and `security/public_key.ed25519` are present, they MUST follow
+  the same signature semantics as run bundles:
+  - signature over the exact bytes of `security/checksums.txt`, and
+  - files contain base64 + `\n`.
+
+Deterministic bundle hash (normative):
+
+The manifest field `integrity.package_tree_sha256` MUST be computed as:
+
+`"sha256:" + sha256_hex(canonical_json_bytes(tree_basis_v1))`
+
+Where `tree_basis_v1` is the canonical JSON object:
+
+- `v`: `1`
+- `engine`: `detection_content_bundle`
+- `files`: an array of
+  `{ "path": "<relative_path>", "sha256": "<lowercase_hex>", "size_bytes": <int> }` for all files in
+  the tree-basis selection.
+
+Tree-basis selection (normative):
+
+- The tree-basis selection MUST be derived from the checksums selection, but MUST additionally
+  exclude `detection_content_bundle_manifest.json` to avoid self-referential hashing cycles.
+
+`files[]` MUST be sorted by `path` ascending using UTF-8 byte order (no locale).
+
+#### Offline validation requirement (verification hook) (normative)
+
+A conforming implementation MUST support an offline validation mode for content bundles: given only
+`(content bundle + contracts bundle)`, validation succeeds without network access and without
+repository checkout.
+
+At minimum, offline validation MUST:
+
+1. Validate `detection_content_bundle_manifest.json` against the `detection_content_bundle_manifest`
+   schema from the resolved contracts bundle.
+1. Validate `security/checksums.txt` format and recompute per-file SHA-256 hashes for all referenced
+   files.
+1. If signature artifacts are present, verify the Ed25519 signature over the exact bytes of
+   `security/checksums.txt`.
+
+CI verification hook (normative):
+
+- Content CI MUST build at least one detection content bundle for the repository’s pinned detection
+  content (ruleset + mapping pack) and MUST validate it via the offline validation mode above.
+
+#### Run validation using a content bundle (normative)
+
+When validating a run in a mode that requires detection content provenance, consumers MUST be able
+to validate the run using only `(run bundle + content bundle + contracts bundle)`.
+
+At minimum, run + content validation MUST:
+
+1. Validate the run bundle contract-backed artifacts using the resolved contracts bundle (existing
+   offline mode).
+1. Validate the content bundle using the content-bundle offline mode above.
+1. Establish that the content bundle is **compatible** with the run’s pinned versions:
+   - For Sigma evaluation runs, `manifest.versions.rule_set_id`/`rule_set_version` MUST match one of
+     the content bundle manifest `components.rule_sets[]` entries.
+   - For bridge-enabled runs, `manifest.versions.mapping_pack_id`/`mapping_pack_version` MUST match
+     one of the content bundle manifest `components.mapping_packs[]` entries.
+   - If the run pins `manifest.versions.criteria_pack_id`/`criteria_pack_version` and the content
+     bundle includes criteria snapshots, the pinned values MUST match one of the content bundle
+     manifest `components.criteria_packs[]` entries.
+1. Validate bridge compatibility deterministically:
+   - The run’s `bridge/mapping_pack_snapshot.json.mapping_pack_sha256` MUST equal the
+     `components.mapping_packs[].mapping_pack_sha256` value for the matched mapping pack entry.
+1. Validate per-rule content provenance deterministically:
+   - For every file `bridge/compiled_plans/<rule_id>.plan.json` in the run bundle:
+     - The `rule_id` MUST exist as a rule file at:
+       `rulesets/<rule_set_id>/<rule_set_version>/rules/<rule_id>.yaml` within the content bundle.
+     - Recompute the rule hash using the canonical rule hashing algorithm (see
+       `060_detection_sigma.md`) and compare against the compiled plan `rule_sha256`.
+     - The compiled plan `mapping_pack_sha256` MUST equal the run’s
+       `bridge/mapping_pack_snapshot.json.mapping_pack_sha256`.
+
+If any required check fails or cannot be completed deterministically, consumers MUST fail closed.
+
 #### Offline validation requirement (verification hook) (normative)
 
 A conforming implementation MUST support an offline validation mode: given only
@@ -375,6 +603,7 @@ The following list is for navigation only. The authoritative mapping is
 - `docs/contracts/criteria_entry.schema.json`
 - `docs/contracts/criteria_result.schema.json`
 - `docs/contracts/ocsf_event_envelope.schema.json`
+- `docs/contracts/detection_content_bundle_manifest.schema.json`
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
 - `docs/contracts/report.schema.json`

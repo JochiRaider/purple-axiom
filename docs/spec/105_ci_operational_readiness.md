@@ -138,6 +138,11 @@ When BDP replay is used, Run CI MUST:
 - Run detection evaluation deterministically over the BDP normalized event store.
 - Compare outputs to a golden expected output (hash- or diff-based), failing closed on mismatch.
 
+If Run CI is configured to qualify multiple batch evaluator backends (for example, `native_pcre2`
+and a second backend that claims `pa_eval_v1` support), Run CI MUST also execute the evaluator
+conformance harness in cross-backend matrix mode over the same pinned BDP fixture, failing closed on
+any `cross_backend_*` mismatch (see `100_test_strategy_ci.md`, "Evaluator conformance harness").
+
 ### Merge and release blocking policy
 
 - Merges to the default branch MUST be blocked unless Content CI passes.

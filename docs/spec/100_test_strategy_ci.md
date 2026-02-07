@@ -771,6 +771,65 @@ Goals:
     - SHA256 of canonical JSON (JCS) for each `bridge/compiled_plans/<rule_id>.plan.json`
   - `detections_hash`:
     - SHA256 of canonical JSON (JCS) for the ordered contents of `detections/detections.jsonl`
+  - `bridge_ir_hash` (backend-neutral; required when `backend.plan_kind="pa_eval_v1"`):
+    - For each executable compiled plan, SHA256 of canonical JSON (JCS) for `backend.plan` only.
+    - The harness MUST also record an aggregate hash computed by sorting `(rule_id, bridge_ir_hash)`
+      by `rule_id` and hashing the resulting canonical JSON array.
+  - `semantic_detections_hash` (backend-neutral):
+    - SHA256 of canonical JSON (JCS) for the ordered contents of a backend-neutral projection of
+      `detections/detections.jsonl` (see "Cross-backend conformance").
+
+#### Cross-backend conformance (verification hook)
+
+When Run CI is configured to qualify more than one batch backend that claims `pa_eval_v1` support,
+the harness MUST execute a backend matrix over the same BDP fixture and ruleset and verify semantic
+equivalence.
+
+Matrix inputs (normative):
+
+- `backends[]`: ordered list of backend ids to test.
+  - The list MUST be sorted lexicographically (bytewise UTF-8) to ensure deterministic report
+    ordering.
+- `fixture`: the same pinned Baseline Detection Package (BDP) version for all backends.
+- `ruleset`: the same pinned evaluator conformance rule set for all backends.
+
+Equivalence rules (normative):
+
+- IR equivalence: for each rule that is `executable=true` across the matrix, the `bridge_ir_hash`
+  MUST be identical across backends.
+- Result equivalence: for those rules, the `semantic_detections_hash` MUST be identical across
+  backends.
+
+Backend-neutral projection for `semantic_detections_hash` (normative):
+
+To avoid false mismatches due to backend provenance, the harness MUST compute semantic equivalence
+over a projection that excludes backend-specific fields.
+
+For each JSONL row in `detections/detections.jsonl`, construct an object with only:
+
+- `rule_id`
+- `first_seen_utc`
+- `last_seen_utc`
+- `matched_event_ids`
+- `technique_ids` (if present)
+
+The projection MUST exclude `run_id`, `scenario_id`, and all `extensions.*` fields.
+
+The harness MUST then:
+
+1. Canonicalize each projected object with RFC 8785 (JCS).
+1. Sort rows deterministically by the stable key tuple:
+   - `rule_id`, then
+   - `first_seen_utc`, then
+   - `last_seen_utc`, then
+   - `matched_event_ids` (lexicographic compare of the already-sorted array)
+1. Join the canonicalized rows with `\n` and a trailing `\n`.
+1. Compute SHA-256 over the resulting bytes.
+
+Non-executable handling (normative):
+
+- If a rule is `executable=false` for any backend in the matrix, the harness MUST record this as a
+  cross-backend conformance failure unless the rule is explicitly excluded from the matrix rule set.
 
 #### Output artifacts
 
@@ -789,6 +848,8 @@ The harness MUST classify mismatches with stable categories:
 
 - `plan_hash_mismatch`
 - `result_hash_mismatch`
+- `cross_backend_ir_mismatch` (backend matrix mode only)
+- `cross_backend_result_mismatch` (backend matrix mode only)
 - `backend_error` (compile or evaluation failure)
 
 Where possible, the harness SHOULD include a human-readable diff summary (for example, a small

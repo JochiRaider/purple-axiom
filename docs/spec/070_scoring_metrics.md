@@ -258,6 +258,8 @@ Unless otherwise specified, the scoring stage MUST compute and emit these denomi
 - `executed_actions_total`: count of action instances whose `lifecycle.execute.phase_outcome` is not
   `"skipped"` in `ground_truth.jsonl`.
 - `executed_techniques_total`: count of distinct `technique_id` values across the executed actions.
+- `detections_total`: detection hits considered by scoring (rows in `detections/detections.jsonl`
+  after deterministic dedupe). Only applicable when the detections stage is enabled.
 
 When a denominator is zero, any derived `rate` metric that would divide by that denominator MUST be
 emitted as `null` with `indeterminate_reason="not_applicable"`.
@@ -330,6 +332,24 @@ Terminology note (normative):
     aggregate)
   - fallback_rate: fraction of evaluated rules that required `raw.*` fallback predicates
   - compile_failures: count and reasons (unknown logsource, unmapped fields, unsupported modifiers)
+
+### Detection fidelity (seed; v0.1)
+
+This scoring surface is intended to prevent overfitting to attack-only telemetry by making false
+positive behavior measurable under a deterministic baseline noise workload.
+
+Definitions (normative):
+
+- A **detection hit** is a row in `detections/detections.jsonl` after deterministic dedupe.
+- A detection hit is a **true positive** when it can be attributed to at least one executed action.
+- A detection hit is a **false positive** when it cannot be attributed to any executed action.
+
+Metric rules (normative):
+
+- When the detections stage is disabled or the detections artifact is absent, the metrics below MUST
+  be emitted as `null` with `indeterminate_reason="not_applicable"`.
+- When `detections_total == 0`, `false_positive_detection_rate` MUST be `null` with
+  `indeterminate_reason="not_applicable"`.
 
 ### Regression comparable metric surface (normative)
 
@@ -509,11 +529,17 @@ Comparable metrics (v0.1 minimum set):
   - `rule_logic_gap_rate` (kind: `rate`, unit: unitless fraction)
   - `cleanup_verification_failed_count` (kind: `count`, unit: actions)
   - `cleanup_verification_failed_rate` (kind: `rate`, unit: unitless fraction)
+- Detection fidelity:
+  - `detections_total` (kind: `count`, unit: detections)
+  - `false_positive_detection_count` (kind: `count`, unit: detections)
+  - `false_positive_detection_rate` (kind: `rate`, unit: unitless fraction)
 
 Notes:
 
-- `*_rate` metrics MUST use `executed_actions_total` as the denominator, unless the category is not
-  applicable to the run, in which case the metric MUST be `null` with an `indeterminate_reason`.
+- `*_rate` metrics MUST use `executed_actions_total` as the denominator, unless explicitly stated
+  otherwise for a metric. `false_positive_detection_rate` uses `detections_total`. When a metric is
+  not applicable to the run (including a zero denominator), the metric MUST be `null` with an
+  `indeterminate_reason`.
 - Implementations MAY include additional comparable metrics, but MUST NOT change the identifiers,
   meaning, or typing of the minimum set above within a contract version.
 
@@ -727,6 +753,10 @@ scoring:
     max_bridge_gap_mapping_rate: 0.10  # Addressable via mapping pack work
     max_bridge_gap_feature_rate: 0.40  # Expected given MVP feature scope
     max_bridge_gap_other_rate: 0.02    # Should be rare; indicates bridge bugs
+
+    # False positive rate
+    max_false_positive_detection_rate: 0.05
+    max_false_positive_detection_count: 10 
 ```
 
 ### Weights (composite score)

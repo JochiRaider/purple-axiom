@@ -733,8 +733,29 @@ Checks (normative; apply to `executable=true` plans):
 
    - Regex nodes MUST satisfy the configured regex safety limits (pattern length, match limits, and
      depth limits; see `120_config_reference.md`).
-   - Implementations SHOULD also enforce a total predicate AST node budget (default RECOMMENDED:
-     5,000 nodes) to prevent pathological compilation outputs.
+
+   - When the detection performance budget gate is enabled (see `110_operability.md`),
+     implementations MUST compute deterministic predicate-AST complexity metrics for each compiled
+     plan:
+
+     - `predicate_ast_op_nodes`: the number of JSON objects with an `"op"` key in
+       `backend.plan.predicate` (root included; `args`/`field`/`value` leaf objects without `"op"`
+       are not counted).
+     - `predicate_ast_max_depth`: maximum nesting depth of `"op"` objects in the predicate tree
+       (root depth = 1).
+     - `predicate_ast_regex_nodes`: number of predicate operator nodes where `op == "regex"`.
+
+   - Implementations SHOULD also enforce predicate-AST size budgets to prevent pathological
+     compilation outputs:
+
+     - `detection.sigma.limits.max_predicate_ast_nodes_per_rule` (optional): maximum allowed
+       `predicate_ast_op_nodes` per rule.
+     - `detection.sigma.limits.max_predicate_ast_nodes_total` (optional; default RECOMMENDED:
+       5,000): maximum allowed sum of `predicate_ast_op_nodes` across all compiled, executable
+       rules.
+
+     Exceedance SHOULD be surfaced via the detection performance budget gate
+     (`detection.performance_budgets`) as defined in `110_operability.md`.
 
 Verification hook (normative):
 

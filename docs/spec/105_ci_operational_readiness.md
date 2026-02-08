@@ -136,6 +136,9 @@ When BDP replay is used, Run CI MUST:
 - Fetch a pinned `(baseline_id, baseline_version)` pair.
 - Validate the BDP manifest and integrity material (checksums; signature when present).
 - Run detection evaluation deterministically over the BDP normalized event store.
+- Enforce configured detection performance budgets using deterministic metrics in
+  `runs/<run_id>/logs/counters.json` and the `detection.performance_budgets` stage outcome (see
+  `110_operability.md` and `ADR-0005-stage-outcomes-and-failure-classification.md`).
 - Compare outputs to a golden expected output (hash- or diff-based), failing closed on mismatch.
 
 If Run CI is configured to qualify multiple batch evaluator backends (for example, `native_pcre2`
@@ -261,15 +264,15 @@ closed. CI MUST surface the absence of outcomes as an operational error requirin
 
 CI MUST enforce the required gate categories already defined by the test strategy:
 
-| Gate category             | Required?                       | Primary evidence                                                     | Fail mode                                                                                                      |
-| ------------------------- | ------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Schema validation         | REQUIRED                        | schema validation output / errors                                    | fail-closed                                                                                                    |
-| Version conformance       | REQUIRED                        | supported version pins + historical bundle fixtures                  | fail-closed                                                                                                    |
-| Determinism gates         | REQUIRED when enabled           | Evaluator conformance report + determinism fixtures                  | fail-closed for `result_hash_mismatch`; warn-only for `plan_hash_mismatch` unless explicitly enabled as a gate |
-| Artifact validation       | REQUIRED                        | run bundle paths + contract reports                                  | fail-closed                                                                                                    |
-| Cross-artifact invariants | REQUIRED                        | manifest/run_id joins + referential checks                           | fail-closed                                                                                                    |
-| Operational readiness     | REQUIRED when enabled (default) | `logs/health.json`, `logs/telemetry_validation.json`, `logs/run.log` | fail-closed for required canaries; threshold-based (partial allowed) for configured budgets                    |
-| Regression gates          | REQUIRED when enabled           | baseline compare outputs + thresholds                                | threshold-based (partial allowed)                                                                              |
+| Gate category             | Required?                       | Primary evidence                                                     | Fail mode                                                                                                                             |
+| ------------------------- | ------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema validation         | REQUIRED                        | schema validation output / errors                                    | fail-closed                                                                                                                           |
+| Version conformance       | REQUIRED                        | supported version pins + historical bundle fixtures                  | fail-closed                                                                                                                           |
+| Determinism gates         | REQUIRED when enabled           | Evaluator conformance report + determinism fixtures                  | fail-closed for `result_hash_mismatch`; warn-only for `plan_hash_mismatch` unless explicitly enabled as a gate                        |
+| Artifact validation       | REQUIRED                        | run bundle paths + contract reports                                  | fail-closed                                                                                                                           |
+| Cross-artifact invariants | REQUIRED                        | manifest/run_id joins + referential checks                           | fail-closed                                                                                                                           |
+| Operational readiness     | REQUIRED when enabled (default) | `logs/health.json`, `logs/telemetry_validation.json`, `logs/run.log` | fail-closed for required canaries; threshold-based (partial allowed) for configured budgets (including detection performance budgets) |
+| Regression gates          | REQUIRED when enabled           | baseline compare outputs + thresholds                                | threshold-based (partial allowed)                                                                                                     |
 
 This table is a consolidation view; details remain in the underlying specs.
 

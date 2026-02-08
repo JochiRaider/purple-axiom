@@ -876,6 +876,10 @@ The fixture set MUST include at least:
   - Assert schema validation fails closed.
   - Assert the failure output identifies the invalid token location deterministically (for example,
     a JSON pointer or dotted path to the array element).
+- `range_config_noise_profile_missing_pin_rejected` (fail closed):
+  - Feed `inputs/range.yaml` with `runner.environment_config.noise_profile.enabled=true` but omit
+    `profile_sha256` (or `profile_id` / `profile_version`).
+  - Expected: config validation fails closed with `reason_code=config_schema_invalid`.
 
 ### Version conformance
 
@@ -954,6 +958,30 @@ CI SHOULD retain the conformance report as a build artifact to support fixture r
 backend and regex engine upgrades, platform qualification (OS/arch) changes, and drift triage when
 golden fixtures regress.
 
+### Detection performance budget gates
+
+Run CI MUST include fixtures that exercise the deterministic detection performance budget gate
+(`detection.performance_budgets`) defined in `110_operability.md`.
+
+Required fixtures:
+
+- **Pass fixture**: budgets configured to comfortably exceed the fixture's cost; expected:
+
+  - `detection.performance_budgets` stage outcome `success`
+  - `manifest.status == "success"` (assuming no other warnings)
+
+- **Fail fixture (deterministic)**: budgets configured to be intentionally too small (for example,
+  `max_predicate_ast_nodes_total: 0` and/or `max_eval_cost_units_total: 0`); expected:
+
+  - `detection.performance_budgets` stage outcome `failed` with
+    `reason_code="detection_budget_exceeded"` and `fail_mode="warn_and_skip"`
+  - `manifest.status == "partial"`
+  - `logs/counters.json` includes the required `detection_sigma_*` budget metrics and non-zero
+    `detection_sigma_budget_violation_total`
+
+The fixtures MUST validate the gate using `logs/counters.json` as the source of truth for metrics.
+Wall-clock timers MUST NOT be used for gating in CI.
+
 ### Artifact validation
 
 Linting and validation for Sigma rules ensures syntactic and semantic correctness.
@@ -1030,6 +1058,47 @@ Cross-artifact invariants enforce consistency across pipeline outputs:
     substages allowed) consistent with the architecture specification.
   - Each `health.json.stages[].reason_code` value (when present) MUST be drawn from ADR-0005 for the
     corresponding stage/substage; unknown reason codes MUST fail CI.
+
+### Controlled noise profile conformance
+
+Controlled benign noise is a first-class test variable used to detect false positive regressions.
+When enabled, it MUST be pinned and observable in provenance (see
+`runner.environment_config.noise_profile` in `120_config_reference.md` and
+`manifest.extensions.runner.environment_noise_profile` in `025_data_contracts.md`).
+
+The fixture set MUST include at least:
+
+- `noise_profile_provenance_pinned` (fail closed):
+
+  - Input: `inputs/range.yaml` enables `runner.environment_config.noise_profile` with explicit
+    `profile_id`, `profile_version`, `profile_sha256`, and `seed`.
+  - Expected:
+    - `manifest.extensions.runner.environment_noise_profile` exists and matches the effective
+      config.
+    - The profile pin is stable across repeated runs with identical inputs (no timestamps, stable
+      ordering).
+
+- `noise_profile_toggle_event_id_stability` (determinism hook; recommended):
+
+  - Input: execute the same scenario suite twice with identical seeds and pinned versions:
+    1. noise profile disabled, 2) noise profile enabled.
+  - Expected:
+    - For all normalized events that carry
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker` values observed in ground
+      truth for executed actions, the multiset of `metadata.event_id` values MUST be identical
+      between the two runs.
+    - Noise-profile metadata fields (when present) MUST NOT participate in `metadata.event_id`
+      computation.
+
+- `noise_profile_false_positive_budget` (CI gate; configurable):
+
+  - Input: a noise-enabled run with detections enabled.
+  - Expected:
+    - Scoring emits `false_positive_detection_count` and `false_positive_detection_rate` in the
+      comparable metrics surface.
+    - If `scoring.thresholds.max_false_positive_detection_rate` and/or
+      `scoring.thresholds.max_false_positive_detection_count` is configured, the run MUST be marked
+      `partial` when the budget is exceeded.
 
 ### Consumer tooling conformance (reference reader semantics)
 

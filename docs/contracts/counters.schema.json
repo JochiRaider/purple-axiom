@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "docs/contracts/counters.schema.json",
   "title": "Purple Axiom Run Counters",
-  "description": "Run-level snapshot of stable counters and gauges for debugging, CI assertions, and deterministic regression triage. Contract for runs/<run_id>/logs/counters.json.",
+  "description": "Run-level snapshot of stable counters and gauges for debugging, CI assertions, deterministic regression triage, and performance/footprint budget gates (for example, detection evaluation cost/complexity counters). Contract for runs/<run_id>/logs/counters.json.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -31,14 +31,14 @@
     },
     "counters": {
       "type": "object",
-      "description": "Map of counter_name -> u64. Producers must serialize keys in deterministic sorted order (UTF-8 byte order, no locale).",
+      "description": "Map of counter_name -> u64. This contract does not require a fixed set of counter keys; stage specifications define required keys and omit-vs-zero semantics. To support deterministic budget gates, resource and performance measurements SHOULD be recorded as integer counters with unit-suffixed names (for example, `*_bytes_*`, `*_ms_*`, `*_cost_units_*`). Producers must serialize keys in deterministic sorted order (UTF-8 byte order, no locale).",
       "additionalProperties": {
         "$ref": "#/$defs/u64"
       }
     },
     "gauges": {
       "type": "object",
-      "description": "Optional map of gauge_name -> number. Producers must serialize keys in deterministic sorted order (UTF-8 byte order, no locale). Values must be finite JSON numbers (JSON does not support NaN/Infinity).",
+      "description": "Optional map of gauge_name -> number. This contract does not require a fixed set of gauge keys; stage specifications define required keys and omit-vs-zero semantics. Gauges are intended for ratios/percentages and other non-integer values; prefer counters for integer-valued budget metrics when possible. Producers must serialize keys in deterministic sorted order (UTF-8 byte order, no locale). Values must be finite JSON numbers (JSON does not support NaN/Infinity).",
       "additionalProperties": {
         "type": "number"
       }
@@ -77,5 +77,5 @@
       }
     }
   },
-  "$comment": "Determinism requirements for JSON key ordering and cross-artifact invariants (for example, run_id == manifest.run_id) are specified by the data contracts spec and cannot be fully enforced by JSON Schema alone."
+  "$comment": "Determinism requirements for JSON key ordering and cross-artifact invariants (for example, run_id == manifest.run_id) are specified by the data contracts spec and cannot be fully enforced by JSON Schema alone. This contract intentionally allows stage-defined counter/gauge keys so new observability and budget gates (for example, detection compilation/evaluation cost and complexity metrics) can be added without schema churn."
 }

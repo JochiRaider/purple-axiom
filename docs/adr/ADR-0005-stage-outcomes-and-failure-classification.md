@@ -701,6 +701,19 @@ Minimum artifacts when enabled: `detections/detections.jsonl`, `bridge/**`
 | `bridge_mapping_pack_invalid` | FATAL    | Bridge mapping pack missing or schema-invalid. |
 | `backend_driver_failed`       | FATAL    | Backend cannot open or mount dataset.          |
 
+#### Performance budgets (substage: `detection.performance_budgets`)
+
+This substage is a deterministic quality gate for detection evaluation performance/footprint budgets
+(compile and evaluation cost). It MUST be driven by deterministic metrics emitted in
+`runs/<run_id>/logs/counters.json` (see `110_operability.md`).
+
+`reason_code` for this substage MUST be constrained to:
+
+- `detection_budget_exceeded` (warn-and-skip): one or more configured detection budget thresholds
+  were exceeded.
+- `detection_budget_metrics_missing` (fail closed): required deterministic metrics are missing
+  (budget gate enabled but cannot be evaluated).
+
 #### NON-FATAL reason codes (per-rule; rule-level fail-closed)
 
 These are emitted at rule granularity (for example in compiled plans). Stage continues.

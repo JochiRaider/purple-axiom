@@ -2597,9 +2597,25 @@ Optional envelope extensions (v0.1):
   used to correlate synthetic activity to a specific action and lifecycle phase. This is the
   normalized (OCSF) representation of the ground-truth action field
   `extensions.synthetic_correlation_marker`.
+
   - When present, the value MUST be preserved verbatim from ingestion through normalization.
   - The value MUST NOT be used as part of `metadata.event_id` computation (see the event identity
     ADR for identity-basis exclusions).
+
+- `metadata.extensions.purple_axiom.environment_noise_profile` (optional): object. When present,
+  records the pinned noise profile for the run:
+
+  - `enabled` (boolean)
+  - `profile_id` (string)
+  - `profile_version` (string)
+  - `profile_sha256` (string)
+  - `seed` (integer)
+
+  Constraints (normative):
+
+  - This object MUST be constant for all events within a run when emitted.
+  - It MUST NOT participate in `metadata.event_id` computation, and MUST NOT affect any other
+    deterministic identifiers (for example, any action keys or join keys).
 
 Vendor-field rule (normative):
 
@@ -3145,6 +3161,30 @@ Normalized events:
 
 - Are intentionally permissive to allow full OCSF payloads and source-specific structures.
 - Must still satisfy required provenance and identity fields.
+
+### Runner namespace: environment noise profile (v0.1)
+
+To make benign background activity ("noise") explicitly testable, a run MAY declare a pinned noise
+profile in configuration (`runner.environment_config.noise_profile` in `inputs/range.yaml`).
+
+When the effective configuration enables a noise profile (`enabled=true`), the run MUST record the
+resolved pin in the run manifest under `manifest.extensions.runner.environment_noise_profile`:
+
+- `enabled` (boolean; MUST be `true`)
+- `profile_id` (string)
+- `profile_version` (string)
+- `profile_sha256` (string; lowercase hex SHA-256 of canonical profile bytes)
+- `seed` (integer)
+- `targets` (optional; array of `asset_id` strings; sorted ascending)
+
+Normative requirements:
+
+- `manifest.extensions.runner.environment_noise_profile` MUST be present when noise is enabled.
+- `profile_id`, `profile_version`, `profile_sha256`, and `seed` MUST match the effective
+  configuration.
+- `targets` (if present) MUST be a subset of `runner.environment_config.targets`.
+- The object MUST be stable across repeated runs with identical inputs (deterministic ordering, no
+  timestamps).
 
 #### `extensions.principal_id` (action-scoped, optional)
 

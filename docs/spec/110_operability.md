@@ -48,7 +48,8 @@ Minimum per-stage health signals (non-exhaustive):
 - **Normalization (`normalization`)**: input read completeness, parse errors, mapping coverage.
 - **Validation (`validation`)**: criteria pack load success, evaluation coverage, run-limit
   enforcement outcome.
-- **Detection (`detection`)**: rule load success, compilation failures, match counts.
+- **Detection (`detection`)**: rule load success, compilation failures, match counts, performance
+  budget gate outcome (when enabled).
 - **Scoring (`scoring`)**: join completeness, latency distributions.
 - **Reporting (`reporting`)**: report generation status, evidence linkage checks, regression
   comparability (when enabled).
@@ -103,6 +104,81 @@ The pipeline MUST enforce upper bounds:
 - **Memory**: collector memory limit (via memory limiter) and normalizer process RSS guardrails.
 - **CPU**: continuous runs should not starve endpoints; target sustained CPU under a configurable
   threshold.
+
+### Detection evaluation budgets (normative)
+
+To prevent slow detections from creeping in unnoticed, the pipeline MUST support deterministic
+performance/footprint budgets for Sigma rule compilation and evaluation. The budget gate MUST be
+enforceable without relying on wall-clock time.
+
+Budgets are configured under `detection.sigma.limits` (see `120_config_reference.md`). When any
+detection performance budget key is configured (non-null), the pipeline MUST compute the metrics
+defined below and write them to `runs/<run_id>/logs/counters.json`.
+
+The pipeline MUST also record a stage outcome entry with:
+
+- `stage: "detection.performance_budgets"`
+- `reason_domain: "operability"`
+- `status: "success" | "failed"`
+
+If one or more configured budgets are exceeded, the stage outcome MUST be recorded as:
+
+- `status: "failed"`
+- `fail_mode: "warn_and_skip"`
+- `reason_code: "detection_budget_exceeded"`
+
+If the budget gate is enabled but required metrics are missing (cannot be computed
+deterministically), the stage outcome MUST be recorded as:
+
+- `status: "failed"`
+- `fail_mode: "fail_closed"`
+- `reason_code: "detection_budget_metrics_missing"`
+
+#### Required deterministic metrics (counters.json)
+
+When the budget gate is enabled, the following counters MUST be emitted in `logs/counters.json`.
+
+- `detection_sigma_rules_compiled_total` (rules compiled, regardless of executable status)
+
+- `detection_sigma_predicate_ast_op_nodes_total` (sum across compiled, executable rules)
+
+- `detection_sigma_predicate_ast_op_nodes_max` (max across rules)
+
+- `detection_sigma_compile_cost_units_total`
+
+- `detection_sigma_compile_cost_units_max`
+
+- `detection_sigma_candidate_events_total` (sum of per-rule candidate event counts)
+
+- `detection_sigma_candidate_events_max` (max per-rule candidate event count)
+
+- `detection_sigma_eval_cost_units_total`
+
+- `detection_sigma_eval_cost_units_max`
+
+- `detection_sigma_budget_violation_rules_total` (number of rules that violated any configured
+  per-rule budget)
+
+- `detection_sigma_budget_violation_total` (number of violated budget checks across all configured
+  budgets)
+
+Optional (recommended) plan complexity counters:
+
+- `detection_sigma_predicate_ast_max_depth_max`
+- `detection_sigma_predicate_ast_regex_nodes_max`
+
+#### Metric definitions (normative)
+
+- `predicate_ast_op_nodes_per_rule` counts **operator nodes** in the compiled plan predicate AST
+  (`pa_eval_v1`) as defined in `065_sigma_to_ocsf_bridge.md`.
+- `candidate_events_per_rule` is the number of normalized events in the run whose `class_uid` is in
+  the rule's `backend.plan.scope.class_uids`. Implementations MAY compute this from a per-class
+  count index; otherwise they MUST compute it by scanning the normalized store.
+- `compile_cost_units_per_rule` is defined as `predicate_ast_op_nodes_per_rule` (v0.1).
+- `eval_cost_units_per_rule` is defined as
+  `predicate_ast_op_nodes_per_rule * candidate_events_per_rule` (v0.1).
+
+Totals are sums across rules. Max values are maxima across rules.
 
 ### EPS baselines (planning targets; v0.1)
 

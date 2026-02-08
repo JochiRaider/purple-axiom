@@ -145,25 +145,30 @@ Common keys:
 - `environment_config` (optional)
 
   - `mode` (optional, default: `off`): `off | check_only | apply`
+
     - `off`: do not perform run-scoped environment configuration.
     - `check_only`: perform preflight checks only. MUST NOT mutate target state.
     - `apply`: MAY mutate target state to converge the configured baseline. This is a destructive
       capability and MUST be explicitly enabled.
 
   - `fail_mode` (optional, default: `fail_closed`): `fail_closed | warn_and_skip`
+
     - `fail_closed`: any failed check blocks scenario execution (preferred for v0.1).
     - `warn_and_skip`: record the failure deterministically but continue execution (use only for
       non-critical checks).
 
   - `transport` (optional, default: `ssh`): `ssh | winrm | other`
+
     - Transport used for remote environment configuration and checks.
 
   - `targets` (optional): allowlist of `lab.assets[].asset_id` eligible for environment
     configuration and checks.
+
     - When `mode=apply`, this list MUST be present and MUST be non-empty; otherwise config
       validation MUST fail closed with `reason_code=config_schema_invalid`.
 
   - `dsc_v3` (optional)
+
     - `enabled` (optional, default: `false`)
     - `config_path` (required when `enabled=true`): path to a DSC v3 configuration document (JSON or
       YAML).
@@ -176,6 +181,26 @@ Common keys:
       - When present and non-empty, the runner MUST reject any configuration document that contains
         resources outside the allowlist.
 
+  - `noise_profile` (optional): configuration for deterministic benign background activity
+    ("baseline noise").
+
+    - `enabled` (optional, default: `false`): when `true`, the runner MUST execute the selected
+      noise profile as part of environment configuration/background activity.
+      - When `enabled=true`, `environment_config.mode` MUST equal `apply` (noise generation is
+        state-mutating).
+    - `profile_id` (required when `enabled=true`): stable identifier for the noise profile.
+    - `profile_version` (required when `enabled=true`): profile version string (SemVer recommended).
+    - `profile_sha256` (required when `enabled=true`): SHA-256 of the canonical bytes of the profile
+      definition used for the run (pins the exact workload).
+    - `profile_path` (optional): human-readable path to the profile definition source. Not used as
+      an identity input; `profile_sha256` is authoritative.
+    - `seed` (optional, default: `0`): deterministic seed for any stochastic elements. MUST be
+      pinned and recorded in provenance (see `manifest.extensions.runner.environment_noise_profile`
+      in `025_data_contracts.md`).
+    - `targets` (optional): allowlist of `lab.assets[].asset_id` eligible for noise generation. When
+      omitted, defaults to `environment_config.targets`. When present, MUST be a subset of
+      `environment_config.targets`.
+
   Notes:
 
   - When `environment_config.mode != off`, the orchestrator records the substage outcome as
@@ -184,6 +209,7 @@ Common keys:
 
   - Environment configuration is the recommended v0.1 integration point for generating benign
     background activity (“noise”) to improve dataset realism.
+
     - Examples:
       - Active Directory / domain controllers: AD-Lab-Generator (domain population) and ADTest.exe
         (directory/authentication workload).
@@ -194,6 +220,7 @@ Common keys:
         than bundled into the orchestrator image.
 
   - Noise tooling configuration MUST remain deterministic and reviewable.
+
     - All configuration inputs MUST be pinned by content hash (for example `dsc_v3.config_sha256`).
     - Noise tooling binaries/scripts SHOULD be treated as immutable inputs; runtime downloads MUST
       NOT be required for v0.1 correctness (aligns with dependency immutability and egress-deny
@@ -203,6 +230,7 @@ Common keys:
       `config_sha256` changes when the seed changes.
     - For DSC v3, `resource_type_allowlist` SHOULD be used to constrain configurations to expected
       safe resources.
+
   - Tools/features that export plaintext credentials (for example AD-Lab-Generator
     `ExportPasswords`) MUST be disabled by default; if enabled for a lab experiment, the exported
     material MUST be treated as a secret and MUST NOT be included in publishable run artifacts (see
@@ -804,6 +832,12 @@ Common keys:
       `bridge_gap_feature` (0.0-1.0). Default: 0.40.
     - `max_bridge_gap_other_rate`: maximum fraction of executed techniques classified as
       `bridge_gap_other` (0.0-1.0). Default: 0.02.
+    - `max_false_positive_detection_rate` (optional): float in `[0,1]` (maximum false positive
+      detection rate; see `false_positive_detection_rate` in `070_scoring_metrics.md`). Only
+      evaluated when the detections stage is enabled and `detections_total > 0`.
+    - `max_false_positive_detection_count` (optional): integer >= 0 (maximum false positive
+      detections; see `false_positive_detection_count` in `070_scoring_metrics.md`). Only evaluated
+      when the detections stage is enabled.
 - `weights` (optional): allow scores to emphasize certain categories.
   - v0.1 defaults (normative) if omitted: `coverage_weight=0.60`, `latency_weight=0.25`,
     `fidelity_weight=0.15`.
@@ -984,6 +1018,11 @@ Common keys:
     - `max_token_chars` (optional)
     - `max_summary_chars` (optional)
     - `max_field_chars` (optional)
+    - `max_predicate_ast_nodes_per_rule` (optional)
+    - `max_predicate_ast_nodes_total` (optional)
+    - `max_compile_cost_units_per_rule` (optional)
+    - `max_eval_cost_units_per_rule` (optional)
+    - `max_eval_cost_units_total` (optional)
   - `disabled_behavior` (optional, default: `withhold_from_long_term`):
     `withhold_from_long_term | quarantine_unredacted`
     - `withhold_from_long_term`: write deterministic placeholders in standard artifact locations

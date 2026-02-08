@@ -145,46 +145,34 @@ Common keys:
 - `environment_config` (optional)
 
   - `mode` (optional, default: `off`): `off | check_only | apply`
-
     - `off`: do not perform run-scoped environment configuration.
     - `check_only`: perform preflight checks only. MUST NOT mutate target state.
     - `apply`: MAY mutate target state to converge the configured baseline. This is a destructive
       capability and MUST be explicitly enabled.
 
   - `fail_mode` (optional, default: `fail_closed`): `fail_closed | warn_and_skip`
-
     - `fail_closed`: any failed check blocks scenario execution (preferred for v0.1).
     - `warn_and_skip`: record the failure deterministically but continue execution (use only for
       non-critical checks).
 
   - `transport` (optional, default: `ssh`): `ssh | winrm | other`
-
     - Transport used for remote environment configuration and checks.
 
   - `targets` (optional): allowlist of `lab.assets[].asset_id` eligible for environment
     configuration and checks.
-
     - When `mode=apply`, this list MUST be present and MUST be non-empty; otherwise config
       validation MUST fail closed with `reason_code=config_schema_invalid`.
 
   - `dsc_v3` (optional)
-
     - `enabled` (optional, default: `false`)
-
     - `config_path` (required when `enabled=true`): path to a DSC v3 configuration document (JSON or
       YAML).
-
     - `config_sha256` (required when `enabled=true`): SHA-256 of the canonical config bytes (UTF-8,
       strip UTF-8 BOM if present, normalize CRLF to LF).
-
     - `output_format` (optional, default: `json`): `json | pretty-json`
-
     - `what_if_before_apply` (optional, default: `true`)
-
       - When `true` and `mode=apply`, the runner MUST emit a WhatIf plan before applying.
-
     - `resource_type_allowlist` (optional)
-
       - When present and non-empty, the runner MUST reject any configuration document that contains
         resources outside the allowlist.
 
@@ -196,9 +184,7 @@ Common keys:
 
   - Environment configuration is the recommended v0.1 integration point for generating benign
     background activity (“noise”) to improve dataset realism.
-
     - Examples:
-
       - Active Directory / domain controllers: AD-Lab-Generator (domain population) and ADTest.exe
         (directory/authentication workload).
       - Windows + Linux servers: scheduled tasks / cron jobs that emulate routine service behavior
@@ -208,20 +194,15 @@ Common keys:
         than bundled into the orchestrator image.
 
   - Noise tooling configuration MUST remain deterministic and reviewable.
-
     - All configuration inputs MUST be pinned by content hash (for example `dsc_v3.config_sha256`).
-
     - Noise tooling binaries/scripts SHOULD be treated as immutable inputs; runtime downloads MUST
       NOT be required for v0.1 correctness (aligns with dependency immutability and egress-deny
       defaults).
-
     - If randomized schedules are used, the effective seed MUST be recorded in deterministic
       evidence (implementation-defined) and SHOULD be included in the configuration document so the
       `config_sha256` changes when the seed changes.
-
     - For DSC v3, `resource_type_allowlist` SHOULD be used to constrain configurations to expected
       safe resources.
-
   - Tools/features that export plaintext credentials (for example AD-Lab-Generator
     `ExportPasswords`) MUST be disabled by default; if enabled for a lab experiment, the exported
     material MUST be treated as a secret and MUST NOT be included in publishable run artifacts (see

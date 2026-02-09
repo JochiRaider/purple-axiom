@@ -48,10 +48,15 @@ This section is the stage-local view of:
 
 Notes:
 
-- Reporting emits additional **non-contract** outputs in v0.1:
+Notes:
+
+- Reporting emits additional outputs that are **not contract-backed via `contract_registry.json`**
+  in v0.1:
   - `report/report.html` when `reporting.emit_html=true`
-  - `report/thresholds.json` (policy/gating surface; TODO: add as a contract-backed artifact)
-  - `report/run_timeline.md` (deterministic operator-facing artifact; see "Run timeline artifact")
+  - `report/thresholds.json` (required for reportable runs; CI gating surface; TODO: add as a
+    contract-backed artifact)
+  - `report/run_timeline.md` (required for reportable runs; deterministic operator-facing artifact;
+    see "Run timeline artifact")
 - When `reporting.regression.enabled=true`, reporting also consumes a baseline reference (see
   `120_config_reference.md`, `reporting.regression.*`) and materializes deterministic baseline
   snapshots under `inputs/` per `045_storage_formats.md`.
@@ -194,9 +199,12 @@ Notes:
   MUST NOT reference remote assets (no `http://` / `https://` URLs) and MUST NOT rely on external
   `.css` / `.js` files. See
   [Self-contained, local-only asset policy](#self-contained-local-only-asset-policy).
-- `report/report.json` and `report/thresholds.json` are contracted required artifacts for v0.1
-  reportable runs; if an implementation supports `reporting.emit_json`, it MUST be `true` for any
-  run intended to be reportable.
+- `report/report.json` is a contract-backed required artifact for v0.1 reportable runs (when
+  `reporting.emit_json=true`).
+- `report/thresholds.json` is a required artifact for v0.1 reportable runs, but is **not**
+  contract-backed in v0.1; its normative schema is defined in this document.
+- If an implementation supports `reporting.emit_json`, it MUST be `true` for any run intended to be
+  reportable.
 - `report/run_timeline.md` is a required deterministic operator-facing artifact for v0.1 reportable
   runs.
 
@@ -395,6 +403,26 @@ Determinism (normative):
 
 - `report/report.json.status_reasons[]` MUST contain unique reason codes and MUST be emitted sorted
   ascending (UTF-8 byte order, no locale).
+
+### Gate catalog
+
+This catalog is a coherence aid only. It introduces no new v0.1 behavior; it summarizes how the
+existing Tier 1 normalization coverage gate and Sigma-to-OCSF bridge gap budgets are surfaced in the
+CI-facing and report-facing outputs.
+
+| Gate axis                                             | Threshold gate (`report/thresholds.json.gates[].gate_id`) | Threshold config key                             | Source metric(s) (`scoring/summary.json`)                | Degradation reason code(s)                                       | Primary evidence artifacts                                        |
+| ----------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Tier 1 normalization coverage                         | `min_tier1_field_coverage`                                | `scoring.thresholds.min_tier1_field_coverage`    | `tier1_field_coverage_pct`, `tier1_field_coverage_state` | `tier1_coverage_below_threshold`, `tier1_coverage_indeterminate` | `normalized/mapping_coverage.json`, `scoring/summary.json`        |
+| Bridge gap budget (mapping pack addressable)          | `max_bridge_gap_mapping_rate`                             | `scoring.thresholds.max_bridge_gap_mapping_rate` | `bridge_gap_mapping_rate`                                | `gap_rate_exceeded`                                              | `bridge/coverage.json` (optionally `detections/detections.jsonl`) |
+| Bridge gap budget (expected feature scope)            | `max_bridge_gap_feature_rate`                             | `scoring.thresholds.max_bridge_gap_feature_rate` | `bridge_gap_feature_rate`                                | `gap_rate_exceeded`                                              | `bridge/coverage.json` (optionally `detections/detections.jsonl`) |
+| Bridge gap budget (unexpected / bridge bug indicator) | `max_bridge_gap_other_rate`                               | `scoring.thresholds.max_bridge_gap_other_rate`   | `bridge_gap_other_rate`                                  | `gap_rate_exceeded`                                              | `bridge/coverage.json` (optionally `detections/detections.jsonl`) |
+
+Notes:
+
+- CI reads `report/thresholds.json.status_recommendation` as the primary verdict input when present
+  (see `105_ci_operational_readiness.md`).
+- For bridge gap budgets, the shared reason code `gap_rate_exceeded` is disambiguated by the failing
+  `gate_id` plus its `threshold` and `actual` values in `report/thresholds.json.gates[]`.
 
 ## Human-readable report sections
 

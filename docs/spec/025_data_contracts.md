@@ -1167,8 +1167,8 @@ reference implementation.
   - MUST NOT re-implement publish-gate behavior (staging layout, validation, report emission, atomic
     promotion) in stage-local code.
 - Stage core implementations MUST publish contract-backed artifacts only via the `PublishGate`
-  instance supplied by the reference publisher SDK. Direct writes to final run-bundle paths are
-  forbidden.
+  instance supplied by the reference publisher SDK. Direct writes to final run-bundle paths for
+  contract-backed artifacts are forbidden.
 
 Publisher semantics versioning (normative):
 
@@ -1189,7 +1189,8 @@ The reference publisher SDK MUST implement the publish-gate contract as specifie
 - deterministic error ordering and truncation (`max_errors_per_artifact`),
 - emission of the deterministic contract validation report artifact at:
   - `runs/<run_id>/logs/contract_validation/<stage_id>.json` on validation failure, and
-- atomic promotion into final run-bundle paths on success (no partial publish).
+- atomic promotion into final run-bundle paths on success (per-`artifact_path` atomic replace; no
+  partial final-path writes).
 
 ### Canonical serialization rules (normative)
 

@@ -34,9 +34,10 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id     | path/glob            | Required?                                  |
-| --------------- | -------------------- | ------------------------------------------ |
-| `report.schema` | `report/report.json` | required (when `reporting.emit_json=true`) |
+| contract_id         | path/glob                | Required?                                  |
+| ------------------- | ------------------------ | ------------------------------------------ |
+| `report.schema`     | `report/report.json`     | required (when `reporting.emit_json=true`) |
+| `thresholds.schema` | `report/thresholds.json` | required                                   |
 
 #### Required inputs
 
@@ -48,15 +49,13 @@ This section is the stage-local view of:
 
 Notes:
 
-Notes:
-
-- Reporting emits additional outputs that are **not contract-backed via `contract_registry.json`**
-  in v0.1:
+- Reporting emits additional outputs that are not contract-backed via `contract_registry.json` in
+  v0.1:
   - `report/report.html` when `reporting.emit_html=true`
-  - `report/thresholds.json` (required for reportable runs; CI gating surface; TODO: add as a
-    contract-backed artifact)
   - `report/run_timeline.md` (required for reportable runs; deterministic operator-facing artifact;
     see "Run timeline artifact")
+- `report/thresholds.json` is contract-backed (`thresholds.schema`) and MUST validate at the
+  reporting publish gate.
 - When `reporting.regression.enabled=true`, reporting also consumes a baseline reference (see
   `120_config_reference.md`, `reporting.regression.*`) and materializes deterministic baseline
   snapshots under `inputs/` per `045_storage_formats.md`.
@@ -78,7 +77,13 @@ Notes:
 ### Isolation test fixture(s)
 
 - `tests/fixtures/reporting/defense_outcomes/`
-- TODO: specify fixture roots for regression comparability and thresholds rendering.
+- `tests/fixtures/reporting/defense_outcomes/`
+- `tests/fixtures/reporting/regression_compare/`
+- `tests/fixtures/reporting/thresholds/`
+- `tests/fixtures/reporting/report_render/`
+
+See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
+mapping.
 
 This document defines the reporting artifacts, required outputs, and trending keys for Purple Axiom
 runs. It specifies both machine-readable JSON outputs for CI integration and human-readable report
@@ -185,12 +190,12 @@ Notes (health files and outcome sources):
 
 The reporting stage MUST produce the following outputs:
 
-| File                     | Purpose                                                                   | Schema reference                                 |
-| ------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------ |
-| `report/report.json`     | Consolidated report for external tooling                                  | [report schema](../contracts/report.schema.json) |
-| `report/thresholds.json` | Threshold evaluation results for CI gating                                | [thresholds schema](#thresholds-json-schema)     |
-| `report/report.html`     | Human-readable report for operator review (when enabled)                  | [HTML structure](#html-report-structure)         |
-| `report/run_timeline.md` | Deterministic, human-readable run timeline in UTC (operator UI + exports) | - (see "Run timeline artifact")                  |
+| File                     | Purpose                                                                   | Schema reference                                         |
+| ------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `report/report.json`     | Consolidated report for external tooling                                  | [report schema](../contracts/report.schema.json)         |
+| `report/thresholds.json` | Threshold evaluation results for CI gating                                | [thresholds schema](../contracts/thresholds.schema.json) |
+| `report/report.html`     | Human-readable report for operator review (when enabled)                  | [HTML structure](#html-report-structure)                 |
+| `report/run_timeline.md` | Deterministic, human-readable run timeline in UTC (operator UI + exports) | - (see "Run timeline artifact")                          |
 
 Notes:
 
@@ -201,7 +206,7 @@ Notes:
   [Self-contained, local-only asset policy](#self-contained-local-only-asset-policy).
 - `report/report.json` is a contract-backed required artifact for v0.1 reportable runs (when
   `reporting.emit_json=true`).
-- `report/thresholds.json` is a required artifact for v0.1 reportable runs, but is **not**
+- `report/thresholds.json` is a required artifact for v0.1 reportable runs, but is not
   contract-backed in v0.1; its normative schema is defined in this document.
 - If an implementation supports `reporting.emit_json`, it MUST be `true` for any run intended to be
   reportable.
@@ -375,21 +380,21 @@ Normative JSON detail (report schema):
 
 Common degradation reasons include:
 
-| Reason code                          | Gate type     | Description                                                    |
-| ------------------------------------ | ------------- | -------------------------------------------------------------- |
-| `stage_failed_closed`                | Stage outcome | A required stage failed with `fail_mode=fail_closed`           |
-| `artifact_missing`                   | Orchestrator  | One or more required artifacts absent                          |
-| `technique_coverage_below_threshold` | Quality gate  | Technique coverage < configured threshold                      |
-| `tier1_coverage_below_threshold`     | Quality gate  | Tier 1 field coverage < configured threshold (default 80%)     |
-| `tier1_coverage_indeterminate`       | Quality gate  | No in-scope events to compute coverage                         |
-| `latency_above_threshold`            | Quality gate  | Detection latency p95 > configured threshold (default 300s)    |
-| `gap_rate_exceeded`                  | Quality gate  | Gap category rate exceeds thresholds                           |
-| `regression_alert`                   | Quality gate  | Significant regression detected vs baseline                    |
-| `baseline_missing`                   | Quality gate  | Regression enabled but baseline run could not be resolved/read |
-| `baseline_incompatible`              | Quality gate  | Regression baseline and candidate not comparable               |
-| `regression_compare_failed`          | Quality gate  | Regression comparison errored; results indeterminate           |
-| `cleanup_verification_failed`        | Validation    | Cleanup verification failures above threshold (future gate)    |
-| `criteria_misconfigured_rate`        | Validation    | Criteria misconfigured rate above threshold (optional gate)    |
+| Reason code                          | Gate type     | Description                                                                                        |
+| ------------------------------------ | ------------- | -------------------------------------------------------------------------------------------------- |
+| `stage_failed_closed`                | Stage outcome | A required stage failed with `fail_mode=fail_closed`                                               |
+| `artifact_missing`                   | Orchestrator  | One or more required artifacts absent                                                              |
+| `technique_coverage_below_threshold` | Quality gate  | Technique coverage < configured threshold                                                          |
+| `tier1_coverage_below_threshold`     | Quality gate  | Tier 1 field coverage < configured threshold (default 80%)                                         |
+| `tier1_coverage_indeterminate`       | Quality gate  | No in-scope events to compute coverage                                                             |
+| `latency_above_threshold`            | Quality gate  | Detection latency p95 > configured threshold (default 300s)                                        |
+| `gap_rate_exceeded`                  | Quality gate  | Gap category rate exceeds thresholds                                                               |
+| `regression_alert`                   | Quality gate  | Significant regression detected vs baseline                                                        |
+| `baseline_missing`                   | Quality gate  | Regression enabled but baseline run could not be resolved/read                                     |
+| `baseline_incompatible`              | Quality gate  | Regression baseline and candidate not comparable (for example: environment noise profile mismatch) |
+| `regression_compare_failed`          | Quality gate  | Regression comparison errored; results indeterminate                                               |
+| `cleanup_verification_failed`        | Validation    | Cleanup verification failures above threshold (future gate)                                        |
+| `criteria_misconfigured_rate`        | Validation    | Criteria misconfigured rate above threshold (optional gate)                                        |
 
 Clarification (normative):
 
@@ -676,8 +681,8 @@ Note (stage vs layer, normative):
   (`criteria_unavailable`, `criteria_misconfigured`, `cleanup_verification_failed`) MUST use
   `measurement_layer="scoring"` per the mapping in `070_scoring_metrics.md`.
 
-Note: Artifact namespaces such as `bridge/**`, `criteria/**`, and `runner/**` are evidence surfaces
-and report subsections. They MUST NOT be used as `measurement_layer` values.
+Note: Artifact namespaces such as `bridge/`, `criteria/`, and `runner/` are evidence surfaces and
+report subsections. They MUST NOT be used as `measurement_layer` values.
 
 Normative requirements:
 
@@ -765,10 +770,10 @@ Required content (per `source_type`):
 Source types MUST align with `metadata.source_type` values in normalized events (e.g.,
 `windows-security`, `windows-sysmon`, `osquery`, `linux-auditd`).
 
-Terminology note (normative): `metadata.source_type` uses the **event_source_type** namespace
+Terminology note (normative): `metadata.source_type` uses the event_source_type namespace
 (hyphenated `id_slug_v1` literals). It MUST NOT be confused with `identity_basis.source_type`
-(**identity_source_type**; typically lower_snake_case such as `windows_eventlog`, `linux_auditd`)
-used for deterministic `metadata.event_id` computation (ADR-0002).
+(identity_source_type; typically lower_snake_case such as `windows_eventlog`, `linux_auditd`) used
+for deterministic `metadata.event_id` computation (ADR-0002).
 
 ### Sigma-to-OCSF bridge health
 
@@ -898,6 +903,14 @@ Conditional pins (from `manifest.versions`, when enabled):
 - `criteria_pack_id`
 - `criteria_pack_version`
 
+Runner environment noise profile pins (from `manifest.extensions.runner.environment_noise_profile`,
+when enabled):
+
+- `manifest.extensions.runner.environment_noise_profile.profile_id`
+- `manifest.extensions.runner.environment_noise_profile.profile_version`
+- `manifest.extensions.runner.environment_noise_profile.profile_sha256`
+- `manifest.extensions.runner.environment_noise_profile.seed`
+
 Additional provenance (when present):
 
 - Mapping pack ref (from `bridge/coverage.json` → `mapping_pack_ref`)
@@ -961,6 +974,12 @@ Required fields:
         (`baseline_incompatible`) unless the key is not applicable to both runs.
       - If `true`, mismatches on `versions.mapping_pack_version` MUST be treated as warnings
         (comparison MAY proceed), and the mismatch MUST still be recorded in
+        `comparability_checks[]`.
+    - `allow_noise_profile_mismatch` (boolean; default: `false`)
+      - If `false`, mismatches on `extensions.runner.environment_noise_profile.*` MUST be treated as
+        not comparable (`baseline_incompatible`) unless the key is not applicable to both runs.
+      - If `true`, mismatches on `extensions.runner.environment_noise_profile.*` MUST be treated as
+        warnings (comparison MAY proceed), and the mismatches MUST still be recorded in
         `comparability_checks[]`.
   - `evidence_refs[]`:
     - Each entry MUST follow the `evidence_refs[]` shape and selector grammar defined in
@@ -1101,19 +1120,22 @@ pipeline/config hash key until a canonical `manifest.versions.*` config-hash fie
 The table order is canonical. `report/report.json.regression.comparability_checks[]` MUST be sorted
 by `key` ascending (UTF-8 byte order, no locale) and MUST include exactly one entry per key below.
 
-| Key                              | Source (baseline & current)               | Applicability (deterministic)                    | Requirement                             |
-| -------------------------------- | ----------------------------------------- | ------------------------------------------------ | --------------------------------------- |
-| `inputs.range_yaml_sha256`       | `manifest.inputs.range_yaml_sha256`       | OPTIONAL: compare only when present in both runs | SHOULD match (non-fatal)                |
-| `versions.criteria_pack_id`      | `manifest.versions.criteria_pack_id`      | Applicable when present in either run            | MUST match                              |
-| `versions.criteria_pack_version` | `manifest.versions.criteria_pack_version` | Applicable when present in either run            | MUST match                              |
-| `versions.mapping_pack_id`       | `manifest.versions.mapping_pack_id`       | Applicable when present in either run            | MUST match                              |
-| `versions.mapping_pack_version`  | `manifest.versions.mapping_pack_version`  | Applicable when present in either run            | MUST match (unless policy allows drift) |
-| `versions.ocsf_version`          | `manifest.versions.ocsf_version`          | Always applicable                                | MUST match                              |
-| `versions.pipeline_version`      | `manifest.versions.pipeline_version`      | Always applicable                                | MUST match                              |
-| `versions.rule_set_id`           | `manifest.versions.rule_set_id`           | Applicable when present in either run            | MUST match                              |
-| `versions.rule_set_version`      | `manifest.versions.rule_set_version`      | Applicable when present in either run            | MUST match                              |
-| `versions.scenario_id`           | `manifest.versions.scenario_id`           | Always applicable                                | MUST match                              |
-| `versions.scenario_version`      | `manifest.versions.scenario_version`      | Always applicable                                | MUST match                              |
+| Key                                                           | Source (baseline & current)                                            | Applicability (deterministic)                    | Requirement                             |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| `inputs.range_yaml_sha256`                                    | `manifest.inputs.range_yaml_sha256`                                    | OPTIONAL: compare only when present in both runs | SHOULD match (non-fatal)                |
+| `extensions.runner.environment_noise_profile.profile_id`      | `manifest.extensions.runner.environment_noise_profile.profile_id`      | Applicable when present in either run            | MUST match (unless policy allows drift) |
+| `extensions.runner.environment_noise_profile.profile_version` | `manifest.extensions.runner.environment_noise_profile.profile_version` | Applicable when present in either run            | MUST match (unless policy allows drift) |
+| `extensions.runner.environment_noise_profile.profile_sha256`  | `manifest.extensions.runner.environment_noise_profile.profile_sha256`  | Applicable when present in either run            | MUST match (unless policy allows drift) |
+| `versions.criteria_pack_id`                                   | `manifest.versions.criteria_pack_id`                                   | Applicable when present in either run            | MUST match                              |
+| `versions.criteria_pack_version`                              | `manifest.versions.criteria_pack_version`                              | Applicable when present in either run            | MUST match                              |
+| `versions.mapping_pack_id`                                    | `manifest.versions.mapping_pack_id`                                    | Applicable when present in either run            | MUST match                              |
+| `versions.mapping_pack_version`                               | `manifest.versions.mapping_pack_version`                               | Applicable when present in either run            | MUST match (unless policy allows drift) |
+| `versions.ocsf_version`                                       | `manifest.versions.ocsf_version`                                       | Always applicable                                | MUST match                              |
+| `versions.pipeline_version`                                   | `manifest.versions.pipeline_version`                                   | Always applicable                                | MUST match                              |
+| `versions.rule_set_id`                                        | `manifest.versions.rule_set_id`                                        | Applicable when present in either run            | MUST match                              |
+| `versions.rule_set_version`                                   | `manifest.versions.rule_set_version`                                   | Applicable when present in either run            | MUST match                              |
+| `versions.scenario_id`                                        | `manifest.versions.scenario_id`                                        | Always applicable                                | MUST match                              |
+| `versions.scenario_version`                                   | `manifest.versions.scenario_version`                                   | Always applicable                                | MUST match                              |
 
 Notes:
 
@@ -1132,48 +1154,60 @@ For each key in the table above, the reporting stage MUST emit exactly one entry
 `comparability_checks[]` with the following deterministic semantics:
 
 - Value extraction:
-
   - If `key` starts with `versions.`, extract the value from `manifest.versions` using the suffix
     after `versions.` (example: `versions.pipeline_version` maps to
     `manifest.versions.pipeline_version`).
   - If `key` starts with `inputs.`, extract the value from `manifest.inputs` using the suffix after
     `inputs.`.
-
+  - If `key` starts with `extensions.`, extract the value from `manifest.extensions` using the
+    suffix after `extensions.` as a dot-delimited path. Example:
+    `extensions.runner.environment_noise_profile.profile_id` maps to
+    `manifest.extensions.runner.environment_noise_profile.profile_id`.
 - `baseline_value` MUST be extracted from the baseline run’s `manifest.json` content that was read
   during baseline resolution. When `inputs/baseline/manifest.json` is present, implementations
   SHOULD use that snapshot as the baseline source.
-
 - `current_value` MUST be extracted from the current run `manifest.json`.
-
 - `match` MUST be computed as byte-for-byte equality of the two string values, with no additional
   normalization. If either value is `null`, `match` MUST be `false`.
-
 - `status` computation:
-
   - For REQUIRED/MUST-match keys:
-    - If `baseline_value` is `null`: `status=fail`, `reason_code=missing_baseline_pin`
-    - If `current_value` is `null`: `status=fail`, `reason_code=missing_current_pin`
-    - If both are present and differ:
-      - `status=fail`, `reason_code=pin_mismatch` (except `versions.mapping_pack_version`, see drift
-        policy)
+    - If `baseline_value` is `null` **and** `current_value` is `null`, and the key is marked
+      "Applicable when present in either run": `status=skipped`, `reason_code=not_applicable`.
+    - If `baseline_value` is `null`: `status=fail`, `reason_code=missing_baseline_pin` (except where
+      a drift policy explicitly allows mismatch; see below).
+    - If `current_value` is `null`: `status=fail`, `reason_code=missing_current_pin` (except where a
+      drift policy explicitly allows mismatch; see below).
+    - If both are present and differ: `status=fail`, `reason_code=pin_mismatch` (except drift-policy
+      keys; see below).
     - If both are present and equal: `status=pass`
-  - For OPTIONAL non-fatal keys (currently: `inputs.range_yaml_sha256`):
-    - If either side is `null`: `status=skipped`, `reason_code=not_applicable`
-    - If both present and equal: `status=pass`
-    - If both present and differ: `status=pass` and the overall `comparability.status` MUST be at
-      least `warning`.
 
 #### Drift policy (normative)
 
-By default, `versions.mapping_pack_version` drift is DISALLOWED.
+By default, drift is DISALLOWED for the following pinned keys:
 
-- If `versions.mapping_pack_version` differs and
-  `comparability.policy.allow_mapping_pack_version_drift=false`, the corresponding check MUST be:
-  - `status=fail`
-  - `reason_code=drift_disallowed_by_policy`
+- `versions.mapping_pack_version`
+- `extensions.runner.environment_noise_profile.profile_id`
+- `extensions.runner.environment_noise_profile.profile_version`
+- `extensions.runner.environment_noise_profile.profile_sha256`
 
-If drift is allowed (`allow_mapping_pack_version_drift=true`), the mismatch MUST still be recorded
-in `comparability_checks[]`, and the overall `comparability.status` MUST be at least `warning`.
+If any of the above keys differs between baseline and current run, and the corresponding allow flag
+is `false`, the corresponding check MUST be:
+
+- `status=fail`
+- `reason_code=drift_disallowed_by_policy`
+
+The allow flags (reporting MUST record these under `comparability.policy`):
+
+- `comparability.policy.allow_mapping_pack_version_drift` (default `false`)
+- `comparability.policy.allow_noise_profile_mismatch` (default `false`)
+
+If drift is allowed for a key (allow flag `true`), the mismatch MUST still be recorded in
+`comparability_checks[]` (`match=false`), but MUST NOT be surfaced as a failed check. In this case
+the corresponding check MUST be `status=pass` and the overall `comparability.status` MUST be at
+least `warning`.
+
+For the noise-profile keys, `allow_noise_profile_mismatch=true` applies to all mismatch modes
+(including baseline-present/current-missing and baseline-missing/current-present).
 
 #### Evidence pointers (normative)
 
@@ -1199,6 +1233,10 @@ If any MUST-match key results in `status=fail`:
 #### Verification hooks (normative)
 
 - Fixture: changing only `manifest.versions.mapping_pack_version` MUST produce
+  `baseline_incompatible` by default, with `comparability_checks[]` including a failed entry whose
+  `reason_code` is `drift_disallowed_by_policy`.
+- Fixture: changing any runner environment noise profile pin (for example:
+  `manifest.extensions.runner.environment_noise_profile.profile_sha256`) MUST produce
   `baseline_incompatible` by default, with `comparability_checks[]` including a failed entry whose
   `reason_code` is `drift_disallowed_by_policy`.
 - Fixture: runs with identical `manifest.versions.*` pins but differing environment fields
@@ -1314,6 +1352,16 @@ Determinism and units (normative):
 - `status_recommendation` MUST be one of `success`, `partial`, or `failed`.
 
 ### Thresholds JSON schema
+
+`report/thresholds.json` MUST validate against the contract schema
+[`thresholds.schema`](../contracts/thresholds.schema.json) as registered in the contract registry.
+
+The JSON object below is a non-normative example.
+
+Determinism requirements (v0.1):
+
+- The `gates[]` array MUST be sorted by `gate_id` ascending (UTF-8 byte order, no locale).
+- `gate_id` values MUST be unique within `gates[]`.
 
 ```json
 {
@@ -1556,11 +1604,11 @@ Full schema definition: `report.schema.json` see `docs/contracts/report.schema.j
 
 The HTML report SHOULD follow this layout:
 
-1. **Header**: Run ID, status badge, scenario name, execution timestamp
-1. **Executive summary card**: Key metrics at a glance
-1. **Navigation**: Jump links to each section
-1. **Sections**: Each section from [Human-readable report sections](#human-readable-report-sections)
-1. **Footer**: Version inventory, generation timestamp, links to raw artifacts
+1. Header: Run ID, status badge, scenario name, execution timestamp
+1. Executive summary card: Key metrics at a glance
+1. Navigation: Jump links to each section
+1. Sections: Each section from [Human-readable report sections](#human-readable-report-sections)
+1. Footer: Version inventory, generation timestamp, links to raw artifacts
 
 ### Styling guidance
 

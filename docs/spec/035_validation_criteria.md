@@ -906,10 +906,16 @@ Effective windowing:
 
 - Compute `before_seconds` from `entry.time_window.before_seconds` if present, else from config
   `validation.evaluation.time_window_before_seconds`.
+
 - For each signal, compute the effective after-window:
+
   - If `signal.within_seconds` is present: use it.
   - Else use `entry.time_window.after_seconds` if present, else config
     `validation.evaluation.time_window_after_seconds`.
+
+  Note: the effective window computed here is materialized in `criteria/results.jsonl.time_window`
+  (as UTC timestamps) and is reused by the scoring attribution algorithm (`pa.attribution.v1`) as
+  the secondary join-window source when `criteria/results.jsonl` is present.
 
 A normalized event is eligible for a signal only if:
 

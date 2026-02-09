@@ -53,7 +53,7 @@ This section is the stage-local view of:
 
 Notes:
 
-- Scoring consumes additional stage outputs (for example `bridge/**`,
+- Scoring consumes additional stage outputs (for example `bridge/`,
   `normalized/mapping_profile_snapshot.json`) but those are not required for the minimal contracted
   scoring summary.
 
@@ -95,9 +95,9 @@ for v0.1 while keeping evaluation deterministic and auditable.
 
 ### Defense outcomes v0.1 (normative)
 
-**Purpose**: Provide an operator-facing outcome classification per action instance and per
-technique, derived deterministically from per-tool outcomes. This is modeled after VECTR’s "tool
-outcomes → test case outcome" derivation (priority-based reduction).
+Purpose: Provide an operator-facing outcome classification per action instance and per technique,
+derived deterministically from per-tool outcomes. This is modeled after VECTR’s "tool outcomes →
+test case outcome" derivation (priority-based reduction).
 
 #### Outcome tokens (normative)
 
@@ -197,7 +197,7 @@ run as schema-invalid.
 
 #### Metric
 
-The pipeline **MUST** compute:
+The pipeline MUST compute:
 
 - `tier1_field_coverage_pct` as defined in the
   [OCSF field tiers specification](055_ocsf_field_tiers.md).
@@ -210,8 +210,8 @@ The pipeline **MUST** compute:
 
 Let `T = tier1_field_coverage_threshold_pct` (default `0.80`).
 
-- If `tier1_field_coverage_state = indeterminate_no_events`, then run status **MUST** be `partial`.
-- Else if `tier1_field_coverage_pct < T`, then run status **MUST** be `partial`.
+- If `tier1_field_coverage_state = indeterminate_no_events`, then run status MUST be `partial`.
+- Else if `tier1_field_coverage_pct < T`, then run status MUST be `partial`.
 - Else, this gate does not downgrade the run.
 
 Invariant:
@@ -234,9 +234,9 @@ themselves, cause schema conformance failure.
 
 #### CI gating guidance
 
-CI conformance gates **MUST** fail the pipeline for `failed`. CI policies **SHOULD** surface
-`partial` prominently (for example, as a failing check in strict mode, or as a warning in default
-mode), since it changes operator expectations and the interpretability of scoring pivots.
+CI conformance gates MUST fail the pipeline for `failed`. CI policies SHOULD surface `partial`
+prominently (for example, as a failing check in strict mode, or as a warning in default mode), since
+it changes operator expectations and the interpretability of scoring pivots.
 
 ## Metric surface (normative)
 
@@ -338,11 +338,91 @@ Terminology note (normative):
 This scoring surface is intended to prevent overfitting to attack-only telemetry by making false
 positive behavior measurable under a deterministic baseline noise workload.
 
-Definitions (normative):
+Definitions:
 
-- A **detection hit** is a row in `detections/detections.jsonl` after deterministic dedupe.
-- A detection hit is a **true positive** when it can be attributed to at least one executed action.
-- A detection hit is a **false positive** when it cannot be attributed to any executed action.
+- A detection hit is a row in `detections/detections.jsonl` after deterministic dedupe.
+- A detection hit is a true positive when `pa.attribution.v1` attributes it to at least one executed
+  action.
+- A detection hit is a false positive when `pa.attribution.v1` cannot attribute it to any executed
+  action.
+
+#### Attribution algorithm (pa.attribution.v1)
+
+Purpose. Deterministically attribute detection hits to executed actions for:
+
+- detection fidelity classification (true-positive vs false-positive),
+- latency attribution (max allowed latency gate), and
+- per-action defense outcome derivation (alerted vs no_alert).
+
+Inputs (v0.1). The attribution algorithm consumes:
+
+- `detections/detections.jsonl` (detection instances; required)
+- `ground_truth.jsonl` (executed actions; required)
+- `normalized/ocsf_events.jsonl` (event envelope; REQUIRED for marker join)
+- `criteria/results.jsonl` (criteria evaluation outputs; OPTIONAL; used when present)
+
+Executed action. An action is considered executed for attribution if
+`ground_truth.lifecycle.phases[].phase="execute"` has `phase_outcome != "skipped"`.
+
+Eligibility gate (technique). A detection hit MUST only be considered for attribution to an action
+when the hit’s `technique_ids[]` contains the action’s `technique_id`.
+
+Join precedence (normative). For each detection hit, candidates MUST be evaluated in this order:
+
+1. Marker join (highest confidence). If:
+
+   - the ground-truth action includes `extensions.synthetic_correlation_marker`, and
+   - at least one matched event (by `matched_event_ids[]`) includes the same value in
+     `metadata.extensions.purple_axiom.synthetic_correlation_marker`, then the hit MUST be
+     attributed to that action with `match_quality="exact"`.
+
+1. Criteria-window join (secondary). If marker join produces no candidates, and
+   `criteria/results.jsonl` is present, then a hit MUST be attributed to an action when:
+
+   - `criteria/results.jsonl` contains a result row for that `action_id` with a `time_window`
+     object,
+   - `detections/detections.jsonl.first_seen_utc` is within the inclusive interval
+     `[time_window.start_time_utc, time_window.end_time_utc]`, and
+   - (when available) the hit’s matched events are attributable to the action’s `target_asset_id`.
+     In this case the `match_quality` MUST be `"partial"`.
+
+1. Pivot join (fallback). If neither marker nor criteria-window join yields candidates, a hit MAY be
+   attributed using a deterministic pivot join:
+
+   - the hit `first_seen_utc` MUST be within a fallback window around the action timestamp:
+     `[action.timestamp_utc - skew_tolerance, action.timestamp_utc + max_allowed_latency_seconds]`
+     where `max_allowed_latency_seconds` is taken from
+     `scoring.thresholds.max_allowed_latency_seconds`, and `skew_tolerance` is fixed at 1 second
+     (v0.1),
+   - and (when available) the hit’s matched events originate from the action’s target asset. In this
+     case the `match_quality` MUST be `"weak_signal"`.
+
+Candidate selection and tie-breaks (normative).
+
+- If multiple actions match in the same precedence tier, implementations MUST select a single
+  `primary_action_id` deterministically using the following total ordering (lowest tuple wins):
+
+  1. `abs(parse_ts(first_seen_utc) - parse_ts(action.timestamp_utc))` ascending
+  1. `action_id` ascending (UTF-8 byte order, no locale)
+
+- Implementations MAY also emit `attributed_action_ids[]` (for debugging), but if emitted it MUST:
+
+  - include the `primary_action_id` first, and
+  - be sorted by the same ordering as above.
+
+- The attribution decision MUST be stable across repeated runs over identical inputs (byte-for-byte
+  identical `manifest.json`, `ground_truth.jsonl`, `criteria/results.jsonl` when present, normalized
+  events, and detections).
+
+#### match_quality (normative)
+
+`match_quality` is a coarse confidence tier for attribution used by scoring and reporting.
+
+Allowed values (v0.1):
+
+- `exact`: marker join succeeded.
+- `partial`: criteria-window join succeeded (no marker evidence).
+- `weak_signal`: pivot join was required (no marker and no criteria-window evidence).
 
 Metric rules (normative):
 

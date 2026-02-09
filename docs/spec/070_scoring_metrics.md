@@ -70,9 +70,12 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- TODO: specify fixture roots for scoring summary conformance.
+- `tests/fixtures/scoring/`
 - See also: `tests/fixtures/reporting/defense_outcomes/` and the measurement contract fixtures
   described in `100_test_strategy_ci.md` (scoring inputs exercised end-to-end).
+
+See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
+mapping.
 
 This document defines how Purple Axiom computes scoring metrics, applies quality gates, and
 interprets results for CI and operator reporting. It establishes default thresholds and weightings

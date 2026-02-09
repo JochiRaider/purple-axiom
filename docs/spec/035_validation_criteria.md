@@ -73,7 +73,12 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- TODO: specify fixture roots for criteria pack conformance and criteria query evaluation.
+- `tests/fixtures/criteria/packs/`
+- `tests/fixtures/criteria/eval/`
+- `tests/fixtures/criteria_eval_smoke/`
+
+See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
+mapping.
 
 ## Overview
 

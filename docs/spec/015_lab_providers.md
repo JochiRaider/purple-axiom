@@ -62,10 +62,11 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- TODO: specify fixture root for lab provider inventory parsing and snapshotting (see
-  `100_test_strategy_ci.md`, "Lab provider parser tests").
-- TODO: specify fixture used by scenario target-selector tests ("Scenario selection tests") for
-  deterministic target resolution.
+- `tests/fixtures/lab_provider/`
+- `tests/fixtures/scenario/target_selection/`
+
+See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
+mapping.
 
 ## Overview
 

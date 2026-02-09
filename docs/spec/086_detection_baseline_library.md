@@ -81,14 +81,6 @@ is enabled, the run bundle `inputs/` area is populated with baseline-run referen
 BDPs are stored under `exports/baselines/` and MUST NOT overload the reserved
 `runs/<run_id>/inputs/baseline/**` paths above.
 
-If a future detection evaluation pipeline consumes a BDP as a run input, it SHOULD snapshot the
-BDP’s `baseline_package_manifest.json` byte-for-byte into the run bundle under a dedicated reserved
-input path to support reproducibility and auditability.
-
-Reserved input path for baseline package snapshots (v0.2+; normative when used):
-
-- `runs/<run_id>/inputs/baseline_packages/<baseline_id>/<baseline_version>/baseline_package_manifest.json`
-
 Rules (normative):
 
 - `runs/<run_id>/inputs/baseline_packages/**` is reserved for baseline package manifest snapshots

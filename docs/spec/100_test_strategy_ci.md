@@ -165,7 +165,7 @@ Additional required vectors (normative):
     envelope `metadata.source_type` differs from `identity_basis.source_type`.
   - The differing values MUST be chosen so that substituting `metadata.source_type` for
     `identity_basis.source_type` in the hash basis would change the expected `metadata.event_id`
-    (trap vector; ensures conflation bugs fail closed).    
+    (trap vector; ensures conflation bugs fail closed).
   - The test MUST assert that:
     - `metadata.event_id` is computed using `identity_basis.source_type` (not
       `metadata.source_type`), and

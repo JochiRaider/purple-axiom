@@ -1,0 +1,405 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pa:contracts:golden_dataset_approvals:0.1.0",
+  "title": "Purple Axiom Golden Dataset Approvals Record",
+  "description": "Contract schema for the approvals record required to designate a dataset version as 'golden'. The record captures explicit signoffs (legal, privacy, security, data governance).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "dataset_id",
+    "dataset_version",
+    "created_at",
+    "release_posture",
+    "legal",
+    "privacy",
+    "security",
+    "data_governance"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "pa:golden_dataset_approvals:v1"
+    },
+    "dataset_id": {
+      "$ref": "#/$defs/id_slug_v1"
+    },
+    "dataset_version": {
+      "$ref": "#/$defs/semver_v1"
+    },
+    "created_at": {
+      "$ref": "#/$defs/utc_rfc3339_z"
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dataset_card_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "build_manifest_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "catalog_entry_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        }
+      },
+      "description": "Optional references that tie this approvals record to the specific evidence artifacts it approves."
+    },
+    "legal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "approver",
+        "approved_at"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "approved_with_conditions"
+          ]
+        },
+        "approver": {
+          "$ref": "#/$defs/person"
+        },
+        "approved_at": {
+          "$ref": "#/$defs/utc_rfc3339_z"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "uniqueItems": true,
+          "description": "Conditions that must be satisfied for redistribution (only when status=approved_with_conditions)."
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact_ref"
+          },
+          "uniqueItems": true,
+          "description": "Optional links to legal review artifacts (e.g., license review memo)."
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "approved_with_conditions"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "conditions"
+            ]
+          }
+        }
+      ]
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "approver",
+        "approved_at",
+        "scan_evidence_refs"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "approved_with_mitigations"
+          ]
+        },
+        "approver": {
+          "$ref": "#/$defs/person"
+        },
+        "approved_at": {
+          "$ref": "#/$defs/utc_rfc3339_z"
+        },
+        "scan_evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/artifact_ref"
+          },
+          "uniqueItems": true,
+          "description": "Paths/URIs to PII scan reports, sampling notes, or other privacy review evidence."
+        },
+        "mitigation_plan_ref": {
+          "$ref": "#/$defs/artifact_ref",
+          "description": "Required when status=approved_with_mitigations."
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "approved_with_mitigations"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "mitigation_plan_ref"
+            ]
+          }
+        }
+      ]
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "approver",
+        "approved_at"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "approved_with_controls",
+            "not_applicable"
+          ]
+        },
+        "approver": {
+          "$ref": "#/$defs/person"
+        },
+        "approved_at": {
+          "$ref": "#/$defs/utc_rfc3339_z"
+        },
+        "controls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "uniqueItems": true,
+          "description": "Required controls/guardrails (e.g., sandboxing requirements) when status=approved_with_controls."
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact_ref"
+          },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "approved_with_controls"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "controls"
+            ]
+          }
+        }
+      ]
+    },
+    "data_governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "approver",
+        "approved_at"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "approved"
+          ]
+        },
+        "approver": {
+          "$ref": "#/$defs/person"
+        },
+        "approved_at": {
+          "$ref": "#/$defs/utc_rfc3339_z"
+        },
+        "checked_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "uniqueItems": true,
+          "description": "Optional checklist tokens (e.g., dataset_card_present, build_manifest_present, redaction_policy_linked)."
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      }
+    },
+    "release_posture": {
+      "type": "string",
+      "enum": [
+        "public",
+        "gated",
+        "internal"
+      ],
+      "description": "The release posture approved for this dataset version."
+    }
+  },
+  "$defs": {
+    "id_slug_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "not": {
+        "pattern": "--"
+      },
+      "description": "ADR-0001 id_slug_v1: lowercase letters/digits/hyphen, 1-64 chars, start/end alnum, no consecutive hyphens."
+    },
+    "semver_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "description": "SemVer 2.0.0 (no leading 'v')."
+    },
+    "utc_rfc3339_z": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+      "description": "UTC RFC3339 timestamp with literal 'Z' (e.g., 2026-01-28T00:00:00Z)."
+    },
+    "repo_relative_posix_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$",
+      "description": "Repo-relative POSIX path. No leading '/', no backslashes, no empty segments, no traversal.",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "^/"
+          }
+        },
+        {
+          "not": {
+            "pattern": "\\\\",
+            "description": "Reject Windows backslash separators."
+          }
+        },
+        {
+          "not": {
+            "pattern": "^[A-Za-z]:",
+            "description": "Reject Windows drive prefixes."
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^|/)\\.(?:/|$)",
+            "description": "Reject '.' path segments."
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^|/)\\.\\.(?:/|$)",
+            "description": "Reject '..' path segments."
+          }
+        }
+      ]
+    },
+    "artifact_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "Reference to an artifact. Prefer repo-relative POSIX paths; absolute URIs are allowed when artifacts live outside the repo.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/repo_relative_posix_path"
+        },
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:.*$",
+          "description": "Absolute URI with scheme (e.g., https:, s3:, gs:)."
+        }
+      ]
+    },
+    "person": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "email"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "team": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    }
+  }
+}

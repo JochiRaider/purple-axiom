@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pa:contracts:golden_dataset_catalog:0.1.0",
+  "title": "Purple Axiom Golden Dataset Catalog",
+  "description": "Contract schema for the golden dataset catalog. Each entry represents a dataset version that is designated 'golden' and therefore MUST link to the required evidence artifacts (dataset card, build manifest, approvals record).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "datasets"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "pa:golden_dataset_catalog:v1"
+    },
+    "created_at": {
+      "$ref": "#/$defs/utc_rfc3339_z"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/utc_rfc3339_z"
+    },
+    "datasets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dataset_id",
+          "dataset_version",
+          "release_posture",
+          "artifact_refs"
+        ],
+        "properties": {
+          "dataset_id": {
+            "$ref": "#/$defs/id_slug_v1"
+          },
+          "dataset_version": {
+            "$ref": "#/$defs/semver_v1"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "release_posture": {
+            "type": "string",
+            "enum": [
+              "public",
+              "gated",
+              "internal"
+            ]
+          },
+          "intended_regression_coverage": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Optional narrative of intended regression coverage / why this dataset is golden."
+          },
+          "artifact_refs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "dataset_card_ref",
+              "build_manifest_ref",
+              "approvals_ref"
+            ],
+            "properties": {
+              "dataset_card_ref": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/artifact_ref"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "\\.json$"
+                  }
+                ],
+                "description": "Path/URI to the machine-readable dataset card companion (must validate against golden_dataset_card.schema.json)."
+              },
+              "build_manifest_ref": {
+                "$ref": "#/$defs/artifact_ref",
+                "description": "Path/URI to the reproducible build manifest for this dataset version."
+              },
+              "approvals_ref": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/artifact_ref"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "\\.json$"
+                  }
+                ],
+                "description": "Path/URI to the approvals record (must validate against golden_dataset_approvals.schema.json)."
+              },
+              "dataset_release_root": {
+                "$ref": "#/$defs/artifact_ref",
+                "description": "Optional path/URI to the dataset release root directory (if the dataset is stored as a release bundle)."
+              }
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "uniqueItems": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "deprecated"
+            ]
+          },
+          "deprecated_at": {
+            "$ref": "#/$defs/utc_rfc3339_z"
+          },
+          "superseded_by": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "dataset_id",
+              "dataset_version"
+            ],
+            "properties": {
+              "dataset_id": {
+                "$ref": "#/$defs/id_slug_v1"
+              },
+              "dataset_version": {
+                "$ref": "#/$defs/semver_v1"
+              }
+            }
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "deprecated"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "deprecated_at",
+                "superseded_by"
+              ]
+            }
+          }
+        ]
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "id_slug_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "not": {
+        "pattern": "--"
+      },
+      "description": "ADR-0001 id_slug_v1: lowercase letters/digits/hyphen, 1-64 chars, start/end alnum, no consecutive hyphens."
+    },
+    "semver_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "description": "SemVer 2.0.0 (no leading 'v')."
+    },
+    "utc_rfc3339_z": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+      "description": "UTC RFC3339 timestamp with literal 'Z' (e.g., 2026-01-28T00:00:00Z)."
+    },
+    "repo_relative_posix_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$",
+      "description": "Repo-relative POSIX path. No leading '/', no backslashes, no empty segments, no traversal.",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "^/"
+          }
+        },
+        {
+          "not": {
+            "pattern": "\\\\",
+            "description": "Reject Windows backslash separators."
+          }
+        },
+        {
+          "not": {
+            "pattern": "^[A-Za-z]:",
+            "description": "Reject Windows drive prefixes."
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^|/)\\.(?:/|$)",
+            "description": "Reject '.' path segments."
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^|/)\\.\\.(?:/|$)",
+            "description": "Reject '..' path segments."
+          }
+        }
+      ]
+    },
+    "artifact_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "Reference to an artifact. Prefer repo-relative POSIX paths; absolute URIs are allowed when artifacts live outside the repo.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/repo_relative_posix_path"
+        },
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:.*$",
+          "description": "Absolute URI with scheme (e.g., https:, s3:, gs:)."
+        }
+      ]
+    },
+    "person": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "email"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "team": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    }
+  }
+}

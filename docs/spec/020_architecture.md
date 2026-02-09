@@ -636,15 +636,29 @@ Required operations (minimum):
 - `StagePublishSession.write_json(artifact_path, obj, canonical: bool=true) -> void`
 - `StagePublishSession.write_jsonl(artifact_path, rows_iterable) -> void`
 - `StagePublishSession.finalize(expected_outputs: list[ExpectedOutput]) -> PublishResult`
+- `StagePublishSession.finalize(expected_outputs: list[ExpectedOutput], unexpected_outputs_policy: UnexpectedOutputsPolicy = "lenient") -> PublishResult`
 - `StagePublishSession.abort() -> void`
 
 Where:
 
 - `artifact_path` is run-relative (e.g., `logs/health.json`), NOT an absolute path.
+
 - `ExpectedOutput` includes:
+
   - `artifact_path` (run-relative)
-  - `contract_id` (schema/contract identity as used by the contract validator)
+  - `contract_id` (optional; schema/contract identity as used by the contract validator)
+    - When present/non-null, it MUST map to a contract in the registry (`contract_registry.json`).
+    - When absent/null, the artifact is treated as **non-contract** (no schema validation).
+    - If `artifact_path` matches a contract-registry binding, `contract_id` MUST be present and MUST
+      equal the bound `contract_id` (fail closed).
   - `required: bool` (default `true`)
+
+- `UnexpectedOutputsPolicy` is an enum: `strict` | `lenient`.
+
+`PublishResult` is implementation-defined, but MUST expose (minimum):
+
+- `unexpected_outputs: list[str]` (run-relative, sorted; see finalize semantics)
+- `missing_required_outputs: list[str]` (run-relative, sorted; see finalize semantics)
 
 `required` MUST be explicitly set by the stage wrapper for every `ExpectedOutput` entry based on the
 stage enablement / required outputs matrix in `025_data_contracts.md` (see “Stage enablement and
@@ -666,6 +680,11 @@ Deterministic stage → contract-backed outputs (normative):
     `runs/<run_id>/.staging/<stage_id>/`.
   - Ordering rule: the resulting `expected_outputs[]` list MUST be sorted by `artifact_path`
     (ascending, bytewise/lexicographic) to keep validation and reporting deterministic.
+  - The join/expand step above produces the **contract-backed** subset of `expected_outputs[]`.
+    - Stages MAY append additional **non-contract** expected outputs by setting `contract_id=null`.
+    - Under `unexpected_outputs_policy="strict"`, every staged regular file MUST be declared in
+      `expected_outputs[]` (contract-backed or non-contract), otherwise `finalize()` MUST fail
+      closed.
 - Ownership invariant: a stage MUST NOT publish any contract-backed output whose registry binding
   has `stage_owner != stage_id` (fail closed).
 
@@ -674,21 +693,30 @@ Finalize semantics (normative):
 - All outputs for a stage MUST be written under `runs/<run_id>/.staging/<stage_id>/` first.
 - Output-root guardrail: a stage MUST NOT write or promote any run-bundle output outside its
   declared output roots (see "Stage IO boundaries" above). Violations MUST fail closed.
-- `finalize()` MUST validate all `expected_outputs[]` using `ContractValidator` before any atomic
-  promotion.
+- `finalize()` MUST validate all **contract-backed** expected outputs (i.e., entries with
+  `contract_id` set) using `ContractValidator` before any atomic promotion.
+  - Expected outputs with `contract_id=null` are not schema-validated.
 - `finalize()` MUST treat missing required outputs as a validation failure: if any
   `expected_outputs[]` entry with `required=true` is absent, `finalize()` MUST fail closed and MUST
   NOT promote any staged outputs.
 - `finalize()` MUST treat missing optional outputs as non-failures: if an `expected_outputs[]` entry
   with `required=false` is absent, `finalize()` MUST NOT fail and MUST NOT attempt contract
   validation for that entry.
+- Unexpected staged outputs MUST be handled according to `unexpected_outputs_policy`:
+  - Define `unexpected_outputs[]` as the set of staged regular files that are not declared in
+    `expected_outputs[]` (run-relative `artifact_path`s, sorted).
+  - If `unexpected_outputs_policy="strict"`, the presence of any unexpected output MUST be treated
+    as a validation failure (no promotion).
+  - If `unexpected_outputs_policy="lenient"`, unexpected outputs MUST be promoted (subject to the
+    output-root guardrail), but MUST be recorded in the publish result as `unexpected_outputs[]`.
+  - Unexpected outputs are treated as non-contract and are not schema-validated.
 - When `finalize()` fails, the orchestrator MUST record a fail-closed stage outcome (see
   `ADR-0005-stage-outcomes-and-failure-classification.md`).
 - If validation fails, `finalize()` MUST NOT promote any staged outputs into their final run bundle
   locations.
 - Atomicity scope (normative; v0.1):
-  - Filesystem-level atomicity MUST be defined per destination path (per
-    `ExpectedOutput.artifact_path`).
+  - Filesystem-level atomicity MUST be defined per destination path (per run-relative artifact
+    path).
   - The publish gate MUST NOT claim or rely on filesystem-global atomicity across the entire
     `expected_outputs[]` set.
   - Stage-level durability is logical and outcome-driven:
@@ -732,6 +760,7 @@ Required operations (minimum):
 
 - `validate_artifact(artifact_path, contract_id) -> ValidationResult`
 - `validate_many(expected_outputs: list[ExpectedOutput]) -> ContractValidationReport`
+  - Implementations MUST ignore any `ExpectedOutput` entries with `contract_id=null` (non-contract).
 
 Validation dispatch (normative):
 

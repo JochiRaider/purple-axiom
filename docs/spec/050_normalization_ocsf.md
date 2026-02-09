@@ -79,8 +79,11 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- TODO: specify fixture roots for mapping unit tests and mapping pack conformance tests (see
-  `100_test_strategy_ci.md`, "Normalization and mapping").
+- `tests/fixtures/normalization/mapping_unit/`
+- `tests/fixtures/normalization/mapping_pack_conformance/`
+
+See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
+mapping.
 
 ## Overview
 

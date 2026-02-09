@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Purple Axiom environment noise profile snapshot (inputs/environment_noise_profile.json)",
+  "description": "Contract schema for the resolved environment noise profile snapshot stored under inputs/environment_noise_profile.json when controlled benign noise is enabled.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "profile_id",
+    "profile_version",
+    "seed"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract version constant for this environment noise profile snapshot."
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for the noise profile (matches runner.environment_config.noise_profile.profile_id)."
+    },
+    "profile_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Noise profile version string (matches runner.environment_config.noise_profile.profile_version)."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Deterministic seed used for any stochastic elements (matches runner.environment_config.noise_profile.seed; default 0)."
+    },
+    "targets": {
+      "type": "array",
+      "description": "Optional allowlist of lab asset ids eligible for noise generation (subset of runner.environment_config.targets).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "$comment": "NOTE: This snapshot is intended to be deterministically hashable. The SHA-256 recorded in manifest.extensions.runner.environment_noise_profile.profile_sha256 is expected to equal sha256(canonical_json_bytes(this_document)) (RFC 8785 / JCS), so this schema intentionally does NOT include a self-referential profile_sha256 field."
+}

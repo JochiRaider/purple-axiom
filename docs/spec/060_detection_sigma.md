@@ -74,8 +74,10 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- TODO: specify fixture roots for Sigma compilation and router-table conformance (see
-  `100_test_strategy_ci.md`, "Sigma compilation (bridge)").
+- `tests/fixtures/sigma_rule_tests/<test_id>/`
+
+See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
+mapping.
 
 ## Overview
 

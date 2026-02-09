@@ -1,0 +1,400 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Purple Axiom reporting thresholds output (report/thresholds.json)",
+  "description": "Contract schema for report/thresholds.json emitted by the reporting stage. This artifact summarizes evaluation gates/thresholds and the derived status recommendation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "evaluated_at_utc",
+    "overall_pass",
+    "gates",
+    "status_recommendation"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Contract version constant for this thresholds artifact."
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "Run identifier (RFC 4122 UUID, canonical hyphenated form, lowercase hex)."
+    },
+    "evaluated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when thresholds were evaluated (ISO 8601 / RFC 3339 date-time)."
+    },
+    "overall_pass": {
+      "type": "boolean",
+      "description": "True if all required gates passed (and regression gates passed when present)."
+    },
+    "regression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alert_status_recommendation"
+      ],
+      "properties": {
+        "alert_status_recommendation": {
+          "type": "string",
+          "enum": [
+            "partial",
+            "failed"
+          ],
+          "description": "Configured regression alert policy (reporting.regression.alert_status_recommendation)."
+        }
+      },
+      "description": "Present when regression comparison is enabled for the run."
+    },
+    "gates": {
+      "type": "array",
+      "description": "List of evaluated gates. Ordering should be deterministic (sorted by gate_id).",
+      "minItems": 8,
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    },
+    "status_recommendation": {
+      "type": "string",
+      "enum": [
+        "success",
+        "partial",
+        "failed"
+      ],
+      "description": "Status recommendation derived from stage outcomes and threshold gates."
+    }
+  },
+  "$defs": {
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "threshold",
+        "actual",
+        "pass"
+      ],
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "enum": [
+            "min_technique_coverage",
+            "max_allowed_latency_seconds",
+            "min_tier1_field_coverage",
+            "max_missing_telemetry_rate",
+            "max_normalization_gap_rate",
+            "max_bridge_gap_mapping_rate",
+            "max_bridge_gap_feature_rate",
+            "max_bridge_gap_other_rate",
+            "regression_alert"
+          ],
+          "description": "Stable gate identifier."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Configured threshold value for the gate."
+        },
+        "actual": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Observed value used to evaluate the gate. May be null when evaluation is indeterminate."
+        },
+        "pass": {
+          "type": "boolean",
+          "description": "Whether the gate passed."
+        },
+        "degradation_reason": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Stable reason code used when a gate failure degrades status."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "gate_id": {
+                "const": "max_allowed_latency_seconds"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "minimum": 0
+              },
+              "actual": {
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "gate_id": {
+                "enum": [
+                  "min_technique_coverage",
+                  "min_tier1_field_coverage",
+                  "max_missing_telemetry_rate",
+                  "max_normalization_gap_rate",
+                  "max_bridge_gap_mapping_rate",
+                  "max_bridge_gap_feature_rate",
+                  "max_bridge_gap_other_rate"
+                ]
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "minimum": 0,
+                "maximum": 1
+              },
+              "actual": {
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "min_technique_coverage"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "max_allowed_latency_seconds"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "min_tier1_field_coverage"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "max_missing_telemetry_rate"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "max_normalization_gap_rate"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "max_bridge_gap_mapping_rate"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "max_bridge_gap_feature_rate"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "max_bridge_gap_other_rate"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "gates": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "gate_id": {
+                "const": "regression_alert"
+              }
+            },
+            "required": [
+              "gate_id"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "regression"
+        ]
+      },
+      "then": {
+        "properties": {
+          "gates": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "const": "regression_alert"
+                }
+              },
+              "required": [
+                "gate_id"
+              ]
+            },
+            "minContains": 1,
+            "maxContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gates": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "gate_id": {
+                  "const": "regression_alert"
+                }
+              },
+              "required": [
+                "gate_id"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "regression"
+        ]
+      }
+    }
+  ],
+  "$comment": "Determinism: producers SHOULD emit gates sorted by gate_id (bytewise lexicographic). This schema enforces presence/uniqueness of required v0.1 gate_ids, and ties regression gate presence to the presence of the regression policy object."
+}

@@ -108,6 +108,40 @@ Run CI MUST include, at minimum:
 Run CI MAY be triggered less frequently than Content CI (for example on merge-to-main and/or on
 release), but MUST be executed before release publication.
 
+## Fixture index
+
+This section defines the **canonical fixture roots** for each stage and cross-cutting component.
+
+Stage specs MUST link to this section from their `### Isolation test fixture(s)` blocks rather than
+duplicating fixture-root lists. When a stage spec needs a new fixture root, it MUST be added here
+and referenced consistently.
+
+Conventions (normative):
+
+- A *fixture root* is a directory under `tests/fixtures/` that contains one or more *fixture cases*.
+- A *fixture case* is a leaf directory that contains:
+  - `inputs/` (minimum required inputs for the stage/feature under test), and
+  - `expected/` (golden outputs or assertion maps used by test harnesses).
+- Fixture cases MUST be named deterministically (no timestamps, no machine-specific paths).
+- Unless stated otherwise by a contract, fixture suites MUST compare JSON artifacts using the
+  contract-defined canonical JSON rules (not text diffs).
+
+| Stage / area                                  | Canonical fixture roots                                                                                                                                                               | Minimum fixture sets (normative)                                                                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cross-cutting: glob matching (`glob_v1`)      | `tests/fixtures/glob_v1/vectors.json`                                                                                                                                                 | `glob_v1_vectors` (vectors file present and exercised)                                                                                                  |
+| Cross-cutting: event identity (`event_id.v1`) | `tests/fixtures/event_id/v1/`                                                                                                                                                         | `tier1_smoke`, `tier2_smoke`, `tier3_collision`, `source_type_distinct`                                                                                 |
+| Cross-cutting: redaction (`pa.redaction.v1`)  | `tests/fixtures/redaction/v1/`                                                                                                                                                        | `allowlist_smoke`, `denylist_smoke`, `stable_hashes`                                                                                                    |
+| `lab_provider`                                | `tests/fixtures/lab_providers/`                                                                                                                                                       | `provider_smoke`, `failure_mapping_smoke`                                                                                                               |
+| `runner`                                      | `tests/fixtures/runner/lifecycle/`<br>`tests/fixtures/runner/state_reconciliation/`<br>`tests/fixtures/runner/noise_profile/`                                                         | `lifecycle_smoke`, `invalid_transition_blocked`, `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`, `noise_profile_canonicalization_crlf_lf` |
+| `telemetry`                                   | `tests/fixtures/telemetry/synthetic_marker/`<br>`tests/fixtures/unix_logs/`<br>`tests/fixtures/osquery/`                                                                              | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`                                                                                            |
+| `normalization`                               | `tests/fixtures/normalization/`                                                                                                                                                       | `tier1_core_common_smoke`, `actor_identity_smoke`                                                                                                       |
+| `validation` (criteria evaluation)            | `tests/fixtures/criteria/`                                                                                                                                                            | `criteria_time_window_smoke`, `criteria_eval_smoke`                                                                                                     |
+| `detection` (Sigma + Bridge)                  | `tests/fixtures/sigma_rule_tests/<test_id>/`                                                                                                                                          | `rule_smoke`, `unsupported_feature_rejected`                                                                                                            |
+| `scoring`                                     | `tests/fixtures/scoring/`                                                                                                                                                             | `regression_comparables_smoke`                                                                                                                          |
+| `reporting`                                   | `tests/fixtures/reporting/defense_outcomes/`<br>`tests/fixtures/reporting/thresholds/`<br>`tests/fixtures/reporting/regression_compare/`<br>`tests/fixtures/reporting/report_render/` | `defense_outcomes_attribution_v1`, `thresholds_contract_and_ordering`, `regression_compare_smoke`, `report_render_smoke`                                |
+| `signing` (when enabled)                      | `tests/fixtures/signing/`                                                                                                                                                             | `checksums_smoke`, `tamper_detected`                                                                                                                    |
+| Content governance: golden datasets           | `tests/fixtures/golden_datasets/governance/`                                                                                                                                          | `valid_minimal_golden`, `missing_required_artifact_fails`                                                                                               |
+
 ## Unit tests
 
 **Summary**: Unit tests validate individual components in isolation using deterministic fixtures.
@@ -123,6 +157,16 @@ field detection, and payload limit truncation with SHA-256 computation.
 
 Linux event identity basis tests use auditd/journald/syslog fixture vectors covering Tier 1 and Tier
 2 fields, plus Tier 3 collision fixtures under `tests/fixtures/event_id/v1/`.
+
+Additional required vectors (normative):
+
+- `metadata.source_type != identity_basis.source_type`:
+  - The fixture set under `tests/fixtures/event_id/v1/` MUST include at least one case where the
+    envelope `metadata.source_type` differs from `identity_basis.source_type`.
+  - The test MUST assert that:
+    - `metadata.event_id` is computed using `identity_basis.source_type` (not
+      `metadata.source_type`), and
+    - both fields are preserved (no forced equality, no rewriting).
 
 ### Glob matching (glob_v1)
 
@@ -725,6 +769,67 @@ Criteria drift detection tests validate that given a criteria pack manifest upst
 set criteria drift to detected and MUST mark affected actions `status=skipped` with a deterministic
 drift reason field.
 
+### Reporting and scoring (defense outcomes + attribution)
+
+Reporting derives per-action defense outcomes. For v0.1, defense outcome derivation depends on
+deterministic attribution of detection hits to executed actions (`pa.attribution.v1`) and the
+associated `match_quality` token defined in `070_scoring_metrics.md`.
+
+#### Defense outcomes derivation
+
+Fixture root (normative): `tests/fixtures/reporting/defense_outcomes/`
+
+The fixture suite MUST lock `pa.attribution.v1` join precedence and tie-break behavior, and MUST
+lock `match_quality` semantics.
+
+Minimum required fixture cases (normative):
+
+- `attribution_marker_only_exact`
+
+  - Setup: A ground-truth executed action includes `extensions.synthetic_correlation_marker`, and at
+    least one matched normalized event includes the same marker in
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker`.
+  - Expected:
+    - the hit is attributed to that action, and
+    - `match_quality = "exact"`.
+
+- `attribution_criteria_window_partial`
+
+  - Setup: Marker evidence is absent. `criteria/results.jsonl` contains a `time_window` for an
+    executed action, and the detection `first_seen_utc` falls within the inclusive interval.
+  - Expected:
+    - the hit is attributed to that action, and
+    - `match_quality = "partial"`.
+
+- `attribution_pivot_fallback_weak_signal`
+
+  - Setup: Neither marker nor criteria-window evidence is available, but the detection
+    `first_seen_utc` is within the pivot fallback window around `ground_truth.action.timestamp_utc`
+    as defined by `pa.attribution.v1`.
+  - Expected:
+    - the hit is attributed to that action, and
+    - `match_quality = "weak_signal"`.
+
+- `attribution_tie_break_deterministic`
+
+  - Setup: Two or more candidate actions match within the same precedence tier (for example,
+    overlapping criteria windows or overlapping pivot fallback windows) for the same `technique_id`.
+  - Expected:
+    - A single `primary_action_id` is selected deterministically by the `pa.attribution.v1` total
+      ordering.
+    - If an implementation emits `attributed_action_ids[]` for debugging, it MUST be ordered by the
+      same ordering with `primary_action_id` first.
+
+Fixture structure (normative):
+
+- Each fixture case MUST include `inputs/` sufficient to run the scoring+reporting attribution logic
+  (minimum: `ground_truth.jsonl`, `detections/detections.jsonl`, and the normalized event envelope
+  when testing marker join; `criteria/results.jsonl` is REQUIRED for criteria-window cases).
+- Each fixture case MUST include an expected attribution assertion map under `expected/` (format MAY
+  be JSON or YAML) that maps each detection hit to:
+  - the expected `primary_action_id`, and
+  - the expected `match_quality` token.
+
 ## Integration tests
 
 **Summary**: Integration tests validate cross-component behavior using realistic fixtures and
@@ -880,6 +985,36 @@ The fixture set MUST include at least:
   - Feed `inputs/range.yaml` with `runner.environment_config.noise_profile.enabled=true` but omit
     `profile_sha256` (or `profile_id` / `profile_version`).
   - Expected: config validation fails closed with `reason_code=config_schema_invalid`.
+
+### Content governance: golden datasets (fail-closed)
+
+Golden datasets are a governed corpus: the "golden" designation MUST NOT be granted unless required
+governance artifacts are present and valid (see `085_golden_datasets.md`).
+
+CI requirements (normative):
+
+- Content CI MUST validate the golden dataset governance artifacts as a fail-closed gate.
+- If any dataset is designated "golden" (via the catalog mechanism defined in
+  `085_golden_datasets.md`) and any required governance artifact is missing or schema-invalid, CI
+  MUST fail.
+
+Minimum checks (normative; paths are defined by `085_golden_datasets.md`):
+
+- Golden dataset catalog exists and validates against its contract (planned:
+  `docs/contracts/golden_dataset_catalog.schema.json`).
+- Each catalog entry designated "golden" has a corresponding dataset card metadata artifact that
+  validates against its contract (planned: `docs/contracts/golden_dataset_card.schema.json`).
+- Each catalog entry designated "golden" has a corresponding approvals record that validates against
+  its contract (planned: `docs/contracts/golden_dataset_approvals.schema.json`).
+- Catalog → card → approvals joins MUST be deterministic (stable key: `dataset_id`).
+
+Conformance fixtures (normative):
+
+- Fixture root: `tests/fixtures/golden_datasets/governance/`
+- Minimum fixture cases:
+  - `valid_minimal_golden`: minimal conforming golden dataset designation passes.
+  - `missing_required_artifact_fails`: missing catalog/card/approvals fails closed with a stable
+    error code that identifies the missing artifact class.
 
 ### Version conformance
 
@@ -1039,6 +1174,18 @@ The fixture set MUST include at least:
       - deterministic artifact path rules hold for produced contracted directories (timestamped
         filenames blocked).
 
+Thresholds artifact conformance (contract + deterministic ordering) (normative):
+
+- The artifact validation fixture suite MUST include conformance coverage for
+  `report/thresholds.json` once it is treated as a contract-backed output (see `080_reporting.md`).
+- Fixture root: `tests/fixtures/reporting/thresholds/`
+- Minimum fixture case(s):
+  - `thresholds_contract_and_ordering`:
+    - Provide a minimal run bundle where reporting emits `report/thresholds.json`.
+    - Assert `report/thresholds.json` validates against the `thresholds.schema` contract.
+    - Assert `gates[]` is deterministically ordered by `gate_id` ascending (UTF-8 byte order) and
+      contains unique `gate_id` values.
+
 Report generation sanity checks validate that reports render without errors.
 
 Artifact manifest completeness check ensures all expected artifacts are present.
@@ -1077,6 +1224,29 @@ The fixture set MUST include at least:
       config.
     - The profile pin is stable across repeated runs with identical inputs (no timestamps, stable
       ordering).
+
+- `noise_profile_snapshot_exists_and_hash_matches` (fail closed; contract-backed):
+
+  - Input: a noise-enabled run (`runner.environment_config.noise_profile` set) with an explicit
+    `profile_id`, `profile_version`, `profile_sha256`, and `seed`.
+  - Expected:
+    - `inputs/environment_noise_profile.json` exists in the run bundle (run-relative path).
+    - The snapshot validates against the `environment_noise_profile` contract.
+    - The SHA-256 of the canonical snapshot bytes equals
+      `manifest.extensions.runner.environment_noise_profile.profile_sha256`.
+
+- `noise_profile_snapshot_deterministic_bytes` (determinism hook):
+
+  - Input: repeat the same scenario suite twice with identical seeds and pinned versions.
+  - Expected:
+    - `inputs/environment_noise_profile.json` is byte-identical across runs.
+
+- `noise_profile_canonicalization_crlf_lf_equivalence` (canonicalization vector):
+
+  - Input: two noise profiles with identical semantic content but different line endings (LF vs
+    CRLF).
+  - Expected:
+    - computed `profile_sha256` is identical, and the emitted snapshot bytes are identical.
 
 - `noise_profile_toggle_event_id_stability` (determinism hook; recommended):
 
@@ -1327,7 +1497,8 @@ definitions live outside this document:
 - Reporting regression compare lifecycle:
   - Authority: reporting spec regression semantics + ADR-0005 substage outcomes.
   - Conformance fixtures: baseline present/identical, baseline intentional change, baseline missing,
-    baseline incompatible.
+    baseline incompatible (including `manifest.extensions.runner.environment_noise_profile.*`
+    mismatch).
 
 When adding a new stateful lifecycle that needs deterministic conformance, document the state
 machine using the ADR-0007 template and add fixture-driven conformance tests here.

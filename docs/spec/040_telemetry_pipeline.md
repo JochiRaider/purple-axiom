@@ -46,7 +46,6 @@ This section is the stage-local view of:
 
 | contract_id            | path/glob                        | Required?                                               |
 | ---------------------- | -------------------------------- | ------------------------------------------------------- |
-| `counters`             | `logs/counters.json`             | required                                                |
 | `telemetry_validation` | `logs/telemetry_validation.json` | optional (when `telemetry.otel.enabled=true`)           |
 | `pcap_manifest`        | `raw/pcap/manifest.json`         | optional (placeholder source; when enabled/implemented) |
 | `netflow_manifest`     | `raw/netflow/manifest.json`      | optional (placeholder source; when enabled/implemented) |
@@ -65,6 +64,8 @@ Notes:
 - The primary telemetry dataset under `raw_parquet/**` is an **analytics-tier** store and is not
   contract-backed in v0.1. Stage boundaries for `raw_parquet/**` are defined in ADR-0004 and
   `045_storage_formats.md`.
+- `logs/counters.json` is a cross-cutting, orchestrator-owned contract artifact (`contract_id`
+  `counters`). Stages (including telemetry) contribute counter data per `110_operability.md`.
 
 ### Config keys used
 

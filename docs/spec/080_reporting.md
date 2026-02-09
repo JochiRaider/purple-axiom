@@ -49,8 +49,7 @@ This section is the stage-local view of:
 
 Notes:
 
-- Reporting emits additional outputs that are not contract-backed via `contract_registry.json` in
-  v0.1:
+- Reporting emits additional non-contract outputs in v0.1:
   - `report/report.html` when `reporting.emit_html=true`
   - `report/run_timeline.md` (required for reportable runs; deterministic operator-facing artifact;
     see "Run timeline artifact")

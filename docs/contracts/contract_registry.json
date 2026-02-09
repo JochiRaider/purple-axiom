@@ -130,6 +130,38 @@
       "format": "json"
     },
     {
+      "contract_id": "environment_noise_profile",
+      "schema_path": "docs/contracts/environment_noise_profile.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Resolved environment noise profile snapshot (inputs/environment_noise_profile.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "golden_dataset_approvals",
+      "schema_path": "docs/contracts/golden_dataset_approvals.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Golden dataset approvals record (repo governance artifact; v0.1).",
+      "artifact_kind": "repo_input",
+      "format": "json"
+    },
+    {
+      "contract_id": "golden_dataset_card",
+      "schema_path": "docs/contracts/golden_dataset_card.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Golden dataset card metadata (repo governance artifact; v0.1).",
+      "artifact_kind": "repo_input",
+      "format": "json"
+    },
+    {
+      "contract_id": "golden_dataset_catalog",
+      "schema_path": "docs/contracts/golden_dataset_catalog.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Golden dataset catalog (repo governance artifact; v0.1).",
+      "artifact_kind": "repo_input",
+      "format": "json"
+    },
+    {      
       "contract_id": "ground_truth",
       "schema_path": "docs/contracts/ground_truth.schema.json",
       "contract_version": "0.1.0",
@@ -312,6 +344,14 @@
       "purpose": "Threat intel pack snapshot manifest (inputs/threat_intel/manifest.json).",
       "artifact_kind": "run_artifact",
       "format": "json"
+    },
+    {
+      "contract_id": "thresholds.schema",
+      "schema_path": "docs/contracts/thresholds.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Reporting thresholds output (report/thresholds.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"    
     }
   ],
   "bindings": [
@@ -325,6 +365,7 @@
     { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "stage_owner": "validation", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "stage_owner": "detection", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "stage_owner": "runner", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "inputs/environment_noise_profile.json", "contract_id": "environment_noise_profile", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "inputs/range.yaml", "contract_id": "range_config", "stage_owner": "orchestrator", "validation_mode": "yaml_document" },
     { "artifact_glob": "inputs/telemetry_baseline_profile.json", "contract_id": "telemetry_baseline_profile", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "inputs/threat_intel/indicators.jsonl", "contract_id": "threat_intel_indicator", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
@@ -340,6 +381,7 @@
     { "artifact_glob": "raw/netflow/manifest.json", "contract_id": "netflow_manifest", "stage_owner": "telemetry", "validation_mode": "json_document" },
     { "artifact_glob": "raw/pcap/manifest.json", "contract_id": "pcap_manifest", "stage_owner": "telemetry", "validation_mode": "json_document" },
     { "artifact_glob": "report/report.json", "contract_id": "report.schema", "stage_owner": "reporting", "validation_mode": "json_document" },
+    { "artifact_glob": "report/thresholds.json", "contract_id": "thresholds.schema", "stage_owner": "reporting", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/cleanup_verification.json", "contract_id": "cleanup_verification", "stage_owner": "runner", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/executor.json", "contract_id": "runner_executor_evidence", "stage_owner": "runner", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/requirements_evaluation.json", "contract_id": "requirements_evaluation", "stage_owner": "runner", "validation_mode": "json_document" },

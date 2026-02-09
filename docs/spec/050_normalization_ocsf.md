@@ -202,6 +202,14 @@ normalized event (keys MAY be null only where explicitly noted).
 - `metadata.identity_tier` (1 | 2 | 3; see the
   [event identity ADR](../adr/ADR-0002-event-identity-and-provenance.md))
 
+Terminology note (normative):
+
+- `metadata.source_type` is the **event_source_type** discriminator. It MAY differ from the
+  **identity_source_type** used for event-id hashing (`identity_basis.source_type`; see
+  [ADR-0002](../adr/ADR-0002-event-identity-and-provenance.md)).
+- Implementations MUST NOT assume these values are equal and MUST NOT rewrite either value to force
+  equality.
+
 Optional envelope extensions (v0.1):
 
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string)

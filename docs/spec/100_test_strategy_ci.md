@@ -163,6 +163,9 @@ Additional required vectors (normative):
 - `metadata.source_type != identity_basis.source_type`:
   - The fixture set under `tests/fixtures/event_id/v1/` MUST include at least one case where the
     envelope `metadata.source_type` differs from `identity_basis.source_type`.
+  - The differing values MUST be chosen so that substituting `metadata.source_type` for
+    `identity_basis.source_type` in the hash basis would change the expected `metadata.event_id`
+    (trap vector; ensures conflation bugs fail closed).    
   - The test MUST assert that:
     - `metadata.event_id` is computed using `identity_basis.source_type` (not
       `metadata.source_type`), and

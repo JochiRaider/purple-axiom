@@ -11,6 +11,11 @@ tags: [charter, scope]
 This charter defines Purple Axiom's mission, MVP outcomes, intended users, and definition of done
 for v0.1.
 
+## Core philosophy
+
+Treat detections as theorems you are trying to prove, and adversary emulation as the axioms (ground
+truth) you build upon.
+
 ## Summary
 
 Purple Axiom is a local-first cyber range that runs safe adversary-emulation scenarios, captures

@@ -1391,22 +1391,96 @@ otel_gateway:
 This document is a v0.2 draft. The following MUST be addressed in the implementation change set(s)
 that adopt it:
 
-1. **Data contracts**
+1. **Contracts + bindings (registry + validation hooks)**
 
-- Register new contract-backed artifacts (and/or bindings) for:
-  - `runs/<run_id>/control/cancel.json`
-  - `runs/<run_id>/control/resume_request.json`
-  - `runs/<run_id>/control/resume_decision.json`
-  - `runs/<run_id>/control/retry_request.json`
-  - `runs/<run_id>/control/retry_decision.json`
-  - `runs/<run_id>/inputs/plan_draft.yaml`
-  - `logs/ui_audit.jsonl` (workspace-global; reuse existing `audit_event` schema/contract_id;
-    requires workspace-root contract binding or separate registry)
-  - `state/run_registry.json` (run registry output)
-  - `export_manifest.json` (export output)
-- run manifest extension fields:
-  - `manifest.extensions.operator_interface.plan_draft_sha256`
-  - `manifest.extensions.operator_interface.plan_draft_path`
+   The implementation MUST register contract-backed artifacts for the operator interface
+   control-plane and supporting workspace state, with **concrete contract IDs** and schema file
+   paths.
+
+   **Run-bundle artifacts (run-relative bindings).**
+
+   Notes (normative):
+
+   - `bindings[].artifact_glob` values in `contract_registry.json` are run-relative (do not include
+     the `runs/<run_id>/` prefix).
+   - Control-plane artifacts under `control/` MUST be bound with `stage_owner="orchestrator"`.
+   - Validation modes MUST use the existing registry vocabulary: `json_document`, `yaml_document`,
+     `jsonl_lines`.
+
+   | Run artifact (location)                      | Registry `artifact_glob`       | `contract_id`             | `schema_path`                                        | `stage_owner`  | `validation_mode` |
+   | -------------------------------------------- | ------------------------------ | ------------------------- | ---------------------------------------------------- | -------------- | ----------------- |
+   | `runs/<run_id>/control/cancel.json`          | `control/cancel.json`          | `control_cancel_request`  | `docs/contracts/control_cancel_request.schema.json`  | `orchestrator` | `json_document`   |
+   | `runs/<run_id>/control/resume_request.json`  | `control/resume_request.json`  | `control_resume_request`  | `docs/contracts/control_resume_request.schema.json`  | `orchestrator` | `json_document`   |
+   | `runs/<run_id>/control/resume_decision.json` | `control/resume_decision.json` | `control_resume_decision` | `docs/contracts/control_resume_decision.schema.json` | `orchestrator` | `json_document`   |
+   | `runs/<run_id>/control/retry_request.json`   | `control/retry_request.json`   | `control_retry_request`   | `docs/contracts/control_retry_request.schema.json`   | `orchestrator` | `json_document`   |
+   | `runs/<run_id>/control/retry_decision.json`  | `control/retry_decision.json`  | `control_retry_decision`  | `docs/contracts/control_retry_decision.schema.json`  | `orchestrator` | `json_document`   |
+   | `runs/<run_id>/inputs/plan_draft.yaml`       | `inputs/plan_draft.yaml`       | `plan_draft`              | `docs/contracts/plan_draft.schema.json`              | `orchestrator` | `yaml_document`   |
+
+   **Manifest extension fields (schema evolution).**
+
+   - Extend the existing `manifest` contract (`docs/contracts/manifest.schema.json`) to include:
+     - `manifest.extensions.operator_interface.plan_draft_sha256`
+     - `manifest.extensions.operator_interface.plan_draft_path`
+
+   **Workspace-global artifacts (workspace-root validation required).**
+
+   The following are workspace-root artifacts (not run-relative). They MUST NOT be silently made
+   run-relative without updating the rest of the operator model:
+
+   | Artifact            | Workspace location (normative)                      | `contract_id`         | `schema_path`                                | `validation_mode` |
+   | ------------------- | --------------------------------------------------- | --------------------- | -------------------------------------------- | ----------------- |
+   | Global UI audit log | `logs/ui_audit.jsonl`                               | `audit_event` (reuse) | `docs/contracts/audit_event.schema.json`     | `jsonl_lines`     |
+   | Run registry        | `state/run_registry.json`                           | `run_registry`        | `docs/contracts/run_registry.schema.json`    | `json_document`   |
+   | Export manifest     | `exports/<run_id>/<export_id>/export_manifest.json` | `export_manifest`     | `docs/contracts/export_manifest.schema.json` | `json_document`   |
+
+   **Test hooks (CI).**
+
+   - CI MUST include fixtures that validate the run-bundle artifacts above using the normal
+     publish-gate `ContractValidator`.
+   - CI MUST also validate the workspace-global artifacts above using the chosen strategy in item 3
+     (workspace-root bindings or a separate workspace validator invocation).
+
+1. **Schema source of truth (payload definitions are already in this spec)**
+
+   The schema files introduced above MUST reflect the normative payload requirements already
+   specified in this document:
+
+   - `cancel.json`: `### Control artifacts (normative)` → `#### cancel.json (v0.2 contract)`
+   - `resume_request.json` / `resume_decision.json`: corresponding subsections under
+     `### Control artifacts (normative)`
+   - `retry_request.json` / `retry_decision.json`: corresponding subsections under
+     `### Control artifacts (normative)`
+   - plan draft snapshot + hashing: `## Plan building (v0.2 normative)` → `### Draft plans` and
+     `### Run association and immutability`
+   - export manifest: `### Export behavior (normative)` → **Export manifest (normative)**
+
+1. **Workspace-global artifacts (validation strategy required)**
+
+   `logs/ui_audit.jsonl`, `state/run_registry.json`, and `exports/**` outputs are workspace-root
+   artifacts.
+
+   Implementations MUST choose one:
+
+   - Add workspace-root binding capability to the contract registry + validator, OR
+   - Introduce a separate workspace registry + validator invocation (recommended), without changing
+     run-bundle artifact paths.
+
+   The chosen approach MUST be enforced in CI (do not "best-effort" validate).
+
+1. **Asciinema playback (required; locally bundled assets + fallback)**
+
+   - Implement the required inline asciinema playback viewer for `.cast` artifacts (for example
+     `runner/actions/<action_id>/terminal.cast`) using locally bundled player assets (no remote
+     fetches), with a plain-text fallback view.
+   - The chosen player library/assets MUST be version-pinned and recorded per
+     `SUPPORTED_VERSIONS.md` (add a UI pin category if needed).
+
+1. **Audit logging contract (validation scope is workspace-global)**
+
+   - The global UI audit log at `logs/ui_audit.jsonl` MUST reuse the existing `audit_event` contract
+     (`docs/contracts/audit_event.schema.json`).
+   - CI validation MUST treat `logs/ui_audit.jsonl` as a workspace-global log (not per-run), even
+     though run bundles may also emit run-local audit trails (for example `control/audit.jsonl`).
 
 1. **ADR-0005 reason code registry**
 
@@ -1416,11 +1490,6 @@ that adopt it:
 1. **Config reference**
 
    - Add `ui.*`, `auth.*` (UI scope), and `otel_gateway.*` keys and schema constraints.
-
-1. **Terminal recording playback (asciinema)**
-
-   - Decide whether `.cast` artifacts (for example `runner/actions/<action_id>/terminal.cast`) are
-     rendered inline (player) or link-only in v0.2.
 
 ## References
 

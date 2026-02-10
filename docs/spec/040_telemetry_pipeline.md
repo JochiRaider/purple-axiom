@@ -769,6 +769,11 @@ When `telemetry.baseline_profile.enabled=true`:
 1. For each expected asset, the validator MUST select the highest-priority matching `profiles[]`
    entry (highest `priority`, then `profile_id` bytewise ascending) and verify all
    `required_signals[]` meet their `min_count` within the validation window.
+   - Terminology note (normative): the telemetry baseline profile gate is a *telemetry validation*
+     check. It MUST NOT be interpreted as a workload/noise generator. Benign background activity
+     configuration is specified separately as the runner environment noise profile
+     (`runner.environment_config.noise_profile` in `120_config_reference.md` and
+     `manifest.extensions.runner.environment_noise_profile` in `025_data_contracts.md`).
    - A profile matches an asset when all specified `selector` fields match the asset record in
      `logs/lab_inventory_snapshot.json`:
      - `asset_ids`: contains `asset_id`

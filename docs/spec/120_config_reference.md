@@ -188,12 +188,20 @@ Common keys:
       noise profile as part of environment configuration/background activity.
       - When `enabled=true`, `environment_config.mode` MUST equal `apply` (noise generation is
         state-mutating).
+    - Terminology note (normative): this noise profile is a *workload/noise generator* input. It
+      MUST NOT be conflated with the telemetry baseline profile gate (`telemetry.baseline_profile`).
     - `profile_id` (required when `enabled=true`): stable identifier for the noise profile.
     - `profile_version` (required when `enabled=true`): profile version string (SemVer recommended).
-    - `profile_sha256` (required when `enabled=true`): SHA-256 of the canonical bytes of the profile
-      definition used for the run (pins the exact workload).
+    - `profile_sha256` (required when `enabled=true`): SHA-256 of the canonical noise profile bytes
+      (64 lowercase hex characters). In v0.1, the canonical bytes are exactly the bytes of the
+      snapshotted profile file `runs/<run_id>/inputs/environment_noise_profile.json`, which MUST be
+      emitted as canonical JSON bytes (`canonical_json_bytes(...)` as defined in
+      `025_data_contracts.md`).
     - `profile_path` (optional): human-readable path to the profile definition source. Not used as
       an identity input; `profile_sha256` is authoritative.
+    - When `enabled=true`, the implementation MUST snapshot the resolved noise profile bytes into
+      `runs/<run_id>/inputs/environment_noise_profile.json` and MUST use the snapshotted bytes for
+      hashing and execution.
     - `seed` (optional, default: `0`): deterministic seed for any stochastic elements. MUST be
       pinned and recorded in provenance (see `manifest.extensions.runner.environment_noise_profile`
       in `025_data_contracts.md`).
@@ -519,6 +527,9 @@ Common keys:
     - The implementation MUST snapshot the effective profile bytes into
       `runs/<run_id>/inputs/telemetry_baseline_profile.json` and use the snapshotted bytes for
       evaluation and hashing.
+    - Terminology note (normative): this telemetry baseline profile is a *telemetry validation*
+      input. It MUST NOT be used as a benign noise/workload generator. Benign background activity is
+      configured separately via `runner.environment_config.noise_profile`.
 - `sources` (optional)
   - Additional sources (example: `unix`, `osquery`, `pcap`, `netflow`)
   - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not

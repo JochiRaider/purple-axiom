@@ -20,7 +20,7 @@ This document defines security boundaries, safe defaults, and non-negotiable con
 
 ## Overview
 
-**Summary**: Purple Axiom MUST enforce explicit trust boundaries between components, default to
+Summary: Purple Axiom MUST enforce explicit trust boundaries between components, default to
 isolation and egress-deny posture, and apply deterministic redaction and artifact-handling rules
 that prevent accidental long-term storage of unredacted evidence.
 
@@ -44,21 +44,21 @@ Scenario safety interaction (normative):
 
 ## Definitions
 
-- **standard long-term artifact locations**: Default-exported run-bundle paths (Tier 1 evidence +
-  Tier 2 analytics) plus deterministic evidence under `runs/<run_id>/logs/` (as defined by
-  ADR-0009), excluding volatile logs, `.staging/**`, and the quarantine directory.
-- **logs/\*.json evidence allowlist** (normative, v0.1): The subset of schema-backed artifacts under
+- standard long-term artifact locations: Default-exported run-bundle paths (Tier 1 evidence + Tier 2
+  analytics) plus deterministic evidence under `runs/<run_id>/logs/` (as defined by ADR-0009),
+  excluding volatile logs, `.staging/`, and the quarantine directory.
+- logs/\*.json evidence allowlist (normative, v0.1): The subset of schema-backed artifacts under
   `runs/<run_id>/logs/` that MUST be treated as standard long-term artifacts (included in default
   export and in `security/checksums.txt` when signing is enabled; see `025_data_contracts.md`,
   "Long-term artifact selection for checksumming").
-- **quarantine directory**: `runs/<run_id>/<security.redaction.unredacted_dir>` used only when
+- quarantine directory: `runs/<run_id>/<security.redaction.unredacted_dir>` used only when
   unredacted evidence storage is explicitly permitted (default: `runs/<run_id>/unredacted/`).
-- **volatile logs**: Operator-local diagnostics excluded from default export/checksums (for example
-  process stdout/stderr and any `runs/<run_id>/logs/**` content not in the allowlist above).
-- **redacted-safe**: Satisfies the effective redaction policy and post-checks (see
+- volatile logs: Operator-local diagnostics excluded from default export/checksums (for example
+  process stdout/stderr and any `runs/<run_id>/logs/` content not in the allowlist above).
+- redacted-safe: Satisfies the effective redaction policy and post-checks (see
   [ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md)).
-- **evidence-tier artifact**: Tier 1 evidence artifacts governed by redaction/withhold/quarantine
-  rules (see [Storage formats](045_storage_formats.md)).
+- evidence-tier artifact: Tier 1 evidence artifacts governed by redaction/withhold/quarantine rules
+  (see [Storage formats](045_storage_formats.md)).
 
 ## Core principles
 
@@ -156,14 +156,51 @@ MUST be explicitly enabled and logged, and rule content MUST be pinned and hashe
 
 ### Noise and background activity generators
 
-- Any workload/noise generator tooling (for example AD-Lab-Generator, ADTest.exe, GHOSTS) MUST
-  operate on synthetic identities and synthetic credentials only. Operators MUST NOT import real
-  production user data into lab noise profiles.
-- Features that export plaintext credentials (for example password export options) MUST be disabled
-  by default. If enabled for a controlled lab experiment, exported material MUST be treated as a
-  secret and MUST NOT be included in publishable run artifacts.
-- Noise generator server components (when required) SHOULD run as internal-only supporting services
-  with outbound egress denied by default.
+- Default-off: Noise generators MUST be disabled unless explicitly enabled in configuration (see
+  `runner.environment_config.noise_profile.enabled` in `120_config_reference.md`). When disabled,
+  the runner MUST NOT start noise generator processes or supporting services.
+
+- Synthetic-only: Any workload/noise generator tooling (for example AD-Lab-Generator, ADTest.exe,
+  GHOSTS) MUST operate on synthetic identities and synthetic credentials only. Operators MUST NOT
+  import real production user data into lab noise profiles.
+
+- Plaintext credential export: Features that export plaintext credentials (for example password
+  export options) MUST be disabled by default. If enabled for a controlled lab experiment, exported
+  material MUST be treated as a secret and MUST NOT be included in publishable run artifacts.
+
+- No external egress: Any noise engine (agent or server) MUST run under default-deny outbound
+  egress; only explicitly allowlisted internal endpoints are permitted.
+
+  - Server components (when required) MUST run as internal-only supporting services (see
+    `020_architecture.md`) and MUST NOT be reachable from outside lab network ranges.
+  - The allowlist MUST be explicit and reviewable. Allowed endpoints MUST be recorded in
+    deterministic run evidence (for example as part of `runner.environment_config` evidence under
+    `runs/<run_id>/logs/**`).
+  - "Internal endpoints" MUST remain within the lab boundary (for example within lab provider
+    inventory networks and/or CIDRs declared in `lab.networks.cidrs`).
+  - Any attempted connection by a noise engine to a non-internal or non-allowlisted endpoint MUST be
+    treated as an unexpected egress violation (fail closed).
+
+- No runtime downloads: Noise engines MUST NOT require runtime downloads or internet fetches. All
+  binaries/images/assets MUST be shipped/pre-seeded and pinned (see `SUPPORTED_VERSIONS.md` and
+  `dependencies.allow_runtime_self_update` in `120_config_reference.md`).
+
+- Least privilege: Noise generators SHOULD run as non-root/non-admin where possible and MUST request
+  only minimal OS privileges/capabilities required for the simulated behavior. Noise generators MUST
+  NOT require host-admin privileges.
+
+- Auditability: All operator-driven enabling/disabling and configuration changes MUST be auditable
+  (operator audit log + manifest pins).
+
+  - When noise is enabled, the run MUST record the effective pins in the run manifest under
+    `manifest.extensions.runner.environment_noise_profile` (see `025_data_contracts.md`).
+  - If noise enablement/configuration is changed during a run via an operator interface, the action
+    MUST be captured in an append-only audit log in the run bundle (see
+    `115_operator_interface.md`).
+
+- Fail closed: Policy violations (unexpected egress, missing pins, unapproved endpoints, attempted
+  runtime download/self-update) MUST be run-fatal or stage-fatal per the fail-closed posture (see
+  ADR-0005).
 
 ## Secrets
 

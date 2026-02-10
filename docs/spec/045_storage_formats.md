@@ -367,6 +367,7 @@ Purpose:
 - `manifest.json`
 - `inputs/baseline_run_ref.json` (REQUIRED when regression comparison is enabled)
 - `inputs/baseline/manifest.json` (optional; RECOMMENDED when baseline manifest bytes are readable)
+- `inputs/environment_noise_profile.json` (optional; when environment noise is enabled)
 - `inputs/telemetry_baseline_profile.json` (optional; telemetry baseline profile gate)
 - `plan/expanded_graph.json` (v0.2+)
 - `plan/expansion_manifest.json` (v0.2+)

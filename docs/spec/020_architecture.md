@@ -1174,6 +1174,16 @@ are mandatory (names are suggestions; harness/framework is implementation-define
    - Assert: the provenance record contains no timestamps, hostnames, or machine-specific absolute
      paths.
 
+1. `noise_engine_provenance_recorded` (v0.2+)
+
+   - Setup: run a minimal pipeline with `runner.environment_config.noise_profile.enabled=true`.
+   - Assert: `manifest.extensions.runner.environment_noise_profile` includes the declared noise
+     engine
+     - adapter pins (and any coordinating server endpoint(s)).
+   - Assert: if noise is enabled but any required pin is missing, the orchestrator fails closed and
+     records a deterministic failure outcome tuple `(stage, status, fail_mode, reason_code)` for the
+     same inputs on repeated runs.
+
 1. `unknown_adapter_id_fail_closed_with_deterministic_outcome`
 
    - Setup: supply a configuration that selects an unknown `adapter_id` for a required `port_id`.
@@ -1588,6 +1598,38 @@ activity (“noise”) so that datasets are not comprised solely of attack actio
 User simulation frameworks that require a coordinating server (for example GHOSTS) SHOULD be
 deployed as optional supporting services (outside core stage boundaries) and integrated by
 configuring endpoint agents via `runner.environment_config`.
+
+### Noise engine adapters
+
+Noise engine adapters (v0.2+) are runner-integrated adapters that consume
+`runner.environment_config.noise_profile` and drive benign background activity. Implementations MAY
+use a host-local agent and MAY rely on an optional server component (for example GHOSTS-style
+coordination).
+
+Deterministic input contract (normative):
+
+- The adapter MUST treat the selected noise profile as a deterministic input surface.
+  - At minimum: `profile_id`, `profile_version`, `profile_sha256`, `seed`, and any explicit
+    schedule/window fields present in the profile definition.
+- The adapter MUST NOT introduce hidden nondeterminism (for example: unpinned random sources,
+  wall-clock scheduling decisions, or ad-hoc network discovery).
+
+Provenance and pin recording (normative):
+
+- When noise generation is enabled, the run bundle MUST record:
+  - adapter name and adapter version
+  - engine name and engine version (and image digest if containerized)
+  - any endpoint(s) used for coordinating server components (when applicable)
+- Canonical location: `manifest.extensions.runner.environment_noise_profile` in `manifest.json`.
+  - v0.1 records profile pins here; v0.2+ extends this location with adapter/engine provenance.
+  - If any values are mirrored elsewhere, this manifest location is authoritative.
+  - Endpoint lists MUST be deterministically ordered (UTF-8 byte ordering).
+
+Supporting services relationship (normative):
+
+- If the engine requires a server component, it MUST be deployed as an optional supporting service
+  and wired via `runner.environment_config` (explicit endpoint configuration), not via ad-hoc
+  discovery.
 
 Extensions MUST preserve the stage IO boundaries and produce contract-compliant artifacts.
 

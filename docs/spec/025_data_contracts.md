@@ -30,9 +30,9 @@ invariants that cannot be expressed in JSON Schema alone.
 
 ## Overview
 
-**Summary**: This spec defines the artifact schemas, run bundle layout, and cross-artifact
-invariants required for reproducible and comparable runs. It covers the normative requirements for
-manifest status derivation, ground truth identity, normalized event envelopes, and optional signing.
+Summary: This spec defines the artifact schemas, run bundle layout, and cross-artifact invariants
+required for reproducible and comparable runs. It covers the normative requirements for manifest
+status derivation, ground truth identity, normalized event envelopes, and optional signing.
 
 ### Document boundaries and ownership
 
@@ -71,7 +71,7 @@ with this document referenced as needed.
 
 ## Terminology
 
-- Artifact: A run-relative file produced or consumed by the pipeline.
+- Artifact: A run-relative file produced or consumed by the pipeline.1
 - Contract-backed artifact: An artifact whose path matches `docs/contracts/contract_registry.json`
   `bindings[]` and therefore has an associated schema and publish-gate validation rules.
 - Contract: A schema plus invariants for one artifact type.
@@ -85,6 +85,12 @@ with this document referenced as needed.
 - JSONL: JSON Lines, one JSON object per line.
 - OCSF event: A normalized event that conforms to the required envelope fields and may include
   additional OCSF fields and vendor extensions.
+- Telemetry baseline profile: An input used by the telemetry validation quality gate
+  (`telemetry.baseline_profile`) to assert expected collector/telemetry health. It is a validation
+  policy, not a workload generator. It MUST NOT be conflated with the *environment noise profile*.
+- Environment noise profile: An input used by the runner to generate deterministic benign background
+  activity (“noise”) during runs. It is a workload generator, not a telemetry validation gate. It
+  MUST NOT be conflated with the *telemetry baseline profile*.
 
 ## Contract registry
 
@@ -92,9 +98,9 @@ Schemas live in `docs/contracts/`.
 
 ### Authoritative contract registry index (normative)
 
-The authoritative registry is a **schema-backed index** that maps:
+The authoritative registry is a schema-backed index that maps:
 
-- **artifact selectors** (run-relative paths or glob patterns) to a `contract_id`, and
+- artifact selectors (run-relative paths or glob patterns) to a `contract_id`, and
 - `contract_id` to a concrete schema file and declared `contract_version`.
 
 Registry files (required for implementations):
@@ -142,7 +148,7 @@ implement `glob_v1` exactly so multi-language implementations match.
 
 Definitions:
 
-- Candidate path: a run-relative POSIX path to a **regular file** (directories are traversed during
+- Candidate path: a run-relative POSIX path to a regular file (directories are traversed during
   enumeration but are not match results).
 - Pattern: a run-relative POSIX glob pattern.
 - Character: a Unicode scalar value (code point).
@@ -177,11 +183,11 @@ Metacharacters (normative):
   - Ranges are supported: `[a-z]` matches any character whose Unicode scalar value is between `a`
     and `z` (inclusive).
     - `-` denotes a range only when it appears between two characters; otherwise `-` is literal.
-- Recursive segment `**` is supported and matches zero or more complete path segments (including
+- Recursive segment \`\` is supported and matches zero or more complete path segments (including
   none), allowing matches across `/`.
-  - `**` is special ONLY when it forms an entire segment (delimited by `/` or string boundaries).
-    Examples: `**/executor.json`, `runner/**/executor.json`, `runner/actions/**`.
-  - Any occurrence of `**` adjacent to other characters in the same segment (for example `a**b`) is
+  - \`\` is special ONLY when it forms an entire segment (delimited by `/` or string boundaries).
+    Examples: `/executor.json`, `runner//executor.json`, `runner/actions/`.
+  - Any occurrence of \`\` adjacent to other characters in the same segment (for example `ab`) is
     invalid in `glob_v1`.
 
 Pattern validity and fail-closed behavior (normative):
@@ -262,12 +268,12 @@ Runs pin `manifest.versions.contracts_version` (and, when applicable,
 Operators, CI jobs, and UIs MUST be able to validate an old run without checking out historical git
 commits.
 
-This spec defines a distributable **contracts bundle**: an immutable snapshot of the project’s
-contract schemas (the `docs/contracts/` tree) for a released `contracts_version`.
+This spec defines a distributable contracts bundle: an immutable snapshot of the project’s contract
+schemas (the `docs/contracts/` tree) for a released `contracts_version`.
 
 #### Bundle layout and contents (normative)
 
-A contracts bundle MUST include a directory subtree `docs/contracts/**` with, at minimum:
+A contracts bundle MUST include a directory subtree `docs/contracts/` with, at minimum:
 
 - `docs/contracts/contract_registry.json`
 - `docs/contracts/contract_registry.schema.json`
@@ -283,14 +289,14 @@ Each released `contracts_version` MUST be published as a distributable artifact 
 
 - `contracts_version` (SemVer), and
 - `contracts_bundle_sha256` (lowercase hex SHA-256) computed deterministically from the bundle’s
-  `docs/contracts/**` contents.
+  `docs/contracts/` contents.
 
 `contracts_bundle_sha256` computation (normative):
 
 - Build `tree_basis_v1` with:
   - `v: 1`
   - `engine: "custom"` (fixed constant for contracts bundles)
-  - `files[]`: one entry per regular file under `docs/contracts/**`, with:
+  - `files[]`: one entry per regular file under `docs/contracts/`, with:
     - `path`: normalized path relative to `docs/contracts/` (forward slashes; reject `..` and
       absolute paths)
     - `sha256`: lowercase hex SHA-256 of the exact file bytes
@@ -326,19 +332,19 @@ RECOMMENDED local store layout:
 - `<bundle_store_root>/<contracts_version>/<contracts_bundle_sha256>/`
   - `bundle.tar.gz` (optional; if stored as an archive)
   - `bundle/` (optional; extracted form)
-    - `docs/contracts/**`
+    - `docs/contracts/`
 
 #### Retrieval order (normative)
 
 Given a run manifest that pins `manifest.versions.contracts_version`, consumers MUST resolve a
 matching contracts bundle using this deterministic order:
 
-1. **Explicit override**: if an operator/CI job/UI provides an explicit contracts bundle path
-   (directory or archive), use it.
-1. **Local store lookup**: otherwise, search the local bundle store for `contracts_version` (and,
-   when available, `contracts_bundle_sha256`).
-1. **Remote retrieval**: otherwise, if remote bundle sources are enabled, download the bundle into
-   the local store.
+1. Explicit override: if an operator/CI job/UI provides an explicit contracts bundle path (directory
+   or archive), use it.
+1. Local store lookup: otherwise, search the local bundle store for `contracts_version` (and, when
+   available, `contracts_bundle_sha256`).
+1. Remote retrieval: otherwise, if remote bundle sources are enabled, download the bundle into the
+   local store.
 
 After resolution, consumers MUST compute `contracts_bundle_sha256` and MUST verify it against a
 trusted expected value when one is available (for example, a signed sidecar `<bundle>.sha256`, or an
@@ -349,9 +355,9 @@ fail closed.
 
 Mature detection ecosystems treat detection content as a releasable package: versioned, integrity
 checked, and independently consumable by CI and offline validators. Purple Axiom formalizes this as
-a **detection content bundle** (also called a **Detection Content Release**).
+a detection content bundle (also called a Detection Content Release).
 
-A detection content bundle is a **non-run artifact** stored outside `runs/` that contains immutable
+A detection content bundle is a non-run artifact stored outside `runs/` that contains immutable
 snapshots of:
 
 - a ruleset (Sigma YAML) used by the detection stage,
@@ -416,7 +422,7 @@ Where:
 
 Ruleset snapshot normalization (normative):
 
-- Each rule file MUST be written as the **canonical rule bytes** defined by `060_detection_sigma.md`
+- Each rule file MUST be written as the canonical rule bytes defined by `060_detection_sigma.md`
   ("Canonical rule hashing"):
   - strip a UTF-8 BOM if present, and
   - normalize line endings to LF (`\n`).
@@ -489,7 +495,7 @@ Detection content bundles reuse the standard checksums/signing rules used for sh
 Checksums selection (normative):
 
 - The checksums selection MUST include every file under the bundle root except:
-  - `.staging/**` (if present)
+  - `.staging/` (if present)
   - `security/checksums.txt`
   - `security/signature.ed25519` (if present)
 
@@ -551,7 +557,7 @@ At minimum, run + content validation MUST:
 1. Validate the run bundle contract-backed artifacts using the resolved contracts bundle (existing
    offline mode).
 1. Validate the content bundle using the content-bundle offline mode above.
-1. Establish that the content bundle is **compatible** with the run’s pinned versions:
+1. Establish that the content bundle is compatible with the run’s pinned versions:
    - For Sigma evaluation runs, `manifest.versions.rule_set_id`/`rule_set_version` MUST match one of
      the content bundle manifest `components.rule_sets[]` entries.
    - For bridge-enabled runs, `manifest.versions.mapping_pack_id`/`mapping_pack_version` MUST match
@@ -625,7 +631,7 @@ The following list is for navigation only. The authoritative mapping is
 - `docs/contracts/threat_intel_indicator.schema.json`
 - `docs/contracts/threat_intel_pack_manifest.schema.json`
 
-See **Contract version constant (normative)** above for the required `contract_version` constant and
+See Contract version constant (normative) above for the required `contract_version` constant and
 bump rules.
 
 ### Contract lifecycle workflow (normative)
@@ -763,9 +769,9 @@ Minimum fields (normative):
 
 Notes:
 
-- This report is a **deterministic evidence log** (Tier 0). When present, it MUST be included in
-  default exports and in `security/checksums.txt` when signing is enabled (see ADR-0009 and the
-  storage formats Tier 0 export classification).
+- This report is a deterministic evidence log (Tier 0). When present, it MUST be included in default
+  exports and in `security/checksums.txt` when signing is enabled (see ADR-0009 and the storage
+  formats Tier 0 export classification).
 - Stages MUST still record the stage outcome with a stable `reason_code` per ADR-0005 and
   operability rules.
 
@@ -798,7 +804,7 @@ For any stage that publishes contract-backed artifacts:
 - `.staging/` is a reserved, non-contracted scratch area:
   - Stages MUST NOT write long-term artifacts outside their `.staging/<stage_id>/` subtree until
     publish.
-  - `.staging/**` MUST NOT be referenced by `evidence_refs[]` (or any other contracted evidence
+  - `.staging/` MUST NOT be referenced by `evidence_refs[]` (or any other contracted evidence
     pointer) and MUST be excluded from signing/checksumming inputs.
 - Atomic publish and cleanup:
   - Publishing MUST be implemented as an atomic replace per final-path artifact (per run-relative
@@ -868,19 +874,21 @@ Minimum publish-gate coverage (v0.1):
   - `runs/<run_id>/inputs/baseline/manifest.json` when produced (regression baseline snapshot form)
   - `runs/<run_id>/inputs/telemetry_baseline_profile.json` when
     `telemetry.baseline_profile.enabled=true`
-  - `runs/<run_id>/inputs/threat_intel/manifest.json` (when threat intelligence is enabled; v0.2+)
+  - `runs/<run_id>/inputs/environment_noise_profile.json` when
+    `runner.environment_config.noise_profile.enabled=true`
+  - `runs/<run_id>/inputs/threat_intel/manifest.json` when threat intel is enabled (v0.2+)
   - `runs/<run_id>/inputs/threat_intel/indicators.jsonl` (when threat intelligence is enabled;
     v0.2+)
-  - `runner/**` artifacts that have contracts (for example, executor evidence, side-effect ledger,
+  - `runner/` artifacts that have contracts (for example, executor evidence, side-effect ledger,
     cleanup verification)
   - `runs/<run_id>/runner/principal_context.json`
   - `runs/<run_id>/logs/cache_provenance.json`
   - `runs/<run_id>/logs/counters.json`
-  - `criteria/**` artifacts that have contracts (criteria pack snapshot, criteria results)
-  - `normalized/**` artifacts that have contracts (OCSF event envelope for JSONL outputs, mapping
+  - `criteria/` artifacts that have contracts (criteria pack snapshot, criteria results)
+  - `normalized/` artifacts that have contracts (OCSF event envelope for JSONL outputs, mapping
     coverage, mapping profile snapshot)
-  - `bridge/**` artifacts that have contracts (router tables, mapping pack snapshots, compiled
-    plans, bridge coverage)
+  - `bridge/` artifacts that have contracts (router tables, mapping pack snapshots, compiled plans,
+    bridge coverage)
   - `detections/detections.jsonl`
   - `scoring/summary.json`
   - `logs/telemetry_validation.json` when the telemetry stage is enabled
@@ -893,15 +901,15 @@ Minimum publish-gate coverage (v0.1):
 
 This section makes all “required when enabled” statements mechanically checkable by defining:
 
-- a single, explicit **stage enablement matrix** (`enabled_if`) pinned to exact config keys, and
-- a deterministic **requiredness function** used to populate `expected_outputs[].required` for the
+- a single, explicit stage enablement matrix (`enabled_if`) pinned to exact config keys, and
+- a deterministic requiredness function used to populate `expected_outputs[].required` for the
   `PublishGate.finalize()` port.
 
-**Source of truth.** Implementations MUST treat the matrix in this section as the canonical mapping
-from config → (stage enabled/disabled) → (required vs optional contracted outputs). Stage-specific
+Source of truth. Implementations MUST treat the matrix in this section as the canonical mapping from
+config → (stage enabled/disabled) → (required vs optional contracted outputs). Stage-specific
 documents MAY use shorthand (“when enabled”), but MUST NOT contradict this section.
 
-**Expression language (`expr_v1`).** `enabled_if` and `required_if` use the following total function
+Expression language (`expr_v1`). `enabled_if` and `required_if` use the following total function
 over the effective run config (after defaults are applied):
 
 - `{"const": true|false}`: literal
@@ -913,7 +921,7 @@ over the effective run config (after defaults are applied):
 - `{"all_of": [expr, ...]}`: AND
 - `{"not": expr}`: NOT
 
-**Requiredness function.** The orchestrator / stage wrapper MUST compute:
+Requiredness function. The orchestrator / stage wrapper MUST compute:
 
 - `stage_enabled(stage_id, cfg) -> bool` by evaluating that stage’s `enabled_if`.
 - `output_required(stage_id, contract_id, cfg) -> bool`:
@@ -925,7 +933,7 @@ over the effective run config (after defaults are applied):
   - If `contract_id` is not covered by any list for that stage: implementations MUST fail closed
     (treat as a spec/registry mismatch).
 
-**Publish-gate integration.** For each binding-derived expected output, the stage wrapper MUST pass
+Publish-gate integration. For each binding-derived expected output, the stage wrapper MUST pass
 `required=output_required(stage_id, contract_id, cfg)` into `expected_outputs[]`. Missing outputs
 with `required=true` MUST be treated as validation failures (no promotion). Missing outputs with
 `required=false` MUST NOT be treated as failures and MUST NOT be contract-validated.
@@ -1066,11 +1074,11 @@ JSON Schema. They do not replace publish-gate contract validation.
 
 v0.1 baseline canaries (non-exhaustive; see operability and telemetry specs for full details):
 
-- **Agent liveness (push-only DOA detection):** `telemetry.agent.liveness`
-- **Telemetry baseline profile gate:** `telemetry.baseline_profile`
-- **Windows raw-mode canary:** `telemetry.windows_eventlog.raw_mode`
-- **Checkpointing and replay validation:** `telemetry.checkpointing.storage_integrity`
-- **Resource budget enforcement:** `telemetry.resource_budgets`
+- Agent liveness (push-only DOA detection): `telemetry.agent.liveness`
+- Telemetry baseline profile gate: `telemetry.baseline_profile`
+- Windows raw-mode canary: `telemetry.windows_eventlog.raw_mode`
+- Checkpointing and replay validation: `telemetry.checkpointing.storage_integrity`
+- Resource budget enforcement: `telemetry.resource_budgets`
 
 Authoritative definitions for these canaries, reason codes, and required evidence pointers are in
 the [operability spec](110_operability.md) and the
@@ -1303,8 +1311,8 @@ Contract-backed artifacts (normative):
 
 Reserved scratch and quarantine locations:
 
-- `.staging/**` is a reserved publish-gate scratch area. The reader MUST treat any `.staging/**`
-  path as non-long-term scratch, MUST exclude it from inventory/hash sets, and MUST return
+- `.staging/` is a reserved publish-gate scratch area. The reader MUST treat any `.staging/` path as
+  non-long-term scratch, MUST exclude it from inventory/hash sets, and MUST return
   `error_code="artifact_in_staging"` if asked to open it via an evidence ref.
 - The quarantine directory is `runs/<run_id>/<security.redaction.unredacted_dir>` (default:
   `runs/<run_id>/unredacted/`; see `090_security_safety.md`).
@@ -1315,8 +1323,8 @@ Reserved scratch and quarantine locations:
 Deterministic evidence vs volatile diagnostics under `logs/`:
 
 - `runs/<run_id>/logs/` classification MUST follow ADR-0009 (file-level allowlist).
-- Any `logs/**` path not explicitly allowlisted as deterministic evidence MUST be treated as
-  volatile diagnostics.
+- Any `logs/` path not explicitly allowlisted as deterministic evidence MUST be treated as volatile
+  diagnostics.
 
 Logical artifacts with multiple representations (normative):
 
@@ -1451,7 +1459,7 @@ Required error codes (v1):
 | `contract_registry_parse_error`        | error    | Contract registry exists but is invalid JSON or schema-invalid               |
 | `artifact_path_invalid`                | error    | Any artifact path fails reader path normalization rules                      |
 | `artifact_missing`                     | error    | An evidence ref or required artifact path does not exist                     |
-| `artifact_in_staging`                  | error    | An evidence ref attempts to access `.staging/**`                             |
+| `artifact_in_staging`                  | error    | An evidence ref attempts to access `.staging/`                               |
 | `artifact_representation_conflict`     | error    | Multiple representations exist for a single logical artifact                 |
 | `quarantine_access_denied`             | error    | Attempted read under quarantine without explicit opt-in                      |
 | `evidence_withheld`                    | warning  | Evidence is withheld (placeholder or explicit handling)                      |
@@ -1530,7 +1538,7 @@ Handling semantics (normative):
 - `withheld`: `artifact_path` exists but contains a deterministic redaction/placeholder; the
   underlying evidence is intentionally not retained.
 - `quarantined`: `artifact_path` exists but is quarantined (for example, under
-  `runs/<run_id>/unredacted/**`) and MUST NOT be used for scoring/trending outputs.
+  `runs/<run_id>/unredacted/`) and MUST NOT be used for scoring/trending outputs.
 - `absent`: evidence was expected for this reference but is not present; `artifact_path` SHOULD
   indicate the expected location.
 
@@ -1634,11 +1642,10 @@ readable.
 Baseline reference artifacts under `runs/<run_id>/inputs/` are owned by the reporting stage and are
 immutable once published:
 
-- Operators MUST NOT pre-populate `inputs/baseline_run_ref.json` or any `inputs/baseline/**` paths.
+- Operators MUST NOT pre-populate `inputs/baseline_run_ref.json` or any `inputs/baseline/` paths.
 
-- All stages MUST treat `inputs/**` as read-only inputs; only reporting (or the orchestrator
-  component that owns regression) may materialize baseline reference artifacts under these reserved
-  paths.
+- All stages MUST treat `inputs/` as read-only inputs; only reporting (or the orchestrator component
+  that owns regression) may materialize baseline reference artifacts under these reserved paths.
 
 - If a run is resumed/replayed and these baseline reference artifacts already exist, implementations
   MUST validate them and MUST NOT rewrite them.
@@ -1885,17 +1892,17 @@ Stage outcomes (v0.1 baseline expectations):
   additional stages, but MUST keep stage identifiers stable and must surface failures via stage
   outcomes.
 
-| Stage           | Typical `fail_mode` (v0.1 default)                     | Minimum artifacts when enabled                                  | Notes                                                                                                              |
-| --------------- | ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `lab_provider`  | `fail_closed`                                          | `manifest.json`                                                 | Failure to resolve targets deterministically is fatal.                                                             |
-| `runner`        | `fail_closed`                                          | `ground_truth.jsonl`, `runner/**`                               | If stable `asset_id` resolution fails, the run MUST fail closed.                                                   |
-| `telemetry`     | `fail_closed`                                          | `raw_parquet/**` (when enabled), `manifest.json`                | If required Windows sources are missing (e.g., Sysmon), the run MUST fail closed unless the scenario exempts them. |
-| `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events/**`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped and unmapped counts MUST still be reported.          |
-| `validation`    | `warn_and_skip` (default)                              | `criteria/results.jsonl`, `criteria/manifest.json`              | MUST emit a result row per selected action; un-evaluable actions MUST be `skipped` with `reason_code`.             |
-| `detection`     | `fail_closed` (default)                                | `detections/detections.jsonl`, `bridge/coverage.json`           | MUST record non-executable rules with stable reasons (compiled plans and coverage).                                |
-| `scoring`       | `fail_closed`                                          | `scoring/summary.json`                                          | A missing or invalid summary is fatal when scoring is enabled.                                                     |
-| `reporting`     | `fail_closed`                                          | `report/**`                                                     | Reporting failures are fatal when reporting is enabled.                                                            |
-| `signing`       | `fail_closed` (when enabled)                           | `security/checksums.txt`,`security/signature.ed25519`           | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed.                        |
+| Stage           | Typical `fail_mode` (v0.1 default)                     | Minimum artifacts when enabled                                | Notes                                                                                                              |
+| --------------- | ------------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `lab_provider`  | `fail_closed`                                          | `manifest.json`                                               | Failure to resolve targets deterministically is fatal.                                                             |
+| `runner`        | `fail_closed`                                          | `ground_truth.jsonl`, `runner/`                               | If stable `asset_id` resolution fails, the run MUST fail closed.                                                   |
+| `telemetry`     | `fail_closed`                                          | `raw_parquet/` (when enabled), `manifest.json`                | If required Windows sources are missing (e.g., Sysmon), the run MUST fail closed unless the scenario exempts them. |
+| `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events/`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped and unmapped counts MUST still be reported.          |
+| `validation`    | `warn_and_skip` (default)                              | `criteria/results.jsonl`, `criteria/manifest.json`            | MUST emit a result row per selected action; un-evaluable actions MUST be `skipped` with `reason_code`.             |
+| `detection`     | `fail_closed` (default)                                | `detections/detections.jsonl`, `bridge/coverage.json`         | MUST record non-executable rules with stable reasons (compiled plans and coverage).                                |
+| `scoring`       | `fail_closed`                                          | `scoring/summary.json`                                        | A missing or invalid summary is fatal when scoring is enabled.                                                     |
+| `reporting`     | `fail_closed`                                          | `report/`                                                     | Reporting failures are fatal when reporting is enabled.                                                            |
+| `signing`       | `fail_closed` (when enabled)                           | `security/checksums.txt`,`security/signature.ed25519`         | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed.                        |
 
 ### Ground truth timeline
 
@@ -2013,7 +2020,7 @@ Idempotence defaults (normative):
 
 Re-run safety and refusal recording (normative):
 
-- A ground truth line represents a single **action instance** (`action_id`) and MUST NOT collapse
+- A ground truth line represents a single action instance (`action_id`) and MUST NOT collapse
   distinct planned executions into one line.
   - If a plan (v0.2+) schedules equivalent executions multiple times (same `action_key` and same
     `target_asset_id`), each scheduled execution MUST be represented as a separate ground truth line
@@ -2094,7 +2101,7 @@ Where `action_key_basis_v1` MUST include, at minimum:
 
 Target semantics (normative):
 
-- `target_asset_id` MUST be a **stable Purple Axiom logical asset id** (matching the
+- `target_asset_id` MUST be a stable Purple Axiom logical asset id (matching the
   `lab.assets[].asset_id` namespace) and MUST NOT be a provider-mutable identifier (for example:
   ephemeral VM IDs or cloud instance IDs).
 - If a provider cannot resolve stable `asset_id`s for the run targets, the pipeline MUST fail closed
@@ -2121,8 +2128,8 @@ Failure policy (normative):
 Fallback when a full JCS library is unavailable:
 
 - Implementations MUST vendor or invoke a known-good RFC 8785 implementation (preferred).
-- For **PA JCS Integer Profile** hash bases only, an implementation MAY use a simplified encoder
-  that is provably identical to JCS for this restricted data model:
+- For PA JCS Integer Profile hash bases only, an implementation MAY use a simplified encoder that is
+  provably identical to JCS for this restricted data model:
   - Numbers MUST be signed integers within IEEE-754 "safe integer" range (|n| \<=
     9,007,199,254,740,991).
   - No floating point numbers are permitted.
@@ -2565,7 +2572,7 @@ Absence semantics:
 
 ### Normalized events
 
-This artifact is stored under `normalized/ocsf_events/**`.
+This artifact is stored under `normalized/ocsf_events/`.
 
 Purpose:
 
@@ -2774,8 +2781,8 @@ Validation:
 Key semantics (normative when produced):
 
 - The router table MUST map Sigma `logsource.category` to one or more OCSF `class_uid` filters.
-- When a `logsource.category` maps to multiple `class_uid` values, the mapping represents a **union
-  scope** for evaluation (boolean OR or `IN (...)` semantics), not an ambiguity (see the
+- When a `logsource.category` maps to multiple `class_uid` values, the mapping represents a union
+  scope for evaluation (boolean OR or `IN (...)` semantics), not an ambiguity (see the
   [Sigma to OCSF bridge spec](065_sigma_to_ocsf_bridge.md)).
 - Routes MAY also include `filters[]` (producer or source predicates) expressed as OCSF filter
   objects (`{path, op, value}`) per `bridge_router_table.schema.json`.
@@ -2941,13 +2948,13 @@ Required invariants:
 
 ## Optional invariants: run bundle signing
 
-Run bundle signing is **optional** in v0.1 and is controlled by `security.signing.enabled` (see the
+Run bundle signing is optional in v0.1 and is controlled by `security.signing.enabled` (see the
 [config reference](120_config_reference.md)). When enabled, signing provides integrity guarantees
 for the full run bundle without requiring a specific transport or storage backend.
 
 Normative requirements:
 
-- v0.1 signing MUST use **Ed25519** signatures.
+- v0.1 signing MUST use Ed25519 signatures.
 - The signing key MUST be provided by reference (`security.signing.key_ref`); private key material
   MUST NOT be written into the run bundle.
 - Signing MUST be the final step after all long-term artifacts are materialized.
@@ -2992,18 +2999,18 @@ MUST be run-relative using POSIX separators (`/`). Newlines MUST be `\n` (LF).
 
 `security/checksums.txt` MUST include every file under `runs/<run_id>/` except:
 
-- `<security.redaction.unredacted_dir>/**` (default: `runs/<run_id>/unredacted/`; quarantine, if
+- `<security.redaction.unredacted_dir>/` (default: `runs/<run_id>/unredacted/`; quarantine, if
   present)
-- `.staging/**` (transient publish-gate scratch area)
+- `.staging/` (transient publish-gate scratch area)
 - Volatile diagnostics under `logs/` (see ADR-0009 and the storage formats spec Tier 0 taxonomy),
   including:
   - `logs/run.log`
   - `logs/warnings.jsonl`
   - `logs/eps_baseline.json`
-  - `logs/telemetry_checkpoints/**`
-  - `logs/dedupe_index/**`
-  - `logs/scratch/**`
-  - any other `logs/**` path not explicitly classified as deterministic evidence
+  - `logs/telemetry_checkpoints/`
+  - `logs/dedupe_index/`
+  - `logs/scratch/`
+  - any other `logs/` path not explicitly classified as deterministic evidence
 - `security/checksums.txt` and `security/signature.ed25519` (to avoid self-reference)
 
 Inclusion notes (normative):
@@ -3015,7 +3022,7 @@ Inclusion notes (normative):
   - `runner/actions/<action_id>/requirements_evaluation.json`
 - If an evidence-tier artifact is withheld-from-long-term, the deterministic placeholder written at
   the standard path MUST be included in `security/checksums.txt`. Any quarantined/unredacted copies
-  under `runs/<run_id>/unredacted/**` MUST NOT be included (see `090_security_safety.md`,
+  under `runs/<run_id>/unredacted/` MUST NOT be included (see `090_security_safety.md`,
   "Redaction").
 - Implementations MUST treat `runner/actions/<action_id>/` as part of the long-term artifact set
   (unless excluded above), including additional contract-defined runner evidence artifacts written
@@ -3096,9 +3103,9 @@ Given a run bundle that includes `security/checksums.txt`, `security/signature.e
 
 Verification outcomes:
 
-- **valid**: all checksums match and the signature verifies.
-- **invalid**: any checksum mismatch, missing referenced file, or signature verification failure.
-- **indeterminate**: required signing artifacts are missing or malformed.
+- valid: all checksums match and the signature verifies.
+- invalid: any checksum mismatch, missing referenced file, or signature verification failure.
+- indeterminate: required signing artifacts are missing or malformed.
 
 When `security.signing.enabled: true`, the pipeline MUST fail closed if verification would be
 `invalid` or `indeterminate` for the artifacts it just emitted.
@@ -3187,12 +3194,35 @@ Normative requirements:
 - The object MUST be stable across repeated runs with identical inputs (deterministic ordering, no
   timestamps).
 
+#### Noise profile snapshot and hashing (normative)
+
+When `runner.environment_config.noise_profile.enabled=true`:
+
+- The pipeline MUST snapshot the resolved noise profile into the run bundle at the reserved
+  run-relative path `inputs/environment_noise_profile.json`.
+
+- The snapshot bytes MUST be the canonical profile bytes for the run:
+
+  - Let `canonical_profile_bytes := canonical_json_bytes(<resolved_noise_profile>)` as defined in
+    this document (“Canonical JSON and hashing”).
+  - The emitted file `inputs/environment_noise_profile.json` MUST be exactly
+    `canonical_profile_bytes` (byte-for-byte).
+
+- `manifest.extensions.runner.environment_noise_profile.profile_sha256` MUST equal
+  `sha256_hex(canonical_profile_bytes)` (64 lowercase hex characters).
+
+- The runner MUST use the snapshotted profile (`inputs/environment_noise_profile.json`) as the
+  effective profile definition for execution. Any external `profile_path` representation (JSON,
+  YAML, line endings, whitespace) MUST NOT affect execution or `profile_sha256` once snapshotted.
+
+- The snapshot MUST be treated as an input artifact and MUST be redaction-safe.
+
 #### `extensions.principal_id` (action-scoped, optional)
 
 - `extensions.principal_id` MAY be present on a ground-truth action record.
 
-- If present, it MUST be a **stable run-local identifier** for the principal used for that action
-  and MUST NOT be a username.
+- If present, it MUST be a stable run-local identifier for the principal used for that action and
+  MUST NOT be a username.
 
 - RECOMMENDED format: `pa_pid_v1_<32hex>`.
 
@@ -3216,7 +3246,7 @@ Normative requirements:
   remain in volatile logs and never enter long-term storage.
 - When storing raw telemetry, apply a configurable redaction policy for known sensitive fields
   (credentials, tokens, PII) before promotion into long-term stores.
-- `runs/<run_id>/logs/**` contains a mix of:
+- `runs/<run_id>/logs/` contains a mix of:
   - volatile operator-local diagnostics (excluded from default export/checksums), and
   - contract-backed, CI-relevant structured logs (for example `logs/counters.json`,
     `logs/cache_provenance.json`).

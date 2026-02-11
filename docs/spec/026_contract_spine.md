@@ -9,6 +9,7 @@ related:
   - 020_architecture.md
   - 025_data_contracts.md
   - 045_storage_formats.md
+  - 080_reporting.md
   - 100_test_strategy_ci.md
   - 105_ci_operational_readiness.md
   - ADR-0004-deployment-architecture-and-inter-component-communication.md
@@ -28,7 +29,7 @@ consolidates the mechanically-actionable requirements for:
 - Contract validation report emission
 - Deterministic serialization rules for contract-backed artifacts
 - Reader discovery, classification, and stable error codes
-- Observability surfaces and CI conformance lanes
+- Observability surfaces and CI conformance gates
 
 The Contract Spine exists to ensure multiple implementations do not “re-interpret” the same contract
 rules.
@@ -62,7 +63,8 @@ This document is authoritative for:
 
 - Verification hooks:
 
-  - a single Contract Spine CI lane (“Wave 0”) that gates contract conformance
+  - a Contract Spine conformance gate within Content CI that gates contract conformance
+  - the Contract Spine gate MUST run before other Content CI checks
 
 Out of scope:
 
@@ -72,9 +74,12 @@ Out of scope:
 
 ### Authority and precedence
 
-- This document is the single authority for the Contract Spine seam: interface signatures,
-  publish/validate/read seam invariants, determinism/canonicalization rules at contract boundaries,
-  and the Contract Spine CI lane (“Wave 0”).
+- This document is the canonical consolidation for the Contract Spine seam (publish/validate/read)
+  and defines the Contract Spine gate within Content CI.
+  - Where this document restates requirements defined in existing specs (notably
+    `020_architecture.md`, `025_data_contracts.md`, and `045_storage_formats.md`), it MUST NOT
+    drift. If a conflict is discovered, implementations MUST follow the existing spec and the
+    conflict MUST be resolved by updating this document (treat as a spec bug).
 - ADRs remain authoritative for architecture/decision intent. If this document conflicts with an
   ADR, implementations MUST follow the ADR and the conflict MUST be resolved by updating this
   document (treat as a spec bug).
@@ -99,6 +104,11 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted 
   declared with `contract_id=null` in `ExpectedOutput`.
 - Deterministic evidence log (Tier 0): a log file that is allowlisted for exports and for inclusion
   in integrity material (checksums/signing) per ADR-0009 and storage format classification rules.
+- CI lane: one of the two explicit CI lanes: Content CI or Run CI (see
+  `105_ci_operational_readiness.md`).
+- CI gate: a pass/fail rule evaluated by CI within a lane (see `105_ci_operational_readiness.md`).
+- Contract Spine gate: the Content CI gate defined by this document (see “Verification and CI
+  conformance”).
 
 ## Canonical ordering
 
@@ -198,8 +208,8 @@ Registry version compatibility (normative):
 - Contract Spine implementations MUST declare a supported `registry_version` range.
 - If `registry_version` is outside the supported range, the registry MUST be treated as invalid
   configuration (fail closed) and MUST surface as:
-  - consumer: `error_code="contract_registry_parse_error"`
-  - producer: publish-gate configuration failure (no publishing)
+  - consumer (reader / offline validation): `error_code="schema_registry_version_incompatible"`
+  - producer (publish gate): publish-gate configuration failure (no publishing)
 
 ### Binding uniqueness and ambiguity
 
@@ -227,6 +237,30 @@ winner.
   - `yaml_document`
 - If an implementation does not support a registry `validation_mode`, validation MUST fail closed
   with a configuration error.
+
+### YAML validation mode policy (ingress-only; v0.1)
+
+`validation_mode="yaml_document"` is reserved for **ingress/control-plane YAML** in v0.1.
+
+Registry invariants (normative):
+
+- Any binding with `validation_mode="yaml_document"` MUST have `stage_owner == "orchestrator"`.
+- Any binding with `validation_mode="yaml_document"` MUST bind under `inputs/` in v0.1.
+  - Concretely: `bindings[].artifact_glob` MUST start with the literal prefix `inputs/`.
+  - If future versions introduce additional orchestrator-owned control-plane roots (for example
+    `control/`), those MUST be added by an explicit spec update (do not silently broaden).
+- Stage-owned contract-backed outputs MUST NOT use `validation_mode="yaml_document"`.
+  - Contract-backed interstage seams remain JSON/JSONL only (canonicalized) in v0.1.
+
+Fail-closed enforcement (normative):
+
+- `ContractRegistry.load(...)` MUST fail closed if any binding violates the invariants above.
+- The Contract Spine gate MUST fail closed if any binding violates the invariants above.
+
+Rationale (non-normative):
+
+- YAML is accepted for operator/orchestrator-provided inputs, but deterministic interstage seams
+  remain JSON/JSONL to avoid cross-language YAML emission drift.
 
 ### Contract version constant
 
@@ -282,6 +316,8 @@ Error handling (normative):
   - any `artifact_glob` is invalid
   - any binding references an unknown `contract_id`
   - any `(contract_id, contract_version, schema_path)` inconsistencies exist
+  - any `yaml_document` binding violates the YAML ingress-only invariants (see “YAML validation mode
+    policy (ingress-only; v0.1)”)
 
 ### `PublishGate` and `StagePublishSession`
 
@@ -622,8 +658,14 @@ Canonical bytes (normative):
 
 - The persisted report file MUST be serialized as Canonical JSON bytes (RFC 8785 / JCS):
   `canonical_json_bytes(ContractValidationReport)` (UTF-8, no BOM, no trailing newline).
-- This requirement exists so that Tier 0 export and signing/checksum material is byte-stable across
-  implementations.
+- Canonical serialization makes the on-disk bytes deterministic **given a chosen report object** and
+  ensures stable ordering across implementations.
+- The report includes intentionally non-stable metadata fields (for example `generated_at_utc`);
+  therefore, two executions are not required to produce byte-identical report files even when they
+  detect the same validation failures.
+- Semantic comparisons (CI fixtures, report diff tooling) MUST ignore `generated_at_utc`.
+- Integrity artifacts (checksums/signing) MUST cover the report bytes exactly as persisted
+  (including `generated_at_utc` when present).
 
 Deterministic ordering (normative):
 
@@ -705,22 +747,122 @@ For contract-backed JSONL artifacts:
   - `write_bytes(...)` MAY be used for explicitly non-contracted artifacts under non-contracted
     locations such as `logs/scratch/`.
 
-### YAML artifacts
+### YAML artifacts (ingress-only; v0.1)
 
-- `validation_mode="yaml_document"` defines validation parsing as YAML decoded into a
-  JSON-compatible in-memory representation before JSON Schema validation.
+YAML is permitted as an operator-/orchestrator-owned **ingress format** in v0.1.
 
-- Canonical YAML byte representation is not defined in v0.1.
+Contract Spine rules (normative):
 
-  - Producers publishing YAML artifacts SHOULD ensure the emitted bytes are deterministic given the
-    effective config.
-  - TODO: Define canonical YAML emission or explicitly forbid YAML contract-backed outputs if
-    deterministic byte identity is required for a given workflow.
+- `validation_mode="yaml_document"` defines validation parsing as YAML decoded into a JSON-shaped
+  in-memory representation (`pa.yaml_decode.v1`) before JSON Schema validation.
+- Canonical YAML byte emission is intentionally **unspecified** in v0.1.
+  - Contract-backed YAML is restricted to orchestrator-owned ingress artifacts (see “YAML validation
+    mode policy (ingress-only; v0.1)”).
+  - Stages MUST NOT publish contract-backed outputs using `validation_mode="yaml_document"`.
+
+Non-contract YAML artifacts (clarification):
+
+- This policy does not prohibit `.yaml` files that are **not** contract-backed (for example byte
+  snapshots of pinned upstream content).
+- Any stage that emits YAML bytes MUST treat those artifacts as **opaque bytes**, not as a
+  structured interstage seam. If an emitted YAML artifact is required to be deterministic and/or
+  included in checksums/signing scope, its owning stage spec MUST define the byte-level determinism
+  constraints (encoding, newline normalization, source basis). The Contract Spine does not define a
+  global YAML emitter in v0.1.
+
+#### YAML decode profile: `pa.yaml_decode.v1` (normative)
+
+Purpose: ensure two conforming implementations decode the same YAML ingress bytes to the same
+JSON-shaped value.
+
+Parsing (normative):
+
+- Input MUST be interpreted as UTF-8 text.
+  - Implementations MAY accept a UTF-8 BOM but MUST strip it before parsing.
+  - Invalid UTF-8 MUST fail closed.
+- The parser MUST implement YAML 1.2.
+- The parser MUST accept exactly one document; multiple documents MUST fail closed.
+- The parser MUST use a safe loader (no arbitrary object construction).
+- The parser MUST reject:
+  - duplicate mapping keys (at any nesting level),
+  - anchors and aliases,
+  - merge keys (`<<`),
+  - explicit tags other than the YAML 1.2 core JSON tags (`!!str`, `!!int`, `!!float`, `!!bool`,
+    `!!null`).
+
+Type resolution (normative):
+
+- To avoid YAML 1.1 vs 1.2 drift, decoding MUST use YAML 1.2 JSON-schema-style resolution.
+  - Example: `yes/no/on/off` MUST be interpreted as strings (unless explicitly tagged, and explicit
+    non-JSON-native tags are rejected).
+
+Normalization to JSON shape (normative):
+
+After parsing, the decoded value MUST be representable using only JSON-native types:
+
+- object/map with string keys only
+- array
+- string
+- number (finite; NaN and ±Inf MUST fail closed)
+- boolean
+- null
+
+If any node cannot be represented in this JSON shape, decoding MUST fail closed.
+
+#### YAML semantic hash: `yaml_semantic_sha256_v1` (normative)
+
+Where the pipeline records a semantic hash for a YAML ingress artifact (for example
+`manifest.inputs.range_yaml_sha256`), it MUST compute:
+
+```
+yaml_semantic_sha256_v1(yaml_bytes):
+  v = pa.yaml_decode.v1(yaml_bytes)          # JSON-shaped value (see above)
+  b = canonical_json_bytes(v)                # RFC 8785 / JCS (see Canonical JSON)
+  return sha256_hex(b)                       # lowercase hex
+```
+
+Notes:
+
+- The semantic hash MUST be recorded in canonical digest string form: `sha256:<lowercase_hex>` (see
+  `025_data_contracts.md`, “Canonical SHA-256 digest strings”).
+- Raw YAML bytes MAY still be preserved in the run bundle for auditability. The semantic hash is the
+  deterministic basis for comparisons/trending that should ignore YAML formatting differences.
 
 ## Artifact Reader
 
 This section defines the consumer-facing Contract Spine surface. It is aligned with `pa.reader.v1`
 in `025_data_contracts.md`.
+
+### `ReaderError`
+
+`ReaderError` is the minimal, language-agnostic error envelope returned by `ArtifactReader` APIs. It
+is intentionally a thin wrapper; the full stable error code vocabulary is defined by `pa.reader` in
+`025_data_contracts.md`.
+
+Normative minimum shape:
+
+```
+ReaderError:
+  error_code: str
+  message: str
+  artifact_path: str | omitted
+  details: object | omitted
+  errors: list[ReaderError] | omitted
+```
+
+Rules (normative):
+
+- `error_code` MUST be a stable machine-readable token (`lower_snake_case`).
+- `message` MUST be human-readable and SHOULD be deterministic for equivalent inputs (avoid
+  embedding absolute paths, hostnames, or timestamps).
+- If `artifact_path` is present, it MUST be a run-relative POSIX path and MUST satisfy “Path
+  requirements” / “Path normalization and reserved locations” in this document.
+- If `details` is present, it MUST be JSON-serializable and MUST NOT include secrets. It SHOULD NOT
+  include volatile values (timestamps, random IDs) unless explicitly marked as diagnostic-only.
+- If `errors` is present:
+  - it MUST be non-empty,
+  - each entry MUST itself conform to this `ReaderError` shape, and
+  - entries MUST be sorted per “Error ordering (normative)”.
 
 ### Required interface
 
@@ -738,7 +880,7 @@ ArtifactReader.inventory_json_bytes(run: RunBundleHandle) -> bytes | ReaderError
 ArtifactReader.open_validated(
   run: RunBundleHandle,
   artifact_path: str,
-  -,
+  *,
   required: bool = true,
   allow_quarantine: bool = false
 ) -> bytes | ReaderError
@@ -851,9 +993,8 @@ Contract validation failures MUST be observable in all of the following:
 
 1. CI:
 
-   - Contract Spine CI MUST surface the failing stage id(s) and the report path(s)
-   - CI MUST fail the run validation step deterministically (exit code per ADR-0005 and CI readiness
-     rules)
+   - The Contract Spine gate MUST surface the failing stage id(s) and the report path(s)
+   - The gate MUST fail deterministically (see “CI output requirements”)
 
 ### Missing required outputs
 
@@ -878,31 +1019,50 @@ Registry failures are configuration failures and MUST fail closed:
     (RECOMMENDED: `config_schema_invalid` when the failure is attributable to registry/schema
     misconfiguration)
 
+### Recommended reason_code mapping
+
+This table is non-authoritative guidance to reduce drift between Contract Spine implementations.
+ADR-0005 remains the single authority for the `reason_code` registry and severity semantics;
+implementations MUST NOT emit `reason_code` values that are not defined for the relevant stage in
+ADR-0005.
+
+| Contract Spine failure class | Trigger (examples)                                                                 | RECOMMENDED stage-outcome `reason_code`                                        | Notes                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Registry invalid             | Registry missing/parse error; `glob_v1` invalid; overlapping bindings; unknown ids | `config_schema_invalid`                                                        | Configuration failure; publish gate must refuse to validate/publish.                                 |
+| Contract validation invalid  | Contract-backed artifact fails schema validation or parse                          | Stage-scoped contract-invalid reason code (example: `scoring_summary_invalid`) | TODO: align across stages in ADR-0005 (suggested cross-cutting: `contract_validation_failed`).       |
+| Unexpected contracted output | Staged file matches a binding but is not declared in `expected_outputs[]`          | Same as “Contract validation invalid”                                          | Treat as a contract validation failure category (fail closed).                                       |
+| Output-root violation        | Stage attempts to write/promote outside its declared output roots                  | `storage_io_error`                                                             | TODO: consider a dedicated policy-violation reason code in ADR-0005 (e.g., `output_root_violation`). |
+| Non-regular file in staging  | Symlink/FIFO/socket/device node present under `.staging/<stage_id>/`               | `storage_io_error`                                                             | Fail closed; promote nothing.                                                                        |
+
 ### CI output requirements
 
-Contract Spine CI output MUST be deterministic and MUST include:
+Contract Spine gate output MUST be deterministic and MUST include:
 
 - run id
 - stage id (when applicable)
 - the path to any contract validation report emitted
 - a stable error summary ordered deterministically (use the error ordering rules above)
 
-Exit codes MUST follow ADR-0005:
+Exit codes:
 
-- `0` success
-- `10` partial
-- `20` failed
+- In Content CI, the Contract Spine gate MUST exit:
+  - `0` on success
+  - `20` on failure
+- When Contract Spine conformance is enforced as part of run-bundle validation in Run CI, the
+  overall CI verdict and exit-code mapping MUST follow ADR-0005 `(0|10|20)` (see
+  `105_ci_operational_readiness.md`).
 
 ## Verification and CI conformance
 
-### Contract Spine CI lane
+### Contract Spine gate (Content CI)
 
-CI MUST provide a dedicated Contract Spine conformance lane that runs before other CI waves and
-gates merges.
+The Contract Spine conformance check is a **gate within Content CI** (not a third CI lane).
+
+Content CI MUST include the Contract Spine gate, and it MUST run before other Content CI checks.
 
 Properties (normative):
 
-- MUST be runnable without a lab provider (Content CI / unit/integration scope)
+- MUST be runnable without a lab provider (Content CI)
 
 - MUST validate:
 
@@ -913,12 +1073,12 @@ Properties (normative):
   - reader stable error codes and ordering
   - logs classification rules relevant to deterministic evidence (Tier 0 allowlist)
 
-Recommended lane name: `contract_spine` (Wave 0). If a different name is used, it MUST be documented
-in CI docs and referenced from here.
+Recommended gate identifier: `contract_spine`. If a different identifier is used, it MUST be
+documented in CI docs and referenced from here.
 
 ### Required conformance tests (minimum set)
 
-The Contract Spine lane MUST include tests that cover at minimum:
+The Contract Spine gate MUST include tests that cover at minimum:
 
 - Contract registry invariants:
   - `stage_owner` present and within allowed set
@@ -926,6 +1086,9 @@ The Contract Spine lane MUST include tests that cover at minimum:
   - `artifact_glob` validity (`glob_v1`)
   - no ambiguous overlapping bindings
   - schema `contract_version` matches registry `contract_version`
+  - YAML ingress-only invariants (v0.1):
+    - any `yaml_document` binding MUST have `stage_owner == "orchestrator"`
+    - any `yaml_document` binding MUST bind under `inputs/`
 - Expected outputs determinism:
   - expansion is over staged regular files
   - stable sort by `artifact_path` (UTF-8 byte order)
@@ -950,10 +1113,22 @@ The Contract Spine lane MUST include tests that cover at minimum:
   - `artifacts[]` sorted by `artifact_path`
   - errors sorted by the specified tuple
   - per-artifact truncation is deterministic and reflected in `errors_truncated`
+  - `generated_at_utc` is treated as volatile metadata and MUST be ignored by semantic comparisons
+    (CI fixtures, report diff tooling)
   - deterministic artifact path rule yields `timestamped_filename_disallowed`
 - Serialization:
   - canonical JSON bytes: UTF-8, no BOM, no trailing newline, JCS
   - JSONL invariants (line endings, trailing newline rule, no blank lines, JCS per line)
+  - YAML ingress decoding (when `yaml_document` exists in the registry):
+    - `pa.yaml_decode.v1` fixture vectors:
+      - duplicate keys fail closed
+      - anchors/aliases fail closed
+      - merge keys (`<<`) fail closed
+      - non-JSON-native tags/types fail closed
+      - YAML 1.1 ambiguity vectors (`yes/no/on/off`) decode deterministically as strings
+    - `yaml_semantic_sha256_v1` stability fixture:
+      - two YAML inputs with identical semantics but different formatting/comments/newlines yield
+        the same semantic hash
 - Reader semantics:
   - run bundle discovery behavior and fallbacks
   - stable error code emission for required codes
@@ -964,7 +1139,7 @@ The Contract Spine lane MUST include tests that cover at minimum:
     - `ArtifactReader.inventory_json_bytes` returns canonical JSON bytes and is byte-identical
       across conforming consumer implementations for the same run bundle
 
-TODO: Align test identifiers and fixture paths with `100_test_strategy_ci.md` and ensure this lane
+TODO: Align test identifiers and fixture paths with `100_test_strategy_ci.md` and ensure this gate
 is explicitly referenced there.
 
 ## Security, export, and evidence classification
@@ -993,13 +1168,16 @@ Contracts bundle distribution (historical validation) MUST follow `025_data_cont
 
 - TODO: Decide whether to migrate `glob_v1` and the stage enablement matrix into this document (and
   update other docs to reference here) to eliminate duplication.
-- TODO: Define canonical YAML emission or constrain YAML usage to avoid non-deterministic bytes
-  where byte identity is required.
-- TODO: Define the exact CI lane wiring and naming in `105_ci_operational_readiness.md` once CI
-  manifests exist.
+- TODO: If deterministic **contract-backed** YAML outputs become a real requirement, define a
+  restricted canonical YAML emission profile (for example `pa.yaml_emit.v1`) and bump
+  publisher/reader semantics as needed. Until then, `yaml_document` remains ingress-only in v0.1
+  (orchestrator-owned `inputs/` bindings only).
+- TODO: Define the exact CI gate wiring (job/step name) and ordering inside Content CI in
+  `105_ci_operational_readiness.md` once CI manifests exist.
 
 ## Changelog
 
-| Date      | Change   |
-| --------- | -------- |
-| 2/09/2026 | Proposed |
+| Date      | Change                                                 |
+| --------- | ------------------------------------------------------ |
+| 2/10/2026 | Define ingress-only YAML policy + `pa.yaml_decode.v1`. |
+| 2/09/2026 | Proposed                                               |

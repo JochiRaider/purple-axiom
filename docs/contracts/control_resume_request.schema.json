@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Control Resume Request",
+  "description": "Run-relative operator control artifact written to runs/<run_id>/control/resume_request.json. Signals an operator intent to resume execution at the run, stage, or action scope. May include an explicit drift-override flag.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "description": "Schema contract version (semver). If present, MUST equal this value.",
+      "const": "0.2.0"
+    },
+    "request_id": {
+      "$ref": "#/$defs/request_id"
+    },
+    "requested_at": {
+      "$ref": "#/$defs/rfc3339_utc"
+    },
+    "requested_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Operator identity (e.g., username). SHOULD match the corresponding audit actor."
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "run",
+        "stage",
+        "action"
+      ],
+      "description": "Requested resume scope."
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "override_drift": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, requests resumption even if drift policy would otherwise require a new run."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional operator-provided reason (must be redaction-safe)."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved for forward-compatible extensions.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "request_id",
+    "requested_at",
+    "requested_by",
+    "scope",
+    "override_drift"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "run"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "$ref": "#/$defs/empty_object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "stage"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "$ref": "#/$defs/stage_target"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "action"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "$ref": "#/$defs/action_target"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid_lower": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID in canonical lowercase hyphenated form."
+    },
+    "request_id": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/uuid_lower"
+        }
+      ],
+      "description": "Idempotency key; MUST match X-Request-ID for the corresponding operator API call."
+    },
+    "rfc3339_utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+      "description": "RFC3339 timestamp in UTC with 'Z'."
+    },
+    "action_id": {
+      "type": "string",
+      "description": "Action identifier (supports both pa_aid_v1_... and legacy sN formats).",
+      "oneOf": [
+        {
+          "pattern": "^pa_aid_v1_[0-9a-f]{32}$"
+        },
+        {
+          "pattern": "^s[1-9][0-9]*$"
+        }
+      ]
+    },
+    "empty_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "stage_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable stage identifier (e.g., 'telemetry')."
+        }
+      }
+    },
+    "action_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id"
+      ],
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/action_id"
+        }
+      }
+    },
+    "target": {
+      "description": "Target selector. For scope=run, MUST be {} or omitted.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/empty_object"
+        },
+        {
+          "$ref": "#/$defs/stage_target"
+        },
+        {
+          "$ref": "#/$defs/action_target"
+        }
+      ]
+    }
+  }
+}

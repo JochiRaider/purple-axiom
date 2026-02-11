@@ -5,10 +5,11 @@ status: draft
 category: spec
 tags: [reporting, scoring, ci, trending]
 related:
-  - 070_scoring_metrics.md
+  - 025_data_contracts.md
+  - 026_contract_spine.md
   - 055_ocsf_field_tiers.md
   - 065_sigma_to_ocsf_bridge.md
-  - 025_data_contracts.md
+  - 070_scoring_metrics.md
   - ADR-0005-stage-outcomes-and-failure-classification.md
 ---
 
@@ -205,8 +206,8 @@ Notes:
   [Self-contained, local-only asset policy](#self-contained-local-only-asset-policy).
 - `report/report.json` is a contract-backed required artifact for v0.1 reportable runs (when
   `reporting.emit_json=true`).
-- `report/thresholds.json` is a required artifact for v0.1 reportable runs, but is not
-  contract-backed in v0.1; its normative schema is defined in this document.
+- `report/thresholds.json` is a contract-backed required artifact (`thresholds.schema`) for v0.1
+  reportable runs and MUST validate at the reporting publish gate.
 - If an implementation supports `reporting.emit_json`, it MUST be `true` for any run intended to be
   reportable.
 - `report/run_timeline.md` is a required deterministic operator-facing artifact for v0.1 reportable

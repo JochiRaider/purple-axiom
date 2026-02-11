@@ -7,6 +7,7 @@ category: spec
 related:
   - 020_architecture.md
   - 025_data_contracts.md
+  - 026_contract_spine.md
   - 030_scenarios.md
   - 032_atomic_red_team_executor_integration.md
   - 035_validation_criteria.md
@@ -89,6 +90,8 @@ This spec defines which test categories MUST be runnable in each lane.
 
 Content CI MUST be runnable without a lab provider and MUST include, at minimum:
 
+- Contract Spine conformance gate (contract registry invariants, canonical serialization,
+  publisher/reader conformance) (see `026_contract_spine.md`).
 - Unit tests that do not require a lab provider (this section).
 - Contract/schema validation for content-like artifacts under test (criteria packs, mapping pack
   snapshots, compiled plans, etc.).
@@ -976,6 +979,12 @@ schema.
 Schema validation of effective configuration validates `inputs/range.yaml` against
 `docs/contracts/range_config.schema.json`.
 
+Schema validation of operator control-plane artifacts (v0.2+) validates contract-backed operator
+intent artifacts when present.
+
+- Fixture run bundles that include any `control/*.json` or `inputs/plan_draft.yaml` MUST validate
+  against the new contracts via the contract validator (fail closed on mismatch).
+
 The fixture set MUST include at least:
 
 - `range_config_gap_taxonomy_invalid_token_rejected` (fail closed)
@@ -988,6 +997,37 @@ The fixture set MUST include at least:
   - Feed `inputs/range.yaml` with `runner.environment_config.noise_profile.enabled=true` but omit
     `profile_sha256` (or `profile_id` / `profile_version`).
   - Expected: config validation fails closed with `reason_code=config_schema_invalid`.
+- `control_plane_cancel_valid` (v0.2+)
+  - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_valid/`
+  - Provide a minimal run bundle that includes a valid `control/cancel.json`.
+  - Assert contract validation succeeds for the operator control-plane artifacts present.
+- `control_plane_cancel_invalid_rejected` (v0.2+; fail closed)
+  - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_invalid_rejected/`
+  - Provide a run bundle that includes a schema-invalid `control/cancel.json`.
+  - Assert contract validation fails closed.
+  - Assert the failure output identifies the invalid location deterministically (for example, JSON
+    pointer or dotted path).
+- `control_plane_resume_request_decision_valid` (v0.2+)
+  - Fixture root: `tests/fixtures/orchestrator/control_plane/resume_request_decision_valid/`
+  - Provide a run bundle that includes:
+    - `control/resume_request.json`, and
+    - `control/operator_decisions.json` (with a decision for the request).
+  - Assert all present operator control-plane artifacts validate successfully.
+- `control_plane_retry_request_decision_valid` (v0.2+)
+  - Fixture root: `tests/fixtures/orchestrator/control_plane/retry_request_decision_valid/`
+  - Provide a run bundle that includes:
+    - `control/retry_request.json`, and
+    - `control/operator_decisions.json` (with a decision for the request).
+  - Assert all present operator control-plane artifacts validate successfully.
+- `plan_draft_valid` (v0.2+)
+  - Fixture root: `tests/fixtures/orchestrator/plan_draft/valid/`
+  - Provide a run bundle that includes a valid `inputs/plan_draft.yaml`.
+  - Assert contract validation succeeds for the plan draft artifact.
+- `plan_draft_invalid_rejected` (v0.2+; fail closed)
+  - Fixture root: `tests/fixtures/orchestrator/plan_draft/invalid_rejected/`
+  - Provide a run bundle that includes an invalid `inputs/plan_draft.yaml` (syntactically invalid OR
+    schema-invalid).
+  - Assert contract validation fails closed and emits a deterministic error location.
 
 ### Content governance: golden datasets (fail-closed)
 
@@ -1033,6 +1073,10 @@ External dependency version matrix (fail closed; v0.1) requires CI MUST run the 
 "golden run" fixtures using the pinned dependency versions in the
 [supported versions reference](../../SUPPORTED_VERSIONS.md). CI MUST fail if any enabled runtime
 dependency version differs from the pins.
+
+When `runner.environment_config.noise_profile` enables a specific engine, the run MUST satisfy
+`SUPPORTED_VERSIONS` pins for that engine (and the UI MUST satisfy pins for any bundled playback
+assets), otherwise version conformance fails.
 
 Selected determinism-critical pins for v0.1 (excerpt; the supported versions reference is
 authoritative):
@@ -1180,7 +1224,7 @@ The fixture set MUST include at least:
 Thresholds artifact conformance (contract + deterministic ordering) (normative):
 
 - The artifact validation fixture suite MUST include conformance coverage for
-  `report/thresholds.json` once it is treated as a contract-backed output (see `080_reporting.md`).
+  `report/thresholds.json` as a contract-backed output (see `080_reporting.md`).
 - Fixture root: `tests/fixtures/reporting/thresholds/`
 - Minimum fixture case(s):
   - `thresholds_contract_and_ordering`:
@@ -1505,6 +1549,12 @@ definitions live outside this document:
 
 When adding a new stateful lifecycle that needs deterministic conformance, document the state
 machine using the ADR-0007 template and add fixture-driven conformance tests here.
+
+- Operator control-plane lifecycle (v0.2+):
+  - Authority: `115_operator_interface.md` cancel/resume/retry semantics + ADR-0007 state
+    machine(s).
+  - Conformance fixtures: `tests/fixtures/orchestrator/control_plane/` (cancel/resume/retry request
+    \+ decision cases).
 
 ## Key decisions
 

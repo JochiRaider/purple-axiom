@@ -138,6 +138,14 @@
       "format": "json"
     },
     {
+      "contract_id": "export_manifest",
+      "schema_path": "docs/contracts/export_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Export manifest output (export_manifest.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },    
+    {
       "contract_id": "golden_dataset_approvals",
       "schema_path": "docs/contracts/golden_dataset_approvals.schema.json",
       "contract_version": "0.1.0",
@@ -226,6 +234,46 @@
       "format": "jsonl"
     },
     {
+      "contract_id": "control_cancel_request",
+      "schema_path": "docs/contracts/control_cancel_request.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Operator cancel request (control/cancel.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "control_resume_decision",
+      "schema_path": "docs/contracts/control_resume_decision.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Operator resume decision (control/resume_decision.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "control_resume_request",
+      "schema_path": "docs/contracts/control_resume_request.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Operator resume request (control/resume_request.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "control_retry_decision",
+      "schema_path": "docs/contracts/control_retry_decision.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Operator retry decision (control/retry_decision.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "control_retry_request",
+      "schema_path": "docs/contracts/control_retry_request.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Operator retry request (control/retry_request.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },    
+    {
       "contract_id": "pcap_manifest",
       "schema_path": "docs/contracts/pcap_manifest.schema.json",
       "contract_version": "0.1.0",
@@ -233,6 +281,14 @@
       "artifact_kind": "run_artifact",
       "format": "json"
     },
+    {
+      "contract_id": "plan_draft",
+      "schema_path": "docs/contracts/plan_draft.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Plan draft snapshot input (inputs/plan_draft.yaml).",
+      "artifact_kind": "run_artifact",
+      "format": "yaml"
+    },    
     {
       "contract_id": "principal_context",
       "schema_path": "docs/contracts/principal_context.schema.json",
@@ -360,12 +416,19 @@
     { "artifact_glob": "bridge/mapping_pack_snapshot.json", "contract_id": "bridge_mapping_pack", "stage_owner": "detection", "validation_mode": "json_document" },
     { "artifact_glob": "bridge/router_table.json", "contract_id": "bridge_router_table", "stage_owner": "detection", "validation_mode": "json_document" },
     { "artifact_glob": "control/audit.jsonl", "contract_id": "audit_event", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "control/cancel.json", "contract_id": "control_cancel_request", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "control/resume_decision.json", "contract_id": "control_resume_decision", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "control/resume_request.json", "contract_id": "control_resume_request", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "control/retry_decision.json", "contract_id": "control_retry_decision", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "control/retry_request.json", "contract_id": "control_retry_request", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "criteria/criteria.jsonl", "contract_id": "criteria_entry", "stage_owner": "validation", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "criteria/manifest.json", "contract_id": "criteria_pack_manifest", "stage_owner": "validation", "validation_mode": "json_document" },
     { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "stage_owner": "validation", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "stage_owner": "detection", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "stage_owner": "runner", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "inputs/environment_noise_profile.json", "contract_id": "environment_noise_profile", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "inputs/plan_draft.yaml", "contract_id": "plan_draft", "stage_owner": "orchestrator", "validation_mode": "yaml_document" },
     { "artifact_glob": "inputs/range.yaml", "contract_id": "range_config", "stage_owner": "orchestrator", "validation_mode": "yaml_document" },
     { "artifact_glob": "inputs/telemetry_baseline_profile.json", "contract_id": "telemetry_baseline_profile", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "inputs/threat_intel/indicators.jsonl", "contract_id": "threat_intel_indicator", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },

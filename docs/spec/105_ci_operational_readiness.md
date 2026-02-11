@@ -6,13 +6,14 @@ category: spec
 tags: [ci, devops, secdevops, sre, operability, gates]
 related:
   - 000_charter.md
+  - 025_data_contracts.md
+  - 026_contract_spine.md
   - 070_scoring_metrics.md
+  - 080_reporting.md
+  - 090_security_safety.md
   - 100_test_strategy_ci.md
   - 110_operability.md
   - 120_config_reference.md
-  - 025_data_contracts.md
-  - 080_reporting.md
-  - 090_security_safety.md
   - ADR-0001-project-naming-and-versioning.md
   - ADR-0003-redaction-policy.md
   - ADR-0004-deployment-architecture-and-inter-component-communication.md
@@ -28,7 +29,7 @@ This document defines the normative CI pipeline contract for Purple Axiom v0.1 i
 stitching together already-specified gates and evidence surfaces into a single, deterministic CI
 verdict model.
 
-This spec SHOULD consolidates and operationalizes the existing requirements across:
+This spec consolidates and operationalizes the existing requirements across:
 
 - CI gates (100_test_strategy_ci.md)
 - Publish-gate and artifact contracts (025_data_contracts.md)
@@ -108,6 +109,9 @@ Content CI validates content-like artifacts and compilation outputs without invo
 
 Content CI MUST validate, at minimum:
 
+1. Contract Spine conformance gate (contract registry invariants, canonical serialization,
+   publisher/reader conformance) (see `026_contract_spine.md`).
+   - Ordering (normative): this gate MUST run before other Content CI checks.
 1. Sigma ruleset determinism + uniqueness + required metadata (see `060_detection_sigma.md`).
 1. Mapping pack resolution, router determinism, and mapping pack schema validation (see
    `065_sigma_to_ocsf_bridge.md`).

@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Control retry decision (v0.2 control-plane artifact)",
+  "description": "Contract for the run-relative operator control artifact written at runs/<run_id>/control/retry_decision.json. This file records the orchestrator's decision in response to the latest retry request for the run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "request_id",
+    "decided_at_utc",
+    "decided_by",
+    "decision",
+    "run_id",
+    "baseline_run_id",
+    "reason_domain",
+    "reason_code"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0",
+      "description": "Schema/contract version for this artifact."
+    },
+    "request_id": {
+      "$ref": "#/$defs/uuid",
+      "description": "UUID of the retry request being decided. MUST match the request_id in control/retry_request.json at the time the decision is made."
+    },
+    "decided_at_utc": {
+      "$ref": "#/$defs/timestamp_utc",
+      "description": "RFC3339 timestamp (UTC, Z-suffix) indicating when the decision was finalized."
+    },
+    "decided_by": {
+      "$ref": "#/$defs/actor",
+      "description": "Actor that made the decision (e.g., an operator identity or an orchestrator/system principal)."
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["same_run", "continuation_run", "denied"],
+      "description": "Decision outcome: same_run continues the existing run; continuation_run requires a new run; denied rejects the request."
+    },
+    "run_id": {
+      "description": "Run UUID selected by the decision. For denied, this MUST be null. For same_run, this SHOULD be the current run. For continuation_run, this MUST be the newly created run.",
+      "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+    },
+    "baseline_run_id": {
+      "description": "When decision=continuation_run, this MUST be the prior run used as the baseline. Otherwise MUST be null.",
+      "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+    },
+    "reason_domain": {
+      "const": "control_retry_decision",
+      "description": "Reason domain for reason_code. For contract-backed artifacts this MUST equal the contract_id."
+    },
+    "reason_code": {
+      "$ref": "#/$defs/reason_code",
+      "description": "Stable lower_snake_case reason code describing why the decision was made."
+    }
+  },
+  "oneOf": [
+    {
+      "title": "Denied",
+      "properties": {
+        "decision": { "const": "denied" },
+        "run_id": { "type": "null" },
+        "baseline_run_id": { "type": "null" }
+      }
+    },
+    {
+      "title": "Same run",
+      "properties": {
+        "decision": { "const": "same_run" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "baseline_run_id": { "type": "null" }
+      }
+    },
+    {
+      "title": "Continuation run",
+      "properties": {
+        "decision": { "const": "continuation_run" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "baseline_run_id": { "$ref": "#/$defs/uuid" }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "UUID string."
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$",
+      "description": "RFC3339 UTC timestamp with Z suffix (fractional seconds optional)."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Stable actor identifier (implementation-defined)."
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Stable lower_snake_case reason code."
+    }
+  },
+  "examples": [
+    {
+      "contract_version": "0.1.0",
+      "request_id": "11111111-1111-1111-1111-111111111111",
+      "decided_at_utc": "2026-02-11T14:05:19.123Z",
+      "decided_by": "operator:alice@example.com",
+      "decision": "same_run",
+      "run_id": "22222222-2222-2222-2222-222222222222",
+      "baseline_run_id": null,
+      "reason_domain": "operator_retry_decision",
+      "reason_code": "no_drift"
+    },
+    {
+      "contract_version": "0.1.0",
+      "request_id": "33333333-3333-3333-3333-333333333333",
+      "decided_at_utc": "2026-02-11T14:07:01.000Z",
+      "decided_by": "system:orchestrator",
+      "decision": "continuation_run",
+      "run_id": "44444444-4444-4444-4444-444444444444",
+      "baseline_run_id": "55555555-5555-5555-5555-555555555555",
+      "reason_domain": "operator_retry_decision",
+      "reason_code": "drift_detected_requires_new_run"
+    },
+    {
+      "contract_version": "0.1.0",
+      "request_id": "66666666-6666-6666-6666-666666666666",
+      "decided_at_utc": "2026-02-11T14:08:44Z",
+      "decided_by": "system:orchestrator",
+      "decision": "denied",
+      "run_id": null,
+      "baseline_run_id": null,
+      "reason_domain": "operator_retry_decision",
+      "reason_code": "policy_denied"
+    }
+  ]
+}

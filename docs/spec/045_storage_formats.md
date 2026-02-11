@@ -6,6 +6,7 @@ category: spec
 tags: [storage, formats, artifacts, export, determinism, schema_evolution]
 related:
   - 025_data_contracts.md
+  - 026_contract_spine.md
   - 040_telemetry_pipeline.md
   - 080_reporting.md
   - 086_detection_baseline_library.md
@@ -94,8 +95,13 @@ Path notation (normative):
   `runs/<run_id>/` (see ADR-0004 and data contracts publish-gate rules). Atomicity is not required
   across multiple artifact paths.
 - After a stage completes (success or failure), `.staging/<stage_id>/` SHOULD be absent or empty.
-  Stages SHOULD remove the staging directory on exit (best-effort). CI MAY lint for any remaining
-  `.staging/<stage_id>/**` entries as an incomplete publish-gate signal.
+  - After successful `PublishGate.finalize(...)`, the stage MUST delete (or leave empty)
+    `.staging/<stage_id>/` before returning.
+  - After a failed stage (or crashed process), cleanup is best-effort. CI MAY lint for any remaining
+    `.staging/<stage_id>/**` entries as an incomplete publish-gate signal; when publish-gate
+    enforcement is enabled in CI, any populated `.staging/<stage_id>/` after orchestrator completion
+    MUST be treated as a fail-closed pipeline contract violation (see
+    `105_ci_operational_readiness.md`).
 
 Note (non-normative): The existence (and eventual disappearance or emptiness) of
 `.staging/<stage_id>/` provides a filesystem-observable integration point for lifecycle state

@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/contracts/control_resume_decision.schema.json",
+  "title": "control_resume_decision",
+  "description": "Decision produced by the orchestrator when processing a resume request. Intended for run-relative path control/resume_decision.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "description": "RFC 4122 UUID in canonical hyphenated, lowercase hexadecimal form.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "lower_snake_case": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    }
+  },
+  "required": [
+    "contract_version",
+    "decision",
+    "run_id",
+    "baseline_run_id",
+    "reason_domain",
+    "reason_code"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.2.0",
+      "description": "Schema/contract version for this artifact."
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "same_run",
+        "continuation_run",
+        "denied"
+      ],
+      "description": "Decision for the resume request."
+    },
+    "run_id": {
+      "description": "Chosen run_id when decision is same_run or continuation_run; null when decision is denied.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "baseline_run_id": {
+      "description": "Baseline run_id when decision is continuation_run; null otherwise.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reason_domain": {
+      "type": "string",
+      "const": "control_resume_decision",
+      "description": "Namespace for reason_code. For contract-backed artifacts, this MUST equal the artifact's contract_id."
+    },
+    "reason_code": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/lower_snake_case"
+        }
+      ],
+      "description": "Machine-readable reason for the decision."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved for forward-compatible, producer-specific extensions.",
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "denied"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "null"
+          },
+          "baseline_run_id": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "same_run"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "$ref": "#/$defs/uuid"
+          },
+          "baseline_run_id": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "continuation_run"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "$ref": "#/$defs/uuid"
+          },
+          "baseline_run_id": {
+            "$ref": "#/$defs/uuid"
+          }
+        }
+      }
+    }
+  ]
+}

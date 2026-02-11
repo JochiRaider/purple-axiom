@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Purple Axiom export manifest",
+  "description": "Contract-backed export manifest written adjacent to export outputs under <workspace_root>/exports/<run_id>/<export_id>/export_manifest.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "schema_version",
+    "run_id",
+    "export_id",
+    "included_paths",
+    "excluded_paths",
+    "checksums"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.2.0",
+      "description": "SemVer of this contract. MUST match the contract_version registered for contract_id 'export_manifest' in contract_registry.json."
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "pa:export_manifest:v1",
+      "description": "Schema identifier for this document."
+    },
+    "run_id": {
+      "$ref": "#/$defs/uuid_rfc4122_lower_hyphenated"
+    },
+    "export_id": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/uuid_rfc4122_lower_hyphenated"
+        }
+      ],
+      "description": "Unique identifier for this export operation (UUID; lowercase hyphenated)."
+    },
+    "included_paths": {
+      "type": "array",
+      "description": "Run-relative POSIX file paths included in the export. MUST be sorted lexicographically (bytewise) and de-duplicated.",
+      "items": {
+        "$ref": "#/$defs/run_relative_posix_file_path_v1"
+      },
+      "uniqueItems": true
+    },
+    "excluded_paths": {
+      "type": "array",
+      "description": "Run-relative POSIX paths excluded from the export. MUST be sorted lexicographically (bytewise) by entry.path and de-duplicated.",
+      "items": {
+        "$ref": "#/$defs/excluded_path_entry_v1"
+      },
+      "uniqueItems": true
+    },
+    "checksums": {
+      "$ref": "#/$defs/checksum_map_v1"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Extension point for forward-compatible or implementation-specific fields. Producers MUST NOT add top-level fields outside this schema without a contract bump; instead, place such fields under extensions.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "uuid_rfc4122_lower_hyphenated": {
+      "type": "string",
+      "description": "RFC 4122 UUID string, lowercase, hyphenated.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256_hex_lower": {
+      "type": "string",
+      "description": "Lowercase hex-encoded SHA-256 digest (64 nybbles).",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sha512_hex_lower": {
+      "type": "string",
+      "description": "Lowercase hex-encoded SHA-512 digest (128 nybbles).",
+      "pattern": "^[0-9a-f]{128}$"
+    },
+    "run_relative_posix_path_v1": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "description": "Run-relative POSIX path. MUST NOT be absolute, MUST use '/' separators, and MUST be safe against path traversal (no '..' segments).",
+      "pattern": "^[^/].*$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "\\\\"
+          },
+          {
+            "pattern": "\u0000"
+          },
+          {
+            "pattern": "//"
+          },
+          {
+            "pattern": "(^|/)\\.\\.(?:/|$)"
+          }
+        ]
+      }
+    },
+    "run_relative_posix_file_path_v1": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/run_relative_posix_path_v1"
+        },
+        {
+          "not": {
+            "pattern": "/$"
+          },
+          "description": "A run-relative POSIX path that refers to a file path (MUST NOT end with '/')."
+        }
+      ]
+    },
+    "excluded_path_entry_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "reason"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/run_relative_posix_path_v1"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Human-readable reason explaining why the path was excluded. SHOULD be deterministic for a given export policy and input run."
+        },
+        "extensions": {
+          "type": "object",
+          "description": "Extension point for future structured exclusion metadata (e.g., policy ids).",
+          "additionalProperties": true
+        }
+      }
+    },
+    "checksum_algorithms_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "#/$defs/sha256_hex_lower"
+        },
+        "sha512": {
+          "$ref": "#/$defs/sha512_hex_lower"
+        }
+      }
+    },
+    "checksum_map_v1": {
+      "type": "object",
+      "description": "Map from included file path -> checksum algorithms. Keys MUST be run-relative POSIX file paths. At minimum, each value MUST include sha256 (lowercase hex).",
+      "propertyNames": {
+        "$ref": "#/$defs/run_relative_posix_file_path_v1"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/checksum_algorithms_v1"
+      }
+    }
+  }
+}

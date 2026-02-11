@@ -1,0 +1,582 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "plan_draft",
+  "type": "object",
+  "description": "Schema for the plan draft document snapshotted into a run bundle at inputs/plan_draft.yaml (YAML parsed as JSON).",
+  "$comment": "Contract-backed input for v0.2 plan building. Unknown keys are rejected except under `extensions`.",
+  "required": [
+    "plan"
+  ],
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional scenario identifier (if the draft embeds scenario metadata)."
+    },
+    "scenario_version": {
+      "$ref": "#/$defs/semver",
+      "description": "Optional scenario version (if the draft embeds scenario metadata)."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional human-readable name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description."
+    },
+    "posture": {
+      "$ref": "#/$defs/posture"
+    },
+    "safety": {
+      "$ref": "#/$defs/safety"
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/target_selector"
+      },
+      "minItems": 1
+    },
+    "plan": {
+      "$ref": "#/$defs/plan"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "contract_version": {
+      "const": "0.1.0",
+      "description": "Contract version constant for registry synchronization (must match docs/contracts/contract_registry.json entry for contract_id 'plan_draft')."
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version in MAJOR.MINOR.PATCH form."
+    },
+    "json_value": {
+      "description": "Any JSON value (used for arbitrary input arguments and extensions).",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/json_value"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/json_value"
+          }
+        }
+      ]
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Extension bag for forward-compatible fields (namespaced by the producer).",
+      "additionalProperties": {
+        "$ref": "#/$defs/json_value"
+      }
+    },
+    "posture": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "baseline",
+            "assumed_compromise"
+          ]
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "safety": {
+      "type": "object",
+      "properties": {
+        "allow_network": {
+          "type": "boolean",
+          "description": "Whether the run may perform network activity (default false when omitted)."
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "target_selector": {
+      "type": "object",
+      "description": "Target selection entry. Each entry contains a `selector` object describing the candidate set.",
+      "properties": {
+        "selector": {
+          "$ref": "#/$defs/target_selector_selector"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "additionalProperties": false
+    },
+    "target_selector_selector": {
+      "type": "object",
+      "properties": {
+        "asset_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Optional explicit list of asset ids."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "os": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "windows",
+              "linux",
+              "macos",
+              "bsd",
+              "appliance",
+              "other"
+            ]
+          },
+          "minItems": 1
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mitre_technique_id": {
+      "type": "string",
+      "pattern": "^T\\d{4}(?:\\.\\d{3})?$",
+      "description": "MITRE ATT&CK technique id (e.g., T1059 or T1059.001)."
+    },
+    "idempotence": {
+      "type": "string",
+      "enum": [
+        "idempotent",
+        "non_idempotent",
+        "unknown"
+      ]
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "principal_alias": {
+          "type": "string",
+          "minLength": 1
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "principal_alias"
+      ],
+      "additionalProperties": false
+    },
+    "requirements": {
+      "type": "object",
+      "description": "Minimum environmental requirements for executing an action (v0.1 plan.requirements; v0.2+ action-specific requirements live elsewhere).",
+      "properties": {
+        "platform": {
+          "type": "object",
+          "properties": {
+            "os": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "windows",
+                  "linux",
+                  "macos",
+                  "bsd",
+                  "appliance",
+                  "other"
+                ]
+              },
+              "minItems": 1
+            },
+            "extensions": {
+              "$ref": "#/$defs/extensions"
+            }
+          },
+          "additionalProperties": false
+        },
+        "privilege": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "user",
+            "system"
+          ]
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reconciliation": {
+      "type": "object",
+      "description": "State reconciliation / side-effect repair policy for v0.1 single-action plans.",
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "observe_only",
+            "repair"
+          ],
+          "default": "none"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "cleanup_verification",
+              "side_effect_ledger"
+            ]
+          },
+          "minItems": 1,
+          "default": [
+            "cleanup_verification",
+            "side_effect_ledger"
+          ]
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "input_args": {
+      "type": "object",
+      "description": "Engine-specific input parameters for the selected test/template.",
+      "additionalProperties": {
+        "$ref": "#/$defs/json_value"
+      }
+    },
+    "plan_atomic": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "atomic"
+        },
+        "technique_id": {
+          "$ref": "#/$defs/mitre_technique_id"
+        },
+        "engine_test_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotence": {
+          "$ref": "#/$defs/idempotence"
+        },
+        "execution": {
+          "$ref": "#/$defs/execution"
+        },
+        "requirements": {
+          "$ref": "#/$defs/requirements"
+        },
+        "input_args": {
+          "$ref": "#/$defs/input_args"
+        },
+        "cleanup": {
+          "type": "boolean",
+          "default": true
+        },
+        "reconciliation": {
+          "$ref": "#/$defs/reconciliation"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "type",
+        "technique_id",
+        "engine_test_id"
+      ],
+      "additionalProperties": false
+    },
+    "plan_matrix": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "matrix"
+        },
+        "templates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/matrix_template"
+          },
+          "minItems": 1
+        },
+        "axes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/matrix_axis"
+          },
+          "minItems": 1
+        },
+        "expand": {
+          "$ref": "#/$defs/matrix_expand"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "type",
+        "templates",
+        "axes",
+        "expand"
+      ],
+      "additionalProperties": false
+    },
+    "matrix_template": {
+      "type": "object",
+      "description": "Reusable action template for expansion.",
+      "properties": {
+        "template_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "engine": {
+          "type": "string",
+          "minLength": 1
+        },
+        "technique_id": {
+          "$ref": "#/$defs/mitre_technique_id"
+        },
+        "engine_test_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "execution": {
+          "$ref": "#/$defs/execution"
+        },
+        "requirements": {
+          "$ref": "#/$defs/requirements"
+        },
+        "input_defaults": {
+          "$ref": "#/$defs/input_args"
+        },
+        "cleanup": {
+          "type": "boolean",
+          "default": true
+        },
+        "reconciliation": {
+          "$ref": "#/$defs/reconciliation"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "template_id",
+        "engine"
+      ],
+      "additionalProperties": false
+    },
+    "matrix_axis": {
+      "type": "object",
+      "description": "Expansion axis. Exactly one of selector_ref, variants, or values should be used.",
+      "properties": {
+        "axis_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selector_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pointer to a selector in the scenario document (e.g., targets.selector)."
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/matrix_variant"
+          },
+          "minItems": 1
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "axis_id"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "selector_ref"
+          ]
+        },
+        {
+          "required": [
+            "variants"
+          ]
+        },
+        {
+          "required": [
+            "values"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "matrix_variant": {
+      "type": "object",
+      "description": "Named variant value for a variants axis.",
+      "properties": {
+        "variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_overrides": {
+          "$ref": "#/$defs/input_args"
+        },
+        "requirements_overrides": {
+          "$ref": "#/$defs/requirements"
+        },
+        "execution_overrides": {
+          "$ref": "#/$defs/execution"
+        },
+        "cleanup": {
+          "type": "boolean"
+        },
+        "reconciliation": {
+          "$ref": "#/$defs/reconciliation"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "variant_id"
+      ],
+      "additionalProperties": false
+    },
+    "matrix_expand": {
+      "type": "object",
+      "description": "Expansion definition for matrix plans.",
+      "properties": {
+        "product": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/matrix_cell"
+          },
+          "minItems": 1
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "product"
+      ],
+      "additionalProperties": false
+    },
+    "matrix_cell": {
+      "type": "object",
+      "description": "One expansion cell (an action instance) produced by matrix expansion.",
+      "properties": {
+        "template_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "axis_values": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Mapping from axis_id -> selected value/variant_id."
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "template_id",
+        "axis_values"
+      ],
+      "additionalProperties": false
+    },
+    "plan": {
+      "description": "Plan definition (v0.1 atomic plan, or v0.2 matrix plan).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/plan_atomic"
+        },
+        {
+          "$ref": "#/$defs/plan_matrix"
+        }
+      ]
+    }
+  }
+}

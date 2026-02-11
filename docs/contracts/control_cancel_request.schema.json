@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Control cancel request",
+  "description": "Run-relative operator control artifact written under control/cancel.json. Expresses a graceful or force cancellation request scoped to the entire run, a stage, or a single action.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "request_id",
+    "requested_at",
+    "requested_by",
+    "mode",
+    "scope"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.2.0",
+      "description": "SemVer contract version for this artifact."
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Idempotency / correlation id for the operator action (UUID). For API-originated requests, this SHOULD match the X-Request-ID response header for the triggering request.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "requested_at": {
+      "type": "string",
+      "description": "ISO-8601 / RFC3339 UTC timestamp with Z suffix.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "requested_by": {
+      "type": "object",
+      "description": "Actor who initiated the cancellation request.",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "auth_provider"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "auth_provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Authentication provider name (for example: local in v0.2)."
+        }
+      }
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "graceful",
+        "force"
+      ],
+      "description": "Cancellation mode. 'graceful' requests a cooperative shutdown; 'force' requests immediate termination."
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "run",
+        "stage",
+        "action"
+      ],
+      "description": "Cancellation scope."
+    },
+    "target": {
+      "type": "object",
+      "description": "Scope-dependent target selector. Empty or omitted when scope=run; stage when scope=stage; action_id when scope=action.",
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "type": "string",
+          "description": "Stable stage identifier (lower_snake_case segments; dot-separated allowed).",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+        },
+        "action_id": {
+          "type": "string",
+          "description": "Action identifier from ground_truth.jsonl (supports legacy v0.1 'sN' and v0.2+ 'pa_aid_v1_<32hex>').",
+          "pattern": "^(s[1-9][0-9]*|pa_aid_v1_[0-9a-f]{32})$"
+        }
+      },
+      "maxProperties": 1
+    },
+    "reason": {
+      "type": "string",
+      "description": "Optional operator-provided reason (must not contain secrets).",
+      "maxLength": 4096
+    },
+    "escalated_at": {
+      "type": "string",
+      "description": "When present, indicates escalation from graceful to force (timestamp).",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "escalated_by": {
+      "type": "object",
+      "description": "Actor who escalated the cancellation request from graceful to force (present iff escalation occurred).",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "auth_provider"
+      ],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "auth_provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved for forward-compatible additions.",
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "run"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "type": "object",
+            "maxProperties": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "stage"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "required": [
+              "stage"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "action"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "required": [
+              "action_id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "escalated_at"
+        ]
+      },
+      "then": {
+        "required": [
+          "escalated_by"
+        ],
+        "properties": {
+          "mode": {
+            "const": "force"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "escalated_by"
+        ]
+      },
+      "then": {
+        "required": [
+          "escalated_at"
+        ],
+        "properties": {
+          "mode": {
+            "const": "force"
+          }
+        }
+      }
+    }
+  ]
+}

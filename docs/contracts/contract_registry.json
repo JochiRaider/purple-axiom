@@ -338,6 +338,14 @@
       "format": "json"
     },
     {
+      "contract_id": "run_results",
+      "schema_path": "docs/contracts/run_results.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Compact run-level CI/human summary (run_results.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },    
+    {
       "contract_id": "runner_executor_evidence",
       "schema_path": "docs/contracts/runner_executor_evidence.schema.json",
       "contract_version": "0.1.0",
@@ -438,6 +446,7 @@
     { "artifact_glob": "logs/lab_inventory_snapshot.json", "contract_id": "lab_inventory_snapshot", "stage_owner": "lab_provider", "validation_mode": "json_document" },
     { "artifact_glob": "logs/telemetry_validation.json", "contract_id": "telemetry_validation", "stage_owner": "telemetry", "validation_mode": "json_document" },
     { "artifact_glob": "manifest.json", "contract_id": "manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "run_results.json", "contract_id": "run_results", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/mapping_coverage.json", "contract_id": "mapping_coverage", "stage_owner": "normalization", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/mapping_profile_snapshot.json", "contract_id": "mapping_profile_snapshot", "stage_owner": "normalization", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/ocsf_events.jsonl", "contract_id": "ocsf_event_envelope", "stage_owner": "normalization", "validation_mode": "jsonl_lines" },

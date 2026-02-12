@@ -868,6 +868,7 @@ Minimum publish-gate coverage (v0.1):
 - When produced, the following artifacts MUST be contract-validated at publish time by the stage
   that publishes them:
   - `manifest.json`
+  - `run_results.json`
   - `ground_truth.jsonl`
   - `runs/<run_id>/inputs/range.yaml`
   - `runs/<run_id>/inputs/baseline_run_ref.json` when regression is enabled
@@ -1903,6 +1904,83 @@ Stage outcomes (v0.1 baseline expectations):
 | `scoring`       | `fail_closed`                                          | `scoring/summary.json`                                        | A missing or invalid summary is fatal when scoring is enabled.                                                     |
 | `reporting`     | `fail_closed`                                          | `report/`                                                     | Reporting failures are fatal when reporting is enabled.                                                            |
 | `signing`       | `fail_closed` (when enabled)                           | `security/checksums.txt`,`security/signature.ed25519`         | If signing is enabled and verification fails or is indeterminate, the run MUST fail closed.                        |
+
+### Run results summary (run_results.json)
+
+Purpose:
+
+- Provide a compact, stable "time-to-signal" summary for CI and humans without parsing the full run
+  bundle.
+- Provide run-relative pointers to richer evidence artifacts (manifest, health, and report).
+
+Path:
+
+- `run_results.json` (run root)
+
+Format:
+
+- JSON document (single object).
+- Contract-backed: MUST validate against `run_results.schema.json`.
+
+Generation (normative):
+
+- Producers SHOULD emit `run_results.json` for any run directory that exists, including runs whose
+  final `status` is `failed`.
+- `run_id` MUST equal the run directory name and MUST equal `manifest.run_id` when `manifest.json`
+  is present.
+
+Status derivation (normative; first match wins):
+
+1. If `report/thresholds.json` is present and schema-valid, `run_results.status` MUST equal
+   `report/thresholds.json.status_recommendation`.
+1. Else, if `manifest.json` is present and schema-valid, `run_results.status` MUST equal
+   `manifest.status`.
+1. Else, `run_results.status` MUST be `failed`.
+
+Counts (normative):
+
+- `counts.actions` MUST be derived from `ground_truth.jsonl` by counting the final `execute` phase
+  outcome per action instance:
+  - `success`: count of actions where the final `execute` phase `phase_outcome` is `success`.
+  - `failed`: count of actions where the final `execute` phase `phase_outcome` is `failed`.
+  - `skipped`: count of actions where the final `execute` phase `phase_outcome` is `skipped`.
+- If `ground_truth.jsonl` is absent, producers MUST emit zero counts for all action outcomes.
+- `counts.stages` MUST be derived from `manifest.stage_outcomes[]` by counting entries by `status`
+  (`success|failed|skipped`).
+  - Substages (dot-suffixed stage identifiers) MUST be included in these counts.
+- If `manifest.json` is absent, producers MUST emit zero counts for all stage outcomes.
+
+Key metric snapshots (normative):
+
+- `metrics.technique_coverage_rate` MUST be copied from `report/thresholds.json` gate
+  `gate_id="min_technique_coverage"` (`actual` value) when available; otherwise MUST be `null`.
+- `metrics.detection_latency_p95_seconds` MUST be copied from `report/thresholds.json` gate
+  `gate_id="max_allowed_latency_seconds"` (`actual` value) when available; otherwise MUST be `null`.
+- `metrics.tier1_field_coverage_pct` MUST be copied from `report/thresholds.json` gate
+  `gate_id="min_tier1_field_coverage"` (`actual` value) when available; otherwise MUST be `null`.
+- When `report/thresholds.json` is present and schema-valid, producers MUST NOT recompute these
+  values from upstream artifacts.
+
+Pointers (normative):
+
+- `pointers.*` values MUST be run-relative POSIX paths, or `null` when the target artifact is absent
+  at publish time.
+- Minimum required pointers:
+  - `pointers.manifest` → `manifest.json`
+  - `pointers.health` → `logs/health.json`
+  - `pointers.report_json` → `report/report.json`
+
+Determinism (normative):
+
+- `run_results.json` MUST be serialized as RFC 8785 canonical JSON and MUST be written as UTF-8 with
+  LF (`\n`) newlines.
+- Producers MUST NOT include non-deterministic values (timestamps, hostnames, machine identifiers)
+  in `run_results.json`.
+
+Verification hooks:
+
+- CI SHOULD include stable hash assertions over `run_results.json` for fixed fixtures (SHA-256 over
+  the exact published bytes).
 
 ### Ground truth timeline
 

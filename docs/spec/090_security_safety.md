@@ -219,6 +219,63 @@ Normative requirements:
   - treat provider stdout/stderr as sensitive.
 - If secret resolution fails for any required secret, the pipeline MUST fail closed.
 
+### External integration credentials
+
+An **integration credential** is secret material used by the pipeline to authenticate to an external
+system (for example: lab provider APIs, orchestration backends, custom executors, telemetry
+backends).
+
+Integration credentials are **pipeline secrets**. They are distinct from scenario content and MUST
+be handled with a stricter posture: integration credential values MUST never be persisted in the run
+bundle (including the unredacted quarantine directory).
+
+Configuration (normative):
+
+- Integrations that require credentials MUST obtain them from the dedicated
+  `security.integration_credentials` config block (see `120_config_reference.md`).
+- Every credential field in `security.integration_credentials` MUST be expressed as a secret
+  reference string (no inline secret values).
+  - CLI arg and environment-variable overrides for these fields MUST carry secret reference strings
+    only (the secret value itself stays in the configured secret provider).
+- A stage MUST treat every credential value it resolves from a secret reference as sensitive.
+
+Redaction + persistence requirements (normative):
+
+- Resolved integration credential values MUST be held in memory only.
+- Resolved integration credential values MUST NOT be written to:
+  - any contract-backed artifact (see `docs/contracts/contract_registry.json`),
+  - any run-bundle path (including `runs/<run_id>/unredacted/`), or
+  - any logs or reports.
+- If an integration is invoked via a child process and the integration supports environment-variable
+  configuration (for example Threatest), the adapter MUST pass secret values via environment
+  variables rather than command-line arguments.
+  - Rationale: argv commonly leaks into transcripts, process listings, and contract-backed execution
+    evidence.
+- Implementations MUST treat the presence of an integration credential value in any persisted output
+  (including volatile logs) as a run-fatal safety violation and MUST fail closed.
+
+Redaction enabled/disabled interaction (normative):
+
+- The above prohibitions apply regardless of `security.redaction.enabled`. Disabling evidence
+  redaction MUST NOT permit persistence of integration credential values.
+
+Preflight checks (normative):
+
+- Every stage that depends on integration credentials MUST perform a **credential preflight** step
+  before performing any external call or starting any integration child process.
+- Credential preflight MUST fail closed with stable reason codes (see ADR-0005):
+  - Missing/unresolvable required credentials: `reason_code=integration_credentials_missing`.
+  - Resolved credentials that fail integration validation/authentication:
+    `reason_code=integration_credentials_invalid`.
+
+Verification hooks (normative):
+
+- Content CI MUST include unit tests that prove:
+  - resolved integration credential values are redacted/absent from logs, and
+  - resolved integration credential values are absent from all contract-backed artifacts emitted by
+    the test harness.
+- These tests MUST use a sentinel secret value and scan the output directory for that byte sequence.
+
 ### Synthetic correlation marker
 
 Synthetic correlation markers are explicitly non-secret identifiers emitted to correlate synthetic

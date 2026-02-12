@@ -255,6 +255,8 @@ These reason codes MAY be used for any stage.
 | `redaction_policy_error`             | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                                                                                                |
 | `config_schema_invalid`              | FATAL    | A required config artifact is schema-invalid (for example `inputs/range.yaml`, `manifest.json`, `inputs/scenario.yaml` or `inputs/plan_draft.yaml` when plan building is enabled). |
 | `input_missing`                      | FATAL    | Required upstream input artifact missing or unreadable.                                                                                                                            |
+| `integration_credentials_missing`    | FATAL    | Required integration credential reference missing, empty, or cannot be resolved by the configured secret provider.                                                                 |
+| `integration_credentials_invalid`    | FATAL    | Integration credential resolved but failed integration validation/authentication.                                                                                                  |
 | `lock_acquisition_failed`            | FATAL    | Exclusive lock could not be acquired.                                                                                                                                              |
 | `storage_io_error`                   | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                                                                                                  |
 | `blocked_by_upstream_failure`        | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                                                                                                    |
@@ -316,6 +318,26 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 
 - Multi-target iteration (matrix plans) is reserved for v0.2; v0.1 enforces 1:1 action-target
   resolution.
+
+#### FATAL reason codes (substage: `runner.integration_credentials`)
+
+This substage records **credential preflight** for any runner-owned external integration that
+requires authentication (for example an orchestration backend).
+
+Default `fail_mode`: `fail_closed`
+
+| Reason code                       | Severity | Description                                                                                               |
+| --------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `integration_credentials_missing` | FATAL    | A required credential reference is missing/empty or cannot be resolved by the configured secret provider. |
+| `integration_credentials_invalid` | FATAL    | A credential resolves but fails integration validation/authentication.                                    |
+
+Normative requirements:
+
+- This substage MUST run before the runner makes any external call that requires credentials.
+- When this substage fails, the runner MUST NOT attempt execution that depends on the
+  missing/invalid credentials.
+- Implementations MUST NOT include resolved credential values in any outcome record, error message,
+  or deterministic artifact.
 
 #### FATAL reason codes (substage: `runner.environment_config`)
 

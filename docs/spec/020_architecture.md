@@ -10,6 +10,7 @@ related:
   - ADR-0007-state-machines.md
   - 025_data_contracts.md
   - 031_plan_execution_model.md
+  - 033_execution_adapters.md
   - 040_telemetry_pipeline.md
   - 045_storage_formats.md
   - 065_sigma_to_ocsf_bridge.md
@@ -1576,18 +1577,22 @@ artifact selection rules.
 
 Purple Axiom is designed for extensibility at defined boundaries:
 
-| Extension type            | Examples                                                                     | Interface                                     |
-| ------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
-| Lab providers             | Manual, Ludus, Terraform, Vagrant, custom                                    | Inventory snapshot contract                   |
-| Environment configurators | Ansible, DSC v3, scripts, image-baked profiles, custom                       | Readiness profile + deterministic operability |
-| Scenario runners          | Atomic Red Team, Caldera, custom                                             | Ground truth + evidence contracts             |
-| Telemetry sources         | Windows Event Log, Sysmon, osquery, Linux auditd (`linux-auditd`), EDR, pcap | OTel receiver + raw schema                    |
-| Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles                                   | Mapping profile contract                      |
-| Rule languages            | Sigma, YARA, Suricata (future)                                               | Bridge + evaluator contracts                  |
-| Bridge mapping packs      | Logsource routers, field alias maps                                          | Mapping pack schema                           |
-| Evaluator backends        | Native (`native_pcre2`), Tenzir, other engines                               | Compiled plan + detection contract            |
-| Criteria packs            | Default, environment-specific                                                | Criteria pack manifest + entries              |
-| Redaction policies        | Default patterns, custom patterns                                            | Redaction policy contract                     |
+| Extension type            | Examples                                                                     | Interface                                                       |
+| ------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Lab providers             | Manual, Ludus, Terraform, Vagrant, custom                                    | Inventory snapshot contract                                     |
+| Environment configurators | Ansible, DSC v3, scripts, image-baked profiles, custom                       | Readiness profile + deterministic operability                   |
+| Execution adapters        | Atomic Red Team, Caldera, custom                                             | Execution adapter interface + ground truth + evidence contracts |
+| Telemetry sources         | Windows Event Log, Sysmon, osquery, Linux auditd (`linux-auditd`), EDR, pcap | OTel receiver + raw schema                                      |
+| Schema mappings           | OCSF 1.7.0, future OCSF versions, profiles                                   | Mapping profile contract                                        |
+| Rule languages            | Sigma, YARA, Suricata (future)                                               | Bridge + evaluator contracts                                    |
+| Bridge mapping packs      | Logsource routers, field alias maps                                          | Mapping pack schema                                             |
+| Evaluator backends        | Native (`native_pcre2`), Tenzir, other engines                               | Compiled plan + detection contract                              |
+| Criteria packs            | Default, environment-specific                                                | Criteria pack manifest + entries                                |
+| Redaction policies        | Default patterns, custom patterns                                            | Redaction policy contract                                       |
+
+Scenario execution backends are implemented as **execution adapters**: a first-class adapter
+interface used by the runner to execute actions, declare capabilities/correlation carriers, and emit
+deterministic execution evidence. See `033_execution_adapters.md`.
 
 Environment configurators are also the v0.1 integration point for generating realistic background
 activity (“noise”) so that datasets are not comprised solely of attack actions. Examples include:
@@ -1668,6 +1673,7 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 - [Lab providers specification][lab-providers-spec]
 - [Scenarios specification][scenarios-spec]
 - [Plan execution model specification (reserved; v0.2+)][plan-exec-spec]
+- [Execution adapters specification][execution-adapters-spec]
 - [Atomic Red Team executor integration][art-exec-spec]
 - [Telemetry pipeline specification][telemetry-spec]
 - [osquery integration specification][osquery-spec]
@@ -1707,6 +1713,7 @@ Extensions MUST preserve the stage IO boundaries and produce contract-compliant 
 [config-ref]: 120_config_reference.md
 [criteria-spec]: 035_validation_criteria.md
 [data-contracts]: 025_data_contracts.md
+[execution-adapters-spec]: 033_execution_adapters.md
 [field-tiers]: 055_ocsf_field_tiers.md
 [lab-providers-spec]: 015_lab_providers.md
 [ocsf-spec]: 050_normalization_ocsf.md

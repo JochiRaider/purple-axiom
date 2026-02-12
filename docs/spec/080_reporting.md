@@ -170,21 +170,22 @@ Notes (health files and outcome sources):
 
 ### Optional artifacts
 
-| Path                                                        | Source stage  | Purpose                                               |
-| ----------------------------------------------------------- | ------------- | ----------------------------------------------------- |
-| `runner/`                                                   | runner        | Per-action transcripts and cleanup evidence           |
-| `runner/principal_context.json`                             | runner        | Redaction-safe principal context summary              |
-| `inputs/baseline_run_ref.json`                              | reporting     | Resolved regression baseline reference (when enabled) |
-| `inputs/baseline/manifest.json`                             | reporting     | Baseline manifest snapshot (when enabled)             |
-| `logs/cache_provenance.json`                                | orchestrator  | Cache hit/miss provenance (when enabled)              |
-| `plan/expanded_graph.json`                                  | runner        | Compiled plan graph (v0.2+)                           |
-| `plan/expansion_manifest.json`                              | runner        | Matrix expansion manifest (v0.2+)                     |
-| `normalized/ocsf_events/` or `normalized/ocsf_events.jsonl` | normalization | Full normalized event store (Parquet or JSONL)        |
-| `bridge/mapping_pack_snapshot.json`                         | detection     | Bridge inputs snapshot for reproducibility            |
-| `bridge/compiled_plans/`                                    | detection     | Per-rule compilation outputs                          |
-| `normalized/mapping_profile_snapshot.json`                  | normalization | Mapping profile snapshot for drift detection          |
-| `security/checksums.txt`                                    | signing       | SHA-256 checksums for long-term artifacts             |
-| `security/signature.ed25519`                                | signing       | Ed25519 signature over checksums                      |
+| Path                                                        | Source stage  | Purpose                                                            |
+| ----------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
+| `runner/`                                                   | runner        | Per-action transcripts and cleanup evidence                        |
+| `runner/principal_context.json`                             | runner        | Redaction-safe principal context summary                           |
+| `inputs/baseline_run_ref.json`                              | reporting     | Resolved regression baseline reference (when enabled)              |
+| `inputs/baseline/manifest.json`                             | reporting     | Baseline manifest snapshot (when enabled)                          |
+| `logs/cache_provenance.json`                                | orchestrator  | Cache hit/miss provenance (when enabled)                           |
+| `plan/expanded_graph.json`                                  | runner        | Compiled plan graph (v0.2+)                                        |
+| `plan/expansion_manifest.json`                              | runner        | Matrix expansion manifest (v0.2+)                                  |
+| `normalized/ocsf_events/` or `normalized/ocsf_events.jsonl` | normalization | Full normalized event store (Parquet or JSONL)                     |
+| `bridge/mapping_pack_snapshot.json`                         | detection     | Bridge inputs snapshot for reproducibility                         |
+| `bridge/compiled_plans/`                                    | detection     | Per-rule compilation outputs                                       |
+| `normalized/mapping_profile_snapshot.json`                  | normalization | Mapping profile snapshot for drift detection                       |
+| `security/checksums.txt`                                    | signing       | SHA-256 checksums for long-term artifacts                          |
+| `security/signature.ed25519`                                | signing       | Ed25519 signature over checksums                                   |
+| `report/junit.xml`                                          | reporting     | CI-native JUnit test report (one testcase per action or scenario). |
 
 ## Required reporting outputs (v0.1)
 
@@ -324,6 +325,56 @@ Verification hooks:
   required section ordering and column set.
 - CI SHOULD include a golden-fixture test that renders `report/run_timeline.md` from a fixed
   `ground_truth.jsonl` and compares it byte-for-byte.
+
+### JUnit output artifact (optional)
+
+The reporting stage MAY emit a JUnit XML file to integrate with common CI test result UIs without
+custom tooling.
+
+Path:
+
+- `report/junit.xml`
+
+Format (normative when present):
+
+- UTF-8 XML.
+- A single `<testsuite>` element containing `<testcase>` elements.
+- Testcases MUST be deterministically ordered (RECOMMENDED: ascending `action_id`).
+
+Test case mapping (normative when present):
+
+- Default mapping: one `<testcase>` per action instance in `ground_truth.jsonl`.
+- `<testcase name>` MUST be the action instance `action_id`.
+- `<testcase classname>` SHOULD be the `scenario_id` (or a stable fallback such as `run_id` if
+  `scenario_id` is not available to the reporter).
+
+Outcome mapping (normative when present):
+
+- The test result MUST be derived from the final `execute` phase outcome for the action:
+  - `success` → pass (no `<failure>` or `<skipped>` element)
+  - `failed` → `<failure>` element
+  - `skipped` → `<skipped>` element
+
+Failures and skips (normative when present):
+
+- `<failure>` / `<skipped>` MUST include the Purple Axiom `reason_domain` and `reason_code` from the
+  action's final `execute` phase record (see `ground_truth.jsonl` lifecycle phase schema).
+- When the ground truth `execute` phase record also contains an `error` object, the reporter SHOULD
+  include `error.type` (and a short message) in the failure payload.
+
+Evidence pointers (normative when present):
+
+- Each `<testcase>` SHOULD include pointers to evidence artifacts, either as `<system-out>` text or
+  as `<property>` values, using run-relative paths.
+- When available, the reporter SHOULD include the `stdout_ref`, `stderr_ref`, and `executor_ref`
+  evidence references from the ground truth action record.
+
+Verification hooks:
+
+- Fixture-based tests SHOULD assert deterministic ordering and stable, parseable XML for fixed
+  fixtures.
+- Fixture-based tests SHOULD assert that failures include `reason_domain` + `reason_code` and at
+  least one evidence pointer when evidence references are present in `ground_truth.jsonl`.
 
 ### Upstream artifacts (consumed, not produced)
 
@@ -822,7 +873,7 @@ Required content:
 - Narrative integration (normative):
   - When any unmet requirements exist, the report MUST include the corresponding reason codes in
     [Status degradation reasons](#status-degradation-reasons) and MUST surface a concise explanation
-    in the executive summary “why did it fail?” narrative.
+    in the executive summary "why did it fail?" narrative.
 
 Disclosure minimization (normative):
 
@@ -1621,7 +1672,7 @@ The HTML report SHOULD follow this layout:
 ### Self-contained, local-only asset policy
 
 To align with the Operator Interface static file serving model (see `115_operator_interface.md`) and
-to keep the report in a “Metta-style” minimal footprint, the HTML report is intentionally
+to keep the report in a "Metta-style" minimal footprint, the HTML report is intentionally
 self-contained.
 
 Normative requirements:
@@ -1641,7 +1692,7 @@ Normative requirements:
 
 Observability:
 
-- A “no remote assets” lint can be implemented by scanning the rendered `report/report.html` for:
+- A "no remote assets" lint can be implemented by scanning the rendered `report/report.html` for:
   - `http://` or `https://`
   - `<script` tags with a `src=` attribute
   - `<link` tags with an `href=` attribute

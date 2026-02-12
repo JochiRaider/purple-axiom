@@ -111,6 +111,13 @@ Common keys:
 
 - `type` (required): `caldera | atomic | custom`
 
+  - `type` selects the **execution adapter** backend (see `033_execution_adapters.md`).
+    - v0.1: only `atomic` is required to be implemented; `caldera` and `custom` are reserved and
+      MUST fail closed if selected.
+    - The resolved execution adapter binding MUST be recorded in
+      `manifest.extensions.adapter_provenance.entries[]` with `port_id="runner-execution-adapter"`
+      and `adapter_id=<type>`.
+
 - `identity` (optional)
 
   - `emit_principal_context` (default: `true`)
@@ -261,6 +268,9 @@ Common keys:
 
   - `endpoint` (required)
   - `api_token_ref` (required): reference only (example: `env:CALDERA_TOKEN`)
+    - Prefer configuring this token under `security.integration_credentials.caldera.api_token_ref`.
+      If both are present, they MUST match exactly; otherwise config validation MUST fail closed
+      with `reason_code=config_schema_invalid`.
   - `operation` (optional): profile or operation template identifier
   - `agent_selector` (optional): tags or asset ids
 
@@ -1052,6 +1062,30 @@ Common keys:
     - `executable` (required): absolute path to the custom secret provider CLI
     - `timeout_seconds` (optional, default: 5): per lookup execution timeout
     - `max_stdout_bytes` (optional, default: 65536): maximum stdout bytes accepted
+- `integration_credentials` (optional)
+  - Dedicated configuration block for **external integration credentials** (API tokens, client
+    secrets, private keys) used by adapters and supporting tools.
+  - The `integration_credentials` block is the canonical place to declare which integrations have
+    credentials and to ensure secret-bearing fields are handled consistently across stages.
+  - Shape: map of `<integration_id>` → `<credential_map>`
+    - `<integration_id>` (id_slug_v1; REQUIRED): stable identifier of the integration.
+      - RECOMMENDED: match an adapter id or provider id (examples: `caldera`, `ludus`).
+    - `<credential_map>` (object; REQUIRED): map of credential fields to secret references.
+      - Keys MUST end with `_ref` (example: `api_token_ref`, `client_secret_ref`,
+        `private_key_ref`).
+      - Values MUST be secret reference strings (see "Secret reference strings" below).
+  - Persistence and redaction requirements (normative):
+    - The pipeline MUST resolve integration credentials at runtime and MUST NOT write resolved
+      credential values into run bundles, logs, or reports.
+    - Any contract-backed artifact that records an integration’s effective configuration MUST record
+      only secret references or redacted placeholders, never resolved credential values.
+    - When emitting debug logs or "effective config" snapshots, implementations MUST omit credential
+      values or replace them with a stable placeholder string (for example `"<REDACTED>"`) while
+      preserving key presence.
+  - Preflight requirement (normative):
+    - If any enabled integration requires credentials, the owning stage MUST preflight credential
+      resolution/validation and fail closed on missing/invalid credentials (see
+      [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)).
 - `network`
   - `allow_outbound` (default: false)
   - `allowlist` (optional): list of CIDRs/domains when outbound is enabled

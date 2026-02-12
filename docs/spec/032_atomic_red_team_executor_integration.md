@@ -7,6 +7,7 @@ tags: [runner, atomic, invoke-atomicredteam, determinism, evidence, cleanup]
 related:
   - 025_data_contracts.md
   - 030_scenarios.md
+  - 033_execution_adapters.md
   - 035_validation_criteria.md
   - 045_storage_formats.md
   - 120_config_reference.md
@@ -24,6 +25,10 @@ This document defines the normative integration contract between Purple Axiom's 
 Invoke-AtomicRedTeam executor stack for scenario actions with `engine="atomic"`. It specifies the
 deterministic behavior and evidence artifacts required to make runs reproducible and cross-run
 comparable while preserving operator-debuggable details.
+
+This executor stack is the v0.1 reference implementation of the `atomic` execution adapter (see
+`033_execution_adapters.md`). It supports executor variants selected by `runner.atomic.executor`;
+v0.1 requires `invoke_atomic_red_team`.
 
 - Deterministic Atomic test discovery and YAML parsing (including template snapshotting)
 - Deterministic input resolution and hashing (defaults, overrides, template expansion)
@@ -46,6 +51,8 @@ This document is additive and MUST be read alongside:
 - [Supported versions](../../SUPPORTED_VERSIONS.md) for pinned runner/executor dependency versions
 - [Scenario model spec](030_scenarios.md) for stable `action_key` basis, lifecycle phase semantics,
   and Atomic Test Plan scenarios
+- [Execution adapters spec](033_execution_adapters.md) for the stable execution adapter interface
+  and shared adapter conformance hooks
 - [Validation criteria spec](035_validation_criteria.md) for cleanup verification semantics
 - [Storage formats spec](045_storage_formats.md) for run bundle layout and artifact naming
   conventions
@@ -1371,7 +1378,10 @@ This artifact is contract-backed and therefore MUST:
 
 Minimum required fields (v0.1):
 
-- `executor` (string, normalized executor name)
+- `executor` (string, normalized executor name; executor variant)
+  - MUST equal the configured `runner.atomic.executor` value after normalization.
+  - This value is the recommended vocabulary for `selectors.executor` in criteria matching (see
+    `035_validation_criteria.md`).
 - `pwsh_version` (string or null; required when executor is PowerShell)
 - `invoke_atomicredteam_version` (string or null)
 - `started_at_utc` (RFC 3339 timestamp)

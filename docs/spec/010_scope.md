@@ -33,7 +33,7 @@ This document does NOT cover:
 - CI harness requirements and operational readiness gates (see the
   [test strategy and CI specification](100_test_strategy_ci.md) and
   [CI operational readiness specification](105_ci_operational_readiness.md)).
-- Linting rules and lint report schema (see the [linting specification](125_linting.md)). 
+- Linting rules and lint report schema (see the [linting specification](125_linting.md)).
 - Safety, security, and operability requirements (see the
   [security and safety specification](090_security_safety.md) and
   [operability specification](110_operability.md)).
@@ -108,7 +108,7 @@ MUST treat them as read-only and MUST NOT rewrite them.
   - `ci-content` exercises Contract Spine validation, schema/lint gates, and content bundle
     build/validation in an offline-safe way.
   - `ci-run` exercises a representative end-to-end run in CI via either BDP replay or a minimal lab
-    run, producing contract-backed `run_results.json` and reporting outputs.    
+    run, producing contract-backed `run_results.json` and reporting outputs.
 - Contract-backed run bundles:
   - A manifest-driven run bundle layout, with deterministic hashing and provenance fields.
   - Publish-gate contract validation for contract-backed artifacts, with deterministic validation
@@ -117,13 +117,13 @@ MUST treat them as read-only and MUST NOT rewrite them.
     canonical serialization and publish-gate behavior (staging + validate-before-publish + atomic
     promotion).
   - When enabled, integrity artifacts (`security/checksums.txt` and optional `signature.ed25519`)
-    are treated as first-class run outputs.  
+    are treated as first-class run outputs.
   - Run-scoped session state and provenance (for example principal context and cache provenance)
     recorded under `runs/<run_id>/` (no global session DB required for correctness).
 - Pluggable lab inventory resolution via a lab provider interface:
   - Manual lab definitions are supported.
   - A local contract registry and Contract Spine define what must validate in v0.1 (no remote `$ref`
-    resolution; no best-effort validation).   
+    resolution; no best-effort validation).
   - Provider-derived inventory is supported via adapter parsing and deterministic canonicalization.
   - A deterministic `lab_inventory_snapshot.json` is recorded per run for reproducibility and
     diffability.
@@ -179,7 +179,7 @@ MUST treat them as read-only and MUST NOT rewrite them.
     liveness heartbeats for dead-on-arrival detection in push-only OTLP, raw Windows Event Log
     capture, checkpointing integrity, resource budgets).
   - Telemetry baseline profile gating is in scope when enabled, including the pinned input
-    `inputs/telemetry_baseline_profile.json` and the `telemetry.baseline_profile` canary outcome.    
+    `inputs/telemetry_baseline_profile.json` and the `telemetry.baseline_profile` canary outcome.
   - When enabled, telemetry validation is published as a contract-backed summary artifact at
     `logs/telemetry_validation.json` and is referenced by scoring/reporting for mechanical gap
     attribution.
@@ -212,7 +212,7 @@ MUST treat them as read-only and MUST NOT rewrite them.
     summary), plus machine-readable report artifacts intended for downstream automation and CI.
   - Report outputs are contract-backed and include a deterministic run timeline
     (`report/run_timeline.md`) and self-contained HTML (`report/report.html`) alongside
-    `report/report.json`.    
+    `report/report.json`.
   - CI gate surface is in scope:
     - `report/thresholds.json` supports deterministic threshold evaluation and status
       recommendation.
@@ -237,8 +237,8 @@ MUST treat them as read-only and MUST NOT rewrite them.
   - Redaction posture and deterministic redaction policy application for evidence artifacts.
   - Deterministic withheld/quarantine semantics for sensitive evidence when redaction is disabled.
   - Secrets-by-reference configuration rules (no resolved secrets in artifacts).
-  - Run export policy and log classification enforce deterministic disclosure boundaries for
-    shared bundles (default exports exclude `unredacted/**` and volatile diagnostics).  
+  - Run export policy and log classification enforce deterministic disclosure boundaries for shared
+    bundles (default exports exclude `unredacted/**` and volatile diagnostics).
   - Resource budgeting and operational health artifacts, including deterministic stage outcomes and
     exit codes.
   - Default isolated lab posture and required egress enforcement verification when outbound egress
@@ -271,7 +271,7 @@ placeholder contracts or reserved types in v0.1.
 - Baseline library management:
   - Baseline catalogs, promotion state machines, and interactive baseline library operations are
     v0.2+.
-  - v0.1 requires only pinned BDP consumption and integrity validation (for example for Run CI).   
+  - v0.1 requires only pinned BDP consumption and integrity validation (for example for Run CI).
 - State reconciliation repair/mutation:
   - Drift detection and reporting is in scope when enabled.
   - Any automatic repair intent or mutation of targets based on reconciliation is reserved (default
@@ -340,12 +340,11 @@ The following are explicit non-goals for initial releases, including v0.1.
 - Endpoint telemetry capture and OCSF normalization are the normative ingestion path for v0.1.
 - Deterministic publish-gate validation and deterministic stage outcomes are required for
   unattended, repeatable operation.
-- Contract Spine conformance gates and the two-lane CI model (Content CI vs Run CI) are
-  required for v0.1 operational readiness.
+- Contract Spine conformance gates and the two-lane CI model (Content CI vs Run CI) are required for
+  v0.1 operational readiness.
 - Logs are classified into deterministic evidence vs volatile diagnostics; default exports and
   checksums include only allowlisted deterministic evidence and exclude `unredacted/**`.
-- Baseline Detection Packages (BDP) are a first-class CI artifact, enabling lab-free run
-  regression.  
+- Baseline Detection Packages (BDP) are a first-class CI artifact, enabling lab-free run regression.
 - Regression comparison, when enabled, is owned by the reporting stage and is expressed in report
   artifacts rather than as separate pipelines.
 
@@ -361,7 +360,7 @@ The following are explicit non-goals for initial releases, including v0.1.
 - [Plan execution model specification](031_plan_execution_model.md)
 - [Atomic Red Team executor integration specification](032_atomic_red_team_executor_integration.md)
 - [Execution adapters specification](033_execution_adapters.md)
-- [Validation criteria specification](035_validation_criteria.md) 
+- [Validation criteria specification](035_validation_criteria.md)
 - [Telemetry pipeline specification](040_telemetry_pipeline.md)
 - [Unix log ingestion specification](044_unix_log_ingestion.md)
 - [osquery integration specification](042_osquery_integration.md)
@@ -393,7 +392,7 @@ The following are explicit non-goals for initial releases, including v0.1.
 
 | Date       | Change                                                                                 |
 | ---------- | -------------------------------------------------------------------------------------- |
-| 2026-02-12 | Align scope with Contract Spine, CI lanes, workspace exports, BDPs, and export policy    |
+| 2026-02-12 | Align scope with Contract Spine, CI lanes, workspace exports, BDPs, and export policy  |
 | 2026-01-24 | update                                                                                 |
 | 2026-01-19 | Align scope with publish-gate validation, regression inputs/outputs, caches, and verbs |
 | 2026-01-12 | Formatting update                                                                      |

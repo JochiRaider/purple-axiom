@@ -17,9 +17,9 @@ related:
   - 105_ci_operational_readiness.md
   - 115_operator_interface.md
   - 120_config_reference.md
-  - ../adr/ADR-0001-project-naming-and-versioning.md
-  - ../adr/ADR-0003-redaction-policy.md
-  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
+  - ADR-0001-project-naming-and-versioning.md
+  - ADR-0003-redaction-policy.md
+  - ADR-0005-stage-outcomes-and-failure-classification.md
 ---
 
 # Linting and schema tooling
@@ -103,6 +103,10 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted 
 - Parsing and schema-validation invariants in this spec are intended to align with existing
   determinism and safety constraints.
 - If a conflict is discovered between this document and an ADR, implementations MUST follow the ADR
+  and the conflict MUST be resolved by updating this document.
+- If a conflict is discovered between this document and an existing v0.1 spec that defines the
+  relevant contract surface (for example `026_contract_spine.md` for `pa.yaml_decode.v1` or
+  `080_reporting.md` for report HTML asset policy), implementations MUST follow the existing spec
   and the conflict MUST be resolved by updating this document.
 
 ## Lint engine contract
@@ -195,8 +199,14 @@ Linting MUST be local-first and MUST NOT require network access:
 All file paths emitted in lint output MUST be:
 
 - workspace-relative (never absolute host paths),
-- POSIX-style with `/` separators,
-- normalized to remove `.` segments and to reject `..` traversal.
+- POSIX-style with `/` separators (normalize `\` to `/`),
+- normalized by:
+  - removing any leading `./`,
+  - removing `.` segments, and
+  - rejecting any path that is empty, begins with `/`, contains a NUL byte, or contains a path
+    segment equal to `..`.
+
+Paths MUST be representable as Unicode and UTF-8 encodable.
 
 If a target path is outside the workspace root (after normalization), linting MUST fail closed.
 
@@ -218,12 +228,32 @@ using **bytewise UTF-8 lexical ordering** (no locale).
 For YAML targets, decoding MUST follow a single shared profile, `pa.yaml_decode.v1`, with these
 invariants:
 
-- YAML 1.2 parsing (YAML 1.2 JSON schema; not the YAML core schema).
-- Exactly one YAML document MUST be present; multi-document YAML MUST be rejected.
-- YAML anchors and aliases MUST be rejected.
-- YAML merge keys MUST be rejected.
-- YAML custom tags MUST be rejected (any tag outside the YAML 1.2 JSON schema tag set).
-- Duplicate mapping keys MUST be rejected.
+For YAML targets, decoding MUST implement the shared profile `pa.yaml_decode.v1` as defined in the
+Contract Spine (`026_contract_spine.md`).
+
+Invariants (normative):
+
+- Input MUST be interpreted as UTF-8 text.
+  - Implementations MAY accept a UTF-8 BOM but MUST strip it before parsing.
+  - Invalid UTF-8 MUST fail closed.
+- The parser MUST implement YAML 1.2.
+- The parser MUST accept exactly one document; multiple documents MUST fail closed.
+- The parser MUST use a safe loader (no arbitrary object construction).
+- The parser MUST reject:
+  - duplicate mapping keys (at any nesting level),
+  - anchors and aliases,
+  - merge keys (`<<`),
+  - explicit tags other than the YAML 1.2 core JSON tags (`!!str`, `!!int`, `!!float`, `!!bool`,
+    `!!null`).
+
+Type resolution (normative):
+
+- To avoid YAML 1.1 vs 1.2 drift, decoding MUST use YAML 1.2 JSON-schema-style resolution.
+  - Example: `yes/no/on/off` MUST be interpreted as strings (unless explicitly tagged, and explicit
+    non-JSON-native tags are rejected).
+
+Normalization to JSON shape (normative):
+
 - After parsing, the value MUST be representable using only JSON-native types:
   - object with string keys only
   - array
@@ -322,7 +352,7 @@ The file is referred to as `lint.json` in this spec.
 
 A lint report MUST be a JSON object with:
 
-- `schema_version`: stable identifier for the lint report schema (RECOMMENDED: `pa:lint-report:v1`)
+- `schema_version`: stable identifier for the lint report schema (MUST be `pa:lint-report:v1`)
 - `tool`:
   - `name` (string)
   - `version` (string)
@@ -475,8 +505,13 @@ Intended for generated HTML reports or report templates.
 
 Minimum rule requirements:
 
-- "No remote assets" rule: report HTML MUST NOT reference remote URLs for scripts, styles, or images
-  when local bundling is required.
+- "No remote assets" rule: report HTML MUST comply with the Reporting spec's self-contained,
+  local-only asset policy (`080_reporting.md`, "Self-contained, local-only asset policy").
+  - The rendered HTML MUST NOT contain absolute `http://` or `https://` URLs in any attribute value.
+  - The rendered HTML MUST NOT contain `<script` tags with a `src=` attribute or `<link` tags with
+    an `href=` attribute.
+  - The rendered HTML MUST NOT contain `<base` tags or `<meta http-equiv="refresh"`
+    (case-insensitive).
 
 ## Schema publishing and editor integration
 

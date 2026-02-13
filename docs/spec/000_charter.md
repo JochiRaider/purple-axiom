@@ -49,6 +49,13 @@ Conformance anchors (v0.1):
   `contract_registry.json.bindings[].stage_owner` declares ownership for each contract-backed
   `artifact_glob` and MUST be used to construct publish-gate `expected_outputs[]` without hardcoding
   stage→contract mappings.
+- **Contract validation reports:** `runs/<run_id>/logs/contract_validation/<stage_id>.json` captures
+  deterministic publish-gate contract validation failures (Tier 0 evidence; export/signing
+  eligible).
+- **Run results summary (recommended):** `runs/<run_id>/run_results.json` is the compact,
+  contract-backed status/metrics summary used for CI time-to-signal when present.
+- **Run log:** `runs/<run_id>/logs/run.log` is the required human-readable operator log. It is
+  volatile diagnostics and is excluded from default exports and signing/checksum scope (ADR-0009).
 
 Stages MUST publish via deterministic filesystem semantics: write into a staging location, validate
 contract-backed outputs at the publish gate, then atomically publish into the run bundle. A stage is
@@ -114,6 +121,8 @@ derivation and stage outcome semantics are defined in ADR-0005 and the data cont
   cache can influence stage outputs, the run MUST emit deterministic cache provenance under
   `logs/cache_provenance.json` and reporting MUST summarize cache provenance without relying on
   non-deterministic host state. See the configuration reference and reporting specification.
+- Export/signing scope MUST treat `logs/` as mixed: deterministic evidence logs are included, and
+  volatile diagnostics (for example `logs/run.log`) are excluded by default. See ADR-0009.
 
 ### Contract-driven, stage-scoped execution
 
@@ -164,6 +173,10 @@ outcomes, including:
 - Optional signing as a stage with explicit failure semantics and deterministic signature metadata.
 - Contract registry and publish-gate validation as the mechanism that makes the run bundle layout
   and artifact schemas mechanically enforceable.
+- Contract Spine as the canonical seam for contract registry resolution, publish-gate validation,
+  deterministic serialization, reader semantics, and CI conformance.
+- Run export policy and `logs/` classification (deterministic evidence vs volatile diagnostics) for
+  safe default exports and signing/checksum coverage.
 - Plan cardinality note (v0.1):
   - The canonical v0.1 plan shape is a single Atomic action resolved to exactly one target asset
     (1:1 action↔target).
@@ -186,6 +199,10 @@ minimum:
   inputs hashes, stage outcomes, and run status derivation inputs. See the
   [data contracts specification](025_data_contracts.md) and
   [ADR-0001](../adr/ADR-0001-project-naming-and-versioning.md).
+- **Run results summary** (recommended): `run_results.json` capturing a compact, deterministic
+  decision surface for CI (`status` and key metric snapshots). See the
+  [data contracts specification](025_data_contracts.md) and
+  [CI operational readiness specification](105_ci_operational_readiness.md).
 - **Inventory snapshot**: a run-scoped snapshot that preserves the resolved target set even if the
   provider state changes later. See the [lab providers specification](015_lab_providers.md).
 - **Ground truth timeline**: `ground_truth.jsonl`, one action per line, including deterministic
@@ -198,8 +215,10 @@ minimum:
   surface for canaries and safeguards (for example, network egress policy enforcement). See the
   [operability specification](110_operability.md) and the telemetry pipeline spec.
 - **Normalized event store**: `normalized/**` as the canonical normalized dataset for downstream
-  detection and scoring, with mapping coverage outputs (`normalized/mapping_coverage.json`). See the
-  [normalization specification](050_normalization_ocsf.md).
+  detection and scoring, with mapping coverage outputs (`normalized/mapping_coverage.json`) and a
+  mapping profile snapshot (`normalized/mapping_profile_snapshot.json`). See the
+  [normalization specification](050_normalization_ocsf.md) and
+  [data contracts specification](025_data_contracts.md).
 - **Bridge artifacts**: `bridge/**` containing the Sigma-to-OCSF mapping pack snapshot, compiled
   plans, and bridge coverage for reproducibility. See the
   [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md).
@@ -217,13 +236,17 @@ minimum:
 - **Health signals** (when enabled): `logs/health.json` emitting per-stage outcomes and substage
   health for operator triage and mechanical gating. See the
   [operability specification](110_operability.md).
+- **Run log** (required): `logs/run.log` as the stable human-readable operator log for triage. It is
+  volatile diagnostics and MUST NOT be included in default export or signing/checksum scope. See
+  ADR-0005 and ADR-0009.
 - **Regression baseline reference** (optional when regression is enabled):
   - `inputs/baseline/manifest.json` (preferred snapshot form), and/or
   - `inputs/baseline_run_ref.json` (allowed pointer form), materialized deterministically during
     reporting publish. See the [storage formats specification](045_storage_formats.md) and
     [reporting specification](080_reporting.md).
 - **Optional signing artifacts** (when enabled): `security/**` with deterministic signature metadata
-  and checksums. See ADR-0004 and the security/safety spec.
+  and checksums covering the default export set (including deterministic evidence logs and excluding
+  volatile diagnostics per ADR-0009). See ADR-0004, ADR-0009, and the security/safety spec.
 
 Notes on required artifact paths (v0.1):
 
@@ -232,6 +255,8 @@ Notes on required artifact paths (v0.1):
   `manifest.json`.
 - **Run counters (operability + CI):** `logs/counters.json` is the stable per-run counters and
   gauges surface used for deterministic triage and CI assertions.
+- **Run log:** `logs/run.log` is the required human-readable operator log. It may contain
+  environment-specific strings and MUST NOT be exported by default (ADR-0009).
 - **Run timeline (reporting):** `report/run_timeline.md` is a deterministic, human-readable run
   chronology derived from `manifest.json` and `ground_truth.jsonl` (UTC), intended as an
   operator-friendly single-file summary and export anchor.
@@ -296,13 +321,17 @@ Purple Axiom v0.1 is considered "done" when:
   that failures can be triaged mechanically using `(stage, status, fail_mode, reason_code)`. See the
   [stage outcomes ADR](../adr/ADR-0005-stage-outcomes-and-failure-classification.md).
 - The run produces the required contracted artifacts (at minimum: `manifest.json`,
-  `ground_truth.jsonl`, `normalized/**`, `detections/detections.jsonl`, `scoring/summary.json`,
-  `report/report.json`, `report/thresholds.json`, and `logs/telemetry_validation.json`), and missing
-  required artifacts are treated as contract failures (fail closed).
+  `ground_truth.jsonl`, `normalized/**` (including `normalized/mapping_coverage.json` and
+  `normalized/mapping_profile_snapshot.json`), `detections/detections.jsonl`,
+  `scoring/summary.json`, `report/report.json`, `report/thresholds.json`, and
+  `logs/telemetry_validation.json`), and missing required artifacts are treated as contract failures
+  (fail closed).
 - The “at minimum” artifact list above is a convenience summary and is non-exhaustive; the
   authoritative minimum outputs are defined per-stage and enforced via publish-gate validation.
   - For avoidance of doubt in v0.1, reportable runs also require `logs/lab_inventory_snapshot.json`,
-    `logs/counters.json`, and `report/run_timeline.md`.
+    `logs/counters.json`, `logs/run.log`, and `report/run_timeline.md`.
+  - `run_results.json` is RECOMMENDED as the compact CI decision surface (see the data contracts
+    spec and CI operational readiness spec).
   - The detection stage’s minimum output surface also includes `bridge/**` (including
     `bridge/coverage.json`) for reproducibility and downstream reporting inputs.
 - Run status and CI signaling are consistent and mechanical:
@@ -316,6 +345,9 @@ Purple Axiom v0.1 is considered "done" when:
 - When regression comparison is enabled, the reporting stage materializes a deterministic baseline
   reference and produces deterministic comparability checks and delta outputs, failing closed when
   baseline compatibility requirements are not met. See the reporting and storage formats specs.
+- When export bundles are produced and/or signing is enabled, default export selection and
+  signing/checksum scope MUST follow ADR-0009 (deterministic evidence logs included; volatile
+  diagnostics excluded by default).
 - Safety defaults are enforced (isolation/egress deny and fail-closed behavior), and redaction /
   quarantine rules prevent secret-like identifiers from being disclosed in reports by default. See
   the security/safety spec and redaction policy ADR.
@@ -327,6 +359,8 @@ Normative or orienting references for v0.1:
 - [Scope and non-goals specification](010_scope.md) (in-scope and out-of-scope boundaries)
 - [Lab providers specification](015_lab_providers.md) (inventory snapshotting, asset identity)
 - [Architecture specification](020_architecture.md) (stage boundaries, component responsibilities)
+- [Contract Spine specification](026_contract_spine.md) (publish-gate validation, deterministic
+  serialization, reader semantics, CI conformance)
 - [Telemetry pipeline specification](040_telemetry_pipeline.md) (collection and validation surfaces)
 - [Storage formats specification](045_storage_formats.md) (artifact tiers, schema evolution,
   regression baseline references)
@@ -350,6 +384,8 @@ Normative or orienting references for v0.1:
 - [Security and safety specification](090_security_safety.md) (safety posture, boundaries,
   redaction, secrets)
 - [Test strategy CI specification](100_test_strategy_ci.md) (fixtures, CI gates, determinism checks)
+- [CI operational readiness specification](105_ci_operational_readiness.md) (decision surfaces,
+  required CI artifacts, status coupling)
 - [Operability specification](110_operability.md) (health signals, canaries, resource safeguards)
 - [Configuration reference](120_config_reference.md) (configuration determinism and secret reference
   rules)
@@ -365,11 +401,14 @@ Normative or orienting references for v0.1:
   outcomes taxonomy and CI gating implications)
 - [ADR-0006: Plan execution model](../adr/ADR-0006-plan-execution-model.md) (reserved multi-target
   and matrix plan semantics)
+- [ADR-0009: Run export policy and log classification](../adr/ADR-0009-run-export-policy-and-log-classification.md)
+  (deterministic evidence logs allowlist, default export, signing/checksum scope)
 
 ## Changelog
 
 | Date       | Change                                                                                                                                                                                                                           |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-12 | Align charter with `run_results.json`, required `logs/run.log`, normalization mapping profile snapshot, Contract Spine, and ADR-0009 export/signing scope                                                                        |
 | 2026-01-24 | Clarify run-bundle anchors (lock + staging), make status derivation/quality-gate representation explicit, and enumerate `logs/lab_inventory_snapshot.json`, `logs/counters.json`, and `report/run_timeline.md` as v0.1 artifacts |
 | 2026-01-19 | Align charter with publish-gate validation, manifest/status semantics, thresholds/regression, and expanded references                                                                                                            |
 | 2026-01-17 | Add bridge artifacts to MVP outcomes; expand references section                                                                                                                                                                  |

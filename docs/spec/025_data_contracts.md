@@ -28,6 +28,35 @@ This specification defines the contract-backed artifacts in a Purple Axiom run b
 Contracts are enforced via JSON Schemas under `docs/contracts/` plus a small set of cross-artifact
 invariants that cannot be expressed in JSON Schema alone.
 
+## Search map
+
+This section is non-normative. It exists to improve local navigation (especially for ripgrep-based
+workflows) in this large document.
+
+- `docs/contracts/contract_registry.json` — registry shape, bindings, and validation dispatch keys.
+  - See section: "Contract registry"
+- `glob_v1` / `artifact_glob` — canonical glob grammar and matching rules used by bindings.
+  - See section: "Glob semantics (glob_v1) (normative)"
+- `validation_mode` — authoritative parse/validation mode (`json_document`, `jsonl_lines`,
+  `yaml_document`).
+  - See section: "Validation mode metadata (normative)"
+- `pa.publisher.v1` / publish gate — staging → validate → report → atomic publish semantics.
+  - See section: "Producer tooling: reference publisher semantics (pa.publisher.v1)"
+- `pa.reader.v1` / inventory — canonical run discovery, artifact inventory, and stable error codes.
+  - See section: "Consumer tooling: reference reader semantics (pa.reader.v1)"
+- `evidence_refs[]` / `json_pointer:` / `jsonl_line:` — shared evidence pointer shape + selector
+  grammar.
+  - See section: "Evidence references (shared shape)"
+- `stage_enablement_matrix_v1` / `expr_v1` — deterministic stage enablement and required outputs
+  mapping.
+  - See section: "Stage enablement and required contract outputs (v0.1)"
+- `contracts_bundle_sha256` / `tree_basis_v1` — reproducible contracts bundle hashing for historical
+  validation.
+  - See section: "Deterministic bundle hash (normative)"
+- `security/checksums.txt` / `signature.ed25519` — signing scope, deterministic selection, and
+  formats.
+  - See section: "Optional invariants: run bundle signing"
+
 ## Overview
 
 Summary: This spec defines the artifact schemas, run bundle layout, and cross-artifact invariants
@@ -183,12 +212,13 @@ Metacharacters (normative):
   - Ranges are supported: `[a-z]` matches any character whose Unicode scalar value is between `a`
     and `z` (inclusive).
     - `-` denotes a range only when it appears between two characters; otherwise `-` is literal.
-- Recursive segment \`\` is supported and matches zero or more complete path segments (including
+- Recursive segment `**` is supported and matches zero or more complete path segments (including
   none), allowing matches across `/`.
-  - \`\` is special ONLY when it forms an entire segment (delimited by `/` or string boundaries).
-    Examples: `/executor.json`, `runner//executor.json`, `runner/actions/`.
-  - Any occurrence of \`\` adjacent to other characters in the same segment (for example `ab`) is
-    invalid in `glob_v1`.
+  - `**` is special ONLY when it forms an entire segment (delimited by `/` or string boundaries).
+    Examples: `**/executor.json`, `runner/**/executor.json`, `runner/actions/**/executor.json`.
+  - `**` MAY match zero segments. Example: `runner/**/executor.json` matches `runner/executor.json`.
+  - Any occurrence of `**` adjacent to other characters in the same segment (for example `ab**` or
+    `**cd`) is invalid in `glob_v1`.
 
 Pattern validity and fail-closed behavior (normative):
 
@@ -392,7 +422,7 @@ A detection content bundle directory MUST have the following structure:
 ```text
 <content_bundle_root>/
   detection_content_bundle_manifest.json
-  CHANGELOG.md                       # optional
+  CHANGELOG.md                       # optional but RECOMMENDED
   security/
     checksums.txt
     signature.ed25519                # optional
@@ -419,6 +449,8 @@ Where:
 - `<rule_id>` MUST be the Sigma rule identifier string as used in run artifacts
   (`detections/detections.jsonl.rule_id` and `bridge/compiled_plans/<rule_id>.plan.json.rule_id`).
   - Producers MUST fail closed if a selected rule lacks a stable `rule_id`.
+- `CHANGELOG.md` is optional but RECOMMENDED. When present, it MUST be included in integrity
+  verification via `security/checksums.txt` (and signature when present).
 
 Ruleset snapshot normalization (normative):
 
@@ -1515,6 +1547,68 @@ Verification hook (normative):
   `canonical_json_bytes(pa.inventory.v1)` output (see `100_test_strategy_ci.md`).
 
 ## Artifact contracts
+
+### Artifact contract block template (copy/paste; non-normative)
+
+Use this template when adding a new artifact contract section under "Artifact contracts". The goal
+is consistent structure and predictable ripgrep targets (`Contract ID:`, `Location:`, etc.).
+
+Contract summary (searchable; RECOMMENDED to keep near the top of each artifact section):
+
+- Contract ID: `<contract_id>`
+- Contract version: `<contract_version>` (schema constant)
+- Schema path: `docs/contracts/<schema_file>.schema.json`
+- Location: `<run-relative path>` (or a small, explicit set of paths)
+- Contract registry binding:
+  - `artifact_glob`: `<glob_v1 pattern>`
+  - `validation_mode`: `<json_document | jsonl_lines | yaml_document>`
+  - `stage_owner`: `<stage_id>`
+- Notes: `<optional, redaction-safe>`
+
+Recommended section skeleton (use only what applies):
+
+Purpose:
+
+- `<why this artifact exists>`
+
+Location (normative):
+
+- `<run-relative path>`
+
+Validation (normative):
+
+- Must validate against `<schema_file>.schema.json`.
+- `<any cross-artifact invariants, if applicable>`
+
+Contract registry binding (normative):
+
+- `artifact_glob`: `<pattern>`
+- `contract_id`: `<contract_id>`
+- `schema_path`: `docs/contracts/<schema_file>.schema.json`
+- `validation_mode`: `<mode>`
+
+Minimum required fields (normative):
+
+- `<list the minimum fields not already obvious from the schema constant keys>`
+
+Type constraints (normative; when not fully captured by schema):
+
+- `<constraints>`
+
+Determinism constraints (normative):
+
+- `<ordering rules, canonical bytes rules, stable IDs, forbidden volatile fields>`
+
+Failure behavior (normative; if this artifact is produced at a gate boundary):
+
+- `<how failures are recorded (stage outcome, reason_code), and whether fail-closed applies>`
+
+Conformance tests (normative):
+
+- CI MUST include:
+  - one valid fixture for this artifact, and
+  - one invalid fixture that exercises a key constraint, and
+  - (when applicable) a determinism fixture proving stable ordering / stable bytes.
 
 ### Evidence references (shared shape)
 

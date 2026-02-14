@@ -13,8 +13,10 @@ related:
   - 035_validation_criteria.md
   - 040_telemetry_pipeline.md
   - 050_normalization_ocsf.md
+  - 060_detection_sigma.md
   - 065_sigma_to_ocsf_bridge.md
   - 080_reporting.md
+  - 105_ci_operational_readiness.md
   - 110_operability.md
   - ../../SUPPORTED_VERSIONS.md
   - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
@@ -92,13 +94,36 @@ Content CI MUST be runnable without a lab provider and MUST include, at minimum:
 
 - Contract Spine conformance gate (contract registry invariants, canonical serialization,
   publisher/reader conformance) (see `026_contract_spine.md`).
+- Sigma ruleset determinism + uniqueness + required metadata (see `060_detection_sigma.md`).
+- Mapping pack validation + router determinism (see `065_sigma_to_ocsf_bridge.md`).
+- Sigma compilation to compiled plans (`bridge_compiled_plan`) for the selected backend (see
+  `065_sigma_to_ocsf_bridge.md`).
+- Compiled plan semantic validation (see `065_sigma_to_ocsf_bridge.md`, "Compiled plan semantic
+  validation policy").
+- Contract/schema validation for any content-like artifacts under test (mapping packs, criteria
+  packs, compiled plans, Baseline Detection Packages, etc.).
+- Static semantic checks (see "Static semantic checks").
 - Unit tests that do not require a lab provider (this section).
-- Contract/schema validation for content-like artifacts under test (criteria packs, mapping pack
-  snapshots, compiled plans, etc.).
-- Sigma compilation + semantic validation (see "Sigma compilation (bridge)").
-- Rule-level unit tests when fixtures are present (see "Sigma rule unit tests").
+- Detection Content Release (detection content bundle) build + offline validation (see
+  `025_data_contracts.md`, "Detection content bundle distribution and validation").
 
 Content CI MUST fail closed when compilation or validation cannot be completed deterministically.
+
+Verification hook (normative): CI workflow MUST fail a pull request that breaks compilation or
+validation without spinning up a lab provider.
+
+Content CI harness fixture suite (normative):
+
+- CI MUST include at least one end-to-end fixture suite that executes the `ci-content` entrypoint
+  against deterministic fixture workspaces without a lab provider.
+- The fixture suite MUST assert expected exit codes deterministically for both a passing and a
+  failing case.
+- Canonical fixture root: `tests/fixtures/ci/content_ci_harness/` (see "Fixture index").
+- Each fixture case under `tests/fixtures/ci/content_ci_harness/<case>/` MUST include:
+  - `inputs/workspace/` as the workspace root to run `ci-content` against, and
+  - `expected/expected_exit_code.txt` containing `0` or `20` (ASCII, trailing newline optional).
+- The fixture runner MUST invoke `ci-content` with the working directory set to `inputs/workspace/`
+  for the case.
 
 ### Run CI gate set (normative)
 
@@ -106,10 +131,52 @@ Run CI MUST include, at minimum:
 
 - The evaluator conformance harness executed against at least one pinned Baseline Detection Package
   (BDP) or equivalent pinned event fixture set (see "Evaluator conformance harness").
-- At least one end-to-end “golden run” bundle when a lab provider is available (RECOMMENDED).
+- At least one end-to-end “golden run” bundle executed in a minimal lab profile when a lab provider
+  is available (RECOMMENDED).
 
 Run CI MAY be triggered less frequently than Content CI (for example on merge-to-main and/or on
 release), but MUST be executed before release publication.
+
+### Static semantic checks
+
+Static semantic checks are deterministic validations that go beyond schema validation and
+compilation success. They are intended to catch authoring errors early (in Content CI) instead of
+surfacing later during integration (Run CI).
+
+Content CI MUST run the static semantic checks defined in this section. Implementations MAY add
+additional checks, but any added checks MUST preserve determinism (stable ordering, stable error
+classification, no network fetch).
+
+#### determinism-critical checks
+
+These checks are determinism-critical and MUST be treated as **errors** in Content CI.
+
+Minimum checks (normative):
+
+- Sigma authoring invariants: enforce deterministic rule discovery, unique `id`, and required rule
+  metadata per `060_detection_sigma.md`.
+- Router determinism: for each Sigma rule `logsource`, routing via the selected mapping pack MUST
+  yield a single deterministic route; ambiguous routing MUST fail closed.
+- Mapping pack referential integrity: mapping pack references (classes, aliases, transforms) MUST
+  resolve; dangling references MUST fail closed.
+- Criteria pack integrity (when criteria packs are present in the change): pack manifests and
+  entries MUST validate and integrity hashes MUST recompute successfully per
+  `035_validation_criteria.md`.
+
+#### quality/hygiene checks
+
+These checks are deterministic quality/hygiene checks. They SHOULD run in Content CI and SHOULD be
+surfaced in pull request feedback, but they MAY be treated as warnings by default.
+
+Minimum checks (normative):
+
+- ATT&CK tag hygiene: rules SHOULD include at least one valid `attack.t*` tag; missing tags SHOULD
+  emit a warning (rules remain eligible for evaluation as defined in `060_detection_sigma.md`).
+- Documentation hygiene: rules SHOULD include `references` when available; missing references SHOULD
+  emit a warning.
+
+Verification (normative): the Content CI harness fixture suite MUST include at least one failing
+case that triggers a static semantic check and MUST assert exit code `20` for that case.
 
 ## Fixture index
 
@@ -136,16 +203,18 @@ Conventions (normative):
 | Cross-cutting: redaction (`pa.redaction.v1`)                             | `tests/fixtures/redaction/v1/`                                                                                                                                                        | `allowlist_smoke`, `denylist_smoke`, `stable_hashes`                                                                                                    |
 | Cross-cutting: integration credentials (`pa.integration_credentials.v1`) | `tests/fixtures/integration_credentials/v1/`                                                                                                                                          | `logs_redaction_smoke`, `artifact_absence_smoke`, `missing_fails_closed`, `invalid_fails_closed`                                                        |
 | Cross-cutting: run results summary (`run_results`)                       | `tests/fixtures/run_results/`                                                                                                                                                         | `run_results_contract_and_hash`                                                                                                                         |
+| Cross-cutting: detection content bundle (`detection_content_release_v1`) | `tests/fixtures/content_bundles/detection_content_release_v1/`                                                                                                                        | `content_bundle_offline_validation_smoke`, `run_plus_content_bundle_validation_smoke`                                                                   |
 | `lab_provider`                                                           | `tests/fixtures/lab_providers/`                                                                                                                                                       | `provider_smoke`, `failure_mapping_smoke`                                                                                                               |
 | `runner`                                                                 | `tests/fixtures/runner/lifecycle/`<br>`tests/fixtures/runner/state_reconciliation/`<br>`tests/fixtures/runner/noise_profile/`                                                         | `lifecycle_smoke`, `invalid_transition_blocked`, `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`, `noise_profile_canonicalization_crlf_lf` |
 | `telemetry`                                                              | `tests/fixtures/telemetry/synthetic_marker/`<br>`tests/fixtures/unix_logs/`<br>`tests/fixtures/osquery/`                                                                              | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`                                                                                            |
 | `normalization`                                                          | `tests/fixtures/normalization/`                                                                                                                                                       | `tier1_core_common_smoke`, `actor_identity_smoke`                                                                                                       |
-| `validation` (criteria evaluation)                                       | `tests/fixtures/criteria/`                                                                                                                                                            | `criteria_time_window_smoke`, `criteria_eval_smoke`                                                                                                     |
+| `validation` (criteria evaluation)                                       | `tests/fixtures/criteria/`                                                                                                                                                            | `criteria_time_window_smoke`, `criteria_eval_smoke`, `criteria_authoring_compile_smoke`, `criteria_pack_lint_smoke`                                     |
 | `detection` (Sigma + Bridge)                                             | `tests/fixtures/sigma_rule_tests/<test_id>/`                                                                                                                                          | `rule_smoke`, `unsupported_feature_rejected`                                                                                                            |
 | `scoring`                                                                | `tests/fixtures/scoring/`                                                                                                                                                             | `regression_comparables_smoke`                                                                                                                          |
 | `reporting`                                                              | `tests/fixtures/reporting/defense_outcomes/`<br>`tests/fixtures/reporting/thresholds/`<br>`tests/fixtures/reporting/regression_compare/`<br>`tests/fixtures/reporting/report_render/` | `defense_outcomes_attribution_v1`, `thresholds_contract_and_ordering`, `regression_compare_smoke`, `report_render_smoke`                                |
 | `signing` (when enabled)                                                 | `tests/fixtures/signing/`                                                                                                                                                             | `checksums_smoke`, `tamper_detected`                                                                                                                    |
 | Content governance: golden datasets                                      | `tests/fixtures/golden_datasets/governance/`                                                                                                                                          | `valid_minimal_golden`, `missing_required_artifact_fails`                                                                                               |
+| CI harness: Content CI                                                   | `tests/fixtures/ci/content_ci_harness/`                                                                                                                                               | `smoke_pass`, `smoke_fail`                                                                                                                              |
 
 ## Unit tests
 
@@ -407,12 +476,14 @@ each compiled plan (see `065_sigma_to_ocsf_bridge.md`, "Compiled plan semantic v
 Unit tests MUST include fixtures that demonstrate deterministic rejection / classification for:
 
 - Invalid field reference: a plan referencing an OCSF path that does not exist in the pinned OCSF
-  schema MUST be rejected deterministically.
+  schema MUST be rejected deterministically with `reason_code="unmapped_field"` and an explanation
+  beginning with `PA_BRIDGE_INVALID_OCSF_PATH:`.
 - Prohibited regex: a plan containing a regex that violates the configured regex safety limits MUST
-  be rejected deterministically with `reason_code="unsupported_regex"` and a stable
-  `PA_BRIDGE_REGEX_POLICY_VIOLATION` code in the explanation.
-- Missing required scoping: a plan that is missing required `class_uid` scope MUST fail closed with
-  a stable, machine-classifiable error (treat as a compiler/validator bug).
+  be rejected deterministically with `reason_code="unsupported_regex"` and an explanation beginning
+  with `PA_BRIDGE_REGEX_POLICY_VIOLATION:`.
+- Missing required scoping: a plan that is missing required `class_uid` scope MUST fail closed
+  deterministically with `reason_code="backend_compile_error"` and an explanation beginning with
+  `PA_BRIDGE_MISSING_SCOPE:` (treat as a compiler/validator bug)
 
 ### Sigma rule unit tests
 
@@ -881,6 +952,51 @@ Criteria drift detection tests validate that given a criteria pack manifest upst
 set criteria drift to detected and MUST mark affected actions `status=skipped` with a deterministic
 drift reason field.
 
+#### Criteria authoring compiler
+
+Fixture root (normative): `tests/fixtures/criteria/authoring_compile/`
+
+The fixture suite MUST validate the deterministic compiler defined in `035_validation_criteria.md`
+("Authoring format and deterministic compilation"):
+
+- Input: `criteria_authoring.csv` or `criteria_authoring.yaml`
+- Authoritative output: `criteria.jsonl`
+- Diagnostic output: `authoring_compile_report.json`
+
+Minimum required fixture cases (normative):
+
+- `criteria_authoring_compile_smoke`
+  - Includes at least one example row for each authoring operator (`equals`, `contains`, `regex`,
+    and one numeric compare operator).
+  - Includes at least one `ARG` row (argument environment + placeholder substitution).
+  - Includes at least one `FYI` row (ignored for compilation).
+  - Includes at least one skipped row using the `!!!` marker with a non-empty skip reason.
+  - Asserts byte-identical outputs for:
+    - compiled `criteria.jsonl` (including canonical ordering), and
+    - `authoring_compile_report.json` (canonical JSON), including `stable_signal_id` values.
+
+#### Criteria pack linter
+
+Fixture root (normative): `tests/fixtures/criteria/lint/`
+
+The fixture suite MUST validate the `criteria-pack` lint target kind described in `125_linting.md`.
+
+Minimum required fixture cases (normative):
+
+- `criteria_pack_lint_smoke`
+  - `missing_required_columns_rejected`:
+    - `criteria_authoring.csv` omits at least one required column for the row model.
+    - Expected: lint fails closed with rule_id `lint-criteria-pack-missing-required-columns`.
+  - `ambiguous_operator_rejected`:
+    - An authoring row uses an unknown operator token OR applies a numeric operator to a non-numeric
+      value OR uses a non-RE2-parseable regex.
+    - Expected: lint fails closed with rule_id `lint-criteria-pack-ambiguous-operator`.
+  - `canonical_ordering_enforced`:
+    - `criteria.jsonl` violates canonical ordering requirements (file ordering and/or
+      `expected_signals[]` ordering and/or `predicate.constraints[]` ordering).
+    - Expected: lint fails closed with rule_id `lint-criteria-pack-canonical-ordering` and includes
+      a stable remediation hint (minimum: the expected sort key).
+
 ### Reporting and scoring (defense outcomes + attribution)
 
 Reporting derives per-action defense outcomes. For v0.1, defense outcome derivation depends on
@@ -1293,6 +1409,28 @@ The fixture set MUST include at least:
   matching contracts bundle fixture (directory or tarball) and assert that contract validation
   succeeds with (a) network access disabled and (b) no repository checkout available (only the two
   bundles on disk).
+- `offline_content_bundle_validation_with_contracts_bundle`: Provide a valid detection content
+  bundle fixture and a matching contracts bundle fixture (directory or tarball) and assert that
+  content bundle offline validation succeeds with (a) network access disabled and (b) no repository
+  checkout available (only the two bundles on disk).
+  - The fixture MUST exercise, at minimum:
+    - `detection_content_bundle_manifest.json` schema validation via the resolved contracts bundle
+    - `security/checksums.txt` format validation and per-file SHA-256 recomputation
+    - Ed25519 signature verification when signature artifacts are present
+- `offline_run_validation_with_content_bundle_and_contracts_bundle`: Provide a valid run bundle
+  fixture, a matching detection content bundle fixture, and a matching contracts bundle fixture and
+  assert that run + content provenance validation succeeds with (a) network access disabled and (b)
+  no repository checkout available (only the three bundles on disk).
+  - The fixture MUST exercise, at minimum:
+    - Version pin compatibility between `runs/<run_id>/manifest.json` and
+      `detection_content_bundle_manifest.json` (ruleset, mapping pack, and criteria pack when
+      pinned)
+    - Bridge compatibility via `bridge/mapping_pack_snapshot.json.mapping_pack_sha256`
+    - Per-rule provenance: the run’s `bridge/compiled_plans/<rule_id>.plan.json.rule_sha256` must
+      match the recomputed canonical rule hash of the corresponding ruleset file inside the content
+      bundle
+  - The fixture suite MUST include at least one negative (fail-closed) case (for example a
+    mismatched `mapping_pack_sha256` or missing referenced `rules/<rule_id>.yaml`).
 - `stage_isolation_fixture_per_stage` (per-stage seam fixtures; independent stage build)
   - Normative rule: Each stage MUST have at least one stage-isolation fixture that contains the
     minimum upstream artifacts required to run that stage and produces contract-valid outputs for

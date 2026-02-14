@@ -476,6 +476,37 @@ Reference checks SHOULD be included when resolution rules are available:
 
 - existence checks for referenced plans, rule packs, mappings, or supporting assets.
 
+### Target kind `criteria-pack`
+
+Intended for criteria pack authoring directories (repository packs under `criteria/packs/**` and run
+snapshots under `criteria/`).
+
+Minimum rule requirements:
+
+- Detect missing required pack files:
+  - `manifest.json`
+  - `criteria.jsonl`
+- If an authoring input is present (`criteria_authoring.yaml` or `criteria_authoring.csv`):
+  - Reject ambiguous operator usage (unknown operator tokens; missing operator/value; numeric
+    compare operators applied to non-numeric values; regex patterns that are not RE2-parseable).
+  - Detect missing required columns/fields for the row model (see `035_validation_criteria.md`,
+    "Authoring format and deterministic compilation").
+  - Enforce the deterministic precedence rule: both authoring files MUST NOT be present at the same
+    time.
+- Enforce canonical ordering of the compiled criteria output:
+  - `criteria.jsonl` line ordering,
+  - `expected_signals[]` ordering,
+  - `predicate.constraints[]` ordering, as defined in `035_validation_criteria.md`, "Canonical
+    ordering for criteria.jsonl".
+
+Required rule IDs (normative):
+
+- `lint-criteria-pack-missing-required-files`
+- `lint-criteria-pack-missing-required-columns`
+- `lint-criteria-pack-ambiguous-operator`
+- `lint-criteria-pack-canonical-ordering`
+- `lint-criteria-pack-multiple-authoring-sources`
+
 ### Target kind `plan-draft`
 
 Intended for `inputs/plan_draft.yaml` in v0.2+.
@@ -568,6 +599,10 @@ Implementations MUST provide tests that assert:
   - multi-document YAML,
   - custom tags,
   - non-JSON-native scalar types.
+- Criteria pack linting fixtures cover:
+  - ambiguous operator usage,
+  - canonical ordering violations, and
+  - missing required columns/fields in authoring inputs.
 - Machine report schema conformance:
   - `lint.json` validates against the lint report schema.
   - golden fixtures ignore no fields because the report MUST avoid volatile metadata by design.
@@ -653,6 +688,7 @@ VS Code example mapping YAML schemas by file glob:
 - [Plan execution model](031_plan_execution_model.md)
 - [Detection Sigma](060_detection_sigma.md)
 - [Reporting](080_reporting.md)
+- [Validation criteria packs](035_validation_criteria.md)
 - [Test strategy and CI](100_test_strategy_ci.md)
 - [CI operational readiness](105_ci_operational_readiness.md)
 - [Operator Interface](115_operator_interface.md)

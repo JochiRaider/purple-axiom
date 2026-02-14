@@ -12,6 +12,43 @@ This document defines the v0.1 scope boundaries for Purple Axiom and the explici
 shape the initial release. It highlights what the pipeline must support, which contracts are
 reserved for later, and the operating assumptions used throughout the spec set.
 
+## Quick navigation
+
+- [Scope and non-goals](#scope-and-non-goals)
+  - [Quick navigation](#quick-navigation)
+  - [Scope](#scope)
+  - [In scope for v0.1](#in-scope-for-v01)
+    - [Canonical v0.1 coordination and path conventions](#canonical-v01-coordination-and-path-conventions)
+      - [Workspace and run-bundle roots](#workspace-and-run-bundle-roots)
+      - [Orchestrator and publish-gate artifacts](#orchestrator-and-publish-gate-artifacts)
+      - [Deterministic evidence logs](#deterministic-evidence-logs)
+      - [Integrity artifacts](#integrity-artifacts)
+      - [Export bundle locations](#export-bundle-locations)
+      - [Regression baseline inputs](#regression-baseline-inputs)
+      - [Path semantics and `inputs/**` immutability](#path-semantics-and-inputs-immutability)
+    - [Execution topology](#execution-topology)
+    - [Canonical stage set](#canonical-stage-set)
+    - [Orchestrator entrypoints](#orchestrator-entrypoints)
+    - [CI operational readiness entrypoints](#ci-operational-readiness-entrypoints)
+    - [Contract-backed run bundles](#contract-backed-run-bundles)
+    - [Lab provider inventory resolution](#lab-provider-inventory-resolution)
+    - [Scenario execution](#scenario-execution)
+    - [Telemetry collection](#telemetry-collection)
+    - [Normalization into OCSF](#normalization-into-ocsf)
+    - [Validation and cleanup verification](#validation-and-cleanup-verification)
+    - [Detection evaluation and scoring](#detection-evaluation-and-scoring)
+    - [Reporting](#reporting)
+    - [Distributable bundles and authoring-time tooling](#distributable-bundles-and-authoring-time-tooling)
+    - [Security safety and operability guardrails](#security-safety-and-operability-guardrails)
+  - [Reserved and placeholder contracts](#reserved-and-placeholder-contracts)
+  - [Explicit non-goals for v0.1](#explicit-non-goals-for-v01)
+  - [Operating assumptions](#operating-assumptions)
+  - [Key decisions](#key-decisions)
+  - [References](#references)
+    - [Specifications](#specifications)
+    - [ADRs](#adrs)
+  - [Changelog](#changelog)
+
 ## Scope
 
 This document covers:
@@ -46,15 +83,23 @@ This scope document assumes the canonical v0.1 workspace and run-bundle coordina
 conventions below (see the architecture and data contracts specifications for full schemas and
 invariants):
 
+#### Workspace and run-bundle roots
+
 - Workspace root: `<workspace_root>/`
   - Reserved children: `runs/` (required), `exports/` (optional), `cache/` (optional), `state/`
     (reserved), `logs/` (reserved), and `plans/` (reserved).
 - Run bundle root (under the workspace root): `runs/<run_id>/`
 - Exclusive run lock: `runs/.locks/<run_id>.lock`
 - Publish-gate staging root: `runs/<run_id>/.staging/<stage_id>/`
+
+#### Orchestrator and publish-gate artifacts
+
 - Run results summary (orchestrator): `runs/<run_id>/run_results.json`
 - Contract validation failure reports (publish gate):
   `runs/<run_id>/logs/contract_validation/<stage_id>.json`
+
+#### Deterministic evidence logs
+
 - Deterministic evidence logs (a subset of `runs/<run_id>/logs/**`; included in default exports and
   checksums when present; see ADR-0009):
   - `runs/<run_id>/logs/health.json`
@@ -62,9 +107,14 @@ invariants):
   - `runs/<run_id>/logs/telemetry_validation.json` (when enabled)
   - `runs/<run_id>/logs/cache_provenance.json` (when caching is enabled)
   - `runs/<run_id>/logs/lab_inventory_snapshot.json`
+
+#### Integrity artifacts
+
 - Integrity artifacts (when enabled; see the storage formats spec):
   - `runs/<run_id>/security/checksums.txt`
   - `runs/<run_id>/security/signature.ed25519` (optional; signing stage)
+
+#### Export bundle locations
 
 Derived export bundles, when produced, are written outside `runs/` under the workspace export root:
 
@@ -72,10 +122,14 @@ Derived export bundles, when produced, are written outside `runs/` under the wor
 - Contracts bundle distributions: `exports/contracts_bundles/<bundle_id>/<bundle_version>/`
 - Baseline Detection Packages (BDP): `exports/baselines/<baseline_id>/<baseline_version>/`
 
+#### Regression baseline inputs
+
 Regression baseline materialization, when enabled, is owned by the reporting stage and uses:
 
 - `runs/<run_id>/inputs/baseline_run_ref.json`
 - `runs/<run_id>/inputs/baseline/**`
+
+#### Path semantics and `inputs/**` immutability
 
 Unless explicitly stated otherwise, file paths referenced in the spec set are run-relative (relative
 to `runs/<run_id>/` under `<workspace_root>/`).
@@ -85,14 +139,22 @@ to `runs/<run_id>/` under `<workspace_root>/`).
 `inputs/baseline/**` only when regression comparison is enabled; if they already exist, reporting
 MUST treat them as read-only and MUST NOT rewrite them.
 
+### Execution topology
+
 - One-shot, local-first run execution on a single run host.
   - Core stages coordinate via filesystem artifacts in `runs/<run_id>/`.
   - Core stages do not require service-to-service RPC for coordination in v0.1.
   - Stage outputs are published via staging + validation + atomic publish (publish gates), and
     stages are not considered complete until their outcomes are recorded.
+
+### Canonical stage set
+
 - A fixed, staged pipeline with stable stage identifiers and stage-scoped outputs:
   - `lab_provider`, `runner`, `telemetry`, `normalization`, `validation`, `detection`, `scoring`,
     `reporting`, and optional `signing`.
+
+### Orchestrator entrypoints
+
 - Orchestrator entrypoints (range lifecycle verbs) are in scope as an interface surface when
   exposed:
   - `simulate` performs the canonical v0.1 stage sequence.
@@ -103,12 +165,18 @@ MUST treat them as read-only and MUST NOT rewrite them.
   - `replay`, `export`, and `destroy` are permitted entrypoints (as defined in the architecture
     spec) but are not required to be implemented for v0.1 completeness. `destroy` is RECOMMENDED
     when lab providers provision or mutate lab resources.
+
+### CI operational readiness entrypoints
+
 - CI operational readiness entrypoints are also in scope as a required interface surface for v0.1
   implementations:
   - `ci-content` exercises Contract Spine validation, schema/lint gates, and content bundle
     build/validation in an offline-safe way.
   - `ci-run` exercises a representative end-to-end run in CI via either BDP replay or a minimal lab
     run, producing contract-backed `run_results.json` and reporting outputs.
+
+### Contract-backed run bundles
+
 - Contract-backed run bundles:
   - A manifest-driven run bundle layout, with deterministic hashing and provenance fields.
   - Publish-gate contract validation for contract-backed artifacts, with deterministic validation
@@ -120,6 +188,9 @@ MUST treat them as read-only and MUST NOT rewrite them.
     are treated as first-class run outputs.
   - Run-scoped session state and provenance (for example principal context and cache provenance)
     recorded under `runs/<run_id>/` (no global session DB required for correctness).
+
+### Lab provider inventory resolution
+
 - Pluggable lab inventory resolution via a lab provider interface:
   - Manual lab definitions are supported.
   - A local contract registry and Contract Spine define what must validate in v0.1 (no remote `$ref`
@@ -132,6 +203,9 @@ MUST treat them as read-only and MUST NOT rewrite them.
     (it is not “debug-only” despite living under `logs/`).
   - v0.1 conformance requires `lab.inventory.snapshot_to_run_bundle = true`; configurations that set
     it to `false` MUST be rejected.
+
+### Scenario execution
+
 - Scenario execution (runner):
   - Optional run-scoped environment configuration (`runner.environment_config`) is in scope when
     enabled, including baseline readiness checks and benign background activity/noise generation
@@ -164,6 +238,9 @@ MUST treat them as read-only and MUST NOT rewrite them.
       artifact at `runner/principal_context.json`.
     - Synthetic correlation marker emission and observability reporting, when enabled.
     - State reconciliation reporting (detect-and-report drift); repair/mutation is reserved.
+
+### Telemetry collection
+
 - Telemetry collection from lab assets (endpoint-first):
   - OpenTelemetry Collector-based capture is the normative path for endpoint telemetry.
   - Supported endpoint telemetry sources include:
@@ -183,6 +260,9 @@ MUST treat them as read-only and MUST NOT rewrite them.
   - When enabled, telemetry validation is published as a contract-backed summary artifact at
     `logs/telemetry_validation.json` and is referenced by scoring/reporting for mechanical gap
     attribution.
+
+### Normalization into OCSF
+
 - Normalization into OCSF:
   - Normalized events satisfy the required envelope and provenance rules.
   - Deterministic event identity and provenance rules are applied during normalization.
@@ -192,12 +272,18 @@ MUST treat them as read-only and MUST NOT rewrite them.
     fields are the primary coverage gating surface; Tier 2 (class minimums) and Tier 3 (Extended)
     fields are measured and reported but are not required for v0.1 completeness unless explicitly
     gated by configuration.
+
+### Validation and cleanup verification
+
 - Validation against expected telemetry (criteria packs) and cleanup verification:
   - Criteria pack snapshotting and deterministic selection (when enabled).
   - Criteria evaluation emits per-action results, including deterministic `skipped` reasons when an
     action cannot be evaluated under configured policy.
   - Cleanup verification outputs are first-class, contract-backed artifacts produced by the runner
     and consumed for validation/scoring/reporting.
+
+### Detection evaluation and scoring
+
 - Detection evaluation and scoring:
   - Sigma-based detection evaluation is in scope via a Sigma-to-OCSF bridge and deterministic
     executability classification.
@@ -207,6 +293,9 @@ MUST treat them as read-only and MUST NOT rewrite them.
     run summary.
   - Quality gates that downgrade a run (for example normalization or coverage gates) are expressed
     as deterministic stage outcomes and reason codes.
+
+### Reporting
+
 - Reporting:
   - Human-readable reporting derived from machine-readable artifacts (for example the scoring
     summary), plus machine-readable report artifacts intended for downstream automation and CI.
@@ -224,6 +313,9 @@ MUST treat them as read-only and MUST NOT rewrite them.
     - Only the reporting stage writes baseline artifacts under `inputs/**`; other stages MUST treat
       `inputs/**` as read-only pinned inputs.
     - Regression results are embedded in `report/report.json` (no separate regression output tree).
+
+### Distributable bundles and authoring-time tooling
+
 - Distributable bundles and authoring-time tooling:
   - Contracts bundle distributions and Detection Content Release bundles are in scope for v0.1 to
     enable offline validation and deterministic distribution of schemas and detection content.
@@ -233,6 +325,9 @@ MUST treat them as read-only and MUST NOT rewrite them.
   - Golden dataset governance and dataset release generation is in scope when enabled.
   - A CLI-first linting surface (`pa lint`) that emits a deterministic `lint-report.json` is in
     scope for fast authoring-time feedback in CI and local workflows.
+
+### Security safety and operability guardrails
+
 - Security, safety, and operability guardrails that make unattended continuous runs viable:
   - Redaction posture and deterministic redaction policy application for evidence artifacts.
   - Deterministic withheld/quarantine semantics for sensitive evidence when redaction is disabled.
@@ -350,6 +445,8 @@ The following are explicit non-goals for initial releases, including v0.1.
 
 ## References
 
+### Specifications
+
 - [Charter specification](000_charter.md)
 - [Lab providers specification](015_lab_providers.md)
 - [Architecture specification](020_architecture.md)
@@ -379,6 +476,9 @@ The following are explicit non-goals for initial releases, including v0.1.
 - [Operator interface specification](115_operator_interface.md)
 - [Configuration reference](120_config_reference.md)
 - [Linting specification](125_linting.md)
+
+### ADRs
+
 - [ADR-0002 "Event identity and provenance"](../adr/ADR-0002-event-identity-and-provenance.md)
 - [ADR-0003 "Redaction policy"](../adr/ADR-0003-redaction-policy.md)
 - [ADR-0004 "Deployment architecture and inter-component communication"](../adr/ADR-0004-deployment-architecture-and-inter-component-communication.md)

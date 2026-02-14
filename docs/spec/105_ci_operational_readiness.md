@@ -74,7 +74,8 @@ raise an issue to reconcile the discrepancy.
 - Run CI: A slower CI lane that executes integration checks by producing run bundles and/or
   evaluating detections against a pinned Baseline Detection Package (BDP).
 - Content-like artifact: A repository input that can be validated deterministically without
-  executing a scenario in a lab (for example Sigma rules, mapping packs, criteria packs, and BDPs).
+  executing a scenario in a lab (for example Sigma rules, mapping packs, criteria packs, detection
+  content bundles, and BDPs).
 - Fail-closed gate: A gate where any failure MUST yield a `failed` run status.
 - Threshold gate: A gate where violations degrade the run status to `partial` (or `failed` when the
   underlying contract requires hard failure) while keeping the run mechanically reportable.
@@ -119,13 +120,20 @@ Content CI MUST validate, at minimum:
    `065_sigma_to_ocsf_bridge.md`).
 1. Compiled plan semantic validation (see `065_sigma_to_ocsf_bridge.md`, "Compiled plan semantic
    validation policy").
+1. Detection Content Release (detection content bundle) build + offline validation (see
+   `025_data_contracts.md`, "Detection content bundle distribution and validation").
 1. Contract/schema validation for any content-like artifacts under test (examples: criteria packs,
-   BDP manifests).
+   detection content bundle manifests, BDP manifests).
+1. Static semantic checks (P0.2 and P0.3) (see `100_test_strategy_ci.md`, "Static semantic checks").
 1. Rule-level unit tests when fixtures are present (see `100_test_strategy_ci.md`, "Sigma rule unit
    tests").
 
 Verification hook (normative): Content CI MUST fail a pull request that breaks compilation or static
 validation without spinning up a lab provider.
+
+Content CI harness fixture suite (normative): CI MUST include an end-to-end fixture suite that
+executes the `ci-content` entrypoint deterministically without a lab provider (see
+`100_test_strategy_ci.md`, fixture root `tests/fixtures/ci/content_ci_harness/`).
 
 ### Run CI (slow, integration)
 

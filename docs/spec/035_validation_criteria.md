@@ -76,6 +76,8 @@ Notes:
 - `tests/fixtures/criteria/packs/`
 - `tests/fixtures/criteria/eval/`
 - `tests/fixtures/criteria_eval_smoke/`
+- `tests/fixtures/criteria/authoring_compile/`
+- `tests/fixtures/criteria/lint/`
 
 See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
 mapping.
@@ -112,6 +114,368 @@ Optional (non-contractual):
 
 - `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/README.md`
 - `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/CHANGELOG.md`
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/criteria_authoring.yaml`
+  - Optional authoring input (YAML 1.2, decoded per `pa.yaml_decode.v1`).
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/criteria_authoring.csv`
+  - Optional authoring input (RFC 4180 CSV; see "Authoring format and deterministic compilation").
+- `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/authoring_compile_report.json`
+  - Optional compiler output (canonical JSON) describing normalization, stable IDs, and any
+    warnings.
+
+## Authoring format and deterministic compilation
+
+Criteria packs MAY be authored directly as `criteria.jsonl`. This section defines an additional,
+optional authoring surface intended for:
+
+- spreadsheet-oriented editing,
+- explicit, minimal clause operators, and
+- deterministic compilation into the authoritative `criteria.jsonl`.
+
+### Authority and precedence
+
+Within a pack version directory (`criteria/packs/<criteria_pack_id>/<criteria_pack_version>/`):
+
+- `criteria.jsonl` is the authoritative evaluation input (and the basis of `criteria_sha256`).
+- `criteria_authoring.yaml` and `criteria_authoring.csv` (if present) are non-authoritative inputs
+  to a deterministic compiler.
+- `authoring_compile_report.json` (if present) is non-authoritative diagnostic metadata.
+
+Deterministic precedence rules:
+
+- A pack MUST NOT contain both `criteria_authoring.yaml` and `criteria_authoring.csv`.
+  - If both are present, the pack MUST be treated as misconfigured.
+- If an authoring file is present, the repository SHOULD treat `criteria.jsonl` as a generated file
+  and SHOULD keep it in sync via the compiler.
+
+Rationale: pack hashes and run reproducibility are anchored on `criteria.jsonl` and `manifest.json`.
+Authoring inputs must never change evaluation semantics unless they are compiled into the
+authoritative artifacts.
+
+### Common row model
+
+Both YAML and CSV authoring formats are normalized into a common conceptual "row" model.
+
+A row has:
+
+- `row_kind` (string enum): `SIG` | `ARG` | `FYI`
+- `skip` (optional string): if present, MUST equal `!!!`
+- `skip_reason` (string; required when `skip="!!!"`)
+- `engine`, `technique_id`, `engine_test_id` (required for `SIG` and `ARG`; optional for `FYI`)
+- `entry_id` (optional string; if omitted, the compiler generates one deterministically; REQUIRED to
+  disambiguate when multiple entries share the same join keys and selectors)
+- `signal_id` (optional string; `SIG` only; if omitted, the row defines a single-clause expected
+  signal and the compiler generates a deterministic `signal_id`)
+- `class_uid` (required int; `SIG` only)
+- `field` (required string; `SIG` only; dotted OCSF path)
+- `op` (required string; `SIG` only; see Operator set)
+- `value` (required for all operators in the authoring operator set)
+- `case_sensitive` (optional bool; applies to string operators only; defaults to true)
+
+Row-kind-specific fields:
+
+- For `ARG` rows:
+  - `arg_name` (required string)
+  - `arg_value` (required string)
+- For `FYI` rows:
+  - `message` (required string)
+
+Rows marked with `skip="!!!"` are ignored for compilation but MUST be recorded in the compile report
+(with `skip_reason`).
+
+Additional optional fields (supported):
+
+- `selectors.os` (optional string)
+- `selectors.executor` (optional string)
+- `selectors.roles` (optional string; comma-separated tokens; normalized as a set)
+- `before_seconds`, `after_seconds` (optional int; entry time-window overrides)
+- `min_count`, `max_count`, `within_seconds` (optional int; `SIG` only)
+- `description` (optional string; `SIG` only)
+
+#### YAML encoding
+
+`criteria_authoring.yaml` MUST decode to a JSON-compatible object per `pa.yaml_decode.v1` and MUST
+have this shape:
+
+- Top-level object: mapping
+  - `schema_version` (required string): `pa:criteria-authoring:v1`
+  - `rows` (required array): each element is a row object whose keys are the row fields above
+
+Unknown top-level keys and unknown row keys MUST be rejected.
+
+#### CSV encoding
+
+`criteria_authoring.csv` MUST have a header row. Column names MUST be the row field names above,
+using literal dots for nested names (for example `selectors.roles`).
+
+Required columns (normative):
+
+- Always required: `row_kind`, `skip`, `skip_reason`
+- Required when any row is `SIG` or `ARG`: `engine`, `technique_id`, `engine_test_id`
+- Required when any row is `SIG`: `class_uid`, `field`, `op`, `value`
+- Required when any row is `ARG`: `arg_name`, `arg_value`
+- Required when any row is `FYI`: `message`
+
+Empty cells represent omitted optional fields.
+
+### Operator set
+
+The authoring compiler MUST accept only the following operator set for `SIG` rows:
+
+- String operators:
+  - `equals`
+  - `contains`
+  - `regex`
+- Numeric compare operators:
+  - `num_lt` (strictly less than)
+  - `num_lte` (less than or equal)
+  - `num_gt` (greater than)
+  - `num_gte` (greater than or equal)
+
+Any other operator token in authoring inputs MUST be rejected as an error.
+
+Regex requirements (normative):
+
+- `op="regex"` uses RE2 syntax.
+- The compiler MUST fail closed if a pattern is not RE2-parseable.
+- Matching semantics for `regex` are "search" semantics: the pattern may match any substring of the
+  resolved value.
+
+Numeric requirements (normative):
+
+- For `num_*` operators, `value` MUST parse as a JSON number (finite) and is compiled as a JSON
+  number (not a string).
+
+### ARG rows: per-action argument overrides
+
+ARG rows allow a criteria entry to be parameterized by execution-time arguments without inventing a
+full macro language.
+
+#### Argument environment
+
+For each compiled criteria entry, the compiler builds an argument environment:
+
+- Start with an empty map.
+- Apply all `ARG` rows associated with that entry (by join keys and selectors).
+- If the same `arg_name` is set multiple times with different values, compilation MUST fail closed.
+
+#### Placeholder substitution
+
+In `SIG.value`, the compiler MUST replace argument placeholders of the form:
+
+- `{{ARG.<arg_name>}}`
+
+with the corresponding `arg_value` from the entry argument environment.
+
+Rules:
+
+- Substitution is purely textual and MUST be applied before type coercion (for example numeric
+  parsing for `num_*`).
+- If a placeholder references an `arg_name` that is not defined for the entry, compilation MUST fail
+  closed.
+- If a value contains no placeholders, it is compiled as-is.
+
+### FYI rows: non-normative commentary
+
+FYI rows are ignored for compilation and MUST NOT affect the compiled `criteria.jsonl`.
+
+FYI rows exist to preserve human commentary inside spreadsheet or YAML authoring sources. The
+compiler SHOULD include FYI rows in the compile report for traceability.
+
+### Deterministic compilation
+
+The authoring compiler MUST be deterministic: given byte-identical authoring inputs and the same
+tool version, it MUST emit byte-identical `criteria.jsonl` and `authoring_compile_report.json`.
+
+#### Input decoding
+
+YAML:
+
+- YAML input MUST be decoded using `pa.yaml_decode.v1` (YAML 1.2 safe profile; reject duplicate
+  keys, anchors, merge keys, and non-JSON-native types).
+
+CSV:
+
+- CSV input MUST be UTF-8 text and MUST follow RFC 4180:
+  - comma delimiter,
+  - `"` for quoting (with `""` escaping),
+  - header row required.
+- The compiler MUST treat CRLF and LF newlines equivalently when parsing.
+
+#### Normalization
+
+For all rows that participate in compilation (`row_kind != FYI` and not skipped):
+
+- `engine` MUST be lowercased.
+- `technique_id` MUST be uppercased (canonical ATT&CK form, for example `T1059`).
+- `case_sensitive` defaults to true when omitted.
+
+Selector normalization (when selector fields are present on rows):
+
+- `selectors.os`, `selectors.executor` values MUST be lowercased.
+- `selectors.roles` MUST be treated as a set of lowercased tokens:
+  - split on commas,
+  - trim ASCII whitespace per token,
+  - drop empty tokens,
+  - de-duplicate,
+  - sort ascending by UTF-8 byte order.
+
+#### Grouping and conflict rules
+
+The compiler groups rows into criteria entries and expected signals.
+
+Entry grouping (normative):
+
+- The entry grouping key is:
+  - `engine`, `technique_id`, `engine_test_id`
+  - normalized selectors (`selectors.os`, `selectors.executor`, `selectors.roles`) when present
+  - `entry_id` when present on the row
+- If `entry_id` is omitted on a row:
+  - The row is associated with the unique entry for the corresponding join keys and selectors.
+  - If more than one entry exists for the same join keys and selectors, compilation MUST fail closed
+    with an ambiguity error until `entry_id` is specified on all rows.
+
+Signal grouping (normative):
+
+- For `SIG` rows with an explicit `signal_id`, the signal grouping key is
+  `(entry_group, signal_id)`.
+- For `SIG` rows without `signal_id`:
+  - Each row defines a distinct expected signal containing exactly one constraint clause.
+  - The compiler MUST generate a deterministic `signal_id` for that single-clause signal.
+
+Conflict detection (normative):
+
+- Within an entry group, these fields (if present) MUST be consistent across all contributing rows;
+  otherwise compilation MUST fail closed:
+  - selectors (`selectors.*`)
+  - time-window overrides (`before_seconds`, `after_seconds`)
+- Within a signal group, these fields MUST be consistent across contributing rows; otherwise
+  compilation MUST fail closed:
+  - `class_uid`
+  - `min_count`, `max_count`, `within_seconds`
+  - `description`
+
+#### Deterministic ID generation
+
+If `entry_id` is omitted for an entry, the compiler MUST generate:
+
+- `entry_id = "entry-" + sha256_hex(canonical_json_bytes(entry_id_basis_v1))[0:32]`
+
+Where `entry_id_basis_v1` is:
+
+- `v: 1`
+- `engine`, `technique_id`, `engine_test_id`
+- `selectors` (normalized; omit the object entirely if no selectors exist)
+
+If `signal_id` is omitted for an expected signal, the compiler MUST generate:
+
+- `signal_id = "sig-" + sha256_hex(canonical_json_bytes(signal_id_basis_v1))[0:32]`
+
+Where `signal_id_basis_v1` is:
+
+- `v: 1`
+- `entry_id` (the resolved entry ID string)
+- `class_uid`
+- `constraints` (normalized; see below)
+- `min_count`, `max_count`, `within_seconds` (only when present)
+
+Collision handling (normative):
+
+- If generated `entry_id` values collide for non-identical `entry_id_basis_v1` objects, compilation
+  MUST fail closed.
+- If generated `signal_id` values collide for non-identical `signal_id_basis_v1` objects,
+  compilation MUST fail closed.
+- Regardless of basis identity, the compiled pack MUST satisfy the criteria pack integrity
+  requirements:
+  - `entry_id` values MUST be unique across the pack.
+  - `signal_id` values MUST be unique across the pack.
+
+#### Normalized constraints
+
+Each `SIG` row compiles into one constraint object:
+
+- `field` (string)
+- `op` (string; authoring operator set)
+- `value` (JSON scalar; string for string ops, number for numeric ops)
+- `case_sensitive` (only when false; omit when true)
+
+Within each expected signal:
+
+- Constraints MUST be de-duplicated by exact structural equality after normalization.
+- Constraints MUST be ordered canonically (see "Canonical ordering" below).
+
+### Compiler outputs
+
+Given a pack directory containing an authoring input, the compiler produces:
+
+- Authoritative output:
+  - `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/criteria.jsonl`
+- Non-authoritative diagnostic output:
+  - `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/authoring_compile_report.json`
+
+Error handling (normative):
+
+- If compilation fails, the compiler MUST:
+  - set `status = "failed"` in `authoring_compile_report.json` and include at least one element in
+    `errors[]`,
+  - exit non-zero, and
+  - MUST NOT write or modify `criteria.jsonl` (no partial output).
+
+When a compiled pack is snapshotted into a run bundle, the validation stage SHOULD copy the compile
+report into the run snapshot (if present):
+
+- `runs/<run_id>/criteria/authoring_compile_report.json` (optional; non-contract)
+
+#### Compile report content
+
+`authoring_compile_report.json` MUST be canonical JSON bytes and MUST minimally include:
+
+- `schema_version`: `pa:criteria-authoring-compile-report:v1`
+- `status`: `success | failed`
+- `summary`: counts of rows/entries/signals compiled, skipped, and errored
+- `errors[]` and `warnings[]`:
+  - each finding MUST include: `code` (id_slug_v1), `message`, and `row_ref`
+- `normalized[]`: one element per compiled criteria entry, including:
+  - `entry_id`, join keys, selectors (normalized)
+  - `expected_signals[]`, each including:
+    - `signal_id`
+    - `stable_signal_id` (see below)
+    - normalized predicate (`class_uid`, `constraints[]`)
+    - `source_row_refs[]` (row refs that contributed)
+
+Row references (normative):
+
+- `row_ref` and `source_row_refs[]` MUST be stable strings:
+  - For CSV inputs: `csv:<record_index>`, where `record_index` counts data records excluding the
+    header row, starting at 1.
+  - For YAML inputs: `yaml:<row_index>`, where `row_index` is the 1-based index in the YAML `rows`
+    sequence.
+  - If a finding is not attributable to a specific input row, `row_ref` MUST be `pack`.
+
+Deterministic ordering in the report (normative):
+
+- `errors[]` and `warnings[]` MUST be ordered ascending by `(row_ref, code, message)`.
+- `normalized[]` MUST be ordered by `entry_id` ascending (bytewise UTF-8 lexicographic order).
+- Within each normalized entry, `expected_signals[]` MUST be ordered by `signal_id` ascending.
+- Within each expected signal, `constraints[]` ordering MUST match the canonical ordering rules for
+  `criteria.jsonl`.
+
+Stable expected-signal IDs (normative):
+
+- For each expected signal, the compiler MUST compute:
+
+  - `stable_signal_id = "pa:sigid:v1:" + sha256_hex(canonical_json_bytes(stable_signal_basis_v1))`
+
+- `stable_signal_basis_v1` MUST include the normalized signal semantics and MUST exclude
+  non-semantic fields (minimum exclusions: `signal_id`, `description`, and row refs).
+
+Rationale: the stable ID allows deterministic joins across compilation reports even when
+human-facing IDs or commentary change.
+
+Bridge note (non-normative):
+
+- If the project later imports existing Atomic Harness criteria authoring sources, this compiler is
+  the natural integration point. Importers should translate external formats into the common row
+  model, then reuse the same deterministic compile and lint surfaces.
 
 ## Pack control workflow (versioning and operational ownership)
 
@@ -237,6 +601,7 @@ Snapshot paths:
 - `runs/<run_id>/criteria/manifest.json`
 - `runs/<run_id>/criteria/criteria.jsonl`
 - `runs/<run_id>/criteria/results.jsonl`
+- `runs/<run_id>/criteria/authoring_compile_report.json` (optional; non-contract)
 
 Normative rule:
 
@@ -825,6 +1190,36 @@ Additional pack integrity requirements (normative):
   - If duplicates are present, the evaluator MUST treat the entry as misconfigured (skipped with
     `reason_code="criteria_misconfigured"` and `error_code="criteria_entry_invalid"`).
 
+### Canonical ordering for criteria.jsonl
+
+To make pack hashes stable and to reduce diff noise, producers of `criteria.jsonl` (including the
+authoring compiler) MUST emit canonical ordering.
+
+File-level ordering (normative):
+
+- `criteria.jsonl` (snapshotted to `criteria/criteria.jsonl` in the run bundle) MUST be ordered by
+  `entry_id` ascending (bytewise lexicographic order, UTF-8).
+
+Entry-level ordering (normative):
+
+- If `selectors.roles` is present, it MUST be:
+  - lowercased,
+  - de-duplicated, and
+  - ordered ascending (bytewise lexicographic order, UTF-8).
+- `expected_signals[]` MUST be ordered by `signal_id` ascending (bytewise lexicographic order,
+  UTF-8).
+
+Signal-level ordering (normative):
+
+- If `predicate.constraints[]` is present, it MUST be ordered ascending by the tuple:
+  1. `field` (bytewise UTF-8 lexical order)
+  1. `op` (bytewise UTF-8 lexical order)
+  1. `case_sensitive` (treat missing as `true`; `false` sorts before `true`)
+  1. `value` rendered as RFC 8785 canonical JSON bytes and compared bytewise
+
+Rationale: ordering is semantically irrelevant because constraints are ANDed. Canonical ordering
+makes deterministic compilation and linting implementable and keeps `criteria_sha256` stable.
+
 ### Criteria entry (minimum fields)
 
 - `entry_id` (string, stable within the pack)
@@ -849,8 +1244,10 @@ Each expected signal defines a predicate over normalized OCSF events.
   - `constraints` (optional array)
     - Each constraint is:
       - `field` (string; dotted path, for example `device.hostname` or `metadata.source_type`)
-      - `op` (string: `equals`, `one_of`, `exists`, `contains`)
-      - `value` (optional; required for `equals`, `one_of`, `contains`)
+      - `op` (string: `equals`, `contains`, `regex`, `num_lt`, `num_lte`, `num_gt`, `num_gte`,
+        `exists`, `one_of`)
+      - `value` (optional; required for `equals`, `one_of`, `contains`, `regex`, `num_lt`,
+        `num_lte`, `num_gt`, `num_gte`)
       - `case_sensitive` (optional bool, default true; applies to string comparisons only)
 - `min_count` (optional int, default 1)
 - `max_count` (optional int)
@@ -876,22 +1273,43 @@ Field resolution:
 
 Operator semantics (minimum, normative):
 
-- `exists`: true iff the resolved value is present and is not JSON null.
 - `equals`: true iff the resolved value equals the expected `value`.
-- `one_of`: true iff the resolved value equals at least one element of the expected `value` array.
 - `contains`: true iff the resolved value (string) contains the expected `value` (string) as a
   substring.
+- `regex`: true iff the resolved value (string) matches the expected `value` (string) using RE2
+  "search" semantics (the pattern may match any substring of the resolved value).
+- `num_lt`: true iff both operands are numbers and the resolved value is strictly less than the
+  expected `value`.
+- `num_lte`: true iff both operands are numbers and the resolved value is less than or equal to the
+  expected `value`.
+- `num_gt`: true iff both operands are numbers and the resolved value is strictly greater than the
+  expected `value`.
+- `num_gte`: true iff both operands are numbers and the resolved value is greater than or equal to
+  the expected `value`.
+- `exists` (legacy; not emitted by the authoring compiler): true iff the resolved value is present
+  and is not JSON null.
+- `one_of` (legacy; not emitted by the authoring compiler): true iff the resolved value equals at
+  least one element of the expected `value` array.
 
 Type rules (minimum, normative):
 
 - `equals` and `one_of` MUST support comparison over JSON scalar types (string, number, boolean).
-- If the resolved value is an array or object, `equals`, `one_of`, and `contains` MUST evaluate to
-  false (no deep matching in v0.1). `exists` remains a presence check and is unaffected by this
-  rule.
-  - Implication: v0.1 defines neither list-logic nor set-logic for array-to-array comparisons. For
-    example, expected `["A","B"]` MUST NOT match observed `["B","A"]` under any operator.
-  - Implication: `one_of` MUST NOT treat an observed array as “any element is in expected”; it is
-    strictly a scalar-to-array membership check.
+- `contains` and `regex` MUST support comparison over strings only:
+  - If the resolved value is not a string, the operator MUST evaluate to false.
+  - If the expected `value` is not a string, the operator MUST evaluate to false.
+- `num_lt`, `num_lte`, `num_gt`, and `num_gte` MUST support comparison over JSON numbers only:
+  - If the resolved value is not a number, the operator MUST evaluate to false.
+  - If the expected `value` is not a number, the operator MUST evaluate to false.
+
+Array/object rule (minimum, normative):
+
+- If the resolved value is an array or object:
+  - `equals`, `one_of`, `contains`, `regex`, and all `num_*` operators MUST evaluate to false (no
+    deep matching in v0.1).
+  - `exists` remains a presence check and is unaffected by this rule.
+
+Legacy operator type rules (minimum, normative):
+
 - For `one_of`, the expected `value` MUST be an array of scalars; otherwise the operator MUST
   evaluate to false.
 - For `equals`, the expected `value` SHOULD be a scalar. If the expected `value` is an array or
@@ -954,12 +1372,17 @@ Sampling:
 
 Case sensitivity:
 
-- `case_sensitive` applies only when both operands are strings (for `equals`, each `one_of` element,
-  and `contains`).
+- `case_sensitive` applies only when both operands are strings (for `equals`, `contains`, `regex`,
+  and each `one_of` element).
 - If `case_sensitive` is omitted, it defaults to true.
-- If `case_sensitive` is false, comparisons MUST apply Unicode default case folding
-  (locale-independent) to both operands before evaluating equality or substring containment.
-  Implementations MUST NOT apply Unicode normalization.
+- For `equals` and `contains`, if `case_sensitive` is false, comparisons MUST apply Unicode default
+  case folding (locale-independent) to both operands before evaluating equality or substring
+  containment.
+  - Implementations MUST NOT apply Unicode normalization.
+- For `regex`, if `case_sensitive` is false, matching MUST use RE2 case-insensitive semantics
+  (equivalent to prefixing the pattern with `(?i)`), and implementations MUST NOT apply Unicode
+  normalization.
+- For numeric compare operators (`num_*`), `case_sensitive` MUST be ignored if present.
 
 Pack authoring guidance (non-normative):
 
@@ -971,10 +1394,12 @@ Required conformance fixtures (constraint matching):
 - `case_sensitive: false`: observed `c:\windows\system32\cmd.exe` MUST match expected
   `C:\Windows\System32\cmd.exe` under `op = equals`.
 - `case_sensitive: true`: the same observed/expected pair MUST NOT match under `op = equals`.
-- **Array resolved value**: if the resolved value is an array, `equals`, `one_of`, and `contains`
-  MUST evaluate to false regardless of the expected `value`.
+- **Array resolved value**: if the resolved value is an array, `equals`, `one_of`, `contains`,
+  `regex`, and all `num_*` operators MUST evaluate to false regardless of the expected `value`.
 - **Array presence**: if the resolved value is an array and is not JSON null, `op = exists` MUST
   evaluate to true.
+- `op = regex`: observed `C:\Windows\System32\cmd.exe` MUST match expected `cmd\.exe`.
+- `op = num_gte`: resolved numeric value `5` MUST match expected `3` under `op = num_gte`.
 
 ### Cleanup verification model
 

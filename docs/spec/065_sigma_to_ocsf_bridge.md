@@ -704,35 +704,51 @@ meaningful for the selected backend and the pinned OCSF schema version.
 The semantic validator MUST be deterministic for a fixed plan + pinned schema inputs and MUST NOT
 depend on runtime telemetry values.
 
+Where this policy requires a stable error subcode in the explanation, it MUST be emitted as the
+first token of `non_executable_reason.explanation` in the form: `<SUBCODE>: <human_message>`.
+
 Checks (normative; apply to `executable=true` plans):
 
 1. **Field existence (pinned OCSF schema)**:
 
    - Every referenced `field` path in the predicate AST (`exists|cmp|match|regex`) MUST resolve to a
-     valid field path in the pinned OCSF schema version for the run (see `050_normalization_ocsf.md`
-     for the v0.1 pin).
+     valid field path for at least one `class_uid` in `backend.plan.scope.class_uids` under the
+     pinned OCSF schema version for the run (see `050_normalization_ocsf.md` for the v0.1 pin).
+     - Paths that exist only in classes outside the plan's `class_uids` MUST NOT be treated as
+       resolvable for this check.
    - Exception: `raw.*` paths are allowed only when permitted by the raw fallback policy gates (see
      "Fallback policy (raw field fallback)").
    - If a referenced non-`raw.*` field path cannot be resolved, the rule MUST be marked
      non-executable with `reason_code="unmapped_field"` and a stable, machine-actionable error
-     subcode in the explanation (for example `PA_BRIDGE_INVALID_OCSF_PATH`).
+     subcode in the explanation (for example `PA_BRIDGE_INVALID_OCSF_PATH:`).
 
 1. **Operator allowlist**:
 
-   - Predicate nodes MUST use only the operators enumerated in the Plan format AST above.
-   - Unknown operators MUST be rejected deterministically with `reason_code="unsupported_operator"`.
+   - Predicate nodes MUST use only the operators enumerated in the Plan format AST above, and MUST
+     satisfy the allowed enum values for operator parameters (`cmp`, `kind`) defined there.
+   - Unknown operators (or invalid operator parameter values) MUST be rejected deterministically
+     with `reason_code="unsupported_operator"`.
 
 1. **Scope completeness**:
 
    - `backend.plan.scope.class_uids` MUST be present and MUST be non-empty.
    - `class_uids` MUST be emitted in ascending numeric order (determinism requirement).
    - Missing/empty scope MUST be treated as a compiler/validator error and MUST fail closed as
-     `reason_code="backend_compile_error"`.
+     `reason_code="backend_compile_error"` with a stable, machine-actionable error subcode in the
+     explanation (for example `PA_BRIDGE_MISSING_SCOPE:`).
+   - Evaluators MUST NOT interpret a missing scope as "match all classes" (no full-scan fallback).
 
 1. **Complexity budgets**:
 
    - Regex nodes MUST satisfy the configured regex safety limits (pattern length, match limits, and
      depth limits; see `120_config_reference.md`).
+
+     - In addition, regex patterns that are effectively unconstrained (match-all) MUST be rejected.
+       A pattern MUST be treated as unconstrained if it is exactly one of: `.*`, `^.*$`, `.+`,
+       `^.+$`.
+     - Any violation of regex policy limits (including match-all patterns) MUST be rejected
+       deterministically with `reason_code="unsupported_regex"` and a stable, machine-actionable
+       error subcode in the explanation (for example `PA_BRIDGE_REGEX_POLICY_VIOLATION:`).
 
    - When the detection performance budget gate is enabled (see `110_operability.md`),
      implementations MUST compute deterministic predicate-AST complexity metrics for each compiled

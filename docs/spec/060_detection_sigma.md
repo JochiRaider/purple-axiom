@@ -207,6 +207,10 @@ Sigma evaluation is a two-stage process.
        omitted.
      - Other batch backends MAY lower deterministically from the IR while preserving semantics.
      - Streaming: optional (v0.2+; backend-defined).
+   - Apply compiled-plan semantic validation after compilation and before publishing
+     `bridge/compiled_plans/<rule_id>.plan.json` (field existence against the pinned OCSF schema
+     with controlled `raw.*` gates, backend operator policy, scope completeness, and complexity
+     budgets; see `065_sigma_to_ocsf_bridge.md`, "Compiled plan semantic validation policy").
 1. **Evaluate**
    - Execute the plan over the run's OCSF event store.
    - Emit `detection_instance` rows for each match group.

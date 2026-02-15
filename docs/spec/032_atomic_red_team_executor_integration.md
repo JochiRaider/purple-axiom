@@ -259,24 +259,23 @@ hostnames, etc.).
 
 When synthetic correlation marker emission is enabled (normative requirements):
 
-- For every action where `execute` is attempted, the runner MUST compute a deterministic marker
-  value (v0.1 minimum):
-  - `pa:synth:v1:<run_id>:<action_id>:execute`
-  - `<run_id>` MUST equal the run's `manifest.run_id`.
-  - `<action_id>` MUST equal the action's `ground_truth.action_id`.
-- The runner MUST populate `ground_truth.extensions.synthetic_correlation_marker` with the marker
-  value for every action where `execute` is attempted.
+- For every action where `execute` is attempted, the runner MUST compute:
+  - `marker_canonical` (v0.1 minimum): `pa:synth:v1:<run_id>:<action_id>:execute`
+  - `marker_token` (deterministic derived token): per `025_data_contracts.md`
+- `<run_id>` MUST match `manifest.run_id`.
+- `<action_id>` MUST match `ground_truth.action_id`.
+- The runner MUST populate ground truth:
+  - `ground_truth.extensions.synthetic_correlation_marker = marker_canonical`
+  - `ground_truth.extensions.synthetic_correlation_marker_token = marker_token`
 - The runner MUST attempt to emit at least one marker-bearing telemetry event per action at the
   start of `execute` (immediately before primary command invocation).
-  - The emitted event MUST carry the marker value in a way that survives end-to-end ingestion and
-    normalization into the OCSF envelope field
-    `metadata.extensions.purple_axiom.synthetic_correlation_marker` (see the telemetry pipeline and
-    data contracts specs).
-- The runner MUST record the emission attempt as evidence:
-  - it MUST append an `execute`-phase side-effect ledger entry describing the marker emission
-    attempt before attempting emission, and
-  - it MUST record whether emission was `success` or `failed` with a stable
-    `reason_domain="side_effect_ledger"`, and `reason_code` when failed.
+  - The emitted event MUST carry the marker in a way that survives end-to-end ingestion and
+    normalization.
+  - If the selected transport (per the Atomic execution adapter’s correlation carrier matrix; see
+    `033_execution_adapters.md`) cannot carry the canonical marker, it MUST carry `marker_token`.
+- The runner MUST record the emission attempt as evidence by appending a side-effect ledger entry
+  for `synthetic_correlation_marker_emit` *before* emission is attempted, and MUST record whether
+  the emission succeeded/failed.
 
 ### Side-effect ledger population (normative, v0.1 minimum)
 

@@ -141,7 +141,7 @@
       "contract_id": "export_manifest",
       "schema_path": "docs/contracts/export_manifest.schema.json",
       "contract_version": "0.1.0",
-      "purpose": "Export manifest output (export_manifest.json).",
+      "purpose": "Export manifest output (exports/<run_id>/<export_id>/export_manifest.json).",
       "artifact_kind": "run_artifact",
       "format": "json"
     },    
@@ -433,7 +433,6 @@
     { "artifact_glob": "criteria/manifest.json", "contract_id": "criteria_pack_manifest", "stage_owner": "validation", "validation_mode": "json_document" },
     { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "stage_owner": "validation", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "stage_owner": "detection", "validation_mode": "jsonl_lines" },
-    { "artifact_glob": "export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "stage_owner": "runner", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "inputs/environment_noise_profile.json", "contract_id": "environment_noise_profile", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "inputs/plan_draft.yaml", "contract_id": "plan_draft", "stage_owner": "orchestrator", "validation_mode": "yaml_document" },
@@ -465,7 +464,7 @@
   ],
   "notes": [
     "contracts[].contract_version MUST be kept in sync with each schema file's contract_version const (enforced by validation/runtime).",
-    "bindings[].artifact_glob values are run-relative (relative to the run bundle root; do not include the runs/<run_id>/ prefix).",
+    "bindings[].artifact_glob values are run-relative (relative to the run bundle root; do not include the runs/<run_id>/ prefix). They MUST NOT be interpreted as workspace-root-relative; workspace-root artifacts are bound via docs/contracts/workspace_contract_registry.json.",
     "bindings[].stage_owner identifies the owning stage (or \"orchestrator\") for deterministic expected_outputs construction at the publish gate.",
     "Network sensor manifests (raw/pcap/manifest.json and raw/netflow/manifest.json) are v0.1 placeholder artifacts. They MAY be absent unless the corresponding telemetry source is enabled and implemented. These paths are reserved; changing them MUST be treated as a breaking change (version bump + migration guidance)."
   ]

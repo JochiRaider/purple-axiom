@@ -1,0 +1,39 @@
+{
+  "registry_version": "0.1.0",
+  "contracts": [
+    {
+      "contract_id": "audit_event",
+      "schema_path": "docs/contracts/audit_event.schema.json",
+      "contract_version": "0.2.0",
+      "purpose": "Append-only audit log event record emitted by the orchestrator. Reused by workspace logs/ui_audit.jsonl in v0.2.",
+      "artifact_kind": "run_artifact",
+      "format": "jsonl"
+    },
+    {
+      "contract_id": "export_manifest",
+      "schema_path": "docs/contracts/export_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Export manifest output (exports/<run_id>/<export_id>/export_manifest.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "run_registry",
+      "schema_path": "docs/contracts/run_registry.schema.json",
+      "contract_version": "0.2.0",
+      "purpose": "Workspace run registry index (state/run_registry.json).",
+      "artifact_kind": "other",
+      "format": "json"
+    }
+  ],
+  "bindings": [
+    { "artifact_glob": "logs/ui_audit.jsonl", "contract_id": "audit_event", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "state/run_registry.json", "contract_id": "run_registry", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "exports/-/-/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" }
+  ],
+  "notes": [
+    "bindings[].artifact_glob values are workspace-root-relative and POSIX-safe (no leading /; forward slashes only).",
+    "Within bindings[].artifact_glob, a path segment equal to '-' is a single-segment wildcard placeholder (equivalent to '*' for that segment). Example: exports/-/-/export_manifest.json matches exports/<run_id>/<export_id>/export_manifest.json.",
+    "Cross-registry consistency: if a contract_id exists in both docs/contracts/contract_registry.json and docs/contracts/workspace_contract_registry.json, then at least schema_path and contract_version MUST match exactly."
+  ]
+}

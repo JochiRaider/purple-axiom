@@ -52,6 +52,9 @@ Provenance surfaces (normative):
   MUST be `null`.
 - `metadata.identity_tier` MUST be present on every event and MUST be one of `1 | 2 | 3`, matching
   the tier used to compute `metadata.event_id`.
+- `metadata.extensions.purple_axiom.raw_ref` MUST be present for identity tiers 1 and 2 and MUST be
+  `null` for identity tier 3. It MUST provide a stable provenance pointer that can identify the raw
+  origin record (see "Raw origin pointer" below).
 
 Terminology note (normative):
 
@@ -61,6 +64,53 @@ Terminology note (normative):
 - Human-facing outputs and gate descriptions SHOULD qualify tier references as either "identity
   tier" (IT1/IT2/IT3) or "field tier" (FT0/FT1/FT2/FT3/FT-R). They SHOULD NOT use unqualified "Tier
   N" where ambiguity is possible.
+
+### Raw origin pointer: `metadata.extensions.purple_axiom.raw_ref`
+
+For identity tiers 1 and 2, every **telemetry-derived** normalized event MUST carry a stable pointer
+to the raw record that originated it. This enables deterministic cross-layer debugging from
+normalized OCSF → simple view → raw artifact / raw_parquet.
+
+`raw_ref` is an object with one of the following shapes:
+
+- `kind: "file_cursor_v1"`: points into a run-bundled raw file/blob (Tier 1, `raw/`)
+- `kind: "dataset_row_v1"`: points to a row in a Parquet dataset (Tier 2, `raw_parquet/`)
+
+Schema (normative):
+
+```json
+{
+  "kind": "file_cursor_v1 | dataset_row_v1",
+  "path": "raw/... or raw_parquet/... (run-relative POSIX path)",
+  "cursor": "li:<u64> | bo:<u64>",
+  "row_locator": { "key": "value" }
+}
+```
+
+Requirements (normative):
+
+- `path` MUST be a run-relative POSIX path (see `045_storage_formats.md`) and MUST NOT include the
+  `runs/<run_id>/` prefix.
+- For `kind="file_cursor_v1"`, `cursor` MUST be present and MUST use the stable cursor formats
+  defined for Unix log ingestion (`044_unix_log_ingestion.md`): `li:<u64>` (line index) or `bo:<u64>`
+  (byte offset).
+- For `kind="dataset_row_v1"`, `row_locator` MUST be present and MUST uniquely identify the raw
+  record within the referenced dataset for the run.
+- If evidence-tier raw preservation is enabled and the source supports stable cursors/offsets,
+  producers SHOULD emit `file_cursor_v1` pointing into `raw/`.
+- Otherwise, producers MUST emit `dataset_row_v1` pointing into `raw_parquet/`.
+- When multiple candidate raw records could be considered the origin (for example, replay
+  duplicates), producers MUST choose a canonical `raw_ref` deterministically:
+  1. smallest `path` (byte-wise lexicographic)
+  2. if both candidates include `cursor`: smallest numeric cursor value
+  3. otherwise: smallest canonical JSON serialization of `row_locator` (sorted keys)
+- `raw_ref` MUST NOT participate in the `metadata.event_id` hashing basis.
+
+Optional multi-origin extension:
+
+- Producers MAY additionally emit `metadata.extensions.purple_axiom.raw_refs` as an array of
+  additional `raw_ref` objects when an emitted event is derived from multiple raw records. If
+  present, `raw_refs` MUST include `raw_ref` as one element.
 
 ### `metadata.source_type` vs `identity_basis.source_type`
 

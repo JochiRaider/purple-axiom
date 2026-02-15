@@ -28,34 +28,113 @@ This specification defines the contract-backed artifacts in a Purple Axiom run b
 Contracts are enforced via JSON Schemas under `docs/contracts/` plus a small set of cross-artifact
 invariants that cannot be expressed in JSON Schema alone.
 
-## Search map
-
-This section is non-normative. It exists to improve local navigation (especially for ripgrep-based
-workflows) in this large document.
-
-- `docs/contracts/contract_registry.json` — registry shape, bindings, and validation dispatch keys.
-  - See section: "Contract registry"
-- `glob_v1` / `artifact_glob` — canonical glob grammar and matching rules used by bindings.
-  - See section: "Glob semantics (glob_v1) (normative)"
-- `validation_mode` — authoritative parse/validation mode (`json_document`, `jsonl_lines`,
-  `yaml_document`).
-  - See section: "Validation mode metadata (normative)"
-- `pa.publisher.v1` / publish gate — staging → validate → report → atomic publish semantics.
-  - See section: "Producer tooling: reference publisher semantics (pa.publisher.v1)"
-- `pa.reader.v1` / inventory — canonical run discovery, artifact inventory, and stable error codes.
-  - See section: "Consumer tooling: reference reader semantics (pa.reader.v1)"
-- `evidence_refs[]` / `json_pointer:` / `jsonl_line:` — shared evidence pointer shape + selector
-  grammar.
-  - See section: "Evidence references (shared shape)"
-- `stage_enablement_matrix_v1` / `expr_v1` — deterministic stage enablement and required outputs
-  mapping.
-  - See section: "Stage enablement and required contract outputs (v0.1)"
-- `contracts_bundle_sha256` / `tree_basis_v1` — reproducible contracts bundle hashing for historical
-  validation.
-  - See section: "Deterministic bundle hash (normative)"
-- `security/checksums.txt` / `signature.ed25519` — signing scope, deterministic selection, and
-  formats.
-  - See section: "Optional invariants: run bundle signing"
+- [Data contracts](#data-contracts)
+  - [Overview](#overview)
+    - [Document boundaries and ownership](#document-boundaries-and-ownership)
+  - [Goals](#goals)
+  - [Non-goals](#non-goals)
+  - [Terminology](#terminology)
+  - [Contract registry](#contract-registry)
+    - [Authoritative contract registry index (normative)](#authoritative-contract-registry-index-normative)
+      - [Minimal registry shape (normative)](#minimal-registry-shape-normative)
+      - [Glob semantics (glob\_v1) (normative)](#glob-semantics-glob_v1-normative)
+      - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
+      - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
+      - [Contract version constant (normative)](#contract-version-constant-normative)
+    - [Contracts bundle distribution and retrieval for historical validation (normative)](#contracts-bundle-distribution-and-retrieval-for-historical-validation-normative)
+      - [Bundle layout and contents (normative)](#bundle-layout-and-contents-normative)
+      - [Deterministic bundle hash (normative)](#deterministic-bundle-hash-normative)
+      - [Distribution and storage locations (normative)](#distribution-and-storage-locations-normative)
+      - [Retrieval order (normative)](#retrieval-order-normative)
+    - [Detection content bundle distribution and validation (normative)](#detection-content-bundle-distribution-and-validation-normative)
+      - [Storage location and addressing](#storage-location-and-addressing)
+      - [Bundle layout and contents (normative)](#bundle-layout-and-contents-normative-1)
+      - [Content bundle manifest contract (normative)](#content-bundle-manifest-contract-normative)
+      - [Integrity and signing (normative)](#integrity-and-signing-normative)
+      - [Offline validation requirement (verification hook) (normative)](#offline-validation-requirement-verification-hook-normative)
+      - [Run validation using a content bundle (normative)](#run-validation-using-a-content-bundle-normative)
+      - [Offline validation requirement (verification hook) (normative)](#offline-validation-requirement-verification-hook-normative-1)
+    - [Human-readable schema inventory (non-authoritative)](#human-readable-schema-inventory-non-authoritative)
+    - [Contract lifecycle workflow (normative)](#contract-lifecycle-workflow-normative)
+  - [Validation engine and publish gates](#validation-engine-and-publish-gates)
+    - [Definitions](#definitions)
+    - [JSON Schema dialect (normative)](#json-schema-dialect-normative)
+    - [Reference resolution (local-only, normative)](#reference-resolution-local-only-normative)
+    - [Deterministic error ordering and error caps (normative)](#deterministic-error-ordering-and-error-caps-normative)
+    - [Contract validation report artifact (normative)](#contract-validation-report-artifact-normative)
+      - [Deterministic artifact path rule (normative)](#deterministic-artifact-path-rule-normative)
+    - [Validation scope and timing](#validation-scope-and-timing)
+      - [Publish-gate contract validation (required)](#publish-gate-contract-validation-required)
+        - [Stage enablement and required contract outputs (v0.1)](#stage-enablement-and-required-contract-outputs-v01)
+      - [Runtime canaries (required only where specified)](#runtime-canaries-required-only-where-specified)
+  - [Run bundle layout](#run-bundle-layout)
+  - [Producer tooling: reference publisher semantics (pa.publisher.v1)](#producer-tooling-reference-publisher-semantics-papublisherv1)
+    - [Reference publisher SDK requirement (normative)](#reference-publisher-sdk-requirement-normative)
+    - [Canonical publish-gate behavior (normative)](#canonical-publish-gate-behavior-normative)
+    - [Canonical serialization rules (normative)](#canonical-serialization-rules-normative)
+  - [Consumer tooling: reference reader semantics (pa.reader.v1)](#consumer-tooling-reference-reader-semantics-pareaderv1)
+    - [Reference reader SDK requirement (normative)](#reference-reader-sdk-requirement-normative)
+    - [Canonical run bundle discovery (paths and fallbacks)](#canonical-run-bundle-discovery-paths-and-fallbacks)
+    - [Canonical artifact discovery and classification](#canonical-artifact-discovery-and-classification)
+    - [`manifest.versions` interpretation and comparability hooks](#manifestversions-interpretation-and-comparability-hooks)
+    - [Evidence ref resolution and redaction handling](#evidence-ref-resolution-and-redaction-handling)
+    - [Stable reader error codes (pa.reader.v1)](#stable-reader-error-codes-pareaderv1)
+    - [Derived inventory view (pa.inventory.v1)](#derived-inventory-view-painventoryv1)
+  - [Artifact contracts](#artifact-contracts)
+    - [Artifact contract block template (copy/paste; non-normative)](#artifact-contract-block-template-copypaste-non-normative)
+    - [Evidence references (shared shape)](#evidence-references-shared-shape)
+    - [Run counters (operability) (normative)](#run-counters-operability-normative)
+    - [Regression baseline reference inputs (normative)](#regression-baseline-reference-inputs-normative)
+      - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
+    - [Measurement layers for conclusions (triage taxonomy)](#measurement-layers-for-conclusions-triage-taxonomy)
+    - [Run manifest](#run-manifest)
+    - [Run results summary (run\_results.json)](#run-results-summary-run_resultsjson)
+    - [Ground truth timeline](#ground-truth-timeline)
+    - [Stable action identity](#stable-action-identity)
+    - [Inputs and reproducible hashing](#inputs-and-reproducible-hashing)
+    - [Command summary, redaction, and command integrity](#command-summary-redaction-and-command-integrity)
+    - [Expected telemetry hints and criteria references](#expected-telemetry-hints-and-criteria-references)
+    - [Criteria pack snapshot](#criteria-pack-snapshot)
+    - [Criteria evaluation results](#criteria-evaluation-results)
+    - [Runner evidence](#runner-evidence)
+      - [Minimum contents (recommended):](#minimum-contents-recommended)
+      - [Runner evidence JSON header pattern (normative; contract-backed artifacts)](#runner-evidence-json-header-pattern-normative-contract-backed-artifacts)
+      - [Requirements evaluation evidence (normative):](#requirements-evaluation-evidence-normative)
+      - [Resolved inputs evidence (optional; schema-backed)](#resolved-inputs-evidence-optional-schema-backed)
+      - [Side-effect ledger (normative):](#side-effect-ledger-normative)
+      - [State reconciliation report (normative; when enabled):](#state-reconciliation-report-normative-when-enabled)
+        - [Principal context (runner-level evidence, schema-backed)](#principal-context-runner-level-evidence-schema-backed)
+        - [Cache provenance (run-level log, schema-backed)](#cache-provenance-run-level-log-schema-backed)
+    - [Network sensor placeholders](#network-sensor-placeholders)
+    - [Normalized events](#normalized-events)
+    - [Normalization mapping profile snapshot](#normalization-mapping-profile-snapshot)
+    - [Detections](#detections)
+    - [Scoring summary](#scoring-summary)
+    - [Mapping coverage](#mapping-coverage)
+    - [Bridge router table snapshot](#bridge-router-table-snapshot)
+    - [Bridge mapping pack snapshot](#bridge-mapping-pack-snapshot)
+    - [Bridge compiled plans](#bridge-compiled-plans)
+    - [Bridge coverage](#bridge-coverage)
+  - [Cross-artifact invariants](#cross-artifact-invariants)
+  - [Optional invariants: run bundle signing](#optional-invariants-run-bundle-signing)
+    - [Canonical SHA-256 digest strings (normative)](#canonical-sha-256-digest-strings-normative)
+    - [Signing artifacts and locations](#signing-artifacts-and-locations)
+    - [Long-term artifact selection for checksumming](#long-term-artifact-selection-for-checksumming)
+    - [Security checksums format (normative)](#security-checksums-format-normative)
+    - [Public key and key id](#public-key-and-key-id)
+    - [Security signature format (normative)](#security-signature-format-normative)
+    - [Verification semantics](#verification-semantics)
+  - [Versioning and compatibility policy](#versioning-and-compatibility-policy)
+    - [Spec breakup guidance (non-normative)](#spec-breakup-guidance-non-normative)
+  - [Extensions and vendor fields](#extensions-and-vendor-fields)
+    - [Runner namespace: environment noise profile (v0.1)](#runner-namespace-environment-noise-profile-v01)
+      - [Noise profile snapshot and hashing (normative)](#noise-profile-snapshot-and-hashing-normative)
+      - [`extensions.principal_id` (action-scoped, optional)](#extensionsprincipal_id-action-scoped-optional)
+  - [Redaction and sensitive data](#redaction-and-sensitive-data)
+  - [Validation workflow](#validation-workflow)
+  - [Key decisions](#key-decisions)
+  - [References](#references)
+  - [Changelog](#changelog)
 
 ## Overview
 
@@ -2388,19 +2467,38 @@ Invariants:
 
 `extensions.synthetic_correlation_marker`:
 
-- If synthetic correlation marker is enabled, the runner MUST record the marker value in
+- If synthetic correlation marker is enabled, the runner MUST record the canonical marker string on
   ground-truth action records at `extensions.synthetic_correlation_marker`.
+- Canonical format (normative, v1): `pa:synth:v1:<run_id>:<action_id>:execute`
+- `<run_id>` MUST match `manifest.run_id`
+- `<action_id>` MUST match `ground_truth.action_id`
 - Note: In normalized OCSF events, this marker is represented at
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` (vendor namespace; see
   `050_normalization_ocsf.md`).
-- Type: string
-- Format (normative): `pa:synth:<run_id>:<action_id>`
-- Rationale: provides an explicit, deterministic join hook for marker-assisted matching and avoids
-  reliance on time windows alone.
-- Marker events emitted for correlation MUST include the same marker value so that downstream
-  normalization and reporting can associate them with a given action deterministically.
-- Correlation marker MUST NOT participate in `metadata.event_id` hashing identity basis.
-- This field is reserved for Purple Axiom use; other producers MUST NOT emit it unless they are
+
+`extensions.synthetic_correlation_marker_token`:
+
+- If synthetic correlation marker is enabled, the runner MUST also record a deterministic derived
+  token on action records. This exists to support transports with length / character constraints.
+- Derivation (normative, v1):
+  1. Let `marker_canonical` be the UTF-8 bytes of `extensions.synthetic_correlation_marker`.
+  1. Compute `digest = SHA-256(marker_canonical)`.
+  1. Compute `b64 = base64url(digest)` using RFC 4648 base64url alphabet and **no padding**.
+  1. Let `marker_token = b64[0:N]` where `N = 22` (fixed).
+- Format: `^[A-Za-z0-9_-]{22}$`
+- Note: In normalized OCSF events, this token is represented at
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`.
+
+Notes (normative):
+
+- Marker-bearing telemetry MUST carry either the canonical marker string, the token, or both, as
+  specified by the selected execution adapter’s correlation carrier matrix
+  (`033_execution_adapters.md`).
+- Marker-bearing events emitted for correlation MUST carry the same marker form(s) that the adapter
+  declares for the selected transport, so downstream normalization and reporting can associate them
+  with a given action deterministically.
+- Correlation marker values MUST NOT participate in `metadata.event_id` hashing identity basis.
+- These fields are reserved for Purple Axiom use; other producers MUST NOT emit them unless they are
   implementing synthetic marker behavior per this spec.
 
 ### Expected telemetry hints and criteria references
@@ -2770,6 +2868,8 @@ Required envelope (minimum):
 - `metadata.source_type`
 - `metadata.source_event_id` (native upstream ID when meaningful; example: Windows `EventRecordID`)
 - `metadata.identity_tier` (1 | 2 | 3; see the event identity ADR)
+- `metadata.extensions.purple_axiom.raw_ref` (stable raw provenance pointer; required for identity
+  tiers 1 and 2; MUST be `null` for identity tier 3; see the event identity ADR)
 
 Optional envelope extensions (v0.1):
 
@@ -2781,6 +2881,9 @@ Optional envelope extensions (v0.1):
   - When present, the value MUST be preserved verbatim from ingestion through normalization.
   - The value MUST NOT be used as part of `metadata.event_id` computation (see the event identity
     ADR for identity-basis exclusions).
+
+- `metadata.extensions.purple_axiom.raw_refs` (array of `raw_ref` objects; MAY be present when an
+  emitted normalized event is derived from multiple raw records)
 
 - `metadata.extensions.purple_axiom.environment_noise_profile` (optional): object. When present,
   records the pinned noise profile for the run:
@@ -3096,6 +3199,15 @@ Required invariants:
      small tolerance for clock skew (configurable).
 1. Event identity:
    - `metadata.event_id` must be unique within a run bundle for normalized events.
+1. Raw provenance:
+   - For every normalized event with `metadata.identity_tier ∈ {1,2}`,
+     `metadata.extensions.purple_axiom.raw_ref` MUST be present and MUST conform to ADR-0002.
+   - `raw_ref.path` MUST exist within the run bundle under `raw/` or `raw_parquet/`.
+   - When `raw_ref.kind="file_cursor_v1"`, `raw_ref.cursor` MUST be in-range for the referenced
+     artifact.
+   - When `raw_ref.kind="dataset_row_v1"`, `raw_ref.row_locator` MUST match at least one record in
+     the referenced dataset. Implementations MAY build an index to validate this efficiently, but
+     MUST treat non-resolvable pointers as a validation failure.
 1. Referential integrity:
    - `detections.matched_event_ids` must exist in the normalized store for that run.
    - `criteria.results.action_id` must reference an `action_id` present in `ground_truth.jsonl`

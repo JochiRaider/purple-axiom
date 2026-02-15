@@ -114,6 +114,12 @@ stable processing spine, in order:
    payloads).
 1. **Persist** the record to the raw store (Parquet dataset and/or evidence-tier blob store, as
    applicable) using deterministic partition keys.
+1. **Emit** a debug-friendly "simple telemetry view" row:
+   - compute a stable raw provenance pointer (`raw_ref`; see
+     `ADR-0002-event-identity-and-provenance.md`), and
+   - write a lossy, deterministic, cross-source projection to
+     `runs/<run_id>/raw_parquet/simple_events/` (schema defined below; intended for quick operator
+     debugging and matching).
 1. **Account** for the record:
    - update per-run counters in `runs/<run_id>/logs/counters.json` (see the operability spec), and
    - when telemetry validation is enabled, record any required per-asset evidence in
@@ -126,6 +132,65 @@ Constraints (normative):
   reason codes.
 - Any per-record transformation that can affect downstream identity (`metadata.event_id`) MUST be
   deterministic and MUST NOT depend on locale, host time zone, or OS rendering state.
+
+## Simple telemetry view
+
+Purple Axiom MUST materialize a debug-friendly **simple telemetry view** that enables quick matching
+across telemetry sources during troubleshooting. This view is intentionally lossy, but MUST be
+consistent and deterministic.
+
+### Output location and mapping guarantees
+
+The telemetry stage MUST write a dataset at:
+
+- `runs/<run_id>/raw_parquet/simple_events/`
+
+Mapping guarantees (normative):
+
+- The simple view MUST be **1:1** with the telemetry record stream *after acquisition and limit
+  enforcement*.
+  - For every record that is persisted to `runs/<run_id>/raw_parquet/**`, exactly one corresponding
+    simple-view row MUST be emitted.
+  - A simple-view row MUST still be emitted when extraction is partial; missing fields MUST be
+    `null` (or absent for nested structs) rather than synthesized values.
+
+Rationale (non-normative): this 1:1 stream provides a stable join surface between raw ingestion and
+downstream normalization/detection, even when the final OCSF-normalized set is not strictly 1:1.
+
+### Required fields
+
+Each simple-view row MUST include, at minimum:
+
+- `time` (int64): event time in **milliseconds since Unix epoch (UTC)** (aligned with OCSF `time`).
+- `asset_id` (string): Purple Axiom `asset_id`.
+- `identity_source_type` (string): stable source type token used for identity (e.g.,
+  `windows_eventlog`, `linux_syslog`, `osquery`).
+- `raw_ref` (object/struct): stable provenance pointer that can identify the raw origin of the row
+  (see `ADR-0002-event-identity-and-provenance.md`).
+- `synthetic_correlation_marker` (string; nullable): copy of
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker` when present.
+
+The following fields SHOULD be present when available from the source:
+
+- `host.name` (string)
+- `user.name` (string)
+- `process.pid` (int64), `process.name` (string), `process.executable` (string)
+- `file.path` (string), `file.name` (string), `file.sha256` (string)
+- `network.src_ip` (string), `network.src_port` (int64), `network.dst_ip` (string),
+  `network.dst_port` (int64), `network.protocol` (string)
+
+### Determinism requirements
+
+- Simple-view field extraction MUST be deterministic and MUST NOT depend on locale, host time zone,
+  or OS rendering state.
+- If the same raw record is processed multiple times due to replay, the emitted simple-view row MUST
+  be byte-identical after canonical JSON / Parquet normalization rules are applied.
+
+### Redaction and safety
+
+Simple-view emission MUST respect the run's redaction posture (see `ADR-0003-redaction-policy.md`
+and `090_security_safety.md`). If a field would be withheld, quarantined, or transformed under
+redaction rules, the simple view MUST NOT reintroduce it in cleartext.
 
 ## Canonical topology
 
@@ -825,6 +890,20 @@ Emit a large script block and confirm max-length and sidecar policies behave as 
 
 Record validation results as part of a run bundle under `logs/telemetry_validation.json`.
 
+Capture window (normative): `capture_window` describes the effective time range for which telemetry
+is expected to be present and considered in-scope for the run.
+
+- `capture_window.start_time_utc` MUST be the inclusive lower bound.
+- `capture_window.end_time_utc` MUST be the exclusive upper bound.
+- Implementations SHOULD derive the window from the run manifest timestamps
+  (`manifest.started_at_utc`/`manifest.ended_at_utc`) plus any configured padding/skew tolerance.
+  Implementations MUST record the *effective* bounds actually used.
+
+Correlation marker strategy (normative): `capture_window.correlation_marker_strategy` MUST describe
+any correlation marker(s) operators can use to join ground truth ↔ raw/simple ↔ normalized layers
+(for example, the synthetic correlation marker). Matching semantics for correlation markers MUST be
+explicit (for example: exact string equality).
+
 Evidence pointer requirements (normative): Any field that records a "where observed" file pointer
 (for example a canary observation location or a sample log reference) MUST be a run-relative path
 using POSIX separators (`/`) even on Windows. Implementations MUST NOT emit absolute paths,
@@ -833,6 +912,14 @@ directly as `evidence_refs[].artifact_path` entries for telemetry-layer gaps in 
 
 Minimum required fields for `logs/telemetry_validation.json`:
 
+- `capture_window` (object):
+  - `start_time_utc` (RFC3339 string; UTC)
+  - `end_time_utc` (RFC3339 string; UTC)
+  - `correlation_marker_strategy` (object; MAY be empty)
+    - if `runner.atomic.synthetic_correlation_marker.enabled=true`, implementations MUST record the
+      synthetic correlation marker carrier paths (ground truth carrier:
+      `extensions.synthetic_correlation_marker`; normalized carrier:
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker`).
 - `assets` (array of objects; sorted by `asset_id` ascending)
   - `asset_id` (string)
   - `collector_config_sha256` (string; lowercase hex; 64 chars)

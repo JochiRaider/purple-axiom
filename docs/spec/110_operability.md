@@ -566,13 +566,20 @@ Log collection enabled, this includes:
 
 Additional normative checks:
 
+- `runs/<run_id>/logs/telemetry_validation.json` MUST include a `capture_window` object with
+  explicit start/end timestamps and any correlation marker strategy used for joins between layers.
+  - Required fields: `capture_window.start_time_utc`, `capture_window.end_time_utc`.
+  - If `runner.atomic.synthetic_correlation_marker.enabled=true`,
+    `capture_window.correlation_marker_strategy` MUST describe the synthetic marker join surface
+    (ground truth carrier: `extensions.synthetic_correlation_marker`; normalized carrier:
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker`).
 - The validator MUST emit a `health.json.stages[]` entry with `stage: "telemetry.agent.liveness"`.
   - The validator MUST treat collector self-telemetry as the OS-neutral heartbeat for each asset
     with `telemetry.otel.enabled=true` (see the telemetry pipeline specification).
   - If no heartbeat is observed for one or more expected assets within
-    `telemetry.otel.agent_liveness.startup_grace_seconds` from the start of the telemetry window,
-    the stage MUST be `status=failed`, `fail_mode=fail_closed`,
-    `reason_code=agent_heartbeat_missing`.
+    `telemetry.otel.agent_liveness.startup_grace_seconds` from the start of the telemetry window
+    (`telemetry_validation.capture_window.start_time_utc`), the stage MUST be `status=failed`,
+    `fail_mode=fail_closed`, `reason_code=agent_heartbeat_missing`.
   - The validator MUST record per-asset liveness evidence in
     `runs/<run_id>/logs/telemetry_validation.json` under `agent_liveness`.
 - The validator MUST emit a `health.json.stages[]` entry with

@@ -52,9 +52,15 @@ This specification does **not** define:
   more action instances and emit deterministic evidence.
 - **Executor variant**: an adapter-internal execution mechanism selector. In v0.1 Atomic execution,
   this is `runner.atomic.executor` (for example `invoke_atomic_red_team`).
-- **Correlation carrier**: a deterministic token emitted by the runner/target that is intended to
-  survive into telemetry so detections can be joined back to ground truth (for example
-  `extensions.synthetic_correlation_marker`).
+- **Correlation marker**: a deterministic value computed by the runner (per action) and injected
+  into telemetry so detections can be joined back to ground truth (for example
+  `extensions.synthetic_correlation_marker` and `extensions.synthetic_correlation_marker_token`).
+- **Correlation carrier**: a runner-declared correlation mechanism (capability id) that defines how
+  a correlation marker is produced, recorded, and surfaced into telemetry (for example
+  `synthetic_correlation_marker`).
+- **Correlation carrier matrix**: an adapter-declared, deterministic mapping that specifies which
+  transport surfaces are supported/required for a given correlation carrier, and any constraints
+  that force tokenized forms.
 
 ## Architecture integration
 
@@ -121,6 +127,10 @@ Each execution adapter MUST provide a **capability descriptor** (in-memory objec
   - Ordering: MUST be sorted ascending by UTF-8 byte order.
   - v0.1 baseline: MUST include `synthetic_correlation_marker` for adapters that support that
     feature gate.
+- `correlation_carrier_matrix`: object describing adapter-specific correlation injection behavior.
+  - REQUIRED when `supported_correlation_carriers` includes `synthetic_correlation_marker`.
+  - `schema_version` MUST equal `pa:correlation-carrier-matrix:v1`.
+  - See "Correlation carrier matrix" for the normative shape and semantics.
 - `supported_engines` (required): array of supported action engines.
   - Allowed values (v1): `atomic | caldera | custom`
   - Ordering: MUST be sorted ascending by UTF-8 byte order.
@@ -141,21 +151,99 @@ Determinism requirements (normative):
 
 ## Correlation carriers
 
-A correlation carrier is a runner-declared mechanism for embedding a join token into telemetry.
+A correlation carrier is a runner-declared mechanism for embedding a correlation marker into
+telemetry.
+
+Correlation injection is adapter-specific: different execution adapters (detonator types) use
+different transport surfaces (process arguments, environment variables, HTTP headers, marker events,
+etc.). Purple Axiom MUST make this explicit via a per-adapter correlation carrier matrix.
+
+### Correlation carrier matrix (normative)
+
+Correlation is only as strong as its weakest backend. A single backend that cannot reliably carry
+the marker forces heuristic fallbacks, which Purple Axiom avoids by default.
+
+Each execution adapter that declares any correlation carrier in `supported_correlation_carriers`
+MUST also declare `correlation_carrier_matrix` in its capability descriptor. The matrix MUST fully
+describe, for that adapter, which transports are available and which are REQUIRED for deterministic
+correlation.
+
+#### Matrix object shape (normative)
+
+`correlation_carrier_matrix`:
+
+- `schema_version` (required): `pa:correlation-carrier-matrix:v1`
+- `carriers` (required): array of carrier declarations.
+  - Ordering: MUST be sorted ascending by UTF-8 byte order of `carrier_id`.
+  - The matrix MUST include exactly one entry for each value in `supported_correlation_carriers`.
+- `carriers[]` entry:
+  - `carrier_id` (required): MUST match one of the values in `supported_correlation_carriers`.
+  - `transports` (required): array of transport declarations for this carrier.
+    - Ordering: MUST be sorted ascending by UTF-8 byte order of `transport_id`.
+- `transports[]` entry:
+  - `transport_id` (required; `id_slug_v1`): transport surface identifier (see below).
+  - `required` (required): boolean.
+  - `value_form` (required): `canonical | token | either`
+    - `canonical`: transport MUST carry `extensions.synthetic_correlation_marker`.
+    - `token`: transport MUST carry `extensions.synthetic_correlation_marker_token`.
+    - `either`: transport MAY carry either form.
+  - `constraints` (optional): object describing carrier limits that influence value form selection.
+    - `max_chars` (optional): integer (character count; for these marker forms this is equivalent to
+      byte count because they are ASCII).
+    - `allowed_chars_regex` (optional): regex string (RE2-compatible recommended).
+    - `notes` (optional): string
+
+#### Value form selection (normative)
+
+- The runner MUST compute and record both marker forms (canonical + token) as defined in
+  `025_data_contracts.md`.
+- For any transport where `value_form` includes `canonical`, the adapter MUST ensure the canonical
+  marker satisfies the transport’s declared constraints (when present). For any transport where
+  `value_form` includes `token`, the adapter MUST ensure the token satisfies the transport’s
+  declared constraints (when present).
+- Implementations MUST NOT perform heuristic correlation to compensate for missing required
+  transport surfaces. When required transports cannot be used, the run MUST surface deterministic
+  "missing telemetry" outcomes downstream.
+
+#### Standard transport ids (v1, normative)
+
+The following `transport_id` values are reserved for v1:
+
+- `env-var-injection`: marker carried via environment variables.
+- `parent-process-naming`: marker carried via parent process naming / parent identity fields.
+- `command-line-argument-tagging`: marker carried via process command-line arguments.
+- `http-header-tagging`: marker carried via HTTP headers and/or user-agent tagging (web/cloud
+  techniques).
+- `marker-event-emission`: marker carried via a dedicated marker-bearing event emitted immediately
+  before the primary action execution.
+
+#### v0.1 baseline matrices (normative)
+
+`adapter_id="atomic"`:
+
+- For carrier `synthetic_correlation_marker`, the adapter MUST declare at least one `required=true`
+  transport and MUST ensure that transport results in marker-bearing telemetry when the carrier is
+  enabled.
+- v0.1 RECOMMENDED minimum required transport: `marker-event-emission`.
 
 ### v0.1 carrier: `synthetic_correlation_marker`
 
 If enabled (`runner.atomic.synthetic_correlation_marker.enabled=true`):
 
-- The runner MUST emit a marker value and record it in:
-  - `ground_truth.jsonl` action record: `extensions.synthetic_correlation_marker`
-  - normalized OCSF telemetry (when marker-bearing telemetry is ingested and normalized):
-    `metadata.extensions.purple_axiom.synthetic_correlation_marker`
+- The runner MUST compute and record **both** of the following per action:
+  - `extensions.synthetic_correlation_marker` (canonical marker string; see `025_data_contracts.md`)
+  - `extensions.synthetic_correlation_marker_token` (deterministic derived token; see
+    `025_data_contracts.md`)
+- Marker-bearing telemetry emission is adapter-specific and MUST follow the adapter’s declared
+  correlation carrier matrix:
+  - For each `required=true` transport, the adapter MUST emit marker-bearing telemetry that carries
+    either the canonical marker, the token, or both as specified by that transport’s `value_form`.
 - The runner MUST also record the marker emission attempt in
   `runner/actions/<action_id>/side_effect_ledger.json` (contract: `side_effect_ledger`) before the
   emission attempt is made (see `032_atomic_red_team_executor_integration.md`).
 
-The marker format is defined in `025_data_contracts.md` (“Synthetic correlation markers”).
+The marker canonical format and token derivation are defined in `025_data_contracts.md`
+(`extensions.synthetic_correlation_marker*`).
 
 ### v0.2+ carrier options (non-normative)
 

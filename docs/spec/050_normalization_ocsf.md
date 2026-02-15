@@ -204,6 +204,9 @@ normalized event (keys MAY be null only where explicitly noted).
 - `metadata.source_event_id` (source-native upstream ID when meaningful; else null)
 - `metadata.identity_tier` (1 | 2 | 3; see the
   [event identity ADR](../adr/ADR-0002-event-identity-and-provenance.md))
+- `metadata.extensions.purple_axiom.raw_ref` (stable raw provenance pointer; required for identity
+  tiers 1 and 2; MUST be `null` for identity tier 3; see
+  [ADR-0002](../adr/ADR-0002-event-identity-and-provenance.md))
 
 Terminology note (normative):
 
@@ -216,11 +219,28 @@ Terminology note (normative):
 Optional envelope extensions (v0.1):
 
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string)
+- `metadata.extensions.purple_axiom.raw_refs` (array of `raw_ref` objects; MAY be present when an
+  emitted normalized event is derived from multiple raw records; see
+  [ADR-0002](../adr/ADR-0002-event-identity-and-provenance.md))
 
 Vendor-field rule (normative):
 
 - New project-owned envelope extension fields MUST be added under `metadata.extensions.purple_axiom`
   (not as new `metadata.*` siblings).
+
+### Raw provenance linkage (required)
+
+Normalization MUST preserve a stable raw provenance pointer from upstream telemetry ingestion:
+
+- For every emitted normalized event with `metadata.identity_tier ∈ {1,2}`,
+  `metadata.extensions.purple_axiom.raw_ref` MUST be present and MUST conform to
+  `ADR-0002-event-identity-and-provenance.md`.
+- If the normalizer emits multiple normalized events from a single raw/source record, all derived
+  events MUST share the same `raw_ref`.
+- If the normalizer emits an aggregated event derived from multiple raw/source records, it MUST:
+  - set `raw_ref` to the canonical origin per ADR-0002, and
+  - SHOULD emit `raw_refs` containing all known origins.
+- `raw_ref` and `raw_refs` MUST NOT influence `metadata.event_id` computation.
 
 ## Osquery normalization (v0.1)
 

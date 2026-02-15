@@ -374,10 +374,13 @@ Join precedence (normative). For each detection hit, candidates MUST be evaluate
 
 1. Marker join (highest confidence). If:
 
-   - the ground-truth action includes `extensions.synthetic_correlation_marker`, and
-   - at least one matched event (by `matched_event_ids[]`) includes the same value in
-     `metadata.extensions.purple_axiom.synthetic_correlation_marker`, then the hit MUST be
-     attributed to that action with `match_quality="exact"`.
+   - the ground-truth action includes `extensions.synthetic_correlation_marker` and/or
+     `extensions.synthetic_correlation_marker_token`, and
+   - at least one matched event (by `matched_event_ids[]`) includes a matching value in the
+     corresponding normalized envelope field:
+     - `metadata.extensions.purple_axiom.synthetic_correlation_marker`, and/or
+     - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, then the hit MUST be
+       attributed to that action with `match_quality="exact"`.
 
 1. Criteria-window join (secondary). If marker join produces no candidates, and
    `criteria/results.jsonl` is present, then a hit MUST be attributed to an action when:
@@ -423,7 +426,7 @@ Candidate selection and tie-breaks (normative).
 
 Allowed values (v0.1):
 
-- `exact`: marker join succeeded.
+- `exact`: marker join succeeded (canonical marker and/or marker token evidence).
 - `partial`: criteria-window join succeeded (no marker evidence).
 - `weak_signal`: pivot join was required (no marker and no criteria-window evidence).
 

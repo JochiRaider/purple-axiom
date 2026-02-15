@@ -92,8 +92,8 @@ Requirements (normative):
 - `path` MUST be a run-relative POSIX path (see `045_storage_formats.md`) and MUST NOT include the
   `runs/<run_id>/` prefix.
 - For `kind="file_cursor_v1"`, `cursor` MUST be present and MUST use the stable cursor formats
-  defined for Unix log ingestion (`044_unix_log_ingestion.md`): `li:<u64>` (line index) or `bo:<u64>`
-  (byte offset).
+  defined for Unix log ingestion (`044_unix_log_ingestion.md`): `li:<u64>` (line index) or
+  `bo:<u64>` (byte offset).
 - For `kind="dataset_row_v1"`, `row_locator` MUST be present and MUST uniquely identify the raw
   record within the referenced dataset for the run.
 - If evidence-tier raw preservation is enabled and the source supports stable cursors/offsets,
@@ -102,8 +102,8 @@ Requirements (normative):
 - When multiple candidate raw records could be considered the origin (for example, replay
   duplicates), producers MUST choose a canonical `raw_ref` deterministically:
   1. smallest `path` (byte-wise lexicographic)
-  2. if both candidates include `cursor`: smallest numeric cursor value
-  3. otherwise: smallest canonical JSON serialization of `row_locator` (sorted keys)
+  1. if both candidates include `cursor`: smallest numeric cursor value
+  1. otherwise: smallest canonical JSON serialization of `row_locator` (sorted keys)
 - `raw_ref` MUST NOT participate in the `metadata.event_id` hashing basis.
 
 Optional multi-origin extension:
@@ -171,11 +171,13 @@ pipeline-specific values:
 
 - MUST NOT include: `run_id`, `scenario_id`, `collector_version`, `normalizer_version`,
   `metadata.extensions.purple_axiom.synthetic_correlation_marker`,
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`,
   `metadata.extensions.purple_axiom.ingest_id`, ingest/observed timestamps, file offsets, collector
   hostnames, or any execution metadata.
 
-Rationale: `metadata.extensions.purple_axiom.synthetic_correlation_marker` is intentionally
-per-run/per-action correlation metadata. Including it in `identity_basis` would make
+Rationale: `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
+`metadata.extensions.purple_axiom.synthetic_correlation_marker_token` are intentionally
+per-run/per-action correlation metadata. Including either in `identity_basis` would make
 `metadata.event_id` vary across runs and reprocessing, breaking stable joins and deterministic
 deduplication.
 

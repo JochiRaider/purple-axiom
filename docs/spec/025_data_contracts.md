@@ -37,7 +37,7 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Contract registry](#contract-registry)
     - [Authoritative contract registry index (normative)](#authoritative-contract-registry-index-normative)
       - [Minimal registry shape (normative)](#minimal-registry-shape-normative)
-      - [Glob semantics (glob\_v1) (normative)](#glob-semantics-glob_v1-normative)
+      - [Glob semantics (glob_v1) (normative)](#glob-semantics-glob_v1-normative)
       - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
       - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
       - [Contract version constant (normative)](#contract-version-constant-normative)
@@ -88,7 +88,7 @@ invariants that cannot be expressed in JSON Schema alone.
       - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
     - [Measurement layers for conclusions (triage taxonomy)](#measurement-layers-for-conclusions-triage-taxonomy)
     - [Run manifest](#run-manifest)
-    - [Run results summary (run\_results.json)](#run-results-summary-run_resultsjson)
+    - [Run results summary (run_results.json)](#run-results-summary-run_resultsjson)
     - [Ground truth timeline](#ground-truth-timeline)
     - [Stable action identity](#stable-action-identity)
     - [Inputs and reproducible hashing](#inputs-and-reproducible-hashing)
@@ -2877,6 +2877,15 @@ Optional envelope extensions (v0.1):
   used to correlate synthetic activity to a specific action and lifecycle phase. This is the
   normalized (OCSF) representation of the ground-truth action field
   `extensions.synthetic_correlation_marker`.
+
+  - When present, the value MUST be preserved verbatim from ingestion through normalization.
+  - The value MUST NOT be used as part of `metadata.event_id` computation (see the event identity
+    ADR for identity-basis exclusions).
+
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (string; optional): stable
+  derived token used to correlate synthetic activity for transports with length / character
+  constraints. This is the normalized (OCSF) representation of the ground-truth action field
+  `extensions.synthetic_correlation_marker_token`.
 
   - When present, the value MUST be preserved verbatim from ingestion through normalization.
   - The value MUST NOT be used as part of `metadata.event_id` computation (see the event identity

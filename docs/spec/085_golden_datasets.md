@@ -236,22 +236,27 @@ tasks if exposed as a feature.
 
 Marker location (v0.1):
 
-- Normalized OCSF events: `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string).
-- Ground truth (when enabled): `extensions.synthetic_correlation_marker` on each ground truth line.
+- Normalized OCSF events:
+  - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string)
+  - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (string)
+- Ground truth (when enabled):
+  - `extensions.synthetic_correlation_marker` on each ground truth line
+  - `extensions.synthetic_correlation_marker_token` on each ground truth line
 
 Therefore dataset builds MUST support two feature variants (selected at build time per release):
 
 1. **marker-assisted** (audit / debugging)
 
-   - Marker MAY be present in feature artifacts.
+   - Marker fields MAY be present in feature artifacts.
 
 1. **marker-blind** (default for ML)
 
-   - Marker MUST be removed from all feature artifacts.
-   - Removing marker MUST NOT change `metadata.event_id` values (marker is not part of event
-     identity).
-   - Marker MUST still be retained in labels/provenance artifacts when present in ground truth, so
-     auditors can confirm end-to-end attribution.
+   - Marker fields MUST be removed from all feature artifacts (both the canonical marker string and
+     the derived token).
+   - Removing marker fields MUST NOT change `metadata.event_id` values (marker fields are not part
+     of event identity).
+   - Marker fields MUST still be retained in labels/provenance artifacts when present in ground
+     truth, so auditors can confirm end-to-end attribution.
 
 Variant declaration and identity (normative):
 

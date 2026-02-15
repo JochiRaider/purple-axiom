@@ -590,19 +590,24 @@ Deterministic ordering (normative):
 Required content (when marker emission is enabled):
 
 - Marker status: `enabled | disabled`.
-- The marker value(s) used for the run (displayed verbatim).
+- The marker values used for the run:
+  - canonical marker string (`extensions.synthetic_correlation_marker`)
+  - deterministic derived token (`extensions.synthetic_correlation_marker_token`)
 - Per-action marker observability table (stable ordering, required):
   - Sort rows by `action_id` ascending.
   - Columns:
     - `action_id` (and action name when available)
-    - `marker_value`
-    - `observed` (`yes | no`)
-    - `gap_category` (when `observed=no`, MUST be `missing_telemetry`)
+    - `marker_canonical`
+    - `marker_token`
+    - `observed` (`yes | no`) (yes when either canonical marker or token is observed in normalized
+      telemetry for the action)
+    - `observed_form` (`canonical | token | both | none`)
+    - `gap_category` (when `observed_form=none`, MUST be `missing_telemetry`)
 - Narrative and gap integration (normative):
-  - When `observed=no` for any action, the report MUST surface those actions under the existing
-    `missing_telemetry` gap category in [Gap analysis](#gap-analysis) and MUST include a concise
-    remediation hint that points to telemetry pipeline filtering/sampling misconfiguration as a
-    primary suspect.
+  - When `observed_form=none` for any action, the report MUST surface those actions under the
+    existing `missing_telemetry` gap category in [Gap analysis](#gap-analysis) and MUST include a
+    concise remediation hint that points to telemetry pipeline filtering/sampling misconfiguration
+    as a primary suspect.
 
 JSON equivalent (recommended):
 

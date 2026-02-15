@@ -811,22 +811,28 @@ The fixture set MUST include at least:
         entry representing cleanup invocation.
 
 Synthetic correlation marker fixtures under `tests/fixtures/runner/synthetic_marker/` validate
-deterministic marker computation and attempted emission bookkeeping.
+deterministic marker computation, deterministic marker_token derivation, and attempted emission
+bookkeeping.
 
 The fixture set MUST include at least:
 
 - `marker_emitted`:
   - Input: runner config enables synthetic correlation marker emission.
   - Expected:
-    - Ground truth includes `extensions.synthetic_correlation_marker` for the action where `execute`
-      is attempted.
+    - Ground truth includes both:
+      - `extensions.synthetic_correlation_marker`, and
+      - `extensions.synthetic_correlation_marker_token`, for the action where `execute` is
+        attempted.
     - The side-effect ledger includes an `execute`-phase entry describing the marker emission
       attempt (success or failure), consistent with runner contracts.
-    - The marker value conforms to the v0.1 format defined in data contracts.
+    - The marker values conform to the v1 formats defined in data contracts, and
+      `extensions.synthetic_correlation_marker_token` MUST equal the deterministic derivation from
+      `extensions.synthetic_correlation_marker`.
 
-For this fixture, the harness SHOULD compute
-`marker_value_sha256 = sha256_hex(UTF-8 bytes of marker_value)` and assert it is identical across
-repeated runs with identical inputs.
+Deterministic token test vector (required):
+
+- For `marker_canonical = "pa:synth:v1:00000000-0000-0000-0000-000000000000:s1:execute"`, the
+  expected `marker_token` MUST equal `-rqyVmMhNi0Dq9suJO8hb8` (N=22; base64url(SHA-256) prefix).
 
 #### State reconciliation fixtures (required)
 
@@ -1017,6 +1023,16 @@ Minimum required fixture cases (normative):
   - Setup: A ground-truth executed action includes `extensions.synthetic_correlation_marker`, and at
     least one matched normalized event includes the same marker in
     `metadata.extensions.purple_axiom.synthetic_correlation_marker`.
+  - Expected:
+    - the hit is attributed to that action, and
+    - `match_quality = "exact"`.
+
+- `attribution_marker_token_only_exact`
+
+  - Setup: A ground-truth executed action includes `extensions.synthetic_correlation_marker_token`,
+    and at least one matched normalized event includes the same token in
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (with the canonical marker
+    absent on the matched event).
   - Expected:
     - the hit is attributed to that action, and
     - `match_quality = "exact"`.
@@ -1545,9 +1561,10 @@ The fixture set MUST include at least:
     1. noise profile disabled, 2) noise profile enabled.
   - Expected:
     - For all normalized events that carry
-      `metadata.extensions.purple_axiom.synthetic_correlation_marker` values observed in ground
-      truth for executed actions, the multiset of `metadata.event_id` values MUST be identical
-      between the two runs.
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` values observed in
+      ground truth for executed actions, the multiset of `metadata.event_id` values MUST be
+      identical between the two runs.
     - Noise-profile metadata fields (when present) MUST NOT participate in `metadata.event_id`
       computation.
 

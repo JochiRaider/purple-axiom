@@ -257,9 +257,10 @@ Rules:
   `normalized/mapping_coverage.json`.
 - Unknown `query_name` rows MUST NOT produce mapped normalized events (that is, `class_uid > 0`).
   Marker-bearing records MUST NOT be dropped; if a record carries
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker`, the normalizer MUST still emit a
-  minimal envelope with `class_uid = 0` and preserve the source payload in `raw` (see
-  [OCSF normalization spec](050_normalization_ocsf.md)).
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, the normalizer MUST still
+  emit a minimal envelope with `class_uid = 0`, preserve whichever marker fields are present, and
+  preserve the source payload in `raw` (see [OCSF normalization spec](050_normalization_ocsf.md)).
 - Implementations MAY provide an explicit allowlist of additional `query_name` routes via mapping
   profile material.
 
@@ -323,6 +324,8 @@ Rules:
 - `calendarTime` MUST NOT be included in identity.
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (if present) MUST NOT be included
   in identity.
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (if present) MUST NOT be
+  included in identity.
 - For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id` (see
   [data contracts](025_data_contracts.md)).
 
@@ -415,7 +418,8 @@ A v0.1 implementation MUST satisfy:
   - Unknown `query_name` values do not produce mapped normalized events (`class_uid > 0`) and are
     recorded as unrouted or unmapped in `normalized/mapping_coverage.json`.
   - Marker-bearing records (those carrying
-    `metadata.extensions.purple_axiom.synthetic_correlation_marker`) MUST NOT be dropped; if
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`) MUST NOT be dropped; if
     unrouted, they MUST still be emitted with `class_uid = 0` and preserved raw payload.
 - Identity determinism:
   - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values.

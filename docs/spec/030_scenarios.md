@@ -316,6 +316,8 @@ Ground truth MUST record (minimum):
   - `reason_domain` (string; required when not `success`; MUST equal `ground_truth`)
 - `extensions.synthetic_correlation_marker` (when synthetic marker emission is enabled and `execute`
   was attempted).
+- `extensions.synthetic_correlation_marker_token` (when synthetic marker emission is enabled and
+  `execute` was attempted).
 - `evidence_refs[]` (when external evidence artifacts exist) using deterministic, stable artifact
   references.
 
@@ -660,6 +662,7 @@ Fields (per line):
     - `evidence` (object; optional pointers to artifacts under `runner/actions/<action_id>/...`)
 - `extensions` (object; optional):
   - `synthetic_correlation_marker` (string; present when enabled and `execute` was attempted)
+  - `synthetic_correlation_marker_token` (string; present when enabled and `execute` was attempted)
   - (other keys reserved)
 
 ### Principal selection (non-secret) (normative)
@@ -814,7 +817,8 @@ Ground truth is emitted as JSONL, one action per line.
     ]
   },
   "extensions": {
-    "synthetic_correlation_marker": "pa:synth:v1:<uuid>:s1:execute"
+    "synthetic_correlation_marker": "pa:synth:v1:<uuid>:s1:execute",
+    "synthetic_correlation_marker_token": "<marker_token>"
   }
 }
 ```

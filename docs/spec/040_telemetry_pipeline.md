@@ -169,6 +169,8 @@ Each simple-view row MUST include, at minimum:
   (see `ADR-0002-event-identity-and-provenance.md`).
 - `synthetic_correlation_marker` (string; nullable): copy of
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` when present.
+- `synthetic_correlation_marker_token` (string; nullable): copy of
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` when present.
 
 The following fields SHOULD be present when available from the source:
 
@@ -762,7 +764,9 @@ Constraints:
 ### Synthetic correlation marker propagation (required when enabled)
 
 When synthetic correlation marker emission is enabled, the telemetry pipeline MUST ingest and retain
-the marker end-to-end so downstream stages can correlate synthetic activity without heuristics.
+the marker evidence end-to-end so downstream stages can correlate synthetic activity without
+heuristics. Marker evidence may be carried as the canonical marker string, the deterministic derived
+token, or both (see `025_data_contracts.md` and `033_execution_adapters.md`).
 
 Normative requirements:
 
@@ -772,10 +776,11 @@ Normative requirements:
 - Collector and gateway configurations MUST NOT include any rule that filters out marker-bearing
   events. If filtering or sampling is enabled for other reasons, the configuration MUST implement an
   explicit allowlist so marker-bearing events are always retained.
-- The raw store MUST preserve the marker field in the captured record (attributes/body as emitted).
-  Normalization MUST preserve the marker value on the OCSF envelope field
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker` even when the base event is not
-  mapped (see [Normalization](050_normalization_ocsf.md))
+- The raw store MUST preserve any marker evidence field(s) in the captured record (attributes/body
+  as emitted). Normalization MUST preserve the marker evidence on the OCSF envelope fields:
+  - `metadata.extensions.purple_axiom.synthetic_correlation_marker`, and
+  - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, even when the base event
+    is not mapped (see [Normalization](050_normalization_ocsf.md))
 
 This invariant is required for regression comparisons and for classifying `missing_telemetry` when
 markers are expected but not observed. Implementations MUST NOT substitute time-window or other
@@ -917,9 +922,10 @@ Minimum required fields for `logs/telemetry_validation.json`:
   - `end_time_utc` (RFC3339 string; UTC)
   - `correlation_marker_strategy` (object; MAY be empty)
     - if `runner.atomic.synthetic_correlation_marker.enabled=true`, implementations MUST record the
-      synthetic correlation marker carrier paths (ground truth carrier:
-      `extensions.synthetic_correlation_marker`; normalized carrier:
-      `metadata.extensions.purple_axiom.synthetic_correlation_marker`).
+      synthetic correlation marker carrier paths (ground truth carriers:
+      `extensions.synthetic_correlation_marker` and `extensions.synthetic_correlation_marker_token`;
+      normalized carriers: `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`).
 - `assets` (array of objects; sorted by `asset_id` ascending)
   - `asset_id` (string)
   - `collector_config_sha256` (string; lowercase hex; 64 chars)

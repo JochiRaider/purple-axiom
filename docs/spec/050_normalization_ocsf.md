@@ -165,13 +165,16 @@ Required steps for changing the pinned OCSF version (normative):
     - values placed under `raw` MUST be redaction-safe for standard long-term artifact locations
     - `unmapped` MAY be used for derived fields that could not be mapped after routing, but `raw` is
       the canonical location for retaining the source payload
-- Preserve the synthetic correlation marker in the normalized envelope even when the base event is
+- Preserve synthetic correlation markers in the normalized envelope even when the base event is
   unmapped:
-  - if the source record carries `metadata.extensions.purple_axiom.synthetic_correlation_marker`
-    (the same marker value is also recorded in ground truth action records as
-    `extensions.synthetic_correlation_marker`; see `025_data_contracts.md`), the normalizer MUST
-    preserve it verbatim at the same path on the emitted envelope
-  - the synthetic correlation marker MUST NOT be used as part of `metadata.event_id` computation
+  - if the source record carries:
+    - `metadata.extensions.purple_axiom.synthetic_correlation_marker`, and/or
+    - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, (the same values are
+      also recorded in ground truth action records as `extensions.synthetic_correlation_marker` and
+      `extensions.synthetic_correlation_marker_token`; see `025_data_contracts.md`), the normalizer
+      MUST preserve them verbatim at the same paths on the emitted envelope
+  - the synthetic correlation marker fields MUST NOT be used as part of `metadata.event_id`
+    computation
   - if the record is otherwise unrouted/unmapped, the normalizer MUST still emit a minimal OCSF
     envelope record (see "Required envelope (Purple Axiom contract)") and retain the payload per the
     source-fidelity rules above (marker-bearing records MUST NOT be dropped as "unmapped noise")
@@ -219,6 +222,7 @@ Terminology note (normative):
 Optional envelope extensions (v0.1):
 
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string)
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (string)
 - `metadata.extensions.purple_axiom.raw_refs` (array of `raw_ref` objects; MAY be present when an
   emitted normalized event is derived from multiple raw records; see
   [ADR-0002](../adr/ADR-0002-event-identity-and-provenance.md))
@@ -266,10 +270,11 @@ Unrouted behavior:
 - The normalizer MUST NOT guess a `class_uid` for an unknown `query_name`.
 - Unknown `query_name` rows MUST be preserved in `raw/` and MUST be counted in
   `normalized/mapping_coverage.json` as unrouted or unmapped.
-- If an unknown `query_name` row carries
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker`, the normalizer MUST still emit a
-  minimal normalized event record with `class_uid = 0` and the required envelope fields per
-  "Required envelope (Purple Axiom contract)".
+- If an unknown `query_name` row carries either
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker` or
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, the normalizer MUST still
+  emit a minimal normalized event record with `class_uid = 0`, preserve whichever marker fields are
+  present, and include the required envelope fields per "Required envelope (Purple Axiom contract)".
 
 Implementation details and conformance fixtures are specified in the
 [osquery integration spec](042_osquery_integration.md).

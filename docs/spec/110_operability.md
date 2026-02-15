@@ -571,8 +571,10 @@ Additional normative checks:
   - Required fields: `capture_window.start_time_utc`, `capture_window.end_time_utc`.
   - If `runner.atomic.synthetic_correlation_marker.enabled=true`,
     `capture_window.correlation_marker_strategy` MUST describe the synthetic marker join surface
-    (ground truth carrier: `extensions.synthetic_correlation_marker`; normalized carrier:
-    `metadata.extensions.purple_axiom.synthetic_correlation_marker`).
+    (ground truth carriers: `extensions.synthetic_correlation_marker` and
+    `extensions.synthetic_correlation_marker_token`; normalized carriers:
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`).
 - The validator MUST emit a `health.json.stages[]` entry with `stage: "telemetry.agent.liveness"`.
   - The validator MUST treat collector self-telemetry as the OS-neutral heartbeat for each asset
     with `telemetry.otel.enabled=true` (see the telemetry pipeline specification).

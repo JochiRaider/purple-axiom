@@ -333,13 +333,15 @@ Common keys:
   - `synthetic_correlation_marker` (optional)
     - `enabled` (optional, default: `false`)
       - When `true`, the runner emits synthetic marker events for correlation (see
-        `032_atomic_red_team_executor_integration.md`) and records the marker value in run
-        artifacts.
-        - Ground truth action records: `extensions.synthetic_correlation_marker` (see
-          `025_data_contracts.md`).
+        `032_atomic_red_team_executor_integration.md`) and records marker values in run artifacts.
+        - Ground truth action records:
+          - `extensions.synthetic_correlation_marker` (see `025_data_contracts.md`).
+          - `extensions.synthetic_correlation_marker_token` (see `025_data_contracts.md`).
         - Normalized OCSF events (when marker-bearing telemetry is ingested and normalized):
-          `metadata.extensions.purple_axiom.synthetic_correlation_marker` (see
-          `050_normalization_ocsf.md`).
+          - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (see
+            `050_normalization_ocsf.md`).
+          - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (see
+            `050_normalization_ocsf.md`).
     - `method` (optional, default: `auto`): `auto | windows_eventlog | linux_syslog | filelog`
       - `auto`: implementation selects an OS-appropriate method.
       - `filelog`: marker is appended to a local file that is tailed by the collector.

@@ -1,52 +1,39 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "run_registry",
+  "$id": "pa:run_registry:v1",
+  "title": "Workspace run registry",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "contract_version",
-    "schema_version",
-    "runs"
-  ],
+  "required": ["schema_version", "contract_version", "runs"],
   "properties": {
-    "contract_version": {
-      "type": "string",
-      "const": "0.2.0",
-      "description": "Contract version for this schema."
-    },
     "schema_version": {
       "type": "integer",
-      "const": 1,
-      "description": "Schema version for the run registry payload shape."
+      "const": 1
+    },
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
     },
     "runs": {
       "type": "array",
-      "description": "Run listing entries. Ordering rules are specified in the operator interface spec (not enforced by JSON Schema).",
       "items": {
-        "$ref": "#/$defs/run_entry"
-      }
-    }
-  },
-  "$defs": {
-    "run_entry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "run_id",
-        "started_at_utc"
-      ],
-      "properties": {
-        "run_id": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-          "description": "Run identifier (lowercase RFC 4122 UUID)."
-        },
-        "started_at_utc": {
-          "type": "string",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
-          "description": "Run start time (RFC3339 UTC with 'Z' suffix)."
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run_id", "started_at_utc"],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "started_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$",
+            "description": "RFC3339 timestamp in UTC with Z suffix."
+          }
         }
       }
     }
-  }
+  },
+  "$comment": "Determinism: runs[] ordering MUST be enforced by CI (stable ordering per Operator Interface)."
 }

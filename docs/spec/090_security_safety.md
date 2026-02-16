@@ -44,17 +44,25 @@ Scenario safety interaction (normative):
 
 ## Definitions
 
-- standard long-term artifact locations: Default-exported run-bundle paths (Tier 1 evidence + Tier 2
-  analytics) plus deterministic evidence under `runs/<run_id>/logs/` (as defined by ADR-0009),
-  excluding volatile logs, `.staging/`, and the quarantine directory.
-- logs/\*.json evidence allowlist (normative, v0.1): The subset of schema-backed artifacts under
-  `runs/<run_id>/logs/` that MUST be treated as standard long-term artifacts (included in default
-  export and in `security/checksums.txt` when signing is enabled; see `025_data_contracts.md`,
-  "Long-term artifact selection for checksumming").
+- default export profile (v0.1): The canonical default export profile defined in ADR-0009.
+- standard long-term artifact locations: Run-relative paths included in the v0.1 default export
+  profile (ADR-0009), excluding:
+  - volatile diagnostics (ADR-0009),
+  - `.staging/**`,
+  - the quarantine directory (`<security.redaction.unredacted_dir>/**`), and
+  - non-long-term operational locations (v0.1: `raw_parquet/**`).
+- deterministic evidence logs allowlist (normative, v0.1): The allowlisted deterministic evidence
+  logs under `runs/<run_id>/logs/` defined in ADR-0009 §3.
+- non-long-term operational locations: Run-bundle paths permitted for pipeline operation but
+  excluded from the v0.1 default export profile and signing/checksums scope (v0.1:
+  `raw_parquet/**`).
 - quarantine directory: `runs/<run_id>/<security.redaction.unredacted_dir>` used only when
   unredacted evidence storage is explicitly permitted (default: `runs/<run_id>/unredacted/`).
-- volatile logs: Operator-local diagnostics excluded from default export/checksums (for example
-  process stdout/stderr and any `runs/<run_id>/logs/` content not in the allowlist above).
+- volatile diagnostics: Operator-local diagnostics excluded from the v0.1 default export profile and
+  signing/checksums scope (see ADR-0009 §4).
+- withheld (handling): The standard artifact path contains a deterministic placeholder and the
+  underlying unredacted bytes are not promoted into standard long-term artifact locations and are
+  excluded from the v0.1 default export profile and signing/checksums scope.
 - redacted-safe: Satisfies the effective redaction policy and post-checks (see
   [ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md)).
 - evidence-tier artifact: Tier 1 evidence artifacts governed by redaction/withhold/quarantine rules
@@ -337,9 +345,11 @@ The pipeline MUST apply one of the following deterministic behaviors, controlled
 `security.redaction.disabled_behavior`:
 
 - `withhold_from_long_term` (default):
-  - Unredacted evidence MUST NOT be persisted in the run bundle (except volatile logs as permitted
-    by operability/debug policies).
+  - Unredacted evidence MUST NOT be promoted into the standard long-term artifact locations and MUST
+    NOT be included in the v0.1 default export profile or signing/checksum scope.
   - The pipeline MUST write deterministic placeholders in standard artifact locations.
+  - Unredacted bytes MAY be written to non-long-term operational locations (for example
+    `raw_parquet/**`) when required for pipeline operation.
 - `quarantine_unredacted`:
   - This behavior MUST be refused (fail closed) unless
     `security.redaction.allow_unredacted_evidence_storage: true`.
@@ -353,9 +363,9 @@ path and handling (`withheld` or `quarantined`).
 
 ### Placeholder artifacts
 
-When an artifact is withheld or quarantined under this spec, implementations MUST still emit a
-placeholder at the standard artifact path so downstream tooling can rely on stable paths and
-schemas.
+Implementations MUST emit a placeholder at the standard artifact path whenever the artifact content
+is not emitted as redaction-safe evidence at that path (for example: `withheld`, `quarantined`, or
+`absent`) so downstream tooling can rely on stable paths and schemas.
 
 Schema-aware placeholder pattern (normative):
 
@@ -365,6 +375,8 @@ Schema-aware placeholder pattern (normative):
   - Schemas MUST allow an optional top-level `placeholder` object with the shape defined below.
   - When `placeholder` is present, the artifact MUST NOT include unredacted sensitive content
     elsewhere in the object; any required non-placeholder fields MUST use safe sentinel values only.
+    - For schema-required timestamp fields (for example `generated_at_utc`), implementations MUST
+      use the fixed sentinel value `1970-01-01T00:00:00Z`.
 
 - For text artifacts (`*.txt`):
 
@@ -379,17 +391,34 @@ Schema-aware placeholder pattern (normative):
     1. One output event: `[0.0,"o","<placeholder_line>\n"]`, where `<placeholder_line>` is the
        placeholder text line format defined below.
 
+Handling semantics (normative):
+
+- `withheld`: content existed but is not stored in long-term artifacts; the standard artifact path
+  contains a placeholder.
+- `quarantined`: content existed; the standard artifact path contains a placeholder; unredacted
+  bytes are stored under `security.redaction.unredacted_dir`.
+- `absent`: content is unavailable (unsupported/not applicable/disabled) and MUST NOT be written
+  anywhere (including under `security.redaction.unredacted_dir`).
+
 Required placeholder fields (normative):
 
 - `reason_code` is REQUIRED and MUST be a stable `lower_snake_case` token.
-- `reason_domain` is REQUIRED and MUST be a `artifact_placeholder`.
+- `reason_domain` is REQUIRED and MUST equal `artifact_placeholder`.
 - `sha256` is REQUIRED when permitted by the effective redaction policy for the underlying content
   class; it MUST be omitted when not permitted.
+  - When `handling=absent`, `sha256` MUST be omitted.
+
+Standard `reason_code` values (RECOMMENDED):
+
+- When `placeholder.handling=absent`, `placeholder.reason_code` SHOULD be one of:
+  - `unsupported_by_executor`
+  - `disabled_by_config`
+  - `not_applicable`
 
 Placeholder JSON object (normative, `pa.placeholder.v1`):
 
 - `placeholder.placeholder_version` MUST be `pa.placeholder.v1`
-- `placeholder.handling` MUST be `withheld` or `quarantined`
+- `placeholder.handling` MUST be `withheld`, `quarantined`, or `absent`
 - `placeholder.reason_code` MUST be present
 - `placeholder.reason_domain` MUST be present
 - `placeholder.sha256` MAY be present only when permitted; format MUST be
@@ -397,7 +426,7 @@ Placeholder JSON object (normative, `pa.placeholder.v1`):
 
 Placeholder text line format (normative, `pa.placeholder.v1`):
 
-`PA_PLACEHOLDER_V1 handling=<withheld|quarantined> reason_code=<lower_snake_case> [sha256=sha256:<64hex>]`
+`PA_PLACEHOLDER_V1 handling=<withheld|quarantined|absent> reason_code=<lower_snake_case> [sha256=sha256:<64hex>]`
 
 Hash inclusion rule (normative):
 
@@ -409,14 +438,16 @@ Determinism requirements (normative):
 
 - Placeholder serialization MUST be byte-for-byte deterministic given the same inputs.
 - JSON placeholders MUST be serialized using RFC 8785 canonical JSON (UTF-8) to ensure stable bytes.
-- Placeholders MUST NOT include timestamps, hostnames, absolute paths, or environment-specific
-  values.
+- Placeholders MUST NOT include run-specific timestamps, hostnames, absolute paths, or
+  environment-specific values.
 
 Quarantine mapping (normative):
 
 - When `handling=quarantined`, the unredacted bytes MUST be written under
   `runs/<run_id>/<security.redaction.unredacted_dir>/` preserving the standard relative path (for
   example, `unredacted/runner/actions/<action_id>/requirements_evaluation.json`).
+- When `handling=withheld` or `handling=absent`, unredacted bytes MUST NOT be written under
+  `security.redaction.unredacted_dir` for that artifact.
 
 ### Runner transcripts
 
@@ -446,8 +477,8 @@ Normative requirements:
   - The pipeline MUST NOT store that content in the standard long-term artifact locations.
   - Implementations MAY write the unredacted content under the run's configured quarantine directory
     when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
-  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
-    bundle).
+  - Otherwise, implementations MUST withhold the unredacted content (not promoted into standard
+    long-term artifact locations).
   - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
     artifact at `runner/actions/<action_id>/requirements_evaluation.json` conforming to "Placeholder
     artifacts" (including required `reason_code`, and `sha256` when allowed).
@@ -467,21 +498,29 @@ Normative requirements:
 
 - It MUST be redacted-safe before promotion to standard long-term artifact locations.
 
+- If the pipeline determines that `resolved_inputs_redacted` evidence cannot be produced
+  deterministically (unsupported/not applicable), implementations MUST still write a deterministic
+  placeholder artifact at `runner/actions/<action_id>/resolved_inputs_redacted.json` conforming to
+  "Placeholder artifacts" with `placeholder.handling=absent` and a stable `placeholder.reason_code`
+  (RECOMMENDED: `unsupported_by_executor` or `not_applicable`).
+
+  - In this case, unredacted bytes MUST NOT be written anywhere for this artifact.
+
 - If the pipeline determines that `resolved_inputs_redacted` content cannot be made redacted-safe
   deterministically:
 
   - The pipeline MUST NOT store that content in the standard long-term artifact locations.
   - Implementations MAY write the unredacted content under the run's configured quarantine directory
     when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
-  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
-    bundle).
+  - Otherwise, implementations MUST withhold the unredacted content (not promoted into standard
+    long-term artifact locations).
   - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
     artifact at `runner/actions/<action_id>/resolved_inputs_redacted.json` conforming to
     "Placeholder artifacts" (including required `reason_code`, and `sha256` when allowed).
 
-- When resolved inputs evidence content is quarantined or withheld, the run manifest and reports
-  MUST disclose the affected artifact relative path and the applied handling (`withheld` or
-  `quarantined`).
+- When resolved inputs evidence content is quarantined, withheld, or absent, the run manifest and
+  reports MUST disclose the affected artifact relative path and the applied handling (`withheld`,
+  `quarantined`, or `absent`).
 
 - Report rendering (default-safe): reports MUST NOT render resolved input values from
   `resolved_inputs_redacted.json` unless a future explicit debug-only gate is added. Reports MAY
@@ -502,17 +541,25 @@ Normative requirements:
     or synthetic identifier)
   - An `action_principal_map[]` keyed by `action_id` and stable ids
   - A `redacted_fingerprint` field that is explicitly designated as safe by the redaction policy.
+- If principal context collection is disabled (for example
+  `runner.identity.emit_principal_context=false`) or unsupported/not applicable, implementations
+  MUST still write a deterministic placeholder artifact at `runner/principal_context.json`
+  conforming to "Placeholder artifacts" with `placeholder.handling=absent` and a stable
+  `placeholder.reason_code` (RECOMMENDED: `disabled_by_config` when disabled; otherwise
+  `unsupported_by_executor` or `not_applicable`).
+  - In this case, unredacted bytes MUST NOT be written anywhere for this artifact.
 - If the pipeline determines the principal context cannot be made redacted-safe:
   - The pipeline MUST NOT store that content in the standard long-term artifact locations.
   - Implementations MAY write the unredacted content under the run's configured quarantine directory
     when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
-  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
-    bundle).
+  - Otherwise, implementations MUST withhold the unredacted content (not promoted into standard
+    long-term artifact locations).
   - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
     artifact at `runner/principal_context.json` conforming to "Placeholder artifacts" (including
     required `reason_code`, and `sha256` when allowed).
-- When principal context is quarantined or withheld, the run manifest and reports MUST disclose the
-  affected artifact relative path and the applied handling (`withheld` or `quarantined`).
+- When principal context is quarantined, withheld, or absent, the run manifest and reports MUST
+  disclose the affected artifact relative path and the applied handling (`withheld`, `quarantined`,
+  or `absent`).
 
 ### Side-effect ledger
 
@@ -525,19 +572,25 @@ Normative requirements:
 - Side-effect entries MUST avoid storing raw secrets. If a side-effect involves secret material, the
   entry MUST record `reason_domain="side_effect_ledger"` and `reason_code` only, and MAY include a
   redacted-safe `sha256` only when allowed by the effective redaction policy.
+- If side-effect tracking is unsupported/not applicable (or cannot be produced deterministically),
+  implementations MUST still write a deterministic placeholder artifact at the standard path
+  conforming to "Placeholder artifacts" with `placeholder.handling=absent` and a stable
+  `placeholder.reason_code` (RECOMMENDED: `unsupported_by_executor` or `not_applicable`).
+  - In this case, unredacted bytes MUST NOT be written anywhere for this artifact.
 - If the pipeline determines the side-effect ledger cannot be made redacted-safe:
   - The pipeline MUST NOT store that content in the standard long-term artifact locations.
   - Implementations MAY write the unredacted content under the run's configured quarantine directory
     when quarantining is allowed by configuration (including the explicit unredacted-storage gate).
-  - Otherwise, implementations MUST withhold the unredacted content (not persisted in the run
-    bundle).
+  - Otherwise, implementations MUST withhold the unredacted content (not promoted into standard
+    long-term artifact locations).
   - In both cases (quarantined or withheld), implementations MUST write a deterministic placeholder
     artifact at `runner/actions/<action_id>/side_effect_ledger.json` conforming to "Placeholder
     artifacts" (including required `reason_code`, and `sha256` when allowed).
 - If the ledger contains raw credential material, it MUST be withheld or quarantined (never stored
   in standard long-term artifact locations).
-- When side-effect ledger is quarantined or withheld, the run manifest and reports MUST disclose the
-  affected artifact relative path and the applied handling (`withheld` or `quarantined`).
+- When side-effect ledger is quarantined, withheld, or absent, the run manifest and reports MUST
+  disclose the affected artifact relative path and the applied handling (`withheld`, `quarantined`,
+  or `absent`).
 
 ### State reconciliation
 

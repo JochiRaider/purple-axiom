@@ -62,7 +62,7 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- `tests/fixtures/lab_provider/`
+- `tests/fixtures/lab_providers/`
 - `tests/fixtures/scenario/target_selection/`
 
 See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
@@ -103,9 +103,19 @@ A component that can resolve a concrete set of targets from an external inventor
 A canonical JSON snapshot written into the run bundle so the run is reproducible even if the
 provider state changes later.
 
+Path notation (normative):
+
+- In this document, `runs/<run_id>/...` is used as an illustrative on-disk prefix for run bundle
+  locations.
+- Any field that stores an artifact path (for example, a run-manifest pointer to the inventory
+  snapshot) MUST store a run-relative POSIX path (relative to the run bundle root) and MUST NOT
+  include the `runs/<run_id>/` prefix.
+  - Example: `logs/lab_inventory_snapshot.json` (not
+    `runs/<run_id>/logs/lab_inventory_snapshot.json`).
+
 Recommended path:
 
-- `runs/<run_id>/logs/lab_inventory_snapshot.json`
+- `logs/lab_inventory_snapshot.json`
 
 #### Inventory snapshot schema: `lab_inventory_snapshot`
 
@@ -154,6 +164,10 @@ Hashing and encoding (normative):
 - `lab.inventory_snapshot_sha256` MUST be computed as `sha256(file_bytes)` over the published
   snapshot bytes and recorded in the run manifest as the authoritative inventory hash for downstream
   stages.
+  - The recorded value MUST use the canonical SHA-256 digest string form defined in
+    `025_data_contracts.md`: `sha256:<lowercase_hex>` (regex `^sha256:[0-9a-f]{64}$`).
+  - Implementations MUST NOT emit raw hex (no `sha256:` prefix) for this field. Consumers MUST treat
+    any value that does not match the regex above as invalid.
 
 Contract validation:
 
@@ -167,8 +181,8 @@ Contract validation:
 Retention semantics:
 
 - The inventory snapshot is a reproducibility-critical, contract-backed run artifact.
-- Even though the recommended path is under `runs/<run_id>/logs/`, implementations MUST retain it
-  for the full retention period of the run bundle and MUST NOT treat it as prunable debug logging.
+- Even though the snapshot is stored under `logs/`, implementations MUST retain it for the full
+  retention period of the run bundle and MUST NOT treat it as prunable debug logging.
 - The run manifest MUST reference the snapshot path and hash as the authoritative inventory input
   for downstream stages.
 
@@ -227,7 +241,8 @@ At run start, a provider implementation MUST:
 1. Write the snapshot into a staging location under the run bundle.
 1. Validate the snapshot invariants and any available schema contract as a publish gate.
 1. Atomically publish the snapshot to its final run bundle location.
-1. Compute `lab.inventory_snapshot_sha256` over the published snapshot bytes.
+1. Compute `lab.inventory_snapshot_sha256` over the published snapshot bytes (recorded as a
+   `sha256:<lowercase_hex>` digest string).
 1. Record provider identity, `inventory_source_ref` (when applicable), snapshot path, and the
    snapshot hash in the manifest.
 
@@ -245,11 +260,11 @@ The lab provider stage MUST follow the staging and atomic publish semantics defi
 `ADR-0004-deployment-architecture-and-inter-component-communication.md` and the contract validation
 requirements in `025_data_contracts.md`:
 
-- Staging location MUST be under `runs/<run_id>/.staging/lab_provider/`.
+- Staging location MUST be under `.staging/lab_provider/`.
 - The stage MUST validate the snapshot (schema where available via the contract registry, plus
   invariants in this spec) before publishing.
   - On contract validation failure, the stage MUST emit a deterministic contract validation report
-    at `runs/<run_id>/logs/contract_validation/lab_provider.json`.
+    at `logs/contract_validation/lab_provider.json`.
 - The stage MUST publish by atomic rename into the final run bundle location.
 - On any fail-closed error, the stage MUST NOT partially populate the final snapshot path.
 
@@ -291,8 +306,7 @@ Connectivity checks are optional for v0.1. When implemented:
     record `status="failed"`, `fail_mode="warn_and_skip"`, and
     `reason_code="connectivity_check_error"`.
   - Implementations SHOULD emit deterministic evidence for this canary under
-    `runs/<run_id>/logs/lab_provider_connectivity.json` (implementation-defined JSON; MUST NOT
-    contain secrets).
+    `logs/lab_provider_connectivity.json` (implementation-defined JSON; MUST NOT contain secrets).
 
 ### Reserved: API-based provider determinism requirements (v0.3+)
 
@@ -503,7 +517,7 @@ Implementations MUST include fixtures that demonstrate deterministic adapter beh
   - one host with an IPv6 management IP, proving canonical IPv6 serialization.
 - A golden `lab_inventory_snapshot.json` produced from those fixtures.
 - A golden `lab.inventory_snapshot_sha256` computed over the published snapshot bytes
-  (`canonical_json_bytes(lab_inventory_snapshot.json)`).
+  (`canonical_json_bytes(lab_inventory_snapshot.json)`), encoded as `sha256:<lowercase_hex>`.
 
 ## Ludus
 
@@ -562,9 +576,9 @@ Determinism and safety notes (normative where stated):
       inventory host identifier)
     - omit `lab.assets[].hostname` unless the exported inventory host identifier differs from the
       machine name (in which case set `hostname` explicitly)
-    - `lab.assets[].asset_id = slugify(<vagrant_machine_name>)` where `slugify` follows the
-      `asset_id` constraints (ID slug v1) in this spec (lowercase ASCII; replace `_` with `-`;
-      collapse repeated `-`; trim leading/trailing `-`).
+    - `lab.assets[].asset_id = slugify(<vagrant_machine_name>)`, where `slugify(...)` MUST produce a
+      valid `id_slug_v1` value as defined in
+      [ADR-0001: Project naming and versioning](../adr/ADR-0001-project-naming-and-versioning.md).
   - Because deterministic resolution matches `hostname` → `provider_asset_ref` → `asset_id`, this
     makes `provider_asset_ref` operationally meaningful for Vagrant ranges while keeping `asset_id`
     stable and human-readable.

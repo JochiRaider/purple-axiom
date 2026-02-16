@@ -121,6 +121,8 @@ Notes:
 - `state/` MUST NOT be served by the artifact-serving endpoints.
 - `exports/` MUST NOT be served by the run artifact endpoints; exports are accessed only via
   explicit export download endpoints and policy gates.
+- `exports/datasets/` is a reserved export namespace for dataset releases (see
+  `085_golden_datasets.md`) and MUST NOT be served by the run artifact endpoints.
 - `cache/` MUST NOT be served by the artifact-serving endpoints.
 
 ### Permissions and fail-closed posture
@@ -895,6 +897,9 @@ Exports MUST follow the orchestrator `export` verb semantics:
 
 - Export outputs MUST be written outside the run bundle, under the workspace root:
   - `<workspace_root>/exports/<run_id>/<export_id>/`
+- Other export products MAY use other reserved export namespaces under `exports/` (for example
+  dataset releases under `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`). These
+  products MUST NOT be exposed via run artifact endpoints.
 - `export_id` MUST be a UUID.
 - Export filenames MUST NOT include timestamps.
 

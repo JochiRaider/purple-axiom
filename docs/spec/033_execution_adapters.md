@@ -282,9 +282,15 @@ bundle contains, at minimum:
 
 - `runner/actions/<action_id>/executor.json` (contract: `runner_executor_evidence`)
 - `runner/actions/<action_id>/side_effect_ledger.json` (contract: `side_effect_ledger`)
+- `runner/actions/<action_id>/side_effect_ledger.json` (contract: `side_effect_ledger`)
+  - Required across all engines/adapters. When unsupported/not applicable, implementations MUST
+    still emit the artifact at the standard path as a deterministic placeholder with
+    `placeholder.handling=absent` (see `090_security_safety.md`).
 - `runner/actions/<action_id>/resolved_inputs_redacted.json` (contract: `resolved_inputs_redacted`)
-  - Required for `engine="atomic"` actions; optional for other engines unless required by their
-    engine integration spec.
+  - Required across all engines/adapters.
+  - When the resolved inputs evidence cannot be produced deterministically for this engine/adapter,
+    implementations MUST still emit the artifact at the standard path as a deterministic placeholder
+    with `placeholder.handling=absent` (see `090_security_safety.md`).
   - Produced by the runner core input resolution step; execution adapters MUST treat it as an input.
 - Transcript artifacts as configured (for example `stdout.txt`, `stderr.txt`) when enabled by the
   runner config and supported by the adapter.

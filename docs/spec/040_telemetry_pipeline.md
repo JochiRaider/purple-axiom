@@ -61,9 +61,11 @@ This section is the stage-local view of:
 
 Notes:
 
-- The primary telemetry dataset under `raw_parquet/**` is an **analytics-tier** store and is not
-  contract-backed in v0.1. Stage boundaries for `raw_parquet/**` are defined in ADR-0004 and
-  `045_storage_formats.md`.
+- The primary telemetry dataset under `raw_parquet/**` is an **analytics-tier** staging store and is
+  not contract-backed in v0.1. `raw_parquet/**` is permitted for pipeline operation (telemetry ->
+  normalization), but MUST be excluded from the v0.1 default export profile and from
+  signing/checksums scope (see ADR-0009 and `025_data_contracts.md`). Stage boundaries for
+  `raw_parquet/**` are defined in ADR-0004 and `045_storage_formats.md`.
 - `logs/counters.json` is a cross-cutting, orchestrator-owned contract artifact (`contract_id`
   `counters`). Stages (including telemetry) contribute counter data per `110_operability.md`.
 

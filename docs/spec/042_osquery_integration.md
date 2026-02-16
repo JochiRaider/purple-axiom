@@ -2,7 +2,7 @@
 title: osquery integration (telemetry and normalization)
 description: Defines v0.1 osquery ingestion, staging, normalization, and conformance requirements.
 status: draft
-+category: spec
+category: spec
 tags: [telemetry, osquery, ingestion, normalization, ocsf]
 related:
   - 040_telemetry_pipeline.md

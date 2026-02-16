@@ -214,6 +214,7 @@ Conventions (normative):
 | `reporting`                                                              | `tests/fixtures/reporting/defense_outcomes/`<br>`tests/fixtures/reporting/thresholds/`<br>`tests/fixtures/reporting/regression_compare/`<br>`tests/fixtures/reporting/report_render/` | `defense_outcomes_attribution_v1`, `thresholds_contract_and_ordering`, `regression_compare_smoke`, `report_render_smoke`                                |
 | `signing` (when enabled)                                                 | `tests/fixtures/signing/`                                                                                                                                                             | `checksums_smoke`, `tamper_detected`                                                                                                                    |
 | Content governance: golden datasets                                      | `tests/fixtures/golden_datasets/governance/`                                                                                                                                          | `valid_minimal_golden`, `missing_required_artifact_fails`                                                                                               |
+| Dataset exports: dataset release artifacts (workspace validation)        | `tests/fixtures/golden_datasets/releases/`                                                                                                                                            | `dataset_release_smoke_valid`, `dataset_release_schema_invalid_fails`                                                                                   |
 | CI harness: Content CI                                                   | `tests/fixtures/ci/content_ci_harness/`                                                                                                                                               | `smoke_pass`, `smoke_fail`                                                                                                                              |
 
 ## Unit tests
@@ -1296,6 +1297,30 @@ Conformance fixtures (normative):
   - `valid_minimal_golden`: minimal conforming golden dataset designation passes.
   - `missing_required_artifact_fails`: missing catalog/card/approvals fails closed with a stable
     error code that identifies the missing artifact class.
+
+### Dataset exports: dataset release artifacts (workspace-root contract validation)
+
+Dataset release artifacts are workspace-root exports (not run-relative). CI MUST validate the
+contract-backed dataset JSON artifacts using the workspace contract registry
+(`workspace_contract_registry.json`), reusing `validation_mode` dispatch:
+
+- `json_document`:
+  - `exports/datasets/<dataset_id>/<dataset_version>/dataset_manifest.json`
+  - `exports/datasets/<dataset_id>/<dataset_version>/splits/split_config.json`
+- `jsonl_lines`:
+  - `exports/datasets/<dataset_id>/<dataset_version>/splits/split_assignments.jsonl`
+
+CI MUST fail closed on any schema validation failure (do not "best-effort" validate).
+
+Conformance fixtures (normative):
+
+- Fixture root: `tests/fixtures/golden_datasets/releases/`
+- Minimum fixture cases:
+  - `dataset_release_smoke_valid`: build or provide a minimal dataset release directory and assert
+    workspace validation succeeds for the three required artifacts.
+  - `dataset_release_schema_invalid_fails`: provide a dataset release with at least one
+    schema-invalid artifact (document or JSONL line) and assert the workspace validator fails closed
+    with a deterministic error location.
 
 ### Version conformance
 

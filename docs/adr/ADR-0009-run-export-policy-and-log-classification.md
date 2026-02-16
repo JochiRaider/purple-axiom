@@ -80,37 +80,62 @@ or signing/checksum scope:
 ### 5. Default export behavior (normative)
 
 When an implementation produces an export bundle (for example via an operator export workflow), the
-default export set MUST:
+default export set MUST implement the "default export profile (v0.1)" defined in Section 6.
+
+At minimum, the default export set MUST:
 
 - include all deterministic evidence logs (Section 3) that exist for the run, and
 - exclude all volatile diagnostics (Section 4),
 - exclude `.staging/**`, and
 - exclude the quarantine directory (unless explicitly requested and permitted).
 
-### 6. Minimal export set for reproducibility (normative)
+### 6. Default export profile (v0.1) (normative)
 
-A “minimal reproducibility export” is the smallest export set that supports deterministic triage and
-report/result reproduction without leaking volatile diagnostics. It MUST include:
+For v0.1, the canonical default export profile is the "minimal reproducibility export" defined in
+this section. All components that package runs for sharing or archival MUST treat this profile as
+the default when the operator does not explicitly select a different profile.
 
-- deterministic evidence logs (Section 3), and
-- reportable/run-critical artifacts as required by the reporting and validation specs (for example
-  stage outcomes, validation summaries, and report outputs), and
-- integrity artifacts (`security/checksums.txt` and `security/signature.ed25519`) when signing is
-  enabled.
+The default export profile (v0.1) MUST include:
 
-It MUST NOT include:
+- all deterministic evidence logs (Section 3) that exist for the run, and
+- the following non-log run-bundle paths (run-relative), when present:
+  - `manifest.json`
+  - `inputs/**`
+  - `ground_truth.jsonl`
+  - `runner/**`
+  - `raw/**` (when raw preservation is enabled)
+  - `normalized/**`
+  - `criteria/**`
+  - `bridge/**`
+  - `detections/**`
+  - `scoring/**`
+  - `report/**`
+  - `security/**` (when signing is enabled; at minimum `security/checksums.txt`,
+    `security/signature.ed25519`, and `security/public_key.ed25519`)
 
-- volatile diagnostics (Section 4),
-- quarantine directory contents (unless explicitly requested and permitted), or
-- `.staging/**`.
+The default export profile (v0.1) MUST NOT include:
+
+- volatile diagnostics under `logs/` (Section 4),
+- `.staging/**`,
+- quarantine directory contents (`<security.redaction.unredacted_dir>/**`) unless explicitly
+  requested and permitted, or
+- `raw_parquet/**`.
+
+`raw_parquet/**` is a non-long-term operational store used for pipeline operation (telemetry ->
+normalization) and local debugging. It MUST be excluded from the v0.1 default export profile and
+from signing/checksum scope.
 
 ### 7. Signing/checksum scope (normative)
 
-When signing is enabled, `security/checksums.txt` MUST include deterministic evidence logs (Section
-3\) and MUST exclude volatile diagnostics (Section 4). Implementations MUST NOT implement this by
-excluding `runs/<run_id>/logs/**` wholesale; selection UST follow the file-level classification in
-this ADR. This aligns signing coverage with the default export set and prevents integrity gaps for
-run-critical evidence.
+When signing is enabled, `security/checksums.txt` scope MUST align to the default export profile
+(v0.1) in Section 6:
+
+- Deterministic evidence logs (Section 3) MUST be included.
+- Volatile diagnostics (Section 4) MUST be excluded.
+- `raw_parquet/**`, `.staging/**`, and `<security.redaction.unredacted_dir>/**` MUST be excluded.
+
+Implementations MUST NOT implement this by excluding `runs/<run_id>/logs/**` wholesale; selection
+MUST follow the file-level classification in this ADR.
 
 ## Consequences
 
@@ -123,8 +148,9 @@ run-critical evidence.
 
 CI MUST include regression coverage that asserts:
 
-- deterministic evidence log paths are present in exports/checksums, and
-- volatile diagnostics paths are absent from exports/checksums.
+- deterministic evidence log paths are present in exports/checksums,
+- volatile diagnostics paths are absent from exports/checksums, and
+- `raw_parquet/**` is absent from exports/checksums.
 
 See: `100_test_strategy_ci.md` → `Export and checksums scope` and the required
 `export_scope_logs_classification` fixture set.

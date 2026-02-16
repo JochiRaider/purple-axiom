@@ -100,7 +100,7 @@ invariants that cannot be expressed in JSON Schema alone.
       - [Minimum contents (recommended):](#minimum-contents-recommended)
       - [Runner evidence JSON header pattern (normative; contract-backed artifacts)](#runner-evidence-json-header-pattern-normative-contract-backed-artifacts)
       - [Requirements evaluation evidence (normative):](#requirements-evaluation-evidence-normative)
-      - [Resolved inputs evidence (optional; schema-backed)](#resolved-inputs-evidence-optional-schema-backed)
+      - [Resolved inputs evidence (required; schema-backed)](#resolved-inputs-evidence-required-schema-backed)
       - [Side-effect ledger (normative):](#side-effect-ledger-normative)
       - [State reconciliation report (normative; when enabled):](#state-reconciliation-report-normative-when-enabled)
         - [Principal context (runner-level evidence, schema-backed)](#principal-context-runner-level-evidence-schema-backed)
@@ -1092,6 +1092,7 @@ stage_enablement_matrix_v1:
       - requirements_evaluation
       - resolved_inputs_redacted
       - side_effect_ledger
+      - principal_context
     optional_contract_ids_when_enabled: []
     conditional_required_contracts:
       - contract_id: runner_executor_evidence
@@ -2592,8 +2593,8 @@ Purpose:
 - `runner/actions/<action_id>/stderr.txt`
 - `runner/actions/<action_id>/executor.json` (exit_code, duration, executor type or version,
   timestamps)
-- `runner/actions/<action_id>/resolved_inputs_redacted.json` (optional; redaction-safe resolved
-  inputs basis used for `parameters.resolved_inputs_sha256`)
+- `runner/actions/<action_id>/resolved_inputs_redacted.json` (required; may be a deterministic
+  placeholder when unsupported, withheld, or quarantined)
 - `runner/actions/<action_id>/requirements_evaluation.json` (effective requirements + per-check
   outcomes)
 - `runner/actions/<action_id>/side_effect_ledger.json` (append-only side-effect ledger; see below)
@@ -2604,7 +2605,7 @@ Purpose:
 - `runner/actions/<action_id>/atomic_test_extracted.json` (optional; Atomic template snapshot)
 - `runner/actions/<action_id>/atomic_test_source.yaml` (optional; Atomic template snapshot)
 - `runner/actions/<action_id>/cleanup_verification.json` (checks + results)
-- `runs/<run_id>/runner/principal_context.json`
+- `runs/<run_id>/runner/principal_context.json` (required; may be a deterministic placeholder)
 - `runs/<run_id>/logs/cache_provenance.json`
 
 note: see [Atomic Red Team executor integration](032_atomic_red_team_executor_integration.md)
@@ -2624,6 +2625,12 @@ artifact MUST include, at minimum:
 
 Rationale: consistent joins and deterministic provenance without depending on file paths alone.
 
+Notes:
+
+- When the evidence artifact is a placeholder artifact per `090_security_safety.md`, any
+  schema-required timestamp fields (including `generated_at_utc`) MUST use the fixed placeholder
+  sentinel timestamp (not a run-specific clock value).
+
 #### Requirements evaluation evidence (normative):
 
 - When requirements evaluation is performed for an action, the runner MUST persist
@@ -2642,37 +2649,59 @@ Rationale: consistent joins and deterministic provenance without depending on fi
   - Each row for `requirements.results[]` MUST include `reason_domain="requirements_evaluation"`
     when `reason_code` is present.
 
-#### Resolved inputs evidence (optional; schema-backed)
+#### Resolved inputs evidence (required; schema-backed)
 
 Purpose: Provide a redaction-safe, machine-readable view of the resolved inputs basis used for
 `parameters.resolved_inputs_sha256` without requiring re-execution.
 
 Normative requirements:
 
-- When the runner emits a resolved inputs evidence artifact for an action, it MUST persist
-  `runner/actions/<action_id>/resolved_inputs_redacted.json`.
+- For each action recorded in ground truth (including actions skipped before `execute`), the runner
+  MUST persist `runner/actions/<action_id>/resolved_inputs_redacted.json`.
+
 - The artifact MUST validate against `resolved_inputs_redacted.schema.json`.
-- The artifact MUST include, at minimum:
+
+- When resolved inputs content can be made redaction-safe deterministically under the effective
+  redaction posture, the artifact MUST include, at minimum:
+
   - `action_id`
   - `action_key`
   - `generated_at_utc`
   - `resolved_inputs_sha256` (string; `sha256:<hex>` form)
   - `resolved_inputs_redacted` (object; see below)
-- `resolved_inputs_redacted` MUST be exactly the redaction-safe resolved input map used as the hash
-  basis in the Atomic executor contract (see
-  [Resolved inputs hash](032_atomic_red_team_executor_integration.md#resolved-inputs-hash)).
-- Hash linkage (verifiable): `resolved_inputs_sha256` MUST equal
-  `sha256_hex(canonical_json_bytes(resolved_inputs_redacted))` where `canonical_json_bytes` is RFC
-  8785 canonical JSON (JCS), UTF-8 bytes.
-- Redaction safety: `resolved_inputs_redacted` MUST be redaction-safe by construction under the
-  effective redaction policy (see [ADR-0003](../adr/ADR-0003-redaction-policy.md) and
-  [security and safety](090_security_safety.md)).
+
+  And MUST satisfy:
+
+  - `resolved_inputs_redacted` MUST be exactly the redaction-safe resolved input map used as the
+    hash basis in the Atomic executor contract (see
+    [Resolved inputs hash](032_atomic_red_team_executor_integration.md#resolved-inputs-hash)).
+  - Hash linkage (verifiable): `resolved_inputs_sha256` MUST equal
+    `sha256_hex(canonical_json_bytes(resolved_inputs_redacted))` where `canonical_json_bytes` is RFC
+    8785 canonical JSON (JCS), UTF-8 bytes.
+  - Redaction safety: `resolved_inputs_redacted` MUST be redaction-safe by construction under the
+    effective redaction policy (see [ADR-0003](../adr/ADR-0003-redaction-policy.md) and
+    [security and safety](090_security_safety.md)).
+
+- Otherwise (unsupported/not applicable, or not redaction-safe), the runner MUST still emit the
+  artifact file at the standard path as a deterministic placeholder per `090_security_safety.md`
+  (“Placeholder artifacts”):
+
+  - Use `placeholder.handling=absent` when the content is unsupported/not applicable (or cannot be
+    produced deterministically).
+  - Use `placeholder.handling=withheld` or `placeholder.handling=quarantined` when the content
+    exists but cannot be made redaction-safe under the effective redaction posture.
+  - If `parameters.resolved_inputs_sha256` is available, the placeholder artifact SHOULD also
+    include `resolved_inputs_sha256` equal to that value unless the schema forbids it.
 
 #### Side-effect ledger (normative):
 
 - The runner MUST persist a per-action side-effect ledger at
   `runner/actions/<action_id>/side_effect_ledger.json`.
-- The ledger MUST be treated as append-only within a run:
+  - If the runner cannot produce ledger content deterministically for an action (unsupported/not
+    applicable), the runner MUST still emit this file as a deterministic placeholder artifact per
+    `090_security_safety.md` with `placeholder.handling=absent`.
+- When the ledger content is present (i.e., not a placeholder artifact), the ledger MUST be treated
+  as append-only within a run:
   - implementations MUST only append new entries,
   - implementations MUST NOT modify or delete previously written entries.
 - The ledger MUST contain an ordered `entries[]` array whose order is authoritative.
@@ -2737,7 +2766,18 @@ deterministic mapping from `action_id` to principal identity.
 
 Format: JSON, schema-backed.
 
-Minimum required fields (normative):
+Placeholder handling (normative):
+
+- If principal context cannot be produced deterministically (unsupported/disabled) or cannot be made
+  redaction-safe, the runner MUST still emit `runner/principal_context.json` as a deterministic
+  placeholder artifact per `090_security_safety.md` (“Placeholder artifacts”).
+  - Use `placeholder.handling=absent` for unsupported/disabled/not applicable.
+  - Use `placeholder.handling=withheld` or `placeholder.handling=quarantined` when redaction posture
+    blocks publication.
+- The remainder of this section's field and ordering requirements apply only when the artifact is
+  not a placeholder.
+
+Minimum required fields when present (non-placeholder) (normative):
 
 - `contract_version` (const, e.g. `"1.0.0"`)
 
@@ -2770,9 +2810,11 @@ Deterministic ordering (normative):
 
 Ground truth linkage (normative):
 
-- When the runner emits `principal_context.json`, it SHOULD also copy the selected `principal_id`
-  onto each action record as `extensions.principal_id` (as defined above) to support report/scoring
-  joins without loading runner internals.
+- When `principal_context.json` is not a placeholder and the resolved principal is known, the runner
+  SHOULD also copy the selected `principal_id` onto each action record as `extensions.principal_id`
+  (as defined above) to support report/scoring joins without loading runner internals.
+- When `principal_context.json` is a placeholder with `placeholder.handling=absent`, the runner MUST
+  NOT populate `extensions.principal_id` in ground truth.
 
 Redaction / disclosure (normative):
 
@@ -3292,18 +3334,12 @@ MUST be run-relative using POSIX separators (`/`). Newlines MUST be `\n` (LF).
 
 `security/checksums.txt` MUST include every file under `runs/<run_id>/` except:
 
-- `<security.redaction.unredacted_dir>/` (default: `runs/<run_id>/unredacted/`; quarantine, if
+- `<security.redaction.unredacted_dir>/**` (default: `runs/<run_id>/unredacted/`; quarantine, if
   present)
-- `.staging/` (transient publish-gate scratch area)
-- Volatile diagnostics under `logs/` (see ADR-0009 and the storage formats spec Tier 0 taxonomy),
-  including:
-  - `logs/run.log`
-  - `logs/warnings.jsonl`
-  - `logs/eps_baseline.json`
-  - `logs/telemetry_checkpoints/`
-  - `logs/dedupe_index/`
-  - `logs/scratch/`
-  - any other `logs/` path not explicitly classified as deterministic evidence
+- `.staging/**` (transient publish-gate scratch area)
+- `raw_parquet/**` (non-long-term operational telemetry staging; see ADR-0009)
+- Volatile diagnostics under `logs/` (as defined by ADR-0009), and any other `logs/**` path not on
+  the deterministic evidence logs allowlist (ADR-0009)
 - `security/checksums.txt` and `security/signature.ed25519` (to avoid self-reference)
 
 Inclusion notes (normative):

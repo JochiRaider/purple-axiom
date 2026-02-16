@@ -49,7 +49,8 @@ v0.1 policy (normative):
 
 ## Goals
 
-- Use Parquet for long-term storage of event streams and large telemetry datasets.
+- Use Parquet for long-term storage of event streams and large analytics datasets (for example,
+  normalized OCSF events).
 - Keep artifacts queryable with Arrow-compatible tools (Python, DuckDB, Spark).
 - Preserve enough fidelity to support reprocessing and debugging.
 - Maintain deterministic outputs for diffability and regression testing.
@@ -106,6 +107,31 @@ Path notation (normative):
 Note (non-normative): The existence (and eventual disappearance or emptiness) of
 `.staging/<stage_id>/` provides a filesystem-observable integration point for lifecycle state
 machines (ADR-0007).
+
+### Workspace-global export staging directories (reserved; v0.1+ normative)
+
+Export/packaging commands that publish multi-file **export products** under
+`<workspace_root>/exports/` (for example dataset releases and baseline packages) SHOULD use a
+crash-safe staging-then-rename pattern analogous to the run-bundle publish gate.
+
+Reserved staging root:
+
+- `<workspace_root>/exports/.staging/`
+  - Producers SHOULD namespace staging by export kind (for example:
+    `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`).
+
+Final output locations are product-specific reserved namespaces under `exports/` (see
+`020_architecture.md`). For dataset releases (see `085_golden_datasets.md`), the authoritative final
+output directory is:
+
+- `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
+
+Publish rules (normative):
+
+- Export products MUST be written completely to staging before publish.
+- The final directory MUST NOT exist (or be partially populated) unless publish succeeds.
+- If a build fails before publish, staging MAY remain for inspection; staging MUST be treated as
+  non-authoritative scratch output.
 
 ### Regression baseline reference and outputs (v0.1; optional when enabled)
 
@@ -345,22 +371,29 @@ contracted artifacts. Note: see
   - v0.1 does not require an additional `manifest.json` file-hash field for the ledger; integrity
     coverage is provided by `security/checksums.txt` when signing is enabled.
 
-### Tier 2: Analytics (structured, long-term)
+### Tier 2: Analytics (structured)
 
 Location:
 
-- `runs/<run_id>/raw_parquet/` and `runs/<run_id>/normalized/`
+- Long-term analytics: `runs/<run_id>/normalized/` (and optional derived tables under
+  `runs/<run_id>/scoring/`)
+- Operational telemetry staging (non-long-term): `runs/<run_id>/raw_parquet/`
 
 Format:
 
 - Parquet for large datasets:
-  - raw telemetry tables
+  - telemetry staging tables (`raw_parquet/`; non-long-term)
   - normalized OCSF event store
   - joins and derived scoring tables (optional)
 
 Retention:
 
-- Long-term, used for evaluation, scoring, trending.
+- Long-term for `normalized/` (and any derived analytics tables) used for evaluation, scoring, and
+  trending.
+- `raw_parquet/` is an operational staging store. It MUST be excluded from the v0.1 default export
+  profile and from `security/checksums.txt` (see ADR-0009 and `025_data_contracts.md`).
+  Implementations MAY prune `raw_parquet/` after successful normalization, subject to disk budget
+  policy.
 
 Purpose:
 
@@ -409,7 +442,8 @@ Rationale:
 
 Default:
 
-- All log-like datasets intended for long-term storage are written as Parquet.
+- Telemetry staging tables are also written as Parquet under `raw_parquet/`, but `raw_parquet/**` is
+  non-long-term and excluded from the v0.1 default export profile and signing/checksums.
 
 Examples:
 
@@ -433,6 +467,10 @@ Rationale:
 ### Dataset naming
 
 Within a run bundle, store Parquet datasets as directories with one or more Parquet files:
+
+Note (normative): `raw_parquet/` is a non-long-term operational staging store and MUST be excluded
+from the v0.1 default export profile and from `security/checksums.txt` (see ADR-0009 and
+`025_data_contracts.md`).
 
 - `runs/<run_id>/raw_parquet/windows_eventlog/`
 - `runs/<run_id>/raw_parquet/linux_syslog/`

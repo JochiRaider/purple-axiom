@@ -44,16 +44,16 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id                   | path/glob                                           | Required?                                                           |
-| ----------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
-| `ground_truth`                | `ground_truth.jsonl`                                | required                                                            |
-| `principal_context`           | `runner/principal_context.json`                     | optional (default-on; see `runner.identity.emit_principal_context`) |
-| `runner_executor_evidence`    | `runner/actions/*/executor.json`                    | required (per action attempted)                                     |
-| `requirements_evaluation`     | `runner/actions/*/requirements_evaluation.json`     | required (per action evaluated, including skipped)                  |
-| `resolved_inputs_redacted`    | `runner/actions/*/resolved_inputs_redacted.json`    | optional (executor-dependent)                                       |
-| `side_effect_ledger`          | `runner/actions/*/side_effect_ledger.json`          | optional                                                            |
-| `state_reconciliation_report` | `runner/actions/*/state_reconciliation_report.json` | optional (when state reconciliation is enabled)                     |
-| `cleanup_verification`        | `runner/actions/*/cleanup_verification.json`        | optional (when cleanup verification is enabled)                     |
+| contract_id                   | path/glob                                           | Required?                                          |
+| ----------------------------- | --------------------------------------------------- | -------------------------------------------------- |
+| `ground_truth`                | `ground_truth.jsonl`                                | required                                           |
+| `principal_context`           | `runner/principal_context.json`                     | required (per run; may be placeholder)             |
+| `runner_executor_evidence`    | `runner/actions/*/executor.json`                    | required (per action attempted)                    |
+| `requirements_evaluation`     | `runner/actions/*/requirements_evaluation.json`     | required (per action evaluated, including skipped) |
+| `resolved_inputs_redacted`    | `runner/actions/*/resolved_inputs_redacted.json`    | required (per action; may be placeholder)          |
+| `side_effect_ledger`          | `runner/actions/*/side_effect_ledger.json`          | required (per action; may be placeholder)          |
+| `state_reconciliation_report` | `runner/actions/*/state_reconciliation_report.json` | optional (when state reconciliation is enabled)    |
+| `cleanup_verification`        | `runner/actions/*/cleanup_verification.json`        | optional (when cleanup verification is enabled)    |
 
 #### Required inputs
 
@@ -64,7 +64,15 @@ This section is the stage-local view of:
 
 Notes:
 
+- `principal_context`, `resolved_inputs_redacted`, and `side_effect_ledger` are required runner
+  outputs across executors/adapters.
+
+  - When unsupported/not applicable (or disabled by config), implementations MUST still emit the
+    artifact at the standard path as a deterministic placeholder with `placeholder.handling=absent`
+    (see `090_security_safety.md`).
+
 - The runner consumes additional **non-contract** inputs (v0.1), notably:
+
   - `inputs/scenario.yaml` (scenario selection + plan selection)
   - pack-like assets referenced by `inputs/scenario.yaml` (Atomic tests, adapters, etc.)
 
@@ -337,18 +345,21 @@ The runner MUST persist:
 
   - `stdout.txt`, `stderr.txt`
   - `executor.json`
-  - `resolved_inputs_redacted.json` (required for `engine="atomic"`; optional for other engines)
+  - `resolved_inputs_redacted.json` (required; may be a deterministic placeholder when unsupported,
+    withheld, or quarantined)
   - `requirements_evaluation.json` (when requirements evaluation is performed)
   - `prereqs_stdout.txt`, `prereqs_stderr.txt` (when prerequisites are invoked)
   - `cleanup_stdout.txt`, `cleanup_stderr.txt` (when cleanup is invoked)
-  - `side_effect_ledger.json` (append-only)
+  - `side_effect_ledger.json` (required; append-only; may be a deterministic placeholder when
+    unsupported, withheld, or quarantined)
   - `cleanup_verification.json` (when cleanup verification is enabled)
   - `state_reconciliation_report.json` (when state reconciliation is enabled)
   - `attire.json` (required for `engine="atomic"`; optional for other engines)
 
   Per-run:
 
-  - `runner/principal_context.json`
+  - `runner/principal_context.json` (required; may be a deterministic placeholder when
+    `runner.identity.emit_principal_context=false`, unsupported, withheld, or quarantined)
 
 ### State reconciliation policy (per action)
 

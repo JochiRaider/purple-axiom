@@ -52,6 +52,12 @@ Workspace boundary rules (normative):
 - Cross-run caches MUST live under `<workspace_root>/cache/` (reserved workspace directory).
 - Derived exports produced outside the run bundle MUST live under `<workspace_root>/exports/`
   (reserved workspace directory).
+  - Dataset releases MUST be published under
+    `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`.
+    - Crash-safe staging is RECOMMENDED under
+      `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`.
+  - Export/packaging commands MUST NOT create or modify artifacts inside any `runs/<run_id>/`
+    directory.
 
 ## Top-level keys
 
@@ -76,7 +82,10 @@ Common keys:
   - `format` (optional): `ansible_yaml | ansible_ini | json` (default: `ansible_yaml`)
   - `refresh` (optional): `never | on_run_start` (default: `on_run_start`)
   - `snapshot_to_run_bundle` (optional, default: true): write resolved inventory snapshot under
-    `logs/`
+    `logs/` (specifically `logs/lab_inventory_snapshot.json`).
+    - v0.1: MUST be `true`. If set to `false`, config validation MUST reject it (fail closed with
+      `reason_code=config_schema_invalid`) because downstream stages require the snapshot artifact
+      for correctness.
 - `networks` (optional)
   - `cidrs`: list of CIDR ranges
   - `notes` (optional)
@@ -127,8 +136,9 @@ Common keys:
       - `action_principal_map[]` MUST include a mapping for every action recorded in
         `ground_truth.jsonl` (including actions mapped to `kind=unknown` with explicit
         `assertion_source`).
-    - When `false`, the runner MUST NOT emit the artifact and MUST NOT populate
-      `extensions.principal_id` in ground truth.
+    - When `false`, the runner MUST still emit `runner/principal_context.json` as a deterministic
+      placeholder artifact with `placeholder.handling=absent` (see `090_security_safety.md`
+      “Placeholder artifacts”) and MUST NOT populate `extensions.principal_id` in ground truth.
   - `probe_enabled` (default: `false`)
     - When `false`, the runner MUST NOT execute “identity probes” beyond what is already available
       without additional collection steps.
@@ -386,6 +396,9 @@ Common keys:
 
 - If `emit_principal_context=true`, `principal_context.json` MUST follow the deterministic ordering
   rules (sorted principals and action map).
+
+- If `emit_principal_context=true` and `principal_context.json` is not a placeholder artifact, it
+  MUST follow the deterministic ordering rules (sorted principals and action map).
 
 - If a self-update is required to proceed and `allow_runtime_self_update=false`, the runner MUST
   fail closed rather than silently updating.

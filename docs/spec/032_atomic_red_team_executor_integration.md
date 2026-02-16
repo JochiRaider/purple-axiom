@@ -981,9 +981,10 @@ When `runner.identity.emit_principal_context=true` (default), the runner MUST:
     reference a principal entry whose `kind=unknown`.
   - Stable ordering rule: sort by `action_id` ascending.
 
-When `runner.identity.emit_principal_context=false`, the runner MUST NOT emit
-`runner/principal_context.json` and MUST NOT populate `extensions.principal_id` in action ground
-truth.
+When `runner.identity.emit_principal_context=false`, the runner MUST still emit
+`runner/principal_context.json` as a deterministic placeholder artifact with
+`placeholder.handling=absent` (see `090_security_safety.md` “Placeholder artifacts”) and MUST NOT
+populate `extensions.principal_id` in action ground truth.
 
 The runner MUST NOT assume the principal is user-shaped. Implementations MUST support:
 

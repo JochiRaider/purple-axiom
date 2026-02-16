@@ -445,17 +445,55 @@ Notes:
 - `state/`, `exports/`, `cache/`, `logs/`, and `plans/` MUST NOT be treated as run artifact roots
   and MUST NOT be included in run-bundle export packaging unless a spec explicitly says so.
 
+### Reserved exports namespaces
+
+`exports/` is a reserved workspace-root child used for **workspace-global export products** (derived
+artifacts that are not run bundles). Export products are organized into explicit **export
+namespaces** under `exports/`. These namespaces are reserved even though they are already under the
+reserved `exports/` root: workspace write-boundary enforcement MUST treat them as first-class,
+explicitly allowlisted destinations (no "it's under exports so it's fine" ambiguity).
+
+Reserved export namespaces (v0.1+; normative):
+
+- **Run export products** (for example archives produced by the `export` verb):
+  - `<workspace_root>/exports/<run_id>/<export_id>/`
+- **Detection baseline packages (BDPs)** (see `086_detection_baseline_library.md`):
+  - `<workspace_root>/exports/baselines/<baseline_id>/<baseline_version>/`
+- **Dataset releases** (see `085_golden_datasets.md`):
+  - `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
+
+Reserved export staging root (v0.1+; reserved):
+
+- `<workspace_root>/exports/.staging/` is reserved scratch space for crash-safe export/packaging
+  commands that publish multi-file outputs using a staging-then-rename pattern.
+  - Producers SHOULD namespace staging by export kind (for example:
+    `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`).
+  - Staging directories MUST be treated as non-authoritative and safe to delete when no export is in
+    progress.
+
+Mechanical enforcement guidance (non-normative):
+
+- Implementations SHOULD maintain an **export namespace allowlist** (for example: `baselines`,
+  `datasets`, and run-export products) so write-boundary enforcement is mechanical and does not
+  require one-off special cases.
+
 ### Workspace write boundary
 
 Normative requirements:
 
 - Stages MUST treat `runs/<run_id>/` as their only persistent output surface.
 
+- Export/packaging commands that produce workspace-global artifacts under `exports/` MUST treat
+  `runs/<run_id>/` as read-only input and MUST NOT create or modify artifacts under any run bundle
+  directory.
+
 - The orchestrator MAY write outside the run bundle only in reserved workspace locations:
 
   - `runs/.locks/<run_id>.lock` (required)
   - `<workspace_root>/cache/` (optional; only when cross-run caching is explicitly enabled)
-  - `<workspace_root>/exports/` (optional; only for explicit export/packaging commands)
+  - `<workspace_root>/exports/` (optional; only for explicit export/packaging commands; writes MUST
+    be confined to reserved export namespaces such as `exports/<run_id>/<export_id>/`,
+    `exports/baselines/**`, `exports/datasets/**`, and `exports/.staging/**`)
   - `<workspace_root>/state/` and `<workspace_root>/logs/` (reserved for v0.2+ control-plane
     features; v0.1 SHOULD leave these untouched)
 
@@ -1214,7 +1252,8 @@ are mandatory (names are suggestions; harness/framework is implementation-define
    - Setup: snapshot the workspace filesystem tree; execute a minimal run; snapshot again.
    - Assert: all new/modified files are under `runs/<run_id>/` or explicitly reserved workspace
      locations used by the run (for example `runs/.locks/`, `<workspace_root>/cache/`, and
-     `<workspace_root>/exports/`).
+     allowlisted export namespaces under `<workspace_root>/exports/` such as `exports/datasets/**`
+     and `exports/.staging/datasets/**`).
    - Assert: the run does not create new top-level directories at the workspace root other than the
      reserved set.
 

@@ -24,12 +24,39 @@
       "purpose": "Export manifest output (exports/<run_id>/<export_id>/export_manifest.json).",
       "artifact_kind": "run_artifact",
       "format": "json"
+    },
+    {
+      "contract_id": "dataset_manifest",
+      "schema_path": "docs/contracts/dataset_manifest.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Dataset release manifest (exports/datasets/<dataset_id>/<dataset_version>/dataset_manifest.json).",
+      "artifact_kind": "other",
+      "format": "json"
+    },
+    {
+      "contract_id": "dataset_splits_config",
+      "schema_path": "docs/contracts/dataset_splits_config.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Dataset splits configuration (exports/datasets/<dataset_id>/<dataset_version>/splits/split_config.json).",
+      "artifact_kind": "other",
+      "format": "json"
+    },
+    {
+      "contract_id": "dataset_split_assignment",
+      "schema_path": "docs/contracts/dataset_split_assignment.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Per-line schema for splits/split_assignments.jsonl in dataset releases.",
+      "artifact_kind": "other",
+      "format": "jsonl"
     }
   ],
   "bindings": [
     { "artifact_glob": "logs/ui_audit.jsonl", "contract_id": "audit_event", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "state/run_registry.json", "contract_id": "run_registry", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/<run_id>/<export_id>/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" }
+    { "artifact_glob": "exports/<run_id>/<export_id>/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "exports/datasets/<dataset_id>/<dataset_version>/dataset_manifest.json", "contract_id": "dataset_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "exports/datasets/<dataset_id>/<dataset_version>/splits/split_config.json", "contract_id": "dataset_splits_config", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "exports/datasets/<dataset_id>/<dataset_version>/splits/split_assignments.jsonl", "contract_id": "dataset_split_assignment", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" }
   ],
   "notes": [
     "This file is the authoritative mapping for contract-backed workspace-root artifacts.",

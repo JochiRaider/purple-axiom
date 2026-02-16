@@ -269,22 +269,35 @@ Variant declaration and identity (normative):
 
 ### Output location
 
-Dataset outputs MUST be written outside any run bundle directory. (This mirrors export behavior for
-other secondary artifacts, see operator interface guidance.)
+Dataset outputs MUST be written outside any run bundle directory under the reserved workspace
+`exports/` root. (This mirrors export behavior for other secondary artifacts, see operator interface
+guidance.)
+
+Authoritative final output location (normative):
+
+- `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
+
+Recommended staging location (crash-safe; reserved scratch):
+
+- `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`
+
+Dataset build tooling MUST treat all `runs/<run_id>/` inputs as read-only and MUST NOT create or
+modify artifacts inside any run bundle directory.
 
 #### Build staging and atomic publish (recommended)
 
 To be crash-safe and to integrate cleanly with filesystem-derived state machines (ADR-0004,
 ADR-0007), producers SHOULD:
 
-1. Write the entire dataset release into a staging directory under the output root:
-   - `<output_root>/.staging/dataset_release/<dataset_id>/<dataset_version>/`
+1. Write the entire dataset release into a staging directory under the workspace exports staging
+   root:
+   - `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`
 1. Validate the staged output (schemas, required files, determinism checks).
 1. Atomically publish by renaming the staging directory to the final location:
-   - `<output_root>/<dataset_id>/<dataset_version>/`
+   - `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
 
 If a build fails before publish, the final output directory MUST NOT be created or partially
-populated.
+populated. The staging directory MAY remain on failure for inspection and operator cleanup.
 
 Representational state machine (non-normative; lifecycle authority: ADR-0004, ADR-0007):
 
@@ -295,13 +308,38 @@ Authoritative observability signals:
 
 - `published`: final directory exists and contains `dataset_manifest.json` and
   `security/checksums.txt`
-- `staging`: staging directory exists
+- `staging`: staging directory exists under `exports/.staging/`
+
+#### Export path helpers (recommended)
+
+To avoid bespoke path logic across tooling and to keep workspace write-boundary enforcement
+mechanical, implementations SHOULD centralize dataset release path resolution in a single helper.
+
+Minimum helper contract:
+
+- `resolve_dataset_release_dir(workspace_root, dataset_id, dataset_version) -> Path`
+  - Returns: `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
+- `resolve_dataset_release_staging_dir(workspace_root, dataset_id, dataset_version) -> Path`
+  - Returns: `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`
+
+Validation (normative):
+
+- The helper MUST validate `dataset_id` as `id_slug_v1` and `dataset_version` as `semver_v1`
+  (ADR-0001) before any filesystem writes occur.
+- The helper MUST reject values that would escape the intended directory (path separators, `..`, or
+  URL-encoded equivalents).
+
+Verification hook (RECOMMENDED):
+
+- Unit tests SHOULD cover a table of invalid `(dataset_id, dataset_version)` pairs (including
+  `../x`, `x/..`, and `x%2F..`) and assert deterministic failure.
+- Unit tests SHOULD cover a valid pair and assert the helper returns an exactly normalized path.
 
 ### Canonical dataset release layout
 
 A dataset release directory MUST have the following structure:
 
-- `<output_root>/<dataset_id>/<dataset_version>/`
+- `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
   - `dataset_manifest.json`
   - `views/`
     - `features/`
@@ -353,8 +391,8 @@ For each included run:
 
 `dataset_manifest.json` MUST be a single JSON object with:
 
-- `schema_id`: `"pa:dataset_manifest:v1"`
-- `schema_version`: SemVer string (this schema document’s version, not the dataset_version)
+- `contract_version`: SemVer string (MUST be `0.1.0`)
+- `schema_version`: `"pa:dataset_manifest:v1"`
 - `dataset_id`: id_slug_v1
 - `dataset_version`: SemVer
 - `dataset_release_id`: string (see hash basis below)
@@ -365,15 +403,16 @@ For each included run:
 - `build`:
   - `tool_name`: string
   - `tool_version`: string
-  - `config_hash_sha256`: string (lowercase hex SHA-256 of canonical JSON for the effective build
-    config; see "Build config hash basis")
+  - `config_hash_sha256`: string (digest string `sha256:<lowercase_hex>` of canonical JSON for the
+    effective build config; see "Build config hash basis")
   - `tasks[]`: array of stable task ids, sorted ascending (bytewise UTF-8)
     - Allowed values (v0.1): `technique_labeling`, `phase_attribution`, `detection_outcomes`,
       `normalization_assistance`
   - `features_variant`: `"marker_blind" | "marker_assisted"`
 - `inputs`:
   - `runs[]`: array of run input entries (see below), sorted by `run_id` ascending (bytewise UTF-8)
-- `views[]`: array of view entries (see below), sorted by `view_id` ascending (bytewise UTF-8)
+- `views_glob_version`: `"glob_v1"` (declares the glob grammar for `views[].includes[]` and
+  `views[].excludes[]`)
 - `splits`:
   - `split_config_path`: `"splits/split_config.json"`
   - `split_assignments_path`: `"splits/split_assignments.jsonl"`
@@ -388,7 +427,7 @@ Each element of `inputs.runs[]` MUST have:
 
 - `run_id`: UUID string
 - `run_manifest_sha256`: string
-  - Lowercase hex SHA-256 of the exact source run’s `manifest.json` file bytes.
+  - Digest string `sha256:<lowercase_hex>` of the exact source run’s `manifest.json` file bytes.
 - `source_ref`: string
   - Either a filesystem path or URI identifying the source run bundle root/archival source.
 - `included_views`:
@@ -409,9 +448,15 @@ Each element of `views[]` MUST have:
 - `root_path`: string
   - Dataset-relative path to the view root (example: `"views/features"`).
 - `includes[]`: array of strings
-  - Sorted array of dataset-relative normalized paths or glob patterns included in the view.
+  - Sorted array of dataset-release-root relative POSIX paths or `glob_v1` patterns included in the
+    view.
+  - Each entry MUST be a valid `glob_v1` pattern over dataset-release-root relative candidate paths
+    (fail closed on invalid patterns).
 - `excludes[]`: array of strings (optional)
-  - Sorted array of dataset-relative normalized paths or glob patterns excluded from the view.
+  - Sorted array of dataset-release-root relative POSIX paths or `glob_v1` patterns excluded from
+    the view.
+  - Each entry MUST be a valid `glob_v1` pattern over dataset-release-root relative candidate paths
+    (fail closed on invalid patterns).
 
 ### Manifest canonicalization and hashing
 
@@ -426,7 +471,7 @@ Determinism requirements:
 
 `build.config_hash_sha256` MUST be computed as:
 
-`sha256_hex(canonical_json_bytes(build_config_basis))`
+`"sha256:" + sha256_hex(canonical_json_bytes(build_config_basis))`
 
 Where `build_config_basis` is a single JSON object with:
 
@@ -434,6 +479,7 @@ Where `build_config_basis` is a single JSON object with:
 - `release_posture`
 - `tasks[]`
 - `features_variant`
+- `views_glob_version`
 - `views[]`: for each view, the tuple `{ view_id, includes[], excludes[] }` (with arrays sorted as
   specified in the manifest schema)
 
@@ -450,8 +496,10 @@ Hash basis object:
 - `release_posture`
 - `build_config_sha256` (equals `build.config_hash_sha256`)
 - `runs[]`: sorted array of `{ run_id, run_manifest_sha256 }`
-  - `run_manifest_sha256` is the SHA-256 of the exact source run’s `manifest.json` bytes.
-- `split_config_sha256`: SHA-256 of the exact `splits/split_config.json` file bytes
+  - `run_manifest_sha256` is the digest string `sha256:<lowercase_hex>` of the exact source run’s
+    `manifest.json` bytes.
+- `split_config_sha256`: digest string `sha256:<lowercase_hex>` of the exact
+  `splits/split_config.json` file bytes
 
 `dataset_release_id = "pa:dsrel:v1:" + sha256_hex(canonical_json_bytes(hash_basis))`.
 
@@ -461,8 +509,8 @@ Hash basis object:
 
 The dataset release MUST include a split config that declares:
 
-- `schema_id`: `"pa:dataset_splits_config:v1"`
-- `schema_version`: SemVer
+- `contract_version`: SemVer string (MUST be `0.1.0`)
+- `schema_version`: `"pa:dataset_splits_config:v1"`
 - `policy`:
   - `split_names`: array (default: `["train","val","test"]`)
   - `split_fractions`: object (default: `{ "train": 0.8, "val": 0.1, "test": 0.1 }`)
@@ -506,9 +554,9 @@ For each run:
    - v0.1 constraint: if a run contains more than one distinct
      `(engine, technique_id, engine_test_id)` tuple in `ground_truth.jsonl`, the dataset build MUST
      fail closed unless an explicit multi-action grouping policy is configured.
-1. Compute `h = sha256_hex(UTF8(seed + "|" + group_key_string))`.
-1. Interpret the first 8 hex characters of `h` as an unsigned 32-bit integer `u` (big-endian hex),
-   then compute `r = u / 2^32` as a real number in `[0,1)`.
+1. Compute `h_hex = sha256_hex(UTF8(seed + "|" + group_key_string))`.
+1. Interpret the first 8 hex characters of `h_hex` as an unsigned 32-bit integer `u` (big-endian
+   hex), then compute `r = u / 2^32` as a real number in `[0,1)`.
 1. Assign a split deterministically by walking `policy.split_names[]` in order and selecting the
    first split whose cumulative fraction threshold exceeds `r` (the final split MUST be treated as
    the catch-all remainder).
@@ -516,10 +564,12 @@ For each run:
 The dataset build MUST emit:
 
 - `splits/split_assignments.jsonl` with one JSON object per run:
+  - `contract_version`: SemVer string (MUST be `0.1.0`)
+  - `schema_version`: `"pa:dataset_split_assignment:v1"`
   - `run_id`
   - `split`
   - `group_key_string`
-  - `group_key_hash_sha256` (MUST equal `h`)
+  - `group_key_hash_sha256` (MUST equal `"sha256:" + h_hex`)
 
 File ordering MUST be deterministic by sorting lines by `run_id` ascending (bytewise UTF-8).
 
@@ -571,7 +621,7 @@ Normative requirements:
   - `relative_path` MUST be dataset-release-root relative, use POSIX separators (`/`), and be
     compared and sorted using UTF-8 byte order (no locale).
 - `security/checksums.txt` MUST include every file under the dataset release directory except:
-  - `.staging/**` (transient publish-gate scratch area, when used),
+  - `.staging/**` (unexpected under a published release; treated as transient scratch when present),
   - `security/checksums.txt` and `security/signature.ed25519` (to avoid self-reference).
 
 Signing (optional):
@@ -593,9 +643,19 @@ Implementations MUST provide deterministic conformance tests suitable for CI:
 CI MUST include a fixture dataset build that:
 
 - takes a fixed set of small run bundles as input (stored as test fixtures),
-- emits a dataset release to a temp directory,
+- emits a dataset release under `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
+  (within a temporary workspace root created for the fixture),
+- does not create or modify any files under the input run bundles (`runs/<run_id>/` is treated as
+  read-only input; validate via a before/after tree snapshot or hashes),
+- writes only within the reserved export namespaces used by dataset builds:
+  - `exports/datasets/**` (final output)
+  - `exports/.staging/datasets/**` (staging; when enabled),
 - validates:
-  1. `dataset_manifest.json` schema and deterministic ordering,
+  1. workspace contract validation (registry-driven):
+     - `dataset_manifest.json` (validation_mode `json_document`)
+     - `splits/split_config.json` (validation_mode `json_document`)
+     - `splits/split_assignments.jsonl` (validation_mode `jsonl_lines`)
+  1. `dataset_manifest.json` and `splits/split_config.json` deterministic ordering,
   1. `dataset_release_id` reproducibility,
   1. `splits/split_assignments.jsonl` reproducibility,
   1. label stripping:

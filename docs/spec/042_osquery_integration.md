@@ -9,7 +9,7 @@ related:
   - 050_normalization_ocsf.md
   - 045_storage_formats.md
   - 120_config_reference.md
-  - ../adr/ADR-0002-event-identity-and-provenance.md
+  - ADR-0002-event-identity-and-provenance.md
 ---
 
 # osquery integration (telemetry and normalization)

@@ -29,7 +29,7 @@
   "bindings": [
     { "artifact_glob": "logs/ui_audit.jsonl", "contract_id": "audit_event", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "state/run_registry.json", "contract_id": "run_registry", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/*/*/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" }
+    { "artifact_glob": "exports/<run_id>/<export_id>/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" }
   ],
   "notes": [
     "This file is the authoritative mapping for contract-backed workspace-root artifacts.",

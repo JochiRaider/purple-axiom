@@ -260,7 +260,19 @@ Redaction + persistence requirements (normative):
   - Rationale: argv commonly leaks into transcripts, process listings, and contract-backed execution
     evidence.
 - Implementations MUST treat the presence of an integration credential value in any persisted output
-  (including volatile logs) as a run-fatal safety violation and MUST fail closed.
+  (including volatile logs) as a run-fatal safety violation and MUST fail closed with
+  `reason_code=integration_credentials_leaked` (see ADR-0005).
+  - Precedence: if the detected secret is a resolved integration credential value, implementations
+    MUST emit `reason_code=integration_credentials_leaked` rather than `redaction_policy_error`.
+
+Leak-detected diagnostics (normative):
+
+- Any diagnostic text MUST NOT include the secret value.
+- Diagnostic text MAY include only:
+  - run-relative paths of offending outputs, and
+  - stable metadata (for example the integration id and credential field name).
+- When multiple paths are reported, they MUST be sorted deterministically by run-relative path
+  (bytewise UTF-8 ordering, no locale).
 
 Redaction enabled/disabled interaction (normative):
 
@@ -275,6 +287,8 @@ Preflight checks (normative):
   - Missing/unresolvable required credentials: `reason_code=integration_credentials_missing`.
   - Resolved credentials that fail integration validation/authentication:
     `reason_code=integration_credentials_invalid`.
+  - Detected credential leakage in persisted output bytes (artifacts or logs):
+    `reason_code=integration_credentials_leaked`.
 
 Verification hooks (normative):
 

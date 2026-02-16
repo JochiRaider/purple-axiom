@@ -1015,6 +1015,28 @@ Common keys:
       redaction enablement switch.
     - Pipeline redaction enablement is controlled by `security.redaction.enabled`.
 
+### Dataset releases (datasets)
+
+Controls deterministic dataset release generation under `<workspace_root>/exports/datasets/` (see
+`085_golden_datasets.md`). Dataset builds are export/packaging workflows and MUST NOT modify any
+`runs/<run_id>/` inputs.
+
+Common keys:
+
+- `event_joins` (optional)
+  - `policy` (optional, default: `dual_key_v1`): `dual_key_v1 | restrictive_v1`
+    - `dual_key_v1` (v0.1 default): prefer `(run_id, metadata.extensions.purple_axiom.raw_ref)` when
+      `raw_ref != null`; fall back to `(run_id, metadata.event_id)` when `raw_ref == null` (Tier 3).
+    - `restrictive_v1`: Tier 3 events are excluded from joinable feature views (or excluded from
+      tasks requiring event-level label reattachment). See `085_golden_datasets.md`.
+
+Notes:
+
+- When producing dataset releases, the builder MUST record the selected policy in the dataset
+  manifest (`event_joins.policy`).
+- The selected policy participates in the dataset release build config hash basis and therefore
+  affects `dataset_release_id`.
+
 ### Operability (optional, operability)
 
 Controls operational safety and runtime behavior (see also `110_operability.md`).
@@ -1344,6 +1366,10 @@ reporting:
   emit_json: true
   include_debug_sections: false
 
+datasets:
+  event_joins:
+    policy: dual_key_v1
+   
 operability:
   logging:
     level: info

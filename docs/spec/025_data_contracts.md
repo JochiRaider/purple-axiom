@@ -213,15 +213,21 @@ The authoritative registry is a schema-backed index that maps:
 
 Registry files (required for implementations):
 
-- `docs/contracts/contract_registry.json` (the registry instance)
-- `docs/contracts/contract_registry.schema.json` (schema for the registry instance)
+- `docs/contracts/contract_registry.json` (run-bundle registry instance; run-relative bindings)
+- `docs/contracts/workspace_contract_registry.json` (workspace-root registry instance;
+  workspace-root-relative bindings)
+- `docs/contracts/contract_registry.schema.json` (schema for registry instances; applies to both
+  registry files)
 
 Normative requirements:
 
 - Implementations MUST treat `docs/contracts/contract_registry.json` as the single source of truth
-  for:
-  - which artifacts are contract-backed, and
-  - which schema validates each artifact.
+  for contract-backed artifacts whose paths are run-relative (relative to a run bundle root).
+- Implementations MUST treat `docs/contracts/workspace_contract_registry.json` as the single source
+  of truth for contract-backed artifacts whose paths are workspace-root-relative (relative to
+  `<workspace_root>/` and outside `runs/<run_id>/`).
+- Validation tooling MUST NOT interpret run-relative bindings as workspace-root-relative bindings
+  (or vice versa).
 - This spec MAY include a human-readable list of schema files for convenience, but that list is
   non-authoritative and MUST NOT be consumed by the validation engine.
 - Each schema referenced by the registry MUST include a `contract_version` constant as described
@@ -262,6 +268,10 @@ Definitions:
 - Character: a Unicode scalar value (code point).
 
 Run-relative POSIX requirement (normative):
+
+Note: When validating `docs/contracts/workspace_contract_registry.json`, the same constraints apply,
+but candidate paths and patterns are workspace-root-relative (relative to `<workspace_root>/`), not
+run-relative.
 
 - Candidate paths and patterns MUST be run-relative POSIX paths:
   - separator is `/` (backslash `\` is forbidden),
@@ -2039,16 +2049,24 @@ Terminology note (normative):
   `bridge/mapping_pack_snapshot.json`. Specs and tooling SHOULD refer to these artifacts by full
   run-relative path to avoid ambiguity.
 
-Recommended version recording (aligned with ADR-0001):
+RRecommended version recording (manifest pins)
 
-For diffable runs (CI, regression, trending, golden dataset inputs), the manifest MUST record:
+For diffable runs (CI, regression, trending, and dataset-release inputs), the manifest MUST record,
+under `manifest.versions`:
 
-- `versions.contracts` (object): map of `contract_id -> contract_version` for all contract-backed
-  artifacts produced in the run.
-- `versions.datasets` (object): map of `schema_id -> schema_version` for all Parquet datasets
-  published with `_schema.json` snapshots in the run.
+- `manifest.versions.contracts` (object): map of `contract_id -> contract_version` for the set of
+  contract-backed artifacts that are published in the run bundle.
+- `manifest.versions.datasets` (object): map of `schema_id -> schema_version` for each Parquet
+  dataset published with an `_schema.json` schema snapshot in the run bundle.
 
 For non-diffable runs, producers SHOULD record the same maps when feasible.
+
+Consumer/compatibility note (normative):
+
+- Consumers MUST treat `manifest.versions.*` (including these maps) as the authoritative pin source
+  for regression comparability, trending join keys, and compatibility gating.
+- Pin values MUST be compared as byte-for-byte string equality with no normalization.
+- Consumers MUST NOT derive pins from other locations except as explicitly defined by ADR-0001.
 
 Plan model provenance (v0.2+; normative when implemented):
 

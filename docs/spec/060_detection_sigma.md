@@ -327,6 +327,20 @@ Each detection instance includes:
 - Recommended: `extensions.bridge` provenance (`mapping_pack_id`, `mapping_pack_version`, `backend`,
   `compiled_at_utc`, and `fallback_used` when any `raw.*` fallback is required)
 
+### Dataset releases: joining detections to raw_ref-first feature views (normative for dataset exports)
+
+Detection instances reference normalized events by `metadata.event_id` via `matched_event_ids[]`.
+Dataset releases (see `085_golden_datasets.md`) prefer event-level joins by `raw_ref` when present.
+
+Therefore, when a dataset release includes `detections/…` under `views/labels/`, the dataset builder
+MUST also emit a deterministic join bridge under:
+
+- `views/labels/runs/<run_id>/joins/event_id_raw_ref_bridge/`
+
+This bridge maps `(run_id, metadata.event_id) <-> (run_id, raw_ref)` so consumers can join detection
+labels to feature events using the dataset release event join policy (raw_ref-first with Tier 3
+fallback as declared in the dataset manifest).
+
 ### Regression comparable detection metric inputs (normative):
 
 - Detection-stage comparable surfaces for regression analysis MUST be derived from deterministic run

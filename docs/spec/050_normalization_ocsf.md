@@ -291,11 +291,18 @@ Note (normative): `normalized/mapping_profile_snapshot.json` is the normalizatio
 snapshot. It is distinct from `bridge/mapping_pack_snapshot.json` (Sigma-to-OCSF bridge provenance)
 which is emitted by the detection stage when Sigma bridge evaluation is enabled.
 
-When normalization produces an OCSF event store, the normalizer MUST also emit exactly one of:
+When normalization produces an OCSF event store, the normalizer MUST emit the contract-backed JSONL
+envelope:
+
+- `normalized/ocsf_events.jsonl`
+
+Implementations MAY also emit a Parquet dataset directory for long-term storage and evaluation:
 
 - `normalized/ocsf_events/` (Parquet dataset directory; MUST include
   `normalized/ocsf_events/_schema.json`)
-- `normalized/ocsf_events.jsonl` (small fixtures)
+
+If both representations are present, they MUST be derived from the same logical normalized event
+stream for the run (no divergence in `metadata.event_id`).
 
 ### Deduplication and replay
 

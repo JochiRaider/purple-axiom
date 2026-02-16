@@ -53,15 +53,16 @@
   "bindings": [
     { "artifact_glob": "logs/ui_audit.jsonl", "contract_id": "audit_event", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "state/run_registry.json", "contract_id": "run_registry", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/<run_id>/<export_id>/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/datasets/<dataset_id>/<dataset_version>/dataset_manifest.json", "contract_id": "dataset_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/datasets/<dataset_id>/<dataset_version>/splits/split_config.json", "contract_id": "dataset_splits_config", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/datasets/<dataset_id>/<dataset_version>/splits/split_assignments.jsonl", "contract_id": "dataset_split_assignment", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" }
+    { "artifact_glob": "exports/*/*/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "exports/datasets/*/*/dataset_manifest.json", "contract_id": "dataset_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "exports/datasets/*/*/splits/split_config.json", "contract_id": "dataset_splits_config", "stage_owner": "orchestrator", "validation_mode": "json_document" },
+    { "artifact_glob": "exports/datasets/*/*/splits/split_assignments.jsonl", "contract_id": "dataset_split_assignment", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" }
   ],
   "notes": [
     "This file is the authoritative mapping for contract-backed workspace-root artifacts.",
     "`bindings[].artifact_glob` values are workspace-root-relative (relative to `<workspace_root>/`). Do not include a leading `/` and do not include `<workspace_root>/`.",
     "Workspace-root globs MUST be POSIX-relative: no leading `/`, no `..` path segments, and no backslashes (`\\\\`).",
+    "`bindings[].artifact_glob` values in this file MUST use `glob_v1` grammar (same matching rules as `025_data_contracts.md`). Placeholder tokens like `<run_id>` are not `glob_v1` metacharacters and MUST NOT appear in `artifact_glob` values.",
     "When a contract_id appears in both this registry and docs/contracts/contract_registry.json, schema_path + contract_version MUST match."
   ]
 }

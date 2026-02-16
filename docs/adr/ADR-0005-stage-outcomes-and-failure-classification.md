@@ -257,6 +257,7 @@ These reason codes MAY be used for any stage.
 | `input_missing`                      | FATAL    | Required upstream input artifact missing or unreadable.                                                                                                                            |
 | `integration_credentials_missing`    | FATAL    | Required integration credential reference missing, empty, or cannot be resolved by the configured secret provider.                                                                 |
 | `integration_credentials_invalid`    | FATAL    | Integration credential resolved but failed integration validation/authentication.                                                                                                  |
+| `integration_credentials_leaked`     | FATAL    | Resolved integration credential value detected in persisted output (artifacts or logs); safety violation.                                                                          |
 | `lock_acquisition_failed`            | FATAL    | Exclusive lock could not be acquired.                                                                                                                                              |
 | `storage_io_error`                   | FATAL    | Storage error prevents atomic writes (for example ENOSPC or EIO).                                                                                                                  |
 | `blocked_by_upstream_failure`        | SKIPPED  | Stage did not run because an upstream stage failed fail-closed.                                                                                                                    |
@@ -264,6 +265,13 @@ These reason codes MAY be used for any stage.
 | `threat_intel_pack_ambiguous`        | FATAL    | Multiple sources match the same `(threat_intel_pack_id, threat_intel_pack_version)` but differ in content; selection is ambiguous.                                                 |
 | `threat_intel_pack_invalid`          | FATAL    | Threat intelligence pack failed validation (schema invalid, hash mismatch, or indicators JSONL parse/validation failure).                                                          |
 | `threat_intel_snapshot_inconsistent` | FATAL    | Existing `inputs/threat_intel/` snapshot does not match resolved pins/hashes and would break reproducibility.                                                                      |
+
+Precedence (normative):
+
+- If the detected secret is a resolved integration credential value, implementations MUST emit
+  `reason_code=integration_credentials_leaked` (more specific) rather than `redaction_policy_error`.
+- `redaction_policy_error` remains reserved for redaction engine failures and post-check failures
+  unrelated to integration credentials.
 
 ### Lab provider stage (`lab_provider`)
 
@@ -330,6 +338,7 @@ Default `fail_mode`: `fail_closed`
 | --------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
 | `integration_credentials_missing` | FATAL    | A required credential reference is missing/empty or cannot be resolved by the configured secret provider. |
 | `integration_credentials_invalid` | FATAL    | A credential resolves but fails integration validation/authentication.                                    |
+| `integration_credentials_leaked`  | FATAL    | Resolved integration credential value detected in persisted output (artifacts or logs); safety violation. |
 
 Normative requirements:
 
@@ -338,6 +347,9 @@ Normative requirements:
   missing/invalid credentials.
 - Implementations MUST NOT include resolved credential values in any outcome record, error message,
   or deterministic artifact.
+- If a resolved integration credential value is detected in any persisted output bytes
+  (contract-backed artifacts or any persisted logs), this substage MUST fail closed with
+  `reason_code=integration_credentials_leaked`.
 
 #### FATAL reason codes (substage: `runner.environment_config`)
 

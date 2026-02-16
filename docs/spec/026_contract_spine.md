@@ -147,8 +147,9 @@ This ordering MUST be used for deterministic sorts of:
 
 ### Components
 
-- `ContractRegistry`: resolves contract metadata and ownership for artifact paths using
-  `docs/contracts/contract_registry.json`.
+- `ContractRegistry`: resolves contract metadata and ownership for artifact paths using the selected
+  registry instance (`docs/contracts/contract_registry.json` or
+  `docs/contracts/workspace_contract_registry.json`).
 - `ContractValidator`: validates artifact bytes against a resolved schema with deterministic
   dispatch and deterministic error ordering/truncation.
 - `PublishGate`: enforces transaction-like publication for stage outputs (stage writes are staged,
@@ -160,10 +161,16 @@ This ordering MUST be used for deterministic sorts of:
 
 ### Registry file and location
 
-- The contract registry file MUST be located at `docs/contracts/contract_registry.json` inside the
-  selected contracts bundle root.
-- Producers and consumers MUST treat the registry as a configuration input that is required for
-  contract-backed artifact interpretation.
+- Implementations MUST support two contract registry instances inside the selected contracts bundle
+  root:
+
+  - Run-bundle registry: `docs/contracts/contract_registry.json` (run-relative bindings).
+  - Workspace-root registry: `docs/contracts/workspace_contract_registry.json`
+    (workspace-root-relative bindings; relative to `<workspace_root>/`).
+
+- Producers and consumers MUST treat registry selection as an explicit configuration input required
+  for contract-backed artifact interpretation. Tooling MUST NOT interpret run-relative bindings as
+  workspace-root-relative bindings (or vice versa).
 
 ### Registry schema essentials
 
@@ -175,15 +182,21 @@ The registry MUST contain:
   - `schema_path` (repo-relative path under `docs/contracts/`)
   - `contract_version` (SemVer string; MUST match the schema constant)
 - `bindings[]`, containing at minimum:
-  - `artifact_glob` (run-relative POSIX glob; `glob_v1`)
+  - `artifact_glob` (POSIX glob; `glob_v1`; registry-relative)
   - `contract_id` (must exist in `contracts[]`)
   - `validation_mode` (authoritative parse/validation dispatch key)
   - `stage_owner` (owning stage ID, or `orchestrator`)
 
 ### Path requirements
 
-All paths consumed or produced by Contract Spine components MUST obey run-relative POSIX
-constraints:
+All paths consumed or produced by Contract Spine components MUST obey POSIX-relative constraints
+(registry-relative):
+
+- For the run-bundle registry, paths are run-relative (relative to the run bundle root).
+- For the workspace-root registry, paths are workspace-root-relative (relative to
+  `<workspace_root>/`).
+
+Constraints:
 
 - Separator MUST be `/` (backslash `\` is forbidden).
 - Paths MUST NOT start with `/`.
@@ -215,7 +228,7 @@ Registry version compatibility (normative):
 
 To prevent divergent interpretations:
 
-- For any run-relative `artifact_path`, at most one binding MUST match.
+- For any registry-relative `artifact_path`, at most one binding MUST match.
 - If multiple bindings match the same `artifact_path`, the registry MUST be treated as invalid
   configuration and tooling MUST fail closed.
   - Consumer surface: `error_code="contract_registry_parse_error"` with `details` identifying the
@@ -276,13 +289,18 @@ but MUST preserve signatures and semantics.
 
 ### `ContractRegistry`
 
-Purpose: resolve contract metadata from run-relative paths and provide stage-scoped binding views.
+Purpose: resolve contract metadata from registry-relative paths and provide stage-scoped binding
+views.
 
 Required interface:
 
 ```
 ContractRegistry.load(contracts_root: Path) -> ContractRegistry
+  - Loads the run-bundle registry instance at `docs/contracts/contract_registry.json`
 
+ContractRegistry.load_workspace(contracts_root: Path) -> ContractRegistry
+  - Loads the workspace-root registry instance at `docs/contracts/workspace_contract_registry.json`.
+  
 ContractRegistry.resolve(artifact_path: str) -> ResolvedContract | None
   - Returns None if no binding matches artifact_path.
   - Returns ResolvedContract if exactly one binding matches.

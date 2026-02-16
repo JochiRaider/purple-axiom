@@ -18,9 +18,9 @@ related:
   - 080_reporting.md
   - 105_ci_operational_readiness.md
   - 110_operability.md
-  - ../../SUPPORTED_VERSIONS.md
-  - ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
-  - ../adr/ADR-0007-state-machines.md
+  - SUPPORTED_VERSIONS.md
+  - ADR-0005-stage-outcomes-and-failure-classification.md
+  - ADR-0007-state-machines.md
 ---
 
 # Test strategy and CI
@@ -57,7 +57,10 @@ degradation, and semantic drift before they reach production.
   `requirements_evaluation.json`, `state_reconciliation_report.json`) are governed by their contract
   schemas and may include additional stable tokens.
   - Any artifact-level `reason_code` field MUST be paired with `reason_domain`.
-  - For contract-backed artifacts, `reason_domain` MUST equal the artifact schema `contract_id`.
+  - For contract-backed artifacts, schema-owned `reason_domain` values MUST equal the artifact
+    schema `contract_id`.
+    - Exemption (placeholder namespace): `placeholder.reason_domain` MUST be `artifact_placeholder`
+      and MUST NOT be subject to the “must equal contract_id” check.
 
 ## Scope
 
@@ -201,7 +204,7 @@ Conventions (normative):
 | Cross-cutting: glob matching (`glob_v1`)                                 | `tests/fixtures/glob_v1/vectors.json`                                                                                                                                                 | `glob_v1_vectors` (vectors file present and exercised)                                                                                                  |
 | Cross-cutting: event identity (`event_id.v1`)                            | `tests/fixtures/event_id/v1/`                                                                                                                                                         | `tier1_smoke`, `tier2_smoke`, `tier3_collision`, `source_type_distinct`                                                                                 |
 | Cross-cutting: redaction (`pa.redaction.v1`)                             | `tests/fixtures/redaction/v1/`                                                                                                                                                        | `allowlist_smoke`, `denylist_smoke`, `stable_hashes`                                                                                                    |
-| Cross-cutting: integration credentials (`pa.integration_credentials.v1`) | `tests/fixtures/integration_credentials/v1/`                                                                                                                                          | `logs_redaction_smoke`, `artifact_absence_smoke`, `missing_fails_closed`, `invalid_fails_closed`                                                        |
+| Cross-cutting: integration credentials (`pa.integration_credentials.v1`) | `tests/fixtures/integration_credentials/v1/`                                                                                                                                          | `logs_redaction_smoke`, `artifact_absence_smoke`, `missing_fails_closed`, `invalid_fails_closed`, `leak_detected_fails_closed`                          |
 | Cross-cutting: run results summary (`run_results`)                       | `tests/fixtures/run_results/`                                                                                                                                                         | `run_results_contract_and_hash`                                                                                                                         |
 | Cross-cutting: detection content bundle (`detection_content_release_v1`) | `tests/fixtures/content_bundles/detection_content_release_v1/`                                                                                                                        | `content_bundle_offline_validation_smoke`, `run_plus_content_bundle_validation_smoke`                                                                   |
 | `lab_provider`                                                           | `tests/fixtures/lab_providers/`                                                                                                                                                       | `provider_smoke`, `failure_mapping_smoke`                                                                                                               |
@@ -332,6 +335,8 @@ credential values:
 
 1. are redacted/absent from logs, and
 1. are absent from all contract-backed artifacts.
+1. fail closed with `reason_code=integration_credentials_leaked` when a resolved credential value is
+   detected in persisted output bytes (artifacts or logs).
 
 Fixture root: `tests/fixtures/integration_credentials/v1/`
 
@@ -369,6 +374,17 @@ Required fixture cases (normative):
     - `logs/health.json` (or `manifest.stage_outcomes[]`) MUST include a failed outcome for substage
       `runner.integration_credentials` with `reason_code=integration_credentials_missing`.
 
+- `leak_detected_fails_closed`
+
+  - Inputs:
+    - Same as `logs_redaction_smoke`, but the test integration intentionally writes the resolved
+      credential value into a persisted output stream (RECOMMENDED target: `logs/run.log`).
+  - Assertions:
+    - Run MUST fail closed.
+    - `logs/health.json` (or `manifest.stage_outcomes[]`) MUST include a failed outcome for substage
+      `runner.integration_credentials` with `reason_code=integration_credentials_leaked`.
+    - Any CI/test harness diagnostics for this failure MUST NOT print the sentinel secret value.
+
 - `invalid_fails_closed`
 
   - Inputs:
@@ -388,6 +404,8 @@ Scanner requirement (normative):
   - all log outputs emitted by the harness.
 - The scan MUST be performed on raw bytes (not parsed JSON) to avoid parser-normalization false
   negatives.
+- The scanning helper MUST enumerate scanned files in deterministic order (run-relative path sort).
+- The scanning helper MUST NOT print the sentinel secret value in any failure output.
 
 ### Normalization and mapping
 
@@ -1280,14 +1298,15 @@ CI requirements (normative):
   `085_golden_datasets.md`) and any required governance artifact is missing or schema-invalid, CI
   MUST fail.
 
-Minimum checks (normative; paths are defined by `085_golden_datasets.md`):
+Minimum checks (normative; repository layout is defined by `085_golden_datasets.md`):
 
-- Golden dataset catalog exists and validates against its contract (planned:
-  `docs/contracts/golden_dataset_catalog.schema.json`).
-- Each catalog entry designated "golden" has a corresponding dataset card metadata artifact that
-  validates against its contract (planned: `docs/contracts/golden_dataset_card.schema.json`).
-- Each catalog entry designated "golden" has a corresponding approvals record that validates against
-  its contract (planned: `docs/contracts/golden_dataset_approvals.schema.json`).
+- Golden dataset catalog exists at `golden_datasets/catalog.json` and validates against its contract
+  (`docs/contracts/golden_dataset_catalog.schema.json`).
+- For each catalog entry designated "golden" (`dataset_id = X`):
+  - `golden_datasets/cards/X.json` MUST exist and validate against its contract
+    (`docs/contracts/golden_dataset_card.schema.json`).
+  - `golden_datasets/approvals/X.json` MUST exist and validate against its contract
+    (`docs/contracts/golden_dataset_approvals.schema.json`).
 - Catalog → card → approvals joins MUST be deterministic (stable key: `dataset_id`).
 
 Conformance fixtures (normative):
@@ -1302,7 +1321,7 @@ Conformance fixtures (normative):
 
 Dataset release artifacts are workspace-root exports (not run-relative). CI MUST validate the
 contract-backed dataset JSON artifacts using the workspace contract registry
-(`workspace_contract_registry.json`), reusing `validation_mode` dispatch:
+(`docs/contracts/workspace_contract_registry.json`), reusing `validation_mode` dispatch:
 
 - `json_document`:
   - `exports/datasets/<dataset_id>/<dataset_version>/dataset_manifest.json`
@@ -1311,6 +1330,34 @@ contract-backed dataset JSON artifacts using the workspace contract registry
   - `exports/datasets/<dataset_id>/<dataset_version>/splits/split_assignments.jsonl`
 
 CI MUST fail closed on any schema validation failure (do not "best-effort" validate).
+
+In addition to JSON Schema validation, CI MUST fail closed on dataset release invariants required by
+`085_golden_datasets.md`, even when the dataset release JSON artifacts are schema-valid. At minimum,
+CI MUST enforce:
+
+- Any field name ending in `_sha256` MUST match `^sha256:[0-9a-f]{64}$`.
+- `dataset_manifest.json.views_glob_version` MUST equal `"glob_v1"`. All view patterns
+  (`views[].includes[]`, `views[].excludes[]`) MUST parse under `glob_v1` and MUST pass
+  dataset-relative path safety checks (no leading `/`, no `..`, no `//`, no `\`).
+- Feature variant disambiguation MUST be enforced:
+  - `dataset_manifest.json.dataset_version` MUST encode the selected feature variant using SemVer
+    build metadata as specified by `085_golden_datasets.md`:
+    - `build.features_variant = "marker_assisted"` -> `dataset_version` ends with `+marker-assisted`
+    - `build.features_variant = "marker_blind"` -> `dataset_version` ends with `+marker-blind`
+  - `dataset_version` MUST match the on-disk `<dataset_version>/` directory name byte-for-byte.
+- Deterministic ordering and set semantics MUST be enforced:
+  - `inputs.runs[]` sorted by `run_id` (bytewise UTF-8),
+  - `views[]` sorted by `view_id`,
+  - `views[].includes[]` and `views[].excludes[]` sorted and de-duplicated (bytewise UTF-8),
+  - `splits/split_assignments.jsonl` lines sorted by `run_id` (bytewise UTF-8).
+- Event identity tier invariants for `raw_ref`:
+  - Identity Tier 1 and Tier 2 events: `metadata.extensions.purple_axiom.raw_ref` MUST be non-null.
+  - Identity Tier 3 events: `metadata.extensions.purple_axiom.raw_ref` MUST be null.
+- When `views/labels/` includes detection-derived labels keyed by `metadata.event_id`, the dataset
+  release MUST include the deterministic event join bridge required by `085_golden_datasets.md`, and
+  CI MUST validate its presence and determinism.
+- Provenance-only descriptive context boundary: prohibited descriptive artifacts MUST NOT appear
+  under `views/features/` or `views/labels/`.
 
 Conformance fixtures (normative):
 
@@ -1321,6 +1368,22 @@ Conformance fixtures (normative):
   - `dataset_release_schema_invalid_fails`: provide a dataset release with at least one
     schema-invalid artifact (document or JSONL line) and assert the workspace validator fails closed
     with a deterministic error location.
+  - `dataset_release_join_bridge_valid`: provide a dataset release that includes detection outputs
+    under `views/labels/` and the join bridge under
+    `views/labels/runs/<run_id>/joins/event_id_raw_ref_bridge/`. Assert:
+    - bridge is present for each included run,
+    - bridge rows are deterministically ordered (stable sort),
+    - joins are possible from `matched_event_ids[]` to raw_ref-first feature events.
+  - `dataset_release_join_bridge_missing_fails`: provide a dataset release that includes detections
+    under `views/labels/` but omits the join bridge. Assert CI fails closed with a stable error that
+    identifies the missing bridge class.
+  - `dataset_release_raw_ref_tier_violation_fails`: provide a dataset release whose feature events
+    violate raw_ref tier invariants (Tier 1/2 raw_ref null or Tier 3 raw_ref non-null). Assert CI
+    fails closed with a stable error classification.
+  - `dataset_release_leakage_boundary_fails`: provide a dataset release that places provenance-only
+    descriptive context under `views/features/` or `views/labels/` (for example, a report narrative
+    file or scenario description material). Assert CI fails closed with a stable error that
+    identifies a leakage boundary violation.
 
 ### Version conformance
 

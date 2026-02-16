@@ -106,6 +106,15 @@ Requirements (normative):
   1. otherwise: smallest canonical JSON serialization of `row_locator` (sorted keys)
 - `raw_ref` MUST NOT participate in the `metadata.event_id` hashing basis.
 
+Downstream join digest (optional; normative when used):
+
+- Downstream producers MAY compute a stable digest for `raw_ref` for join use (for example, dataset
+  releases) as:
+  - `raw_ref_sha256 = "sha256:" + sha256_hex(canonical_json_bytes(raw_ref_norm))`
+- `raw_ref_norm` SHOULD omit optional keys whose value is `null` to avoid multiple encodings of the
+  same logical pointer.
+- This digest MUST NOT be interpreted as participating in `metadata.event_id` computation.
+
 Optional multi-origin extension:
 
 - Producers MAY additionally emit `metadata.extensions.purple_axiom.raw_refs` as an array of

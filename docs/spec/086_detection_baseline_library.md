@@ -43,7 +43,7 @@ version scope: v0.1 (CI consumption subset) + post-OI (v0.2+)
   requirements in this spec. (BDPs are inputs; how they are consumed by a general detection
   evaluation pipeline is reserved.)
 - Providing a general-purpose archival format for complete run bundles (see run export policy /
-  golden datasets).
+  dataset releases).
 - Defining a remote artifact store or synchronization protocol.
 
 ## CI usage (v0.1 subset)

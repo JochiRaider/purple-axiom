@@ -1132,10 +1132,20 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
    - Any non-stage artifact that emits a `reason_code` field MUST also emit a sibling
      `reason_domain` field:
      - Pairing rule: `reason_domain` MUST be present iff `reason_code` is present.
-     - Contract alignment: for contract-backed artifacts, `reason_domain` MUST equal the artifact
-       schema’s `contract_id` (see `docs/contracts/contract_registry.json`).
+     - Contract alignment (schema-owned reason fields): for contract-backed artifacts,
+       `reason_domain` MUST equal the artifact schema’s `contract_id` (see
+       `docs/contracts/contract_registry.json`).
+       - Exemption (placeholder namespace): fields under the top-level `placeholder` object are
+         governed by the placeholder contract. `placeholder.reason_domain` MUST be
+         `artifact_placeholder` (and `placeholder.reason_code` is paired per that contract), and
+         `placeholder.reason_domain` MUST NOT be subject to the contract-alignment check. Rationale:
+         placeholders must be schema-valid while using a fixed placeholder reason domain.
+     - Exemption (placeholder namespace): fields under the top-level `placeholder` object are
+       governed by the placeholder contract. `placeholder.reason_domain` MUST be
+       `artifact_placeholder` and MUST NOT be subject to the contract-alignment check (see
+       `090_security_safety.md`, “Placeholder artifacts”).
      - For non-contract placeholder/operator-interface artifacts, `reason_domain` MUST be one of the
-       explicitly documented constants (`artifact_placeholder`, `operator_interface`).
+       explicitly documented constants (`artifact_placeholder`, `operator_interface`)..
 
    Note: This architecture spec does not define per-stage default `fail_mode` values. The v0.1
    baseline defaults are specified in ADR-0005 and summarized in `025_data_contracts.md` ("Stage

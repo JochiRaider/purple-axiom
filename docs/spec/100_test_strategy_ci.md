@@ -717,12 +717,22 @@ The fixture set MUST include at least:
 
 - `dependency_mutation_blocked`
 
-  - Simulate an attempt by the runner (or an invoked action) to self-update or mutate runtime
-    dependencies during a run.
+  - Input:
+    - `runner.dependencies.allow_runtime_self_update=false` (explicit).
+  - Simulate an attempt by the runner (or any invoked component, including noise engines) to
+    self-update or mutate runtime dependencies during a run.
   - Assert deterministic enforcement handling:
     - The run MUST record a stable reason code for the block: `disallowed_runtime_self_update`.
   - Assert counters:
     - `runner_dependency_mutation_blocked_total == 1`
+
+- `disallowed_runtime_self_update_config_rejected`
+
+  - Input:
+    - `runner.dependencies.allow_runtime_self_update=true`.
+  - Assert deterministic config validation failure:
+    - The run MUST fail closed before any action `prepare` begins.
+    - The run MUST record a stable stage outcome reason code: `disallowed_runtime_self_update`.
 
 - `unsafe_rerun_blocked_cleanup_suppressed`:
 

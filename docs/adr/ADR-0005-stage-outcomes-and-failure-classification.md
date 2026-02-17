@@ -305,24 +305,25 @@ Minimum artifacts when enabled: `ground_truth.jsonl`, `runner/**`
 
 #### FATAL reason codes
 
-| Reason code                         | Severity | Description                                                                                                                              |
-| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `target_connection_address_missing` | FATAL    | Target asset is resolved but has no usable address fields (no `asset.ip` and no `asset.hostname`) in `logs/lab_inventory_snapshot.json`. |
-| `unstable_asset_id_resolution`      | FATAL    | `target_asset_id` cannot be resolved deterministically.                                                                                  |
-| `plan_type_reserved`                | FATAL    | Plan type is reserved and not supported in this version.                                                                                 |
-| `interactive_prompt_blocked`        | FATAL    | Runner received an interactive user prompt.                                                                                              |
-| `plan_expansion_limit`              | FATAL    | Plan expansion exceeded configured limits; runner refused to execute the expanded plan.                                                  |
-| `invalid_posture_mode`              | FATAL    | `posture.mode` is present but not one of the allowed enum values.                                                                        |
-| `executor_not_found`                | FATAL    | Required executor binary/module is missing.                                                                                              |
-| `ground_truth_write_failed`         | FATAL    | Cannot write `ground_truth.jsonl`.                                                                                                       |
-| `action_key_collision`              | FATAL    | Duplicate `action_key` within the run.                                                                                                   |
-| `invalid_lifecycle_transition`      | FATAL    | Runner detected an invalid lifecycle transition request (contract violation).                                                            |
-| `unsafe_rerun_blocked`              | FATAL    | Runner refused to re-execute a non-idempotent action without successful `revert`.                                                        |
-| `cleanup_invocation_failed`         | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure).                                                                |
-| `prepare_failed`                    | FATAL    | One or more actions failed during lifecycle `prepare`.                                                                                   |
-| `execute_failed`                    | FATAL    | One or more actions failed during lifecycle `execute`.                                                                                   |
-| `revert_failed`                     | FATAL    | One or more actions failed during lifecycle `revert`.                                                                                    |
-| `teardown_failed`                   | FATAL    | One or more actions failed during lifecycle `teardown`.                                                                                  |
+| Reason code                         | Severity | Description                                                                                                                               |
+| ----------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `target_connection_address_missing` | FATAL    | Target asset is resolved but has no usable address fields (no `asset.ip` and no `asset.hostname`) in `logs/lab_inventory_snapshot.json`.  |
+| `unstable_asset_id_resolution`      | FATAL    | `target_asset_id` cannot be resolved deterministically.                                                                                   |
+| `plan_type_reserved`                | FATAL    | Plan type is reserved and not supported in this version.                                                                                  |
+| `interactive_prompt_blocked`        | FATAL    | Runner received an interactive user prompt.                                                                                               |
+| `plan_expansion_limit`              | FATAL    | Plan expansion exceeded configured limits; runner refused to execute the expanded plan.                                                   |
+| `invalid_posture_mode`              | FATAL    | `posture.mode` is present but not one of the allowed enum values.                                                                         |
+| `executor_not_found`                | FATAL    | Required executor binary/module is missing.                                                                                               |
+| `disallowed_runtime_self_update`    | FATAL    | Runtime self-update is requested or attempted under dependency immutability policy (see `runner.dependencies.allow_runtime_self_update`). |
+| `ground_truth_write_failed`         | FATAL    | Cannot write `ground_truth.jsonl`.                                                                                                        |
+| `action_key_collision`              | FATAL    | Duplicate `action_key` within the run.                                                                                                    |
+| `invalid_lifecycle_transition`      | FATAL    | Runner detected an invalid lifecycle transition request (contract violation).                                                             |
+| `unsafe_rerun_blocked`              | FATAL    | Runner refused to re-execute a non-idempotent action without successful `revert`.                                                         |
+| `cleanup_invocation_failed`         | FATAL    | Cleanup command cannot be invoked (missing definition, executor failure).                                                                 |
+| `prepare_failed`                    | FATAL    | One or more actions failed during lifecycle `prepare`.                                                                                    |
+| `execute_failed`                    | FATAL    | One or more actions failed during lifecycle `execute`.                                                                                    |
+| `revert_failed`                     | FATAL    | One or more actions failed during lifecycle `revert`.                                                                                     |
+| `teardown_failed`                   | FATAL    | One or more actions failed during lifecycle `teardown`.                                                                                   |
 
 - Multi-target iteration (matrix plans) is reserved for v0.2; v0.1 enforces 1:1 action-target
   resolution.

@@ -191,7 +191,10 @@ MUST be explicitly enabled and logged, and rule content MUST be pinned and hashe
 
 - No runtime downloads: Noise engines MUST NOT require runtime downloads or internet fetches. All
   binaries/images/assets MUST be shipped/pre-seeded and pinned (see `SUPPORTED_VERSIONS.md` and
-  `dependencies.allow_runtime_self_update` in `120_config_reference.md`).
+  `runner.dependencies.allow_runtime_self_update` in `120_config_reference.md`).
+
+  Noise engines inherit runner dependency immutability; noise configuration MUST NOT be more
+  permissive than `runner.dependencies.allow_runtime_self_update`.
 
 - Least privilege: Noise generators SHOULD run as non-root/non-admin where possible and MUST request
   only minimal OS privileges/capabilities required for the simulated behavior. Noise generators MUST

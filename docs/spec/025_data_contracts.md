@@ -3638,6 +3638,7 @@ CI gates should fail closed on contract violations.
 
 | Date      | Change                                                                                                              |
 | --------- | ------------------------------------------------------------------------------------------------------------------- |
+| 2/16/2026 | Added ToC                                                                                                           |
 | 1/24/2026 | Clarify `logs/` deterministic evidence vs volatile diagnostics and align signing checksum scope with export policy. |
 | 1/22/2026 | Add `vagrant` to `lab.provider` enum                                                                                |
 | 1/17/2026 | Style guide migration (no technical changes)                                                                        |

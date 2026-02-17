@@ -249,7 +249,11 @@ Common keys:
     - All configuration inputs MUST be pinned by content hash (for example `dsc_v3.config_sha256`).
     - Noise tooling binaries/scripts SHOULD be treated as immutable inputs; runtime downloads MUST
       NOT be required for v0.1 correctness (aligns with dependency immutability and egress-deny
-      defaults).
+      defaults). Noise engines MUST inherit runner runtime dependency immutability:
+      - Noise engines MUST NOT perform runtime downloads or self-updates when
+        `runner.dependencies.allow_runtime_self_update=false`.
+      - Noise configuration MUST NOT introduce a more permissive policy than the runner-level
+        policy.
     - If randomized schedules are used, the effective seed MUST be recorded in deterministic
       evidence (implementation-defined) and SHOULD be included in the configuration document so the
       `config_sha256` changes when the seed changes.
@@ -264,15 +268,18 @@ Common keys:
 - `dependencies` (optional)
 
   - `allow_runtime_self_update` (default: `false`)
-    - v0.1: MUST be `false`. Setting to `true` MUST be rejected by config validation (fail closed
-      with `reason_code=config_schema_invalid`).
+    - Config key: `runner.dependencies.allow_runtime_self_update`.
+    - v0.1: MUST be `false`. Setting to `true` MUST be rejected by config validation **before any
+      action `prepare` begins** (fail closed with `reason_code=disallowed_runtime_self_update`).
     - When `false`, any runner-managed self-update attempt MUST be blocked deterministically.
-      - “Self-update” here should be defined narrowly as runner-managed dependency mutation (for
-        example: updating the runner’s executor tooling, updating pinned modules the runner relies
-        on, etc.), not the technique’s own intended side effects.
-    - When blocked, the runner MUST surface the outcome deterministically via existing runner
-      failure semantics (no new reason-code inventing in 120; keep it as a policy gate /
-      configuration-invalid or “dependency missing” path per existing runner behavior).
+      - “Self-update” here is narrowly runner-managed dependency mutation (for example: updating the
+        runner’s executor tooling, updating pinned modules the runner relies on), not the
+        technique’s own intended side effects.
+    - When a self-update attempt is blocked, the runner MUST:
+      - record a failed stage outcome (stage `runner`) with
+        `reason_code=disallowed_runtime_self_update` (see ADR-0005), and
+      - increment `runner_dependency_mutation_blocked_total` once per blocked attempt (see
+        `110_operability.md`).
 
 - `caldera` (optional, when `type: caldera`)
 
@@ -400,8 +407,8 @@ Common keys:
 - If `emit_principal_context=true` and `principal_context.json` is not a placeholder artifact, it
   MUST follow the deterministic ordering rules (sorted principals and action map).
 
-- If a self-update is required to proceed and `allow_runtime_self_update=false`, the runner MUST
-  fail closed rather than silently updating.
+- If a self-update is required to proceed and `runner.dependencies.allow_runtime_self_update=false`,
+  the runner MUST fail closed rather than silently updating.
 
 Determinism guidance:
 

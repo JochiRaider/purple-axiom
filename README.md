@@ -35,7 +35,7 @@ can diff, gate, and trend over time:
 
 ### Why it exists
 
-Most detection engineering loops still look like “run a test, eyeball logs, call it good enough.”
+Most detection engineering loops still look like "run a test, eyeball logs, call it good enough."
 
 Purple Axiom replaces that with a **contract-backed** pipeline where each stage reads its inputs
 from the **run bundle** and publishes schema-validated outputs back into the same run bundle. The
@@ -61,7 +61,7 @@ Explicit non-goals for v0.1 include:
 
 - Exploit development, weaponization, destructive testing, or persistence-focused operations
 - Production deployment guidance for hostile or multi-tenant environments
-- A “full SIEM replacement” or default enterprise ingestion model (external ingestion is optional)
+- A "full SIEM replacement" or default enterprise ingestion model (external ingestion is optional)
 - A full lab provisioning platform (Purple Axiom integrates with external lab providers; it does not
   replace them)
 - Automatic endpoint management as a required v0.1 platform feature (agent installation, config
@@ -71,7 +71,7 @@ Explicit non-goals for v0.1 include:
 - Required network sensor capture and ingestion as baseline functionality (pcap, NetFlow/IPFIX,
   Zeek, Suricata)
 - Network or threat-intelligence enrichment that requires outbound network access by default
-- Runtime self-update or “fetch dependencies at execution time” behavior
+- Runtime self-update or "fetch dependencies at execution time" behavior
 - Pipeline correctness depending on native container exports (any such features require explicit
   config gates and disclosure semantics)
 
@@ -309,7 +309,7 @@ Authoritative references: `docs/spec/025_data_contracts.md` (publish-gate valida
 
 ## Part 3: Details of interest
 
-### Determinism and reproducibility (what makes this “diffable”)
+### Determinism and reproducibility (what makes this "diffable")
 
 Purple Axiom treats determinism as a first-class requirement:
 
@@ -361,7 +361,7 @@ Authoritative references: `docs/adr/ADR-0005-stage-outcomes-and-failure-classifi
 ### OCSF field tiers and a practical coverage gate
 
 Normalization targets OCSF 1.7.0. Tiered field expectations provide a measurable quality signal
-without turning “SHOULD-level” schema expectations into hard failures.
+without turning "SHOULD-level" schema expectations into hard failures.
 
 In v0.1, scoring defines a normalization coverage gate based on **Tier 1 (Core Common)** field
 coverage that can downgrade a run to `partial` when coverage is below threshold or indeterminate
@@ -408,7 +408,7 @@ Volatile diagnostics (excluded by default) include:
 Authoritative reference: `docs/adr/ADR-0009-run-export-policy-and-log-classification.md` and
 `docs/spec/045_storage_formats.md` (Tier 0 classification).
 
-### Evidence references and “why did this gate fail?”
+### Evidence references and "why did this gate fail?"
 
 Whenever Purple Axiom degrades status or claims a gap (telemetry missing, normalization gap, Sigma
 compile failure, etc.), outputs are expected to include explicit evidence references:
@@ -418,7 +418,7 @@ compile failure, etc.), outputs are expected to include explicit evidence refere
   selector)
 - `handling` (optional): `present | withheld | quarantined | absent`
 
-This ensures CI and operators can answer “why?” using stable pointers to run artifacts that can be
+This ensures CI and operators can answer "why?" using stable pointers to run artifacts that can be
 reviewed and diffed.
 
 ## Part 4: Run bundles, artifacts, and where to look
@@ -496,7 +496,7 @@ Notes:
   - `normalized/ocsf_events.jsonl` (JSONL) is an alternate representation
   - if both exist, consumers must fail closed
 
-### “I want X, where is it?” (common entry points)
+### "I want X, where is it?" (common entry points)
 
 | Goal                                                                | Start with                       | Then                                                                                    |
 | ------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------- |

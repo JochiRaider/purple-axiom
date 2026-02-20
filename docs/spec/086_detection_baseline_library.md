@@ -28,7 +28,7 @@ BDPs exist to support:
 
 - Detection regression testing (local and CI)
 - Iterative detection development (repeatable offline evaluation)
-- Durable retention of “known good” datasets without retaining full evidence-tier run artifacts
+- Durable retention of "known good" datasets without retaining full evidence-tier run artifacts
 
 BDPs are stored outside of `runs/` under the workspace `exports/` tree.
 
@@ -39,7 +39,7 @@ version scope: v0.1 (CI consumption subset) + post-OI (v0.2+)
 
 ## Non-goals
 
-- Defining a new detection “replay run” execution model beyond the minimal CI replay harness
+- Defining a new detection "replay run" execution model beyond the minimal CI replay harness
   requirements in this spec. (BDPs are inputs; how they are consumed by a general detection
   evaluation pipeline is reserved.)
 - Providing a general-purpose archival format for complete run bundles (see run export policy /
@@ -48,7 +48,7 @@ version scope: v0.1 (CI consumption subset) + post-OI (v0.2+)
 
 ## CI usage (v0.1 subset)
 
-Although the general “replay run” execution model is reserved, v0.1 CI relies on BDPs as a promoted,
+Although the general "replay run" execution model is reserved, v0.1 CI relies on BDPs as a promoted,
 versioned dataset artifact for deterministic detection evaluation without spinning up a lab
 provider.
 
@@ -66,12 +66,12 @@ Run CI requirements (normative; v0.1):
 
 Pinning requirement (verification hook):
 
-- The repository MUST designate at least one pinned “CI baseline” `(baseline_id, baseline_version)`
+- The repository MUST designate at least one pinned "CI baseline" `(baseline_id, baseline_version)`
   pair to be used by Run CI.
 
 ## Relationship to reporting regression baselines
 
-Reporting “regression baseline” inputs are baseline *runs*, not baseline packages. When regression
+Reporting "regression baseline" inputs are baseline *runs*, not baseline packages. When regression
 is enabled, the run bundle `inputs/` area is populated with baseline-run references/snapshots (see
 `025_data_contracts.md` and `080_reporting.md`), including:
 

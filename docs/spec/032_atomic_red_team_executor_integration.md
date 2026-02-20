@@ -983,7 +983,7 @@ When `runner.identity.emit_principal_context=true` (default), the runner MUST:
 
 When `runner.identity.emit_principal_context=false`, the runner MUST still emit
 `runner/principal_context.json` as a deterministic placeholder artifact with
-`placeholder.handling=absent` (see `090_security_safety.md` “Placeholder artifacts”) and MUST NOT
+`placeholder.handling=absent` (see `090_security_safety.md` "Placeholder artifacts") and MUST NOT
 populate `extensions.principal_id` in action ground truth.
 
 The runner MUST NOT assume the principal is user-shaped. Implementations MUST support:

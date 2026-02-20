@@ -10,7 +10,7 @@
 
 ## Navigation entrypoint (required)
 
-- Start with `docs/mappings/MAPPINGS_INDEX.md` (one-page map + “Common tasks” router).
+- Start with `docs/mappings/MAPPINGS_INDEX.md` (one-page map + "Common tasks" router).
 
 ## Mappings-only fast paths (minimal pointers)
 

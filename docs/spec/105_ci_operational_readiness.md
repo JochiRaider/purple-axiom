@@ -43,7 +43,7 @@ This spec consolidates and operationalizes the existing requirements across:
 In-scope (v0.1):
 
 - A deterministic CI verdict derived from contracted artifacts and existing exit-code semantics.
-- A single “pipeline contract” view of the already-required CI gates.
+- A single "pipeline contract" view of the already-required CI gates.
 - Explicit mapping from gates to evidence surfaces (schemas, reports, health files, and thresholds).
 - A two-lane CI workflow (Content CI and Run CI) and the required CI entrypoints to run them.
 
@@ -91,7 +91,7 @@ raise an issue to reconcile the discrepancy.
 - CI verdict: The CI job’s final recommendation `(success | partial | failed)` plus an exit-code
   mapping `(0|10|20)` for the CI job step that enforces this contract.
 - Reportable: A run with mechanically usable artifacts and the required reporting outputs for its
-  enabled feature set (see reporting “required artifacts / required reporting outputs” and data
+  enabled feature set (see reporting "required artifacts / required reporting outputs" and data
   contracts publish-gate requirements).
 
 ## CI lanes

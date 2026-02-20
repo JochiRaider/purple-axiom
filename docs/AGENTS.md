@@ -26,7 +26,7 @@
 
 ## Evidence-gated edits
 
-- If you cannot verify a fact in-repo/specs, mark it “TBD / Needs Confirmation” rather than
+- If you cannot verify a fact in-repo/specs, mark it "TBD / Needs Confirmation" rather than
   hallucinating it.
 - If you update an existing doc, keep the diff localized and reference the exact section heading
   being changed.
@@ -45,7 +45,7 @@
   serialization.
 - Where hashing/IDs are involved, follow the project’s canonical JSON requirements (RFC 8785 / JCS)
   and identity rules.
-- Avoid ambiguous “best effort” rules without an explicit tie-breaker.
+- Avoid ambiguous "best effort" rules without an explicit tie-breaker.
 - Prefer explicit omission rules: when a value is not authoritative, fields MUST be absent rather
   than inferred.
 

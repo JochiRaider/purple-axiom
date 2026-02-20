@@ -31,7 +31,7 @@ consolidates the mechanically-actionable requirements for:
 - Reader discovery, classification, and stable error codes
 - Observability surfaces and CI conformance gates
 
-The Contract Spine exists to ensure multiple implementations do not “re-interpret” the same contract
+The Contract Spine exists to ensure multiple implementations do not "re-interpret" the same contract
 rules.
 
 ## Scope
@@ -112,7 +112,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted 
 
 ## Canonical ordering
 
-Unless a section explicitly specifies a different ordering, all “sorted” / “stable ordering”
+Unless a section explicitly specifies a different ordering, all "sorted" / "stable ordering"
 requirements in this document MUST use the canonical ordering defined here.
 
 ### Bytewise UTF-8 lexical ordering
@@ -209,7 +209,7 @@ Constraints:
 ### Glob semantics
 
 - All components that interpret `bindings[].artifact_glob` MUST implement `glob_v1` semantics
-  exactly (see `025_data_contracts.md`, “Glob semantics (glob_v1)”).
+  exactly (see `025_data_contracts.md`, "Glob semantics (glob_v1)").
 - Fail-closed requirement:
   - If any `artifact_glob` is invalid per `glob_v1`, the registry MUST be treated as invalid
     configuration.
@@ -234,9 +234,9 @@ To prevent divergent interpretations:
   - Consumer surface: `error_code="contract_registry_parse_error"` with `details` identifying the
     ambiguous bindings.
   - Producer surface: publish-gate MUST refuse to validate/publish and MUST surface a configuration
-    failure (see “Failure taxonomy and observability”).
+    failure (see "Failure taxonomy and observability").
 
-Note: This is stricter than “first match wins”. No implementation is allowed to pick an arbitrary
+Note: This is stricter than "first match wins". No implementation is allowed to pick an arbitrary
 winner.
 
 ### Validation mode as the only dispatch key
@@ -402,7 +402,7 @@ Publish-gate staging layout (normative):
 Output-root guardrail (normative):
 
 - A stage MUST NOT write or promote any run-bundle output outside its declared output roots (see
-  `020_architecture.md`, “Stage IO boundaries”).
+  `020_architecture.md`, "Stage IO boundaries").
 - Violations MUST fail closed and MUST NOT promote any staged outputs.
 
 Deterministic stage → contract-backed outputs (normative):
@@ -451,7 +451,7 @@ Finalize semantics (normative):
     `runs/<run_id>/.staging/<stage_id>/`.
   - If any staged entry is not a regular file (for example a symlink, socket, FIFO, or device node),
     `finalize()` MUST fail closed and MUST NOT promote any staged outputs.
-- Contract-backed artifacts MUST NOT be treated as “unexpected non-contract outputs”:
+- Contract-backed artifacts MUST NOT be treated as "unexpected non-contract outputs":
   - Define `unexpected_outputs[]` as staged regular files that are not declared in
     `expected_outputs[]`.
   - If any unexpected staged file matches a registry binding (i.e., is contract-backed),
@@ -472,7 +472,7 @@ Finalize semantics (normative):
   - Publish-gate failure MUST be fail-closed with respect to artifact promotion: no final-path
     promotion may occur when validation fails.
   - Stage outcome `fail_mode` handling MUST follow the orchestrator’s configured `fail_mode` policy
-    for that stage (see ADR-0005). The term “fail closed” in this document refers to publication
+    for that stage (see ADR-0005). The term "fail closed" in this document refers to publication
     behavior unless explicitly stated otherwise.
 
 Atomicity scope (normative; v0.1):
@@ -597,12 +597,12 @@ Error caps (normative):
 - A maximum error cap per artifact (`max_errors_per_artifact`) MUST be applied.
 - Default cap MUST be `50` when not configured.
 - The validator MUST compute the deterministic sort key for every encountered error (see
-  “Deterministic error ordering”) and MUST return the **first** `max_errors_per_artifact` errors in
+  "Deterministic error ordering") and MUST return the **first** `max_errors_per_artifact` errors in
   that sorted order.
 - `errors_truncated` MUST be:
   - `false` if the total number of errors for the artifact is `<= max_errors_per_artifact`
   - `true` if the total number of errors for the artifact is `> max_errors_per_artifact`
-- To ensure the “first N by sort order” selection is deterministic across validation engines and
+- To ensure the "first N by sort order" selection is deterministic across validation engines and
   discovery orders, implementations SHOULD use an order-independent selection strategy, such as:
   - collect all errors, sort, then truncate; or
   - maintain a bounded heap of the smallest `N` errors by sort key, marking `errors_truncated=true`
@@ -634,7 +634,7 @@ Rules:
 ### Stage enablement matrix
 
 - The canonical stage enablement matrix and `expr_v1` expression language are defined in
-  `025_data_contracts.md`, “Stage enablement and required contract outputs (v0.1)”.
+  `025_data_contracts.md`, "Stage enablement and required contract outputs (v0.1)".
 - Contract Spine implementers MUST treat that matrix as the source of truth.
 
 TODO: Optionally migrate the matrix into this document to eliminate duplication across specs once
@@ -688,7 +688,7 @@ Canonical bytes (normative):
 Deterministic ordering (normative):
 
 - `artifacts[]` MUST be sorted by `artifact_path` ascending using UTF-8 byte order (no locale).
-- Each `errors[]` list MUST be sorted per “Deterministic error ordering”.
+- Each `errors[]` list MUST be sorted per "Deterministic error ordering".
 
 Tier classification (normative):
 
@@ -842,7 +842,7 @@ yaml_semantic_sha256_v1(yaml_bytes):
 Notes:
 
 - The semantic hash MUST be recorded in canonical digest string form: `sha256:<lowercase_hex>` (see
-  `025_data_contracts.md`, “Canonical SHA-256 digest strings”).
+  `025_data_contracts.md`, "Canonical SHA-256 digest strings").
 - Raw YAML bytes MAY still be preserved in the run bundle for auditability. The semantic hash is the
   deterministic basis for comparisons/trending that should ignore YAML formatting differences.
 
@@ -874,13 +874,13 @@ Rules (normative):
 - `message` MUST be human-readable and SHOULD be deterministic for equivalent inputs (avoid
   embedding absolute paths, hostnames, or timestamps).
 - If `artifact_path` is present, it MUST be a run-relative POSIX path and MUST satisfy “Path
-  requirements” / “Path normalization and reserved locations” in this document.
+  requirements” / "Path normalization and reserved locations" in this document.
 - If `details` is present, it MUST be JSON-serializable and MUST NOT include secrets. It SHOULD NOT
   include volatile values (timestamps, random IDs) unless explicitly marked as diagnostic-only.
 - If `errors` is present:
   - it MUST be non-empty,
   - each entry MUST itself conform to this `ReaderError` shape, and
-  - entries MUST be sorted per “Error ordering (normative)”.
+  - entries MUST be sorted per "Error ordering (normative)".
 
 ### Required interface
 
@@ -904,7 +904,7 @@ ArtifactReader.open_validated(
 ) -> bytes | ReaderError
 ```
 
-- `inventory_json_bytes` MUST implement the derived inventory semantics (“pa.inventory.v1”) and MUST
+- `inventory_json_bytes` MUST implement the derived inventory semantics ("pa.inventory.v1") and MUST
   return byte-identical `canonical_json_bytes(...)` output for the same run bundle contents across
   conforming consumer implementations.
 
@@ -922,7 +922,7 @@ Notes:
 
 ### Canonical discovery
 
-The discovery algorithm MUST follow `025_data_contracts.md` (“Canonical run bundle discovery”).
+The discovery algorithm MUST follow `025_data_contracts.md` ("Canonical run bundle discovery").
 
 Key requirements (normative):
 
@@ -1012,7 +1012,7 @@ Contract validation failures MUST be observable in all of the following:
 1. CI:
 
    - The Contract Spine gate MUST surface the failing stage id(s) and the report path(s)
-   - The gate MUST fail deterministically (see “CI output requirements”)
+   - The gate MUST fail deterministically (see "CI output requirements")
 
 ### Missing required outputs
 
@@ -1048,7 +1048,7 @@ ADR-0005.
 | ---------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | Registry invalid             | Registry missing/parse error; `glob_v1` invalid; overlapping bindings; unknown ids | `config_schema_invalid`                                                        | Configuration failure; publish gate must refuse to validate/publish.                                 |
 | Contract validation invalid  | Contract-backed artifact fails schema validation or parse                          | Stage-scoped contract-invalid reason code (example: `scoring_summary_invalid`) | TODO: align across stages in ADR-0005 (suggested cross-cutting: `contract_validation_failed`).       |
-| Unexpected contracted output | Staged file matches a binding but is not declared in `expected_outputs[]`          | Same as “Contract validation invalid”                                          | Treat as a contract validation failure category (fail closed).                                       |
+| Unexpected contracted output | Staged file matches a binding but is not declared in `expected_outputs[]`          | Same as "Contract validation invalid"                                          | Treat as a contract validation failure category (fail closed).                                       |
 | Output-root violation        | Stage attempts to write/promote outside its declared output roots                  | `storage_io_error`                                                             | TODO: consider a dedicated policy-violation reason code in ADR-0005 (e.g., `output_root_violation`). |
 | Non-regular file in staging  | Symlink/FIFO/socket/device node present under `.staging/<stage_id>/`               | `storage_io_error`                                                             | Fail closed; promote nothing.                                                                        |
 
@@ -1180,7 +1180,7 @@ is explicitly referenced there.
   bump the corresponding semantics version and MUST include explicit compatibility notes.
 
 Contracts bundle distribution (historical validation) MUST follow `025_data_contracts.md`
-(“Contracts bundle distribution and retrieval for historical validation”).
+("Contracts bundle distribution and retrieval for historical validation").
 
 ## Open items
 

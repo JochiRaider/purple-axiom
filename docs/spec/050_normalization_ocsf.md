@@ -74,7 +74,7 @@ Notes:
 - Default `fail_mode`: `fail_closed` when `normalization.strict_mode=true`; otherwise
   `warn_and_skip`
 - Stage outcome reason codes: see
-  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Normalization stage
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) "Normalization stage
   (`normalization`)".
 
 ### Isolation test fixture(s)
@@ -341,7 +341,7 @@ The requirements below are restatements of the
 contract mechanically implementable and testable.
 
 - **Window:** Deduplication MUST consider the full run window (unbounded within the run), i.e.
-  dedupe MUST consider all previously-emitted normalized events for the run, not only “recent”
+  dedupe MUST consider all previously-emitted normalized events for the run, not only "recent"
   events.
 - **Non-goal:** The project does not require `metadata.event_id` to be globally unique across run
   bundles. Replays across different runs MAY intentionally produce the same `metadata.event_id`.

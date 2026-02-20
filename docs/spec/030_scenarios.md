@@ -85,7 +85,7 @@ Notes:
 
 - Default `fail_mode`: `fail_closed`
 - Stage outcome reason codes: see
-  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Runner stage
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) "Runner stage
   (`runner`)" (and substage `runner.environment_config`).
 
 ### Isolation test fixture(s)
@@ -973,7 +973,7 @@ Event requirements (normative):
 | From state         | Event                     | Guard (deterministic)         | To state           | Actions (entry/exit)                                                    | Outcome mapping                                                                                       | Observable transition evidence            |
 | ------------------ | ------------------------- | ----------------------------- | ------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | `init`             | `event.prepare_recorded`  | None                          | `prepare_recorded` | Append a `prepare` phase record to `lifecycle.phases[]` (append-only).  | Phase record MUST satisfy the ground truth lifecycle contract (`025_data_contracts.md`).              | `ground_truth.jsonl` contains `prepare`.  |
-| `prepare_recorded` | `event.execute_recorded`  | `prepare` phase record exists | `execute_recorded` | Append an `execute` phase record to `lifecycle.phases[]` (append-only). | Phase record MUST satisfy gating/guard rules in “Entry actions and exit actions” below.               | `ground_truth.jsonl` contains `execute`.  |
+| `prepare_recorded` | `event.execute_recorded`  | `prepare` phase record exists | `execute_recorded` | Append an `execute` phase record to `lifecycle.phases[]` (append-only). | Phase record MUST satisfy gating/guard rules in "Entry actions and exit actions" below.               | `ground_truth.jsonl` contains `execute`.  |
 | `execute_recorded` | `event.revert_recorded`   | `execute` phase record exists | `revert_recorded`  | Append a `revert` phase record to `lifecycle.phases[]` (append-only).   | Phase record MUST satisfy cleanup suppression / prior-phase blocked / invalid-transition rules below. | `ground_truth.jsonl` contains `revert`.   |
 | `revert_recorded`  | `event.teardown_recorded` | `revert` phase record exists  | `done`             | Append a `teardown` phase record to `lifecycle.phases[]` (append-only). | Phase record MUST satisfy cleanup suppression rules below.                                            | `ground_truth.jsonl` contains `teardown`. |
 

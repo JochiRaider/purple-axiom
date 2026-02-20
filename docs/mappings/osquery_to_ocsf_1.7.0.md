@@ -415,7 +415,7 @@ Minimum conformance tests for this profile:
 
 1. Coverage tests:
 
-   - Coverage computation MUST treat non-authoritative fields as “not applicable” and MUST NOT count
+   - Coverage computation MUST treat non-authoritative fields as "not applicable" and MUST NOT count
      them as missing.
    - Tests MUST assert that `N/A` fields remain absent.
 

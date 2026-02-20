@@ -17,7 +17,7 @@ Condensed reference for the [full style guide](MARKDOWN_STYLE_GUIDE.md).
 - When listing keys/IDs/enums, use **one token per list item** (one per line) for clean `rg` hits.
 - When referencing another document, include the **document ID + title** in text (not just a link):
   `ADR-0002 "Event identity and provenance"`.
-- Avoid ambiguous pronouns (“it”, “this”, “that”) when a repeated noun makes the sentence
+- Avoid ambiguous pronouns ("it", "this", "that") when a repeated noun makes the sentence
   searchable.
 
 ## Frontmatter required
@@ -43,8 +43,8 @@ status: draft | stable | deprecated
 
 - Sentence case: "Event identity model" not "Event Identity Model"
 - No skipped levels (H2 → H4 without H3 is wrong)
-- Make headings **keyword-bearing** (prefer nouns agents will search for; avoid generic “Notes” /
-  “Misc” headings)
+- Make headings **keyword-bearing** (prefer nouns agents will search for; avoid generic "Notes" /
+  "Misc" headings)
 
 ## Lists
 
@@ -64,7 +64,7 @@ Definition style:
 - Max two nesting levels
 - Short items: no trailing punctuation
 - Long items (full sentences): use punctuation
-- For “search targets” (keys, IDs, enums), prefer **one-per-line** list items
+- For "search targets" (keys, IDs, enums), prefer **one-per-line** list items
 
 ## Code
 

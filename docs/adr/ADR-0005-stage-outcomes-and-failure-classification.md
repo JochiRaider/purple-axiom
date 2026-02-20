@@ -498,7 +498,7 @@ Runner lifecycle enforcement substage (normative; when emitted):
 
   Notes:
 
-  - “Any action” MUST be evaluated over the set of ground truth rows for the run. Implementations
+  - "Any action" MUST be evaluated over the set of ground truth rows for the run. Implementations
     MUST NOT depend on input iteration order; they MUST treat ground truth as the source of truth.
   - If multiple phases fail across different actions, the earliest phase in the precedence list MUST
     win. This ensures stable root-cause reporting (fix earlier failures first).

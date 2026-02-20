@@ -79,7 +79,7 @@ Purple Axiom specifications MAY use state machine notation in two distinct ways:
    - Representational state machines MUST NOT be used as the sole conformance-critical signal for CI
      gating.
 
-### What a “state machine” means in Purple Axiom specs
+### What a "state machine" means in Purple Axiom specs
 
 A **state machine definition** is a specification artifact that:
 
@@ -92,7 +92,7 @@ A **state machine definition** is a specification artifact that:
 
 A state machine definition is not required to introduce new storage artifacts. When possible, it
 SHOULD map state to existing contracted artifacts (manifest, stage outcomes, ground truth, evidence
-artifacts) rather than introducing a new “state store”.
+artifacts) rather than introducing a new "state store".
 
 If a normative state machine requires a new persisted artifact (for authoritative state and/or
 required observability), the owning spec MUST:
@@ -106,7 +106,7 @@ required observability), the owning spec MUST:
 State machines are appropriate anywhere Purple Axiom needs a deterministic, testable lifecycle with
 observable boundaries.
 
-The following are the primary intended “state machine insertion points”. These are guidance, not a
+The following are the primary intended "state machine insertion points". These are guidance, not a
 new normative stage list.
 
 1. **Orchestrator run lifecycle machine**
@@ -118,7 +118,7 @@ new normative stage list.
 
 1. **Stage execution machine (per stage)**
 
-   - Represents: stage-level lifecycle (“pending → running → published”, plus failure/skip
+   - Represents: stage-level lifecycle ("pending → running → published", plus failure/skip
      behavior).
    - Primary lifecycle authority: ADR-0004 publish gate semantics and ADR-0005 stage outcomes.
 
@@ -135,8 +135,8 @@ new normative stage list.
 
 1. **Reliability and safety lifecycles**
 
-   - Represents: bounded stateful behaviors such as “checkpoint is absent/healthy/corrupt”,
-     “redaction allowed/withheld/quarantined”, “egress canary passed/failed”.
+   - Represents: bounded stateful behaviors such as "checkpoint is absent/healthy/corrupt",
+     "redaction allowed/withheld/quarantined", "egress canary passed/failed".
    - Primary lifecycle authority: the relevant pipeline stage spec plus ADR-0003/ADR-0005 as
      applicable.
 
@@ -237,7 +237,7 @@ Composition requirements (normative):
 - If a child machine’s internal state must be recovered after process restart, it MUST be
   represented by contracted artifacts in the run bundle.
 
-Rationale: this preserves the “run bundle as single source of truth” property and keeps runs
+Rationale: this preserves the "run bundle as single source of truth" property and keeps runs
 explainable by inspection.
 
 ### What this represents in development
@@ -278,7 +278,7 @@ For executor implementations specifically:
 
 ### Non-goals
 
-- This ADR does not require a generic “state machine engine” or DSL in the runtime.
+- This ADR does not require a generic "state machine engine" or DSL in the runtime.
 - This ADR does not require that every stage or component be rewritten as an explicit state machine.
 - This ADR does not change the canonical pipeline stage ordering or stage outcome taxonomy.
 
@@ -453,7 +453,7 @@ Tests MUST:
 Benefits:
 
 - Lifecycle behavior becomes explicit and reviewable.
-- “What happens next” and “what can happen” are constrained and testable.
+- "What happens next" and "what can happen" are constrained and testable.
 - Observability expectations become contractual, improving operability and CI gating.
 - Interlocking lifecycle behavior (run/stage/action/plan) can be described without inventing ad-hoc
   terminology.

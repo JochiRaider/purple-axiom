@@ -83,7 +83,7 @@ mappings/
 
 ### Mapping material boundary (normative)
 
-The “mapping material” for a mapping pack is the complete set of files required to route and emit
+The "mapping material" for a mapping pack is the complete set of files required to route and emit
 events for that pack.
 
 At minimum it includes:
@@ -332,7 +332,7 @@ Rules:
 
   - YAML string
   - YAML integer
-  - YAML null (meaning “emit absent”)
+  - YAML null (meaning "emit absent")
 
 Map files MUST NOT declare `includes`.
 

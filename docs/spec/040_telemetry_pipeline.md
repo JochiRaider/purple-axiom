@@ -80,7 +80,7 @@ Notes:
 
 - Default `fail_mode`: `fail_closed` (v0.1 baseline)
 - Stage outcome reason codes (including substages): see
-  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Telemetry stage
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) "Telemetry stage
   (`telemetry`)".
 
 ### Isolation test fixture(s)

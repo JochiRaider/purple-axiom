@@ -138,9 +138,9 @@ Common keys:
         `assertion_source`).
     - When `false`, the runner MUST still emit `runner/principal_context.json` as a deterministic
       placeholder artifact with `placeholder.handling=absent` (see `090_security_safety.md`
-      “Placeholder artifacts”) and MUST NOT populate `extensions.principal_id` in ground truth.
+      "Placeholder artifacts") and MUST NOT populate `extensions.principal_id` in ground truth.
   - `probe_enabled` (default: `false`)
-    - When `false`, the runner MUST NOT execute “identity probes” beyond what is already available
+    - When `false`, the runner MUST NOT execute "identity probes" beyond what is already available
       without additional collection steps.
     - When `true`, the runner MAY probe to improve principal attribution, but MUST still obey
       redaction/disclosure constraints (no raw usernames/SIDs/creds).
@@ -233,7 +233,7 @@ Common keys:
     [architecture](020_architecture.md)).
 
   - Environment configuration is the recommended v0.1 integration point for generating benign
-    background activity (“noise”) to improve dataset realism.
+    background activity ("noise") to improve dataset realism.
 
     - Examples:
       - Active Directory / domain controllers: AD-Lab-Generator (domain population) and ADTest.exe
@@ -272,7 +272,7 @@ Common keys:
     - v0.1: MUST be `false`. Setting to `true` MUST be rejected by config validation **before any
       action `prepare` begins** (fail closed with `reason_code=disallowed_runtime_self_update`).
     - When `false`, any runner-managed self-update attempt MUST be blocked deterministically.
-      - “Self-update” here is narrowly runner-managed dependency mutation (for example: updating the
+      - "Self-update" here is narrowly runner-managed dependency mutation (for example: updating the
         runner’s executor tooling, updating pinned modules the runner relies on), not the
         technique’s own intended side effects.
     - When a self-update attempt is blocked, the runner MUST:
@@ -617,8 +617,7 @@ Notes:
 - Collector self-telemetry MUST be exported upstream (for example Prometheus self-scrape plus OTLP
   export) to support resource budgets and agent liveness (dead-on-arrival detection).
 - For v0.1, the config SHOULD also set `suppress_rendering_info: true` and a persistent `storage`
-  extension for bookmarks (see the [telemetry pipeline specification](040_telemetry_pipeline.md)
-  §2).
+  extension for bookmarks (see the [telemetry pipeline specification](040_telemetry_pipeline.md)).  
 - OTel Collector configuration shape is owned by upstream OTel. Purple Axiom only references the
   path and hashes it.
 - `telemetry.otel.checkpoint_corruption` does not generate collector configuration. It is a policy
@@ -637,7 +636,7 @@ extraction):
       `raw_parquet/windows_eventlog/`.
     - When the payload exceeds this limit, the writer MUST truncate deterministically and MUST write
       the full payload to a deterministically addressed sidecar blob when sidecar retention is
-      enabled (see `045_storage_formats.md` “Raw payload sizing and sidecars” and “Sidecar blob
+      enabled (see `045_storage_formats.md` "Raw payload sizing and sidecars" and “Sidecar blob
       store”).
   - `max_field_chars` (optional, default: 262144)
     - Maximum character length for any single promoted string field at staging time (deterministic
@@ -835,7 +834,7 @@ Notes:
   [Sigma-to-OCSF bridge specification](065_sigma_to_ocsf_bridge.md). This config selects the mapping
   pack and backend behavior.
 - `fail_closed` is the recommended default so rules that cannot be routed or mapped are reported as
-  non-executable rather than silently producing “no matches”.
+  non-executable rather than silently producing "no matches".
 
 ### Scoring (scoring)
 

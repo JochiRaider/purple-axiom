@@ -34,7 +34,7 @@ authoritative sources for detailed contracts and mechanics.
 
 ### Grep keys (copy/paste)
 
-These are intentionally “stable strings” that are good entry points for `rg`:
+These are intentionally "stable strings" that are good entry points for `rg`:
 
 - Run bundle roots and indices:
   - `runs/<run_id>/`
@@ -490,7 +490,7 @@ Purple Axiom v0.1 is considered "done" when:
   `logs/telemetry_validation.json`), and missing required artifacts are treated as contract failures
   (fail closed).
 
-- The “at minimum” artifact list above is a convenience summary and is non-exhaustive; the
+- The "at minimum" artifact list above is a convenience summary and is non-exhaustive; the
   authoritative minimum outputs are defined per-stage and enforced via publish-gate validation.
 
   - For avoidance of doubt in v0.1, reportable runs also require `logs/lab_inventory_snapshot.json`,

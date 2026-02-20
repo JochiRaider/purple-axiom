@@ -26,13 +26,13 @@ Rows are sorted lexicographically by filename.
 
 | Need                                                                 | Read first                                | Then (if needed)                                                                                                    |
 | -------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| “What fields are required for mapping completeness by source?”       | `coverage_matrix.md`                      | (follow the per-class Tier 2 tables; then add fixtures to satisfy required `R[...]` cells)                          |
-| “How do I author a mapping pack that is deterministic and testable?” | `ocsf_mapping_profile_authoring_guide.md` | `docs/spec/100_test_strategy_ci.md` (mapping pack conformance gates), `docs/spec/050_normalization_ocsf.md`         |
-| “Where is the Windows Security mapping spec?”                        | `windows-security_to_ocsf_1.7.0.md`       | `docs/spec/050_normalization_ocsf.md` (envelope requirements), `docs/adr/ADR-0002-event-identity-and-provenance.md` |
-| “Where is the Sysmon mapping spec?”                                  | `windows-sysmon_to_ocsf_1.7.0.md`         | `coverage_matrix.md` (required pivots for Sysmon), `docs/adr/ADR-0002-event-identity-and-provenance.md`             |
-| “Where is the osquery mapping spec?”                                 | `osquery_to_ocsf_1.7.0.md`                | `docs/spec/042_osquery_integration.md` (raw shape + routing constraints), `coverage_matrix.md`                      |
-| “I need to add a new source_type mapping (new telemetry source)”     | `ocsf_mapping_profile_authoring_guide.md` | `coverage_matrix.md` (add a row/expectations), then add a new per-source mapping doc under `docs/mappings/`         |
-| “What does CI enforce for mapping packs and mapping outputs?”        | `docs/spec/100_test_strategy_ci.md`       | `coverage_matrix.md` (fixture minimums), `docs/spec/025_data_contracts.md` (mapping snapshot artifacts)             |
+| "What fields are required for mapping completeness by source?"       | `coverage_matrix.md`                      | (follow the per-class Tier 2 tables; then add fixtures to satisfy required `R[...]` cells)                          |
+| "How do I author a mapping pack that is deterministic and testable?" | `ocsf_mapping_profile_authoring_guide.md` | `docs/spec/100_test_strategy_ci.md` (mapping pack conformance gates), `docs/spec/050_normalization_ocsf.md`         |
+| "Where is the Windows Security mapping spec?"                        | `windows-security_to_ocsf_1.7.0.md`       | `docs/spec/050_normalization_ocsf.md` (envelope requirements), `docs/adr/ADR-0002-event-identity-and-provenance.md` |
+| "Where is the Sysmon mapping spec?"                                  | `windows-sysmon_to_ocsf_1.7.0.md`         | `coverage_matrix.md` (required pivots for Sysmon), `docs/adr/ADR-0002-event-identity-and-provenance.md`             |
+| "Where is the osquery mapping spec?"                                 | `osquery_to_ocsf_1.7.0.md`                | `docs/spec/042_osquery_integration.md` (raw shape + routing constraints), `coverage_matrix.md`                      |
+| "I need to add a new source_type mapping (new telemetry source)"     | `ocsf_mapping_profile_authoring_guide.md` | `coverage_matrix.md` (add a row/expectations), then add a new per-source mapping doc under `docs/mappings/`         |
+| "What does CI enforce for mapping packs and mapping outputs?"        | `docs/spec/100_test_strategy_ci.md`       | `coverage_matrix.md` (fixture minimums), `docs/spec/025_data_contracts.md` (mapping snapshot artifacts)             |
 
 ## Update rule (required)
 

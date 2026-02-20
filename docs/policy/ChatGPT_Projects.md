@@ -18,7 +18,7 @@ translates those capabilities and constraints into **operational best practices*
 - **File strategy**: best mix of **code files** and **documentation** for reliable, low-friction
   work
 
-Projects are described by OpenAI as “smart workspaces” that keep **chats + reference files + custom
+Projects are described by OpenAI as "smart workspaces" that keep **chats + reference files + custom
 (project) instructions** together for long-running efforts. ([OpenAI Help Center][1])
 
 ______________________________________________________________________
@@ -27,14 +27,14 @@ ______________________________________________________________________
 
 **Primary sources used**:
 
-- “Projects in ChatGPT” (OpenAI Help Center) ([OpenAI Help Center][1])
-- “File Uploads FAQ” (OpenAI Help Center) ([OpenAI Help Center][2])
-- “Chat and File Retention Policies in ChatGPT” (OpenAI Help Center) ([OpenAI Help Center][3])
-- “Visual Retrieval with PDFs FAQ” (OpenAI Help Center) ([OpenAI Help Center][4])
-- “Prompt engineering best practices for ChatGPT” (OpenAI Help Center) ([OpenAI Help Center][5])
-- “Key Guidelines for Writing Instructions for Custom GPTs” (OpenAI Help Center)
+- "Projects in ChatGPT" (OpenAI Help Center) ([OpenAI Help Center][1])
+- "File Uploads FAQ" (OpenAI Help Center) ([OpenAI Help Center][2])
+- "Chat and File Retention Policies in ChatGPT" (OpenAI Help Center) ([OpenAI Help Center][3])
+- "Visual Retrieval with PDFs FAQ" (OpenAI Help Center) ([OpenAI Help Center][4])
+- "Prompt engineering best practices for ChatGPT" (OpenAI Help Center) ([OpenAI Help Center][5])
+- "Key Guidelines for Writing Instructions for Custom GPTs" (OpenAI Help Center)
   ([OpenAI Help Center][6])
-- “What is the canvas feature…” (OpenAI Help Center) ([OpenAI Help Center][7])
+- "What is the canvas feature…" (OpenAI Help Center) ([OpenAI Help Center][7])
 
 **Scope boundaries**:
 
@@ -51,7 +51,7 @@ ______________________________________________________________________
 
 - **Project instructions**: instructions set at the project level apply only within that project,
   and **override global custom instructions**. ([OpenAI Help Center][1])
-- **Project memory**: Projects “remember” the chats and files within the project, enabling ongoing
+- **Project memory**: Projects "remember" the chats and files within the project, enabling ongoing
   work without re-stating context. ([OpenAI Help Center][1])
 - **Context prioritization**: for Plus/Pro, ChatGPT can reference previous chats in the same
   project, and it prioritizes project chats/files when answering inside a project.
@@ -65,14 +65,14 @@ ______________________________________________________________________
 
 | Area                     | Pro reality                                                                                                                                                                                           | Implication                                                                                           |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Files per project        | Up to **40 files per project** on Pro. ([OpenAI Help Center][1])                                                                                                                                      | Plan your file set as a curated “context pack,” not a full repo mirror.                               |
+| Files per project        | Up to **40 files per project** on Pro. ([OpenAI Help Center][1])                                                                                                                                      | Plan your file set as a curated "context pack," not a full repo mirror.                               |
 | Batch upload             | Only **10 files** can be uploaded at the same time. ([OpenAI Help Center][1])                                                                                                                         | Stage uploads; don’t rely on one big import step.                                                     |
 | File size and quotas     | 512MB/file hard limit; 2M token cap for text/doc files; user/org storage caps; upload rate caps (e.g., 80 files / 3 hours). ([OpenAI Help Center][2])                                                 | Use smaller, targeted files; avoid frequent churn.                                                    |
-| Apps in projects         | **Apps are currently not supported** in projects. ([OpenAI Help Center][1])                                                                                                                           | Don’t assume “connected apps/connectors” will work inside projects (e.g., GitHub connector patterns). |
+| Apps in projects         | **Apps are currently not supported** in projects. ([OpenAI Help Center][1])                                                                                                                           | Don’t assume "connected apps/connectors" will work inside projects (e.g., GitHub connector patterns). |
 | Custom GPTs in projects  | Custom GPTs **cannot** be used in projects. ([OpenAI Help Center][1])                                                                                                                                 | Encode dev workflow behavior in project instructions + project files (not a custom GPT).              |
 | Temporary chats          | Temporary chats **cannot** be added to projects. ([OpenAI Help Center][1])                                                                                                                            | If something may become long-running, don’t start it as a temporary chat.                             |
 | Visual retrieval in PDFs | Visual PDF understanding is **Enterprise-only** and not supported for Pro; plus PDFs added as **Project Files** are text-only retrieval even where visual retrieval exists. ([OpenAI Help Center][4]) | Put diagrams into text (ASCII, Mermaid, extracted text) if you need reliable reuse on Pro.            |
-| Rate limits              | Project chats follow the same subscription-based rate limits as regular chats. ([OpenAI Help Center][1])                                                                                              | Projects won’t “increase quota”; optimize for fewer, higher-signal turns.                             |
+| Rate limits              | Project chats follow the same subscription-based rate limits as regular chats. ([OpenAI Help Center][1])                                                                                              | Projects won’t "increase quota"; optimize for fewer, higher-signal turns.                             |
 
 ______________________________________________________________________
 
@@ -111,10 +111,10 @@ ______________________________________________________________________
 Use **default memory** when you want **continuity across your account**, such as:
 
 - Consistent personal dev preferences you’ve saved as memories (language style, code-review tone,
-  “always include tests,” etc.)
+  "always include tests," etc.)
 - Cross-project patterns (e.g., you maintain several similar repos and want shared conventions to
   carry through)
-- You value speed over strict isolation, and you can tolerate occasional “context bleed” risks
+- You value speed over strict isolation, and you can tolerate occasional "context bleed" risks
 
 This is especially relevant because, for non-enterprise plans, default-memory project chats can
 reference non-project conversations and vice versa. ([OpenAI Help Center][1])
@@ -122,7 +122,7 @@ reference non-project conversations and vice versa. ([OpenAI Help Center][1])
 **Default memory risks** (and mitigation):
 
 - Risk: The assistant may pull in assumptions from other projects or saved memories.
-- Mitigation: In project instructions, explicitly require “cite the file/chat source” for
+- Mitigation: In project instructions, explicitly require "cite the file/chat source" for
   repo-specific claims, and require clarification where the source is absent.
 
 #### Project-only memory projects
@@ -130,10 +130,10 @@ reference non-project conversations and vice versa. ([OpenAI Help Center][1])
 Use **project-only memory** when you want **strong isolation and reproducibility**, such as:
 
 - Security-sensitive work (private code, proprietary architecture, pre-release behavior)
-- Projects that share names/terms with other repos (avoid “wrong repo” errors)
+- Projects that share names/terms with other repos (avoid "wrong repo" errors)
 - When you anticipate sharing later (sharing forces project-only memory anyway)
   ([OpenAI Help Center][1])
-- When you want “clean-room” reasoning anchored strictly to the project’s files and chats
+- When you want "clean-room" reasoning anchored strictly to the project’s files and chats
 
 **Project-only tradeoffs**:
 
@@ -147,7 +147,7 @@ Use **project-only memory** when you want **strong isolation and reproducibility
 | Need cross-project personalization | Yes ([OpenAI Help Center][1]) | No ([OpenAI Help Center][1])                                           |
 | Need strict repo isolation         | No                            | Yes ([OpenAI Help Center][1])                                          |
 | Might share project later          | OK, but sharing flips it      | Yes (pre-align with eventual forced setting) ([OpenAI Help Center][1]) |
-| Risk tolerance for “context bleed” | Higher                        | Lower                                                                  |
+| Risk tolerance for "context bleed" | Higher                        | Lower                                                                  |
 | Need your saved preferences        | Yes ([OpenAI Help Center][1]) | No ([OpenAI Help Center][1])                                           |
 
 ______________________________________________________________________
@@ -166,23 +166,23 @@ ______________________________________________________________________
 
 ### Design principles for effective project instructions
 
-#### 1) Keep them stable, compact, and “constitutional”
+#### 1) Keep them stable, compact, and "constitutional"
 
-Your project instructions should be a stable, low-churn “constitution” for how work is done in that
+Your project instructions should be a stable, low-churn "constitution" for how work is done in that
 project. Put volatile, fast-changing details into project files.
 
 - **Project instructions**: stable behavior and output contract
 - **Project files**: source-of-truth facts that change over time (design, constraints, APIs,
   roadmap)
-- **Chat prompts**: per-task specifics (the “ticket”)
+- **Chat prompts**: per-task specifics (the "ticket")
 
 This approach is consistent with OpenAI’s emphasis on clarity and iterative prompting without
 overloading a single instruction blob. ([OpenAI Help Center][5])
 
 #### 2) Be explicit about evidence and provenance
 
-For software dev, the most common failure mode is confident output that is correct “in general” but
-wrong “for your repo.”
+For software dev, the most common failure mode is confident output that is correct "in general" but
+wrong "for your repo."
 
 Add an explicit requirement such as:
 
@@ -198,7 +198,7 @@ trigger/instruction pairs to keep the assistant from skipping steps. ([OpenAI He
 
 ### Recommended project-instruction template for a dev project
 
-Use this as your default “project instructions” text.
+Use this as your default "project instructions" text.
 
 ```text
 ROLE
@@ -236,11 +236,11 @@ ______________________________________________________________________
 
 ## Project file strategy for software development
 
-### What “project files” are best for
+### What "project files" are best for
 
 Projects exist to keep **files, chats, and instructions in one place** to stay on-topic.
 ([OpenAI Help Center][1]) On Pro, you have up to **40 files per project**, so you should treat the
-file list as a curated “context pack,” not a dumping ground. ([OpenAI Help Center][1])
+file list as a curated "context pack," not a dumping ground. ([OpenAI Help Center][1])
 
 ### File handling constraints you should design around
 
@@ -262,7 +262,7 @@ A practical starting point for a Pro project:
 
 - **~12–18 documentation/config files**
 - **~10–20 code/test files**
-- **Keep 5–10 slots free** for short-term “investigation artifacts” (logs, stack traces, exported
+- **Keep 5–10 slots free** for short-term "investigation artifacts" (logs, stack traces, exported
   canvases, temporary specs)
 
 This balances:
@@ -271,7 +271,7 @@ This balances:
 - the need for exactness (code and tests)
 - the constraints of 40 files and practical churn limits ([OpenAI Help Center][1])
 
-### Recommended “context pack” (docs/config first)
+### Recommended "context pack" (docs/config first)
 
 These files tend to pay off repeatedly:
 
@@ -284,22 +284,22 @@ These files tend to pay off repeatedly:
 1. `API.md` / `openapi.yaml` / contracts (public interfaces)
 1. `DECISIONS.md` (or ADR-style decisions)
 1. `ROADMAP.md` / `BACKLOG.md` (what matters now)
-1. “Repo map” file (see below)
+1. "Repo map" file (see below)
 
-**Why this works**: It creates a stable, shared “language” for the assistant and reduces repeated
+**Why this works**: It creates a stable, shared "language" for the assistant and reduces repeated
 re-explanation turn-by-turn, which matters because projects inherit the same tools/rate limits as
 normal chats. ([OpenAI Help Center][1])
 
-### Recommended “repo map” file (high leverage)
+### Recommended "repo map" file (high leverage)
 
 Create and maintain a single, small, frequently updated file such as `REPO_MAP.md`:
 
 - Directory tree (top 2–3 levels)
-- “What lives where” descriptions
+- "What lives where" descriptions
 - Key entrypoints (main, CLI, server start)
 - Where configs live
 - Where tests live
-- Where the “core domain logic” lives
+- Where the "core domain logic" lives
 
 Because apps/connectors are not supported in projects, a repo map becomes a substitute for “browse
 the repo on demand inside the project.” ([OpenAI Help Center][1])
@@ -328,7 +328,7 @@ slices** based on the task.
 - Generated artifacts
 - Large logs beyond what you’re actively debugging (prefer minimal repro snippets)
 
-### Managing file churn and “stale truth”
+### Managing file churn and "stale truth"
 
 A project’s answers will be influenced by its files and chats, and project files persist until you
 delete the project. ([OpenAI Help Center][3]) Therefore, stale files are a real risk.
@@ -339,11 +339,11 @@ Recommended hygiene:
 
   - file name
   - purpose
-  - “source of truth” vs “snapshot”
+  - "source of truth" vs "snapshot"
   - last updated date
   - commit hash (if relevant)
 
-- When you upload a new version of a file, delete the old version (or clearly mark it “deprecated”)
+- When you upload a new version of a file, delete the old version (or clearly mark it "deprecated")
   to reduce contradictory context.
 
 - Use a simple naming convention:
@@ -359,12 +359,12 @@ ______________________________________________________________________
 
 Create a small number of stable chats and reuse them:
 
-- “0 - Project hub”: goals, definition of done, links to key chats/files
-- “1 - Architecture and decisions”: design discussions; branch when exploring alternatives
+- "0 - Project hub": goals, definition of done, links to key chats/files
+- "1 - Architecture and decisions": design discussions; branch when exploring alternatives
   ([OpenAI Help Center][1])
-- “2 - Implementation log”: task-by-task work; link to PRs/commits (manually)
-- “3 - Debugging and incidents”: logs, errors, root cause analysis
-- “4 - Testing strategy”: test plan and coverage gaps
+- "2 - Implementation log": task-by-task work; link to PRs/commits (manually)
+- "3 - Debugging and incidents": logs, errors, root cause analysis
+- "4 - Testing strategy": test plan and coverage gaps
 
 Projects support branching chats; use it aggressively to explore alternatives without overwriting
 the main thread. ([OpenAI Help Center][1])
@@ -379,7 +379,7 @@ Best practice:
 
 - Use Canvas for artifacts that you want to iterate on (design docs, long code blocks, refactors).
 - Export Canvas outputs (e.g., markdown or code files) and upload them back into the project as
-  stable references when they become “source of truth.” ([OpenAI Help Center][7])
+  stable references when they become "source of truth." ([OpenAI Help Center][7])
 
 > **Important**: The Canvas article notes that Canvas is not available with **GPT-5 Pro**. If you
 > don’t see Canvas, check whether the currently selected model is compatible.
@@ -399,7 +399,7 @@ ______________________________________________________________________
 ### Model training controls (relevant for Pro)
 
 For Free/Plus/Pro users, OpenAI may use information accessed from projects to train models **if**
-your “Improve the model for everyone” setting is on. ([OpenAI Help Center][1]) For shared projects,
+your "Improve the model for everyone" setting is on. ([OpenAI Help Center][1]) For shared projects,
 OpenAI states training occurs only if **every** contributor/owner has that toggle enabled.
 ([OpenAI Help Center][1])
 
@@ -412,7 +412,7 @@ Operational best practice for dev:
 
 ______________________________________________________________________
 
-## Known limitations and “gotchas” that matter in dev workflows
+## Known limitations and "gotchas" that matter in dev workflows
 
 1. **Apps are not supported in projects** Plan for a workflow that does not rely on connected
    apps/connectors inside the project. ([OpenAI Help Center][1])
@@ -423,7 +423,7 @@ ______________________________________________________________________
 1. **Temporary chats can’t be moved into projects** If you might want the work to live in a project,
    don’t start it as a temporary chat. ([OpenAI Help Center][1])
 
-1. **Project-only memory is “set at creation”** You cannot convert an existing default-memory
+1. **Project-only memory is "set at creation"** You cannot convert an existing default-memory
    project to project-only; make a new project and move conversations if needed.
    ([OpenAI Help Center][1])
 
@@ -434,7 +434,7 @@ ______________________________________________________________________
    Pro, plan to extract diagrams into text or separate image files and describe them.
    ([OpenAI Help Center][4])
 
-1. **Only 10 files at a time** Plan staged uploads and keep a “manifest” so you don’t lose track.
+1. **Only 10 files at a time** Plan staged uploads and keep a "manifest" so you don’t lose track.
    ([OpenAI Help Center][1])
 
 ______________________________________________________________________
@@ -446,9 +446,9 @@ ______________________________________________________________________
 - [ ] Choose memory mode (default vs project-only) based on isolation needs.
   ([OpenAI Help Center][1])
 - [ ] Add project instructions (use the dev template; keep it stable). ([OpenAI Help Center][1])
-- [ ] Upload the documentation baseline (“context pack”). ([OpenAI Help Center][1])
+- [ ] Upload the documentation baseline ("context pack"). ([OpenAI Help Center][1])
 - [ ] Add `REPO_MAP.md` and `FILE_MANIFEST.md`.
-- [ ] Create core chats (“hub”, “architecture”, “implementation log”, “debugging”).
+- [ ] Create core chats ("hub", "architecture", "implementation log", "debugging").
 
 ### Per-task execution checklist
 

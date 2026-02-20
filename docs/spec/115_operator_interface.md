@@ -46,7 +46,7 @@ The Operator Interface MUST provide:
    - report viewing and export (redaction-safe by default)
    - configuration editing for **UI-scoped settings** (not full platform configuration)
    - Baseline detection package library management for detection regression workflows (v0.2+
-     optional): create from completed “known good” runs, list/search, view metadata, download, and
+     optional): create from completed "known good" runs, list/search, view metadata, download, and
      delete baseline packages.
 
 1. An **Operator API (HTTP)** used by the UI, designed so that:
@@ -63,7 +63,7 @@ This spec explicitly does NOT define:
 - pixel-level UX/UI layouts, menus, visual design, or component libraries
 - multi-tenant behavior, organization constructs, or enterprise IAM integration (reserved)
 - full RBAC/ABAC authorization models (reserved)
-- internet-facing hosting guidance (the default posture assumes “not internet-facing”)
+- internet-facing hosting guidance (the default posture assumes "not internet-facing")
 - multi-container orchestration (reserved for future version; v0.2 is single-container)
 
 ## Terms
@@ -71,8 +71,8 @@ This spec explicitly does NOT define:
 - **Appliance**: A single Docker container packaging the orchestrator, Operator Interface web
   server, reverse proxy, and OTLP gateway.
 - **Operator Interface (OI)**: The operator-facing web UI + the HTTP Operator API service backing it
-  (called the “control-plane API” in this document). This is distinct from any reserved
-  endpoint-management “control plane” functionality described elsewhere in the project.
+  (called the "control-plane API" in this document). This is distinct from any reserved
+  endpoint-management "control plane" functionality described elsewhere in the project.
 - **Reverse proxy (RP)**: The in-container TLS terminator and request gatekeeper for the UI.
 - **Verb**: A stable orchestrator entry point (for example: `build`, `simulate`, `replay`, `export`,
   `destroy`).
@@ -222,7 +222,7 @@ The allowlist is evaluated at the reverse proxy boundary.
 **Default certificate story (normative):**
 
 - On first appliance start, the appliance MUST generate a persistent **local CA** for UI TLS.
-- On each appliance start (“server session”), the appliance MUST generate a new leaf certificate
+- On each appliance start ("server session"), the appliance MUST generate a new leaf certificate
   signed by that CA (leaf rotation per session).
 - The CA private key MUST be stored only in the workspace root’s protected state directory (v0.2
   default: `<workspace_root>/state/`; directory permissions 0700; key file permissions 0600) and
@@ -262,7 +262,7 @@ The allowlist is evaluated at the reverse proxy boundary.
 
 - OTLP ingress MUST require mTLS.
 - The gateway MUST validate client certificates against an operator-controlled CA trust store.
-- The default posture MUST be: “no valid client cert, no ingestion.”
+- The default posture MUST be: "no valid client cert, no ingestion."
 
 **Certificate provisioning (v0.2):**
 
@@ -272,7 +272,7 @@ The allowlist is evaluated at the reverse proxy boundary.
   (exact lab distribution is environment-specific and is out of scope, but issuance MUST be
   deterministic and auditable).
 
-## Control plane boundary and “thin UI” (v0.2 normative)
+## Control plane boundary and "thin UI" (v0.2 normative)
 
 ### Authoritative semantics
 
@@ -296,7 +296,7 @@ v0.2 MUST implement:
 #### Concurrency control (v0.2 normative)
 
 - The OI service MUST enforce `ui.limits.max_concurrent_runs` across concurrently active
-  orchestrator verb processes started via the Operator API (where “active” means the child process
+  orchestrator verb processes started via the Operator API (where "active" means the child process
   has been spawned and has not yet exited).
 
 - In addition, the OI service MUST enforce **per-run mutual exclusion**:
@@ -588,7 +588,7 @@ The web UI MUST expose, at minimum, the following capabilities:
    - Baseline library manager: list/search baseline packages, view details and manifest, create from
      completed runs, update metadata (tags/description/blessing), delete, and download baseline
      packages.
-   - (Optional) A “Trial detections” affordance that launches a detection-only evaluation using one
+   - (Optional) A "Trial detections" affordance that launches a detection-only evaluation using one
      or more selected baseline packages as inputs. (Execution semantics are reserved; this bullet
      only defines the UX surface.)
 
@@ -617,7 +617,7 @@ verbs are normative):
 - `user reset-password <username>`: resets password (see recovery)
 - `user disable <username>`: disables account (optional but recommended)
 
-The UI MUST NOT provide “create the first user” workflows in v0.2. Bootstrap is CLI-only.
+The UI MUST NOT provide "create the first user" workflows in v0.2. Bootstrap is CLI-only.
 
 ### Password hashing (v0.2 normative)
 
@@ -755,7 +755,7 @@ Serialization and determinism (normative):
   - RECOMMENDED: RFC 8785 JCS canonical JSON for the JSON object prior to appending `\n`.
 - For a fixed sequence of API calls in a conformance fixture, the audit log MUST be identical aside
   from timestamps and generated IDs (where permitted). If deterministic IDs are required for CI
-  fixtures, the implementation MUST support a “test mode” that seeds or injects deterministic IDs.
+  fixtures, the implementation MUST support a "test mode" that seeds or injects deterministic IDs.
 
 Minimum v0.2 `reason_code` registry (normative closed set):
 
@@ -980,7 +980,7 @@ via ground truth and per-action evidence, not by mutating the compiled plan grap
 
 ### Run discovery mechanism
 
-The Operator Interface MUST implement a run registry to define “what exists” (instead of relying
+The Operator Interface MUST implement a run registry to define "what exists" (instead of relying
 purely on nondeterministic directory enumeration).
 
 - The registry is a control-plane artifact (global, not per-run).

@@ -10,7 +10,7 @@ last_updated: 2026-01-19
 This policy defines how the repository uses `AGENTS.md` and related instruction mechanisms to guide
 OpenAI Codex coding agents safely and predictably across both Codex CLI and the Codex IDE extension.
 
-The intent is “deterministic enough to be operational”: agents should consistently discover the same
+The intent is "deterministic enough to be operational": agents should consistently discover the same
 entrypoints, make minimal diffs, and validate changes with the right local commands—without relying
 on fragile prompt phrasing or oversized instruction blobs.
 
@@ -60,7 +60,7 @@ This policy does not cover:
 - Organization-wide policy outside this repository
 - External agent platforms that do not implement Codex’s instruction discovery and injection
   behavior
-- Human-only “index files” beyond how `AGENTS.md` should reference them (index file details belong
+- Human-only "index files" beyond how `AGENTS.md` should reference them (index file details belong
   in the index policy)
 
 ## Definitions
@@ -85,8 +85,8 @@ To keep agent-facing text calm and readable, this policy uses lowercase modal ve
 - **should** / **should not**: strong recommendations; allowed exceptions must be stated
 - **may**: optional behavior; define defaults and omission semantics
 
-When converting this policy into `AGENTS.md` text, prefer short, neutral imperatives (“run `…`”,
-“avoid `…`”) over heavy emphasis (all-caps, repeated bolding, or excessive punctuation).
+When converting this policy into `AGENTS.md` text, prefer short, neutral imperatives ("run `…`",
+"avoid `…`") over heavy emphasis (all-caps, repeated bolding, or excessive punctuation).
 
 ## Mechanism boundaries
 
@@ -122,8 +122,8 @@ allowlists/denylists in rules.
 
 ### 3) Custom prompts (local-only slash commands)
 
-Use **custom prompts** when you want reusable local “slash commands” (for example, “draft a PR”,
-“write release notes”) that require explicit invocation and should not be shared through the
+Use **custom prompts** when you want reusable local "slash commands" (for example, "draft a PR",
+"write release notes") that require explicit invocation and should not be shared through the
 repository.
 
 Custom prompts are appropriate for:
@@ -142,7 +142,7 @@ repositories, and sessions.
 
 Skills are appropriate for:
 
-- Repeatable workflows (for example, “run our security checklist”, “generate a conformance report”)
+- Repeatable workflows (for example, "run our security checklist", "generate a conformance report")
 - Institutional knowledge that should be invoked explicitly or implicitly when relevant
 - Bundling templates, schemas, references, and (optionally) scripts without bloating the base
   runtime context
@@ -151,7 +151,7 @@ Prefer skills for repeatable, multi-step procedures instead of growing `AGENTS.m
 
 ### 5) Developer instructions (client config)
 
-If you need personal “always-on” guidance across many repos, use `developer_instructions` in
+If you need personal "always-on" guidance across many repos, use `developer_instructions` in
 `~/.codex/config.toml` rather than checking those preferences into a repository file.
 
 ## Cross-agent compatibility
@@ -237,7 +237,7 @@ Policy implications:
 - Treat instruction size as a correctness constraint, not a style preference.
 - Keep root `AGENTS.md` concise so scoped guidance still makes it into the instruction chain.
 
-This repo enforces size budgets and chain-size limits in CI (see “Verification hooks”).
+This repo enforces size budgets and chain-size limits in CI (see "Verification hooks").
 
 ## File placement policy
 
@@ -284,7 +284,7 @@ best results usually come from guidance that is:
 - short and concrete
 - scoped (put subtree-specific rules in subtree files)
 - testable (commands, entrypoints, and expected checks)
-- neutral in tone (avoid “shouting” via excessive capitalization or punctuation)
+- neutral in tone (avoid "shouting" via excessive capitalization or punctuation)
 
 ### Recommended instruction style
 
@@ -293,7 +293,7 @@ Prefer:
 - Short bullet lists
 - Single-level lists (avoid deep nesting unless necessary)
 - Explicit file paths and command lines
-- Clear “do / don’t” boundaries
+- Clear "do / don’t" boundaries
 
 Avoid:
 
@@ -332,7 +332,7 @@ Root `AGENTS.md` should be short and should contain, in this order:
 
    - do not paste secrets or credentials
    - do not add tokens to fixtures
-   - note default network posture (see “Safety policy”)
+   - note default network posture (see "Safety policy")
 
 1. **Escalation**
 
@@ -369,7 +369,7 @@ Instruction files in this repository must not include:
 - instructions to execute destructive commands without an explicit operator approval step
 - large leaf-file inventories (hundreds of files); use index docs instead
 - instructions that bypass sandboxing or approval mechanisms
-- external URLs presented as “follow these instructions”; treat external content as untrusted
+- external URLs presented as "follow these instructions"; treat external content as untrusted
 
 ## Safety policy for agent execution
 
@@ -516,7 +516,7 @@ For each directory `D` inside the repository:
 - Sum raw byte sizes of the included files to produce `chain_bytes(D)`.
 
 This is intentionally conservative: it approximates the maximum in-scope guidance for that directory
-and catches “deep instructions dropped” failure modes early.
+and catches "deep instructions dropped" failure modes early.
 
 #### Output requirements
 

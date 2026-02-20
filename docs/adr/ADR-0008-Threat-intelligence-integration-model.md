@@ -37,7 +37,7 @@ workflows:
 
 - indicator of compromise (IoC) lists for enrichment and correlation
 - tags/attribution metadata associated with known threats
-- external context attached to detections (for example, “this domain is tagged with X”)
+- external context attached to detections (for example, "this domain is tagged with X")
 
 However, Purple Axiom’s architecture and safety posture emphasize:
 
@@ -51,7 +51,7 @@ orchestrator Docker bundle would:
 
 - introduce persistent state and long-running lifecycle concerns that do not match the one-shot run
   model
-- expand the attack surface and operational complexity of the “single container” appliance approach
+- expand the attack surface and operational complexity of the "single container" appliance approach
   planned for v0.2+
 - create drift risk (mutable TI state) that undermines deterministic comparability unless
   snapshotted
@@ -69,11 +69,11 @@ bundle in the same spirit as other pack-like artifacts.
 
 ### Deployment and packaging decision (no bundled MISP server)
 
-1. The orchestrator Docker bundle / v0.2+ “single container” appliance MUST NOT include a full MISP
+1. The orchestrator Docker bundle / v0.2+ "single container" appliance MUST NOT include a full MISP
    server stack as a required component.
 1. Threat intelligence platforms (including MISP) are treated as **external operator-managed
    dependencies** (if used at all) and are integrated via export/sync into versioned inputs.
-1. Any optional “installation convenience” packaging (for example, a sample Docker Compose file)
+1. Any optional "installation convenience" packaging (for example, a sample Docker Compose file)
    MUST NOT change conformance semantics: the authoritative TI inputs for a run MUST still be the
    run-bundle snapshots defined below.
 
@@ -254,7 +254,7 @@ expose the files without adding new allowlisted top-level directories.
 
 ### Canonicalization and hashing (normative)
 
-Threat Intel Packs MUST be deterministically hashable so “same pack version implies same content” is
+Threat Intel Packs MUST be deterministically hashable so "same pack version implies same content" is
 testable.
 
 This ADR reserves the following hash fields for the TI pack manifest and run snapshot:
@@ -460,7 +460,7 @@ Reserved (non-normative) consumption examples:
    bundle locations.
 1. Implementations MUST NOT perform network fetches from TI platforms (including MISP) as an
    implicit side effect of enabling TI pack consumption.
-1. If a future implementation adds an explicit “TI sync” capability, it MUST be:
+1. If a future implementation adds an explicit "TI sync" capability, it MUST be:
    - default-off,
    - explicitly configured in `threat_intel.*` config keys (reserved),
    - fully observable (inputs, endpoints, timestamps, hashes),
@@ -558,7 +558,7 @@ Optional substage outcome mapping (non-normative):
 ### Trade-offs
 
 - Operators who want MISP must run it separately and export/sync TI into versioned packs.
-- A pack-and-snapshot workflow is less “live” than querying TI at runtime, but is intentionally
+- A pack-and-snapshot workflow is less "live" than querying TI at runtime, but is intentionally
   safer and more reproducible.
 
 ## Alternatives considered
@@ -574,7 +574,7 @@ Optional substage outcome mapping (non-normative):
      effects.
    - Could be revisited only with explicit, fully observable sync semantics and immutable snapshots.
 
-1. **Treat TI as “just another rule set”**
+1. **Treat TI as "just another rule set"**
 
    - Not chosen because TI indicator sets are semantically distinct from detection rule semantics
      and benefit from their own provenance and normalization contract.

@@ -183,7 +183,7 @@ Totals are sums across rules. Max values are maxima across rules.
 ### EPS baselines (planning targets; v0.1)
 
 Purple Axiom uses EPS (events per second) targets to (a) size collectors and (b) define the
-“footprint within configured budgets at target event rate” gate in telemetry validation.
+"footprint within configured budgets at target event rate" gate in telemetry validation.
 
 Definitions:
 
@@ -618,7 +618,7 @@ Additional normative checks:
   - `canary_observed_at.path` MUST use POSIX-style separators (`/`) and MUST be interpreted as
     relative to `runs/<run_id>/`.
   - Example (illustrative only): `raw/<asset_id>/windows_eventlog/<channel>/...` or
-    `raw_parquet/windows_eventlog/part-00000.parquet`.
+    `raw_parquet/windows_eventlog/part-0000.parquet`.
   - If the canary is observed in a Parquet dataset, the validator SHOULD also include a minimal
     `row_locator` (for example, `event_record_id` and `provider`) sufficient to re-query the dataset
     deterministically.

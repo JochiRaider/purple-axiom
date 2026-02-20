@@ -37,7 +37,7 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Contract registry](#contract-registry)
     - [Authoritative contract registry index (normative)](#authoritative-contract-registry-index-normative)
       - [Minimal registry shape (normative)](#minimal-registry-shape-normative)
-      - [Glob semantics (glob_v1) (normative)](#glob-semantics-glob_v1-normative)
+      - [Glob semantics (glob\_v1) (normative)](#glob-semantics-glob_v1-normative)
       - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
       - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
       - [Contract version constant (normative)](#contract-version-constant-normative)
@@ -88,7 +88,7 @@ invariants that cannot be expressed in JSON Schema alone.
       - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
     - [Measurement layers for conclusions (triage taxonomy)](#measurement-layers-for-conclusions-triage-taxonomy)
     - [Run manifest](#run-manifest)
-    - [Run results summary (run_results.json)](#run-results-summary-run_resultsjson)
+    - [Run results summary (run\_results.json)](#run-results-summary-run_resultsjson)
     - [Ground truth timeline](#ground-truth-timeline)
     - [Stable action identity](#stable-action-identity)
     - [Inputs and reproducible hashing](#inputs-and-reproducible-hashing)
@@ -197,7 +197,7 @@ with this document referenced as needed.
   (`telemetry.baseline_profile`) to assert expected collector/telemetry health. It is a validation
   policy, not a workload generator. It MUST NOT be conflated with the *environment noise profile*.
 - Environment noise profile: An input used by the runner to generate deterministic benign background
-  activity (“noise”) during runs. It is a workload generator, not a telemetry validation gate. It
+  activity ("noise") during runs. It is a workload generator, not a telemetry validation gate. It
   MUST NOT be conflated with the *telemetry baseline profile*.
 
 ## Contract registry
@@ -482,7 +482,7 @@ snapshots of:
 - a ruleset (Sigma YAML) used by the detection stage,
 - one or more Sigma-to-OCSF bridge mapping pack snapshots, and
 - optionally, one or more criteria pack snapshots (for evaluation workflows that want a single
-  “content + criteria” release).
+  "content + criteria" release).
 
 A conforming implementation MUST be able to validate a detection content bundle without network
 access, and MUST be able to validate a run’s detection provenance given only:
@@ -907,7 +907,7 @@ Notes:
   - `artifact_path` set to the offending run-relative path
   - `instance_path=""`, `schema_path=""`, and `keyword` omitted
 
-- “Timestamped exports” (if ever needed for ad-hoc operator workflows) MUST:
+- "Timestamped exports" (if ever needed for ad-hoc operator workflows) MUST:
 
   - be written only under an explicitly non-contracted scratch area (RECOMMENDED:
     `runs/<run_id>/logs/scratch/`), and
@@ -1021,7 +1021,7 @@ Minimum publish-gate coverage (v0.1):
 
 ##### Stage enablement and required contract outputs (v0.1)
 
-This section makes all “required when enabled” statements mechanically checkable by defining:
+This section makes all "required when enabled" statements mechanically checkable by defining:
 
 - a single, explicit stage enablement matrix (`enabled_if`) pinned to exact config keys, and
 - a deterministic requiredness function used to populate `expected_outputs[].required` for the
@@ -1029,7 +1029,7 @@ This section makes all “required when enabled” statements mechanically check
 
 Source of truth. Implementations MUST treat the matrix in this section as the canonical mapping from
 config → (stage enabled/disabled) → (required vs optional contracted outputs). Stage-specific
-documents MAY use shorthand (“when enabled”), but MUST NOT contradict this section.
+documents MAY use shorthand ("when enabled"), but MUST NOT contradict this section.
 
 Expression language (`expr_v1`). `enabled_if` and `required_if` use the following total function
 over the effective run config (after defaults are applied):
@@ -2702,7 +2702,7 @@ Normative requirements:
 
 - Otherwise (unsupported/not applicable, or not redaction-safe), the runner MUST still emit the
   artifact file at the standard path as a deterministic placeholder per `090_security_safety.md`
-  (“Placeholder artifacts”):
+  ("Placeholder artifacts"):
 
   - Use `placeholder.handling=absent` when the content is unsupported/not applicable (or cannot be
     produced deterministically).
@@ -2788,7 +2788,7 @@ Placeholder handling (normative):
 
 - If principal context cannot be produced deterministically (unsupported/disabled) or cannot be made
   redaction-safe, the runner MUST still emit `runner/principal_context.json` as a deterministic
-  placeholder artifact per `090_security_safety.md` (“Placeholder artifacts”).
+  placeholder artifact per `090_security_safety.md` ("Placeholder artifacts").
   - Use `placeholder.handling=absent` for unsupported/disabled/not applicable.
   - Use `placeholder.handling=withheld` or `placeholder.handling=quarantined` when redaction posture
     blocks publication.
@@ -3551,7 +3551,7 @@ When `runner.environment_config.noise_profile.enabled=true`:
 - The snapshot bytes MUST be the canonical profile bytes for the run:
 
   - Let `canonical_profile_bytes := canonical_json_bytes(<resolved_noise_profile>)` as defined in
-    this document (“Canonical JSON and hashing”).
+    this document ("Canonical JSON and hashing").
   - The emitted file `inputs/environment_noise_profile.json` MUST be exactly
     `canonical_profile_bytes` (byte-for-byte).
 

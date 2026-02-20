@@ -27,7 +27,7 @@ pipeline components so that:
 
 - runs are reproducible and comparable across time
 - reporting and trending joins are stable and deterministic
-- “same inputs” can be meaningfully asserted and tested in CI
+- "same inputs" can be meaningfully asserted and tested in CI
 - unpinned or ambiguous inputs fail closed instead of silently drifting
 
 Several specs already assume the existence of pinned versions (for example: OCSF version pinning,
@@ -59,7 +59,7 @@ compatibility, or coupling unless this ADR (or the owning spec) explicitly defin
    - `scenario_id` MUST be a stable identifier for a logical scenario (independent of code release).
    - `scenario_version` MUST be SemVer and MUST be versioned independently from `project_version`.
 
-1. **Pack-like artifacts** The following are “pack-like” artifacts: they are selected for a run,
+1. **Pack-like artifacts** The following are "pack-like" artifacts: they are selected for a run,
    pinned, and treated as immutable per version.
 
    - criteria packs: `criteria_pack_id`, `criteria_pack_version`
@@ -162,7 +162,7 @@ Regex (informative):
 
 - The run bundle directory name MUST be exactly the `run_id` string:
   - `runs/<run_id>/`
-- Any human-readable labels (for example, “run name”, “run label”) MAY exist but MUST NOT be used as
+- Any human-readable labels (for example, "run name", "run label") MAY exist but MUST NOT be used as
   identifiers, join keys, or directory names.
 - Producers MUST treat `run_id` as the only stable identifier for a specific execution.
 
@@ -173,7 +173,7 @@ The run manifest is the authoritative location for the effective pins used by a 
 #### `manifest.versions` (normative)
 
 The manifest MUST include a top-level `versions` object. `versions` MUST record the effective
-resolved pins for a run (after any “latest” or omitted-version resolution is applied).
+resolved pins for a run (after any "latest" or omitted-version resolution is applied).
 
 Minimum required keys in `manifest.versions` (v0.1 baseline, normative):
 

@@ -20,7 +20,7 @@ related:
 
 ## Purpose
 
-Execution adapters are first-class, swappable runner backends (Threatest “detonator” analogs) that
+Execution adapters are first-class, swappable runner backends (Threatest "detonator" analogs) that
 perform technique execution while preserving a stable, contract-backed evidence surface.
 
 The goal is to make it feasible to add non-Atomic execution backends (for example: cloud technique
@@ -65,7 +65,7 @@ This specification does **not** define:
 ## Architecture integration
 
 Execution adapters are extension adapters and MUST follow the adapter wiring/provenance rules in
-`020_architecture.md` (“Adapter wiring and provenance (v0.1; normative)”).
+`020_architecture.md` ("Adapter wiring and provenance (v0.1; normative)").
 
 ### Port id and adapter ids
 
@@ -269,8 +269,8 @@ Execution adapters MUST surface deterministic evidence metadata via contract-bac
 
 The canonical runner evidence surface (paths + contract ids) is defined in:
 
-- `025_data_contracts.md` (“Runner evidence”), and
-- `030_scenarios.md` (“Runner evidence artifacts under runner/”).
+- `025_data_contracts.md` ("Runner evidence"), and
+- `030_scenarios.md` ("Runner evidence artifacts under runner/").
 
 For v0.1 `engine="atomic"` actions, the runner MUST also implement the integration contract in
 `032_atomic_red_team_executor_integration.md`, including its "Contracted runner artifacts" section.
@@ -418,7 +418,7 @@ Examples:
 Design notes:
 
 - Capability scope: `remote_exec`
-- Correlation carriers: synthetic marker is the v0.2 “low coupling” default (write eventlog/syslog
+- Correlation carriers: synthetic marker is the v0.2 "low coupling" default (write eventlog/syslog
   record or filelog line that is collected)
 
 ## Verification hooks
@@ -440,12 +440,12 @@ Minimum conformance checks (normative):
 1. **Required evidence header**
 
    - Every contract-backed JSON evidence artifact under `runner/` MUST include the runner evidence
-     header fields as defined in `025_data_contracts.md` (“Runner evidence JSON header pattern”):
+     header fields as defined in `025_data_contracts.md` ("Runner evidence JSON header pattern"):
      `contract_version`, `run_id`, `action_id`, `action_key`, `generated_at_utc`.
 
 1. **Deterministic output ordering**
 
-   - Any arrays declared by contracts or owning specs as “ordered” MUST be in the required stable
+   - Any arrays declared by contracts or owning specs as "ordered" MUST be in the required stable
      order (UTF-8 byte order or explicitly defined domain order).
    - At minimum, the suite MUST check stable ordering for:
      - `manifest.extensions.adapter_provenance.entries[]` sorting rules, and
@@ -472,7 +472,7 @@ Minimum required fixture categories:
   `action_key` and stable `parameters.resolved_inputs_sha256`).
 - `failure_reason_codes/` — fixtures that assert stable reason code mapping for common failures.
 
-See `100_test_strategy_ci.md` (“Runner and execution”) for fixture harness requirements.
+See `100_test_strategy_ci.md` ("Runner and execution") for fixture harness requirements.
 
 ## Changelog
 

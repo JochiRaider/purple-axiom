@@ -60,7 +60,7 @@ degradation, and semantic drift before they reach production.
   - For contract-backed artifacts, schema-owned `reason_domain` values MUST equal the artifact
     schema `contract_id`.
     - Exemption (placeholder namespace): `placeholder.reason_domain` MUST be `artifact_placeholder`
-      and MUST NOT be subject to the “must equal contract_id” check.
+      and MUST NOT be subject to the "must equal contract_id" check.
 
 ## Scope
 
@@ -134,7 +134,7 @@ Run CI MUST include, at minimum:
 
 - The evaluator conformance harness executed against at least one pinned Baseline Detection Package
   (BDP) or equivalent pinned event fixture set (see "Evaluator conformance harness").
-- At least one end-to-end “golden run” bundle executed in a minimal lab profile when a lab provider
+- At least one end-to-end "golden run" bundle executed in a minimal lab profile when a lab provider
   is available (RECOMMENDED).
 
 Run CI MAY be triggered less frequently than Content CI (for example on merge-to-main and/or on
@@ -419,7 +419,7 @@ boundary defined by the
 `normalized/mapping_profile_snapshot.json` MUST validate against
 `mapping_profile_snapshot.schema.json` and MUST include, at minimum: `mapping_profile_id`,
 `mapping_profile_version`, `mapping_profile_sha256`, and `ocsf_version` (see data contracts:
-“Normalization mapping profile snapshot”).
+"Normalization mapping profile snapshot").
 
 OCSF schema regression tests validate that representative normalized fixtures MUST validate against
 the pinned OCSF version used by v0.1.
@@ -506,7 +506,7 @@ Unit tests MUST include fixtures that demonstrate deterministic rejection / clas
 
 ### Sigma rule unit tests
 
-Rule-level unit tests treat “expected matches” as executable assertions and are intended to run in
+Rule-level unit tests treat "expected matches" as executable assertions and are intended to run in
 Content CI (fast, no lab required).
 
 Rule unit test fixtures tie together:
@@ -1867,7 +1867,7 @@ Regression gates (configurable thresholds) protect against coverage and performa
 - `missing_telemetry_count` delta (`candidate - baseline`) must not be > +2
 - `bridge_gap_mapping_count` delta (`candidate - baseline`) must not be > +5
 
-These thresholds are defined in `080_reporting.md` (“Regression deltas”) and MAY be overridden via
+These thresholds are defined in `080_reporting.md` ("Regression deltas") and MAY be overridden via
 `reporting.regression.thresholds` (see `120_config_reference.md`).
 
 Regression comparison precondition failures (for example, missing or incompatible baselines) MUST be

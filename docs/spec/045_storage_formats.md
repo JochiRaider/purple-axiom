@@ -185,7 +185,7 @@ regression surface deviates from `report/report.json.regression` or uses timesta
 
 ### Detection baseline packages (v0.1+; promoted CI artifact)
 
-To support long-lived, lightweight “known-good” datasets for detection regression testing without
+To support long-lived, lightweight "known-good" datasets for detection regression testing without
 re-running labs, the system MUST support **Baseline Detection Packages (BDPs)** as a first-class
 test artifact.
 
@@ -624,14 +624,14 @@ This section defines how Parquet-backed datasets evolve over time as:
 
 - Within a single run bundle, all Parquet files under a dataset directory MUST share the same
   physical schema.
-  - Rationale: avoids per-run “schema merge” behavior that can be non-deterministic and expensive at
+  - Rationale: avoids per-run "schema merge" behavior that can be non-deterministic and expensive at
     read time.
 
 2. **Additive evolution is the default**
 
 - Adding columns is the preferred evolution mechanism.
 - Newly introduced columns MUST be **nullable**.
-- Writers MUST NOT rely on “column presence” to communicate meaning. Absence is treated as `NULL` on
+- Writers MUST NOT rely on "column presence" to communicate meaning. Absence is treated as `NULL` on
   read.
 
 3. **No in-place semantic changes**
@@ -649,12 +649,12 @@ This section defines how Parquet-backed datasets evolve over time as:
   - Preferred: **widening** changes (for example, `int32 -> int64`) while preserving meaning.
   - Otherwise: write to a new column name and deprecate the old one.
 
-#### Rename policy (how to handle “field renamed” in practice)
+#### Rename policy (how to handle "field renamed" in practice)
 
 Parquet itself is not a table format with first-class rename semantics. Purple Axiom therefore
-treats “rename” as a compatibility pattern, not an in-place operation:
+treats "rename" as a compatibility pattern, not an in-place operation:
 
-- A “rename” MUST be implemented as:
+- A "rename" MUST be implemented as:
   1. add the new column name (nullable),
   1. mark the old column name as deprecated,
   1. provide an explicit alias mapping for readers (required; see `_schema.json` below).
@@ -708,7 +708,7 @@ Consumers of run bundles SHOULD assume that older runs may:
 Requirements (normative for built-in query tooling):
 
 - When scanning multiple Parquet files or multiple run bundles with potentially different schemas,
-  the reader MUST use “union by name” semantics so missing columns become `NULL` instead of failing
+  the reader MUST use "union by name" semantics so missing columns become `NULL` instead of failing
   the scan.
 - Readers SHOULD rely on column projection to only load the columns needed for the query.
 
@@ -720,7 +720,7 @@ Reference patterns (non-normative examples):
 
 #### Compatibility expectations for normalized OCSF datasets
 
-- The “minimum required columns” listed below are **contract-critical** and MUST remain present and
+- The "minimum required columns" listed below are **contract-critical** and MUST remain present and
   type-stable across all schema versions for `normalized/ocsf_events/`.
 - New OCSF fields added over time MUST be introduced as additional nullable columns.
 

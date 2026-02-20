@@ -52,14 +52,16 @@ Scenario safety interaction (normative):
   - the quarantine directory (`<security.redaction.unredacted_dir>/**`), and
   - non-long-term operational locations (v0.1: `raw_parquet/**`).
 - deterministic evidence logs allowlist (normative, v0.1): The allowlisted deterministic evidence
-  logs under `runs/<run_id>/logs/` defined in ADR-0009 §3.
+  logs under `logs/` defined in ADR-0009.
 - non-long-term operational locations: Run-bundle paths permitted for pipeline operation but
   excluded from the v0.1 default export profile and signing/checksums scope (v0.1:
   `raw_parquet/**`).
-- quarantine directory: `runs/<run_id>/<security.redaction.unredacted_dir>` used only when
-  unredacted evidence storage is explicitly permitted (default: `runs/<run_id>/unredacted/`).
+- quarantine directory: `<security.redaction.unredacted_dir>` (run-relative) used only when
+  unredacted evidence storage is explicitly permitted (default: `unredacted/`). Validation and
+  canonicalization rules for `security.redaction.unredacted_dir` are defined in
+  `120_config_reference.md`.
 - volatile diagnostics: Operator-local diagnostics excluded from the v0.1 default export profile and
-  signing/checksums scope (see ADR-0009 §4).
+  signing/checksums scope (see ADR-0009).
 - withheld (handling): The standard artifact path contains a deterministic placeholder and the
   underlying unredacted bytes are not promoted into standard long-term artifact locations and are
   excluded from the v0.1 default export profile and signing/checksums scope.
@@ -327,7 +329,7 @@ The pipeline MUST support a configurable redaction policy for:
 
 ### Policy definition
 
-The redaction policy format and the definition of “redacted-safe” are specified in
+The redaction policy format and the definition of "redacted-safe" are specified in
 [ADR-0003 Redaction policy](../adr/ADR-0003-redaction-policy.md).
 
 ### Binary evidence retention
@@ -619,7 +621,7 @@ Guardrails:
 - Default posture MUST be observe-only:
   - Observe-only mode MAY check for leftover artifacts and compare to expected cleanup actions.
   - Observe-only mode MUST NOT delete or mutate artifacts on the system.
-- Destructive reconciliation (“repair”) MUST be disabled by default.
+- Destructive reconciliation ("repair") MUST be disabled by default.
 - v0.1: repair is out of scope. Implementations MUST NOT attempt destructive repair actions as part
   of reconciliation.
 - If the scenario requests reconciliation policy of `repair`:

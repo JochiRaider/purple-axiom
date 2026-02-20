@@ -68,7 +68,7 @@ Notes:
 
 - Default `fail_mode`: `warn_and_skip` (v0.1 baseline)
 - Stage outcome reason codes: see
-  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Validation stage
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) "Validation stage
   (`validation`)".
 
 ### Isolation test fixture(s)
@@ -990,7 +990,7 @@ Interpretation of `"unknown"` (normative):
   - The evaluator SHOULD proceed, but MUST surface an explicit warning in run outputs.
 - If `validation.evaluation.fail_mode = fail_closed`:
   - The evaluator MUST treat `"unknown"` as a hard drift gate failure for the affected engine and
-    MUST mark affected actions as skipped deterministically (see “Required behavior on drift”).
+    MUST mark affected actions as skipped deterministically (see "Required behavior on drift").
 
 ### Required behavior on drift (normative)
 
@@ -1856,10 +1856,10 @@ for representational state machines in ADR-0007.
 
 Authority references (normative semantics live in):
 
-- “Selection and pinning”
-- “Run bundle snapshot”
-- “Signal evaluation semantics”
-- “Drift detection”
+- "Selection and pinning"
+- "Run bundle snapshot"
+- "Signal evaluation semantics"
+- "Drift detection"
 - ADR-0005 (stage outcomes)
 - ADR-0007 (state machine representation guidance)
 

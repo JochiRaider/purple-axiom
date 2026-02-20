@@ -45,4 +45,4 @@ authoritative information without loading the full tree.
 - Do not include the agent, index or readme files.
 - Prefer pointers to scoped indexes over duplicated prose.
 - Unless stated otherwise, lists and tables are sorted lexicographically by path.
-- The “Entrypoints” section above is intentionally sorted by recommended read order.
+- The "Entrypoints" section above is intentionally sorted by recommended read order.

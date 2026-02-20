@@ -57,7 +57,7 @@ Notes:
 
 - Default `fail_mode`: `fail_closed`
 - Stage outcome reason codes: see
-  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) § "Lab provider stage
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) "Lab provider stage
   (`lab_provider`)".
 
 ### Isolation test fixture(s)

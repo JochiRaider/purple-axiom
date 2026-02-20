@@ -15,7 +15,7 @@
 ## What is authoritative for what
 
 - On-disk pack structure, allowed YAML features, deterministic parsing rules, routing semantics, and
-  “mapping material boundary” → `docs/mappings/ocsf_mapping_profile_authoring_guide.md`
+  "mapping material boundary" → `docs/mappings/ocsf_mapping_profile_authoring_guide.md`
 - Where mapping files live and what each file is for (per pack) → `mappings/MAPPINGS_INDEX.md`
 - Mapping intent and field-level mapping rationale (per source) → `docs/mappings/*_to_ocsf_*.md`
 - Required vs optional mapping completeness expectations → `docs/mappings/coverage_matrix.md`
@@ -26,7 +26,7 @@
 
 - Prefer edits that stay within a single pack directory under
   `mappings/normalizer/ocsf/<version>/<source_pack_id>/`.
-- Do not introduce new YAML constructs or “helper conventions” unless they are defined in the
+- Do not introduce new YAML constructs or "helper conventions" unless they are defined in the
   authoring guide.
 - When adding a new pack, new route, or new class map:
   - Update `mappings/MAPPINGS_INDEX.md` (one-page map).

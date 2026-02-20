@@ -200,7 +200,7 @@ MUST treat them as read-only and MUST NOT rewrite them.
     diffability.
   - The snapshot is published at run-relative path `logs/lab_inventory_snapshot.json` and is treated
     as reproducibility-critical and MUST be included in default exports and checksums when present
-    (it is not “debug-only” despite living under `logs/`).
+    (it is not "debug-only" despite living under `logs/`).
   - v0.1 conformance requires `lab.inventory.snapshot_to_run_bundle = true`; configurations that set
     it to `false` MUST be rejected.
 
@@ -288,7 +288,7 @@ MUST treat them as read-only and MUST NOT rewrite them.
   - Sigma-based detection evaluation is in scope via a Sigma-to-OCSF bridge and deterministic
     executability classification.
     - Sigma features that are not supported for execution in v0.1 are classified deterministically
-      (rather than “best-effort” execution).
+      (rather than "best-effort" execution).
   - Scoring joins ground truth, validation outputs, and detection outputs into a machine-readable
     run summary.
   - Quality gates that downgrade a run (for example normalization or coverage gates) are expressed
@@ -403,7 +403,7 @@ The following are explicit non-goals for initial releases, including v0.1.
   - External SIEM ingestion is optional and out of scope as a required capability.
 - Production deployment guidance for hostile or multi-tenant environments.
 - Network or threat intelligence enrichment that requires outbound network access by default.
-- Runtime self-update or “fetch dependencies at execution time” behavior as a supported runner
+- Runtime self-update or "fetch dependencies at execution time" behavior as a supported runner
   mechanism.
 - A comprehensive UI or SaaS service.
   - Optional packaging (for example Docker Compose) is permitted as an installation convenience, but

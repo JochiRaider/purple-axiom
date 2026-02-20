@@ -32,4 +32,4 @@ Ordering: rows are sorted lexicographically by `Pack (source_type)`.
 - Do not include the agent, or readme files.
 - Prefer pointers to scoped indexes over duplicated prose.
 - Unless stated otherwise, lists and tables are sorted lexicographically by path.
-- The “Entrypoints” section above is intentionally sorted by recommended read order.
+- The "Entrypoints" section above is intentionally sorted by recommended read order.

@@ -665,7 +665,7 @@ Observability:
 
 #### Port: `PublishGate`
 
-Purpose: provide “transaction-like” artifact publication: stage writes are staged, validated, and
+Purpose: provide "transaction-like" artifact publication: stage writes are staged, validated, and
 then atomically promoted.
 
 Required operations (minimum):
@@ -1015,7 +1015,7 @@ Third-party adapter policy (decision):
 
 Implementation guidance (non-normative):
 
-Purple Axiom’s stage model is intentionally “contract-first”: each stage can be implemented as a
+Purple Axiom’s stage model is intentionally "contract-first": each stage can be implemented as a
 black box that consumes only its contracted inputs and emits only its contracted outputs. This is
 intended to support parallel development mediated solely by schema contracts and fixtures.
 
@@ -1040,7 +1040,7 @@ Recommended patterns:
    - Any configurable behavior that materially changes how a stage reads inputs or produces
      contracted outputs SHOULD be expressed as a strategy behind an adapter interface.
    - Strategy selection SHOULD be config-driven and deterministic. Avoid environment-dependent or
-     “auto-discovery” selection unless it is explicitly ordered and pinned by configuration.
+     "auto-discovery" selection unless it is explicitly ordered and pinned by configuration.
    - Strategy identity and version SHOULD be recorded in the run bundle via adapter provenance (see
      "Adapter provenance recording (v0.1)").
 
@@ -1106,7 +1106,7 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
    - Timestamped contracted filenames are disallowed: timestamps belong inside artifact content, not
      in filenames.
    - Implementations MUST treat any filename containing date/time-like tokens (e.g., `YYYY-MM-DD`,
-     `YYYYMMDD`, RFC3339-like `...T...Z`) as “timestamped” for the purposes of this rule (a stricter
+     `YYYYMMDD`, RFC3339-like `...T...Z`) as "timestamped" for the purposes of this rule (a stricter
      detector is allowed).
 
 1. **Deterministic serialization and ordering**
@@ -1143,7 +1143,7 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
      - Exemption (placeholder namespace): fields under the top-level `placeholder` object are
        governed by the placeholder contract. `placeholder.reason_domain` MUST be
        `artifact_placeholder` and MUST NOT be subject to the contract-alignment check (see
-       `090_security_safety.md`, “Placeholder artifacts”).
+       `090_security_safety.md`, "Placeholder artifacts").
      - For non-contract placeholder/operator-interface artifacts, `reason_domain` MUST be one of the
        explicitly documented constants (`artifact_placeholder`, `operator_interface`)..
 
@@ -1181,8 +1181,8 @@ are mandatory (names are suggestions; harness/framework is implementation-define
 
 1. `publish_gate_atomic_publish_no_partial_outputs`
 
-   - Setup: simulate a stage that writes multiple outputs; force an injected failure between “write”
-     and “finalize”.
+   - Setup: simulate a stage that writes multiple outputs; force an injected failure between "write"
+     and "finalize".
    - Assert: no contracted outputs appear in final locations; only staging contains partial data.
    - Assert: rerun behavior is deterministic (either cleanly resumes and publishes, or fails closed
      with a stable storage/consistency reason code).
@@ -1535,7 +1535,7 @@ See the [Sigma detection specification][sigma-spec] for evaluation model and out
 
 #### Detection content release bundles (optional input)
 
-To support reproducible CI, supply-chain integrity, and deterministic “what content was used”
+To support reproducible CI, supply-chain integrity, and deterministic "what content was used"
 provenance, the detection stage MAY be configured to source its content from a **Detection Content
 Release** (a.k.a. **detection content bundle**) instead of reading rules/mapping material directly
 from a working tree.
@@ -1553,7 +1553,7 @@ When a detection content bundle is used as an input, implementations MUST:
 - Enforce that the run’s pinned versions (for example `manifest.versions.rule_set_id` /
   `rule_set_version` and `manifest.versions.mapping_pack_id` / `mapping_pack_version`) are
   compatible with the content bundle manifest.
-- Fail closed if compatibility cannot be established deterministically (do not “best effort” fall
+- Fail closed if compatibility cannot be established deterministically (do not "best effort" fall
   back to local content).
 
 This input option enables offline provenance validation using only:
@@ -1644,7 +1644,7 @@ interface used by the runner to execute actions, declare capabilities/correlatio
 deterministic execution evidence. See `033_execution_adapters.md`.
 
 Environment configurators are also the v0.1 integration point for generating realistic background
-activity (“noise”) so that datasets are not comprised solely of attack actions. Examples include:
+activity ("noise") so that datasets are not comprised solely of attack actions. Examples include:
 
 - domain and directory baseline activity (for example AD-Lab-Generator and ADTest.exe), and
 - server/workstation workload activity via scheduled tasks (Windows) and cron jobs (Linux).

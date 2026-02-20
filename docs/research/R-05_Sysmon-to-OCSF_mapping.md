@@ -39,7 +39,7 @@ OCSF-normalized outputs. (Sysmon EventID catalog reference: Microsoft Learn) ([M
 
 ## Methodology
 
-1. Extract “routed event families” and explicit EventID coverage from
+1. Extract "routed event families" and explicit EventID coverage from
    `windows-sysmon_to_ocsf_1.7.0.md`.
 
 1. Compare against the Sysmon EventID catalog (EventIDs 1–29 and 255). ([Microsoft Learn][1])
@@ -157,7 +157,7 @@ These EventIDs commonly underpin high-value endpoint detection content:
 
 ## Verification hooks for closing gaps
 
-For each EventID promoted to “routed” (especially P0/P1):
+For each EventID promoted to "routed" (especially P0/P1):
 
 1. **Golden input fixtures**
 
@@ -192,12 +192,12 @@ on common Sigma logsource categories and representative Sigma rules.
 ### Why this matters for Sigma
 
 Sigma rules identify their target telemetry using a `logsource` consisting of `category`, `product`,
-and optional `service`; mismatches can render a rule ineffective even if “similar” data exists
+and optional `service`; mismatches can render a rule ineffective even if "similar" data exists
 elsewhere. Pipelines/backends often use `logsource` to scope queries and apply field mappings.
 ([sigmahq.io][2])
 
 Also note the Sigma main repository contains **more than 3000** detection rules overall, so even
-“one category” gaps can have non-trivial downstream impact. ([GitHub][3])
+"one category" gaps can have non-trivial downstream impact. ([GitHub][3])
 
 ### P0 gaps and expected Sigma impact
 

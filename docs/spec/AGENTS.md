@@ -12,7 +12,7 @@
 
 ## Navigation entrypoint (required)
 
-- Start with `docs/spec/SPEC_INDEX.md` (one-page map + “Common tasks” router).
+- Start with `docs/spec/SPEC_INDEX.md` (one-page map + "Common tasks" router).
 
 ## Spec-only fast paths (minimal pointers)
 

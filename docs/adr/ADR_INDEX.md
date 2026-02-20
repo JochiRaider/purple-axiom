@@ -24,11 +24,11 @@ This file exists to keep agent working sets small. It is a one-page map over ADR
 
 | Need                                                   | Read first                                                              |
 | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| “Where are event identity / provenance rules defined?” | `ADR-0002-event-identity-and-provenance.md`                             |
-| “How are sensitive values redacted?”                   | `ADR-0003-redaction-policy.md`                                          |
-| “What is the run status / failure taxonomy?”           | `ADR-0005-stage-outcomes-and-failure-classification.md`                 |
-| “What are the deployment / component boundaries?”      | `ADR-0004-deployment-architecture-and-inter-component-communication.md` |
-| “How do matrix/multi-target plans work?”               | `ADR-0006-plan-execution-model.md`                                      |
+| "Where are event identity / provenance rules defined?" | `ADR-0002-event-identity-and-provenance.md`                             |
+| "How are sensitive values redacted?"                   | `ADR-0003-redaction-policy.md`                                          |
+| "What is the run status / failure taxonomy?"           | `ADR-0005-stage-outcomes-and-failure-classification.md`                 |
+| "What are the deployment / component boundaries?"      | `ADR-0004-deployment-architecture-and-inter-component-communication.md` |
+| "How do matrix/multi-target plans work?"               | `ADR-0006-plan-execution-model.md`                                      |
 
 ## Update rule (required)
 
@@ -38,4 +38,4 @@ When you add a new ADR:
 - Do not include the agent, index or readme files.
 - Prefer pointers over duplicated prose.
 - Unless stated otherwise, lists and tables are sorted lexicographically by path.
-- The “Entrypoints” section above is intentionally sorted by recommended read order.
+- The "Entrypoints" section above is intentionally sorted by recommended read order.

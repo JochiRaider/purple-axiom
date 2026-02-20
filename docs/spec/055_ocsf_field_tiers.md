@@ -124,7 +124,7 @@ For v0.1, the following `metadata.source_type` values are reserved for custom ne
 - `zeek_conn` (Zeek `conn.log` derived flow/session records)
 - `suricata_eve` (Suricata EVE flow/session records)
 
-Event identity for these sources is defined in ADR-0002 under “Network flows (provisional)”,
+Event identity for these sources is defined in ADR-0002 under "Network flows (provisional)",
 including an `identity_tier = 3` fallback based on 5-tuple plus flow start time.
 
 ### Strong recommendations
@@ -325,7 +325,7 @@ v0.1. This baseline exists to prevent cross-lab incomparability by fixing the mi
 
 - mapping effort (which Tier 2 family minimums are expected),
 - telemetry configuration (which families must be collectable in the lab), and
-- what “coverage” means for scoring and detection evaluation.
+- what "coverage" means for scoring and detection evaluation.
 
 #### Baseline set (normative)
 
@@ -338,7 +338,7 @@ For Purple Axiom **v0.1**, the following event families **MUST** be treated as e
 1. **File writes (selectively)**
 
 Implementations **MAY** additionally enable other families (for example, registry, image/module
-load, EDR “findings”), but those families are **out of scope** for v0.1 baseline comparability
+load, EDR "findings"), but those families are **out of scope** for v0.1 baseline comparability
 unless:
 
 1. this section is updated, and
@@ -354,7 +354,7 @@ unless:
   are absent, the field **MUST** be absent and the gap **MUST** remain observable via mapping
   coverage outputs (for example, coverage segmented by `source_type` and `class_uid`).
 - v0.1 scoring and Sigma-based detection evaluation **SHOULD** treat these families as the minimum
-  input surface for “meaningful” evaluation. Runs that do not collect/normalize one or more baseline
+  input surface for "meaningful" evaluation. Runs that do not collect/normalize one or more baseline
   families will be difficult to compare across labs and will commonly manifest as
   `missing_telemetry` / `normalization_gap`-shaped outcomes downstream.
 
@@ -373,7 +373,7 @@ network sensors).
 
 #### File write selection policy (recommended; v0.1)
 
-“File writes (selectively)” is enabled because dropped payloads, staging, and persistence often
+"File writes (selectively)" is enabled because dropped payloads, staging, and persistence often
 leave file-system evidence, but unconstrained file telemetry can dominate volume and cost.
 
 To bound telemetry volume (and reduce privacy risk), file system collection **SHOULD** be limited
@@ -395,7 +395,7 @@ This v0.1 baseline aligns with the Sigma-to-OCSF bridge MVP scope recommendation
 network connections, DNS queries, authentication/logon, selective file writes), chosen to cover a
 significant fraction of high-value detection content without exploding scope.
 
-Collectively, these families cover the most common “evidence surfaces” produced by safe technique
+Collectively, these families cover the most common "evidence surfaces" produced by safe technique
 execution scenarios, including execution pivots, download / remote communications, and identity
 pivots.
 

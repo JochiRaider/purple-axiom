@@ -16,8 +16,8 @@ collector sizing and CI thresholds?
 
 Purple Axiom performs resource budget validation and throughput validation using collector
 self-telemetry and run artifacts. Without numeric baselines, implementers cannot size collectors,
-set safe defaults, or establish CI gates that distinguish “collector misconfigured or overloaded”
-from “scenario produced low signal.”
+set safe defaults, or establish CI gates that distinguish "collector misconfigured or overloaded"
+from "scenario produced low signal."
 
 ## Scope
 
@@ -72,7 +72,7 @@ per collector” for Windows event collection use cases:
   of roughly **3,000 events per second** across all subscriptions on a collector. (This is not a
   per-endpoint rate; it is a total ingestion bound for a collector instance.)
 - Microsoft also documents performance characteristics and scaling considerations (including
-  client-to-collector ratios and memory growth behavior) that imply “thousands of EPS per collector”
+  client-to-collector ratios and memory growth behavior) that imply "thousands of EPS per collector"
   is a reasonable operating envelope when tuned.
 
 ### OpenTelemetry Collector performance (logs)
@@ -89,7 +89,7 @@ during Atomic execution.
 
 ## v0.1 seed defaults (recommended)
 
-This section seeds default values that are “reasonable for labs” and consistent with Purple Axiom’s
+This section seeds default values that are "reasonable for labs" and consistent with Purple Axiom’s
 existing operability targets.
 
 ### Per-asset role: EPS and resource targets
@@ -105,7 +105,7 @@ targets as the default baseline to implement against:
 
 Notes:
 
-- **max EPS** in this document corresponds to the Operability “burst_eps_target_p95_1m” concept.
+- **max EPS** in this document corresponds to the Operability "burst_eps_target_p95_1m" concept.
   Implementations MAY name this field differently, but the semantics must match: a p95 threshold on
   a 1-minute rolling EPS window.
 
@@ -115,7 +115,7 @@ Purple Axiom’s telemetry pipeline currently seeds a baseline memory limiter of
 
 - **Windows endpoint**: `memory_limiter.limit_mib` SHOULD default to **512 MiB**.
 - **Windows DC**: `memory_limiter.limit_mib` SHOULD default to **1024 MiB** (derived from the higher
-  rss p95 target; see “Calibration” below).
+  rss p95 target; see "Calibration" below).
 - **Linux server**: `memory_limiter.limit_mib` SHOULD default to **768 MiB** (derived).
 
 Additional configuration guidance:
@@ -171,7 +171,7 @@ vary with event sizes and compression.
 
 ## Calibration plan (how to replace seed defaults with empirical baselines)
 
-This section defines what “good evidence” looks like for Purple Axiom and produces an implementable
+This section defines what "good evidence" looks like for Purple Axiom and produces an implementable
 measurement contract.
 
 ### Measurement requirements
@@ -188,7 +188,7 @@ ambiguous failures.
 
 ### Baseline workload definition (Atomic representative)
 
-A “representative” baseline workload SHOULD include:
+A "representative" baseline workload SHOULD include:
 
 - A minimum of N Atomic tests spanning common telemetry generators:
   - process creation (cmd, powershell, rundll32)
@@ -254,14 +254,14 @@ A seed default MAY be replaced only when:
   - at or below the 80th percentile of observed burst p95 1m (for max EPS),
   - while preserving a safety margin for CPU/RSS/disk budgets.
 
-Rationale: defaults should “usually pass” for representative workloads, while still detecting
+Rationale: defaults should "usually pass" for representative workloads, while still detecting
 abnormal conditions.
 
 ## Recommended initial configuration mapping
 
 Until the baseline JSON corpus exists, implementers SHOULD map defaults as follows:
 
-- `max_eps` (if a single field exists): use the role’s “max EPS (burst p95, 1m)” from the table
+- `max_eps` (if a single field exists): use the role’s "max EPS (burst p95, 1m)" from the table
   above.
 - `sustained_eps_target`: use the role’s sustained target from the table above.
 - `rss_target_p95_bytes`: use the role’s rss target (MiB × 1024 × 1024).

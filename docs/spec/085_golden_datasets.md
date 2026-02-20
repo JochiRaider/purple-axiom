@@ -63,15 +63,22 @@ deterministically via stable join keys.
   - **Run-level**: `run_id`.
   - **Event-level (v0.1, raw_ref-first)**:
     - Primary: `(run_id, metadata.extensions.purple_axiom.raw_ref)` when `raw_ref != null`.
-    - Fallback (Tier 3 only): `(run_id, metadata.event_id)` when `raw_ref == null`.
+    - Fallback (IT3 only): `(run_id, metadata.event_id)` when `raw_ref == null`.
   - (Reserved for v0.2+ / multi-action runs) **Action-level**: `(run_id, action_id)` (ground truth
     action instance id).
+- **IT1 / IT2 / IT3**: identity tiers corresponding to `metadata.identity_tier` values `1 | 2 | 3`
+  (ADR-0002).
+- **FT0 / FT1 / FT2 / FT3 / FT-R**: OCSF field tiers per `055_ocsf_field_tiers.md`.
+- **Tier terminology (dataset-doc-local; normative)**:
+  - In this document, unqualified `"Tier N"` terminology is invalid and MUST NOT be used.
+  - Identity tiers MUST be referenced as `IT1`, `IT2`, `IT3`.
+  - OCSF field tiers MUST be referenced as `FT0`, `FT1`, `FT2`, `FT3`, `FT-R`.    
 - **raw_ref**: canonical raw-origin pointer for an event, stored at
   `metadata.extensions.purple_axiom.raw_ref`.
   - Structured object (not a single string); see "Event join keys and join bridge (normative)".
   - Identity tier constraints:
-    - Tier 1 and Tier 2: `raw_ref` is required (non-null).
-    - Tier 3: `raw_ref` MUST be null.
+    - IT1 and IT2: `raw_ref` is required (non-null).
+    - IT3: `raw_ref` MUST be null.
 - **Dataset release posture**:
   - `public`: redaction-safe only, suitable for broad distribution.
   - `gated`: access-controlled; still redaction-safe, but may include richer derived artifacts.
@@ -122,10 +129,10 @@ v0.1 plan model. Multi-step attribution across multiple distinct actions per run
        consumers can join detections through the raw_ref-first event join policy.
      - run-level scoring summaries join via `run_id`.
 
-1. **Normalization assistance (Tier 0 + Tier 1 only)**
+1. **Normalization assistance (FT0 + FT1 only)**
 
    - Inputs: raw event stores (when present) plus normalized OCSF store.
-   - Label target: Tier 0 + Tier 1 OCSF fields only (see `055_ocsf_field_tiers.md`).
+   - Label target: FT0 + FT1 OCSF fields only (see `055_ocsf_field_tiers.md`).
    - Join requirement (v0.1):
      - Any raw records included for this task MUST carry the corresponding `metadata.event_id` so
        they can be joined to `normalized/ocsf_events/` without heuristic matching.
@@ -166,6 +173,10 @@ A dataset release MUST include the following identifiers:
 - For `internal` posture:
   - The dataset build MAY include quarantined/unredacted artifacts only when explicitly enabled by
     operator intent gates (see `090_security_safety.md` and ADR-0003).
+  - When included, quarantined/unredacted bytes MUST be written under the dedicated dataset-release
+    subtree `unredacted/runs/<run_id>/...` and MUST NOT appear under any `views/**` subtree.
+  - The `unredacted/**` subtree MUST be excluded from `security/checksums.txt` (and therefore from
+    `security/signature.ed25519` when signing is enabled).    
   - Internal releases MUST include a prominent "NOT FOR TRAINING WITHOUT GOVERNANCE REVIEW" notice
     in the dataset release card (`docs/README.md`).
 
@@ -227,7 +238,7 @@ A dataset release MUST support the following views:
    - MUST retain join keys needed to re-attach labels:
      - `run_id`,
      - `metadata.event_id` (required for determinism and detection joins),
-     - `metadata.extensions.purple_axiom.raw_ref` (required for Tier 1 and Tier 2 events; MUST be
+     - `metadata.extensions.purple_axiom.raw_ref` (required For IT1 and IT2 events; MUST be
        null for Tier 3 events).
 
 1. **labels view**
@@ -280,17 +291,20 @@ Enforcement (dataset builder):
 
 Dataset releases MUST treat non-`present` artifact handling as an audit-only concern. Handling
 values (`present | withheld | quarantined | absent`) MUST be recorded in `dataset_manifest.json` for
-each input run, but only the provenance view may contain placeholder or quarantined/unredacted
-artifacts.
+each input run.
 
 Rules:
 
 - `views/features/**` MUST contain only artifacts whose effective handling is `present`.
 - `views/labels/**` MUST contain only artifacts whose effective handling is `present`.
-- `views/provenance/**` MAY contain:
-  - deterministic placeholder artifacts (for `withheld` or `absent`) for auditability, and
-  - quarantined/unredacted artifacts only when `release_posture="internal"` and the corresponding
-    operator intent gates permit it.
+- `views/provenance/**` MAY contain deterministic placeholder artifacts (for `withheld` or `absent`)
+  for auditability.
+- `views/provenance/**` MUST NOT contain quarantined/unredacted byte copies.
+- Quarantined/unredacted byte copies MAY be included only when `release_posture="internal"` and the
+  corresponding operator intent gates permit it, and then only under:
+  - `unredacted/runs/<run_id>/...` (dataset-release-root relative).
+- For `release_posture != "internal"`, the dataset release MUST NOT contain any `unredacted/**`
+  subtree content (fail closed).
 - If a selected task would require including any non-`present` artifact under `views/features/**` or
   `views/labels/**`, the builder MUST either:
   - skip that run (only when explicitly configured to allow skipping), or
@@ -303,9 +317,9 @@ Rules:
 - A consumer MUST be able to re-attach labels deterministically using:
   - `run_id` joins for run-level labels (v0.1 technique labels), and
   - event-level joins under the dataset release event join policy (v0.1 default: `dual_key_v1`):
-    - Primary: `(run_id, metadata.extensions.purple_axiom.raw_ref)` when `raw_ref != null` (Tier 1
-      and Tier 2 events).
-    - Fallback (Tier 3 only): `(run_id, metadata.event_id)` when `raw_ref == null`.
+    - Primary: `(run_id, metadata.extensions.purple_axiom.raw_ref)` when `raw_ref != null` (IT1
+      and IT2 events).
+    - Fallback (IT3 only): `(run_id, metadata.event_id)` when `raw_ref == null
 - Any label-bearing artifact included under `views/labels/` MUST either:
   - carry the required join keys as fields (`run_id` and either `raw_ref` or `metadata.event_id`
     depending on scope), or
@@ -321,14 +335,14 @@ Event identity fields:
 
 - `metadata.event_id`: stable event identifier (string).
 - `metadata.extensions.purple_axiom.raw_ref`: canonical raw-origin pointer (object or null).
-  - Tier 1 and Tier 2 events: `raw_ref` MUST be non-null.
-  - Tier 3 events: `raw_ref` MUST be null.
+  - IT1 and IT2 events: `raw_ref` MUST be non-null.
+  - IT3 events: `raw_ref` MUST be null.
 
 Event join policy (v0.1 default):
 
 - `event_joins.policy = "dual_key_v1"`:
   - Primary join: `(run_id, raw_ref)` when `raw_ref != null`.
-  - Fallback join (Tier 3 only): `(run_id, metadata.event_id)` when `raw_ref == null`.
+  - Fallback join (IT3 only): `(run_id, metadata.event_id)` when `raw_ref == null`.
 
 raw_ref canonicalization for joins:
 
@@ -348,7 +362,7 @@ Detections join bridge (required when `detections/…` are included):
   - Path: `views/labels/runs/<run_id>/joins/event_id_raw_ref_bridge/`
   - Files:
     - `_schema.json`
-    - Parquet dataset files (v0.1: a single `part-00000.parquet`)
+    - Parquet dataset files (v0.1: a single `part-0000.parquet`)
 - Join bridge schema (v0.1):
   - `run_id` (string, required)
   - `event_id` (string, required; equals `metadata.event_id`)
@@ -357,9 +371,9 @@ Detections join bridge (required when `detections/…` are included):
   - `raw_ref_jcs` (string, nullable; canonical JSON string of `raw_ref_norm`)
 - Derivation:
   - One row per normalized event in the features event store for that run.
-  - For Tier 1 and Tier 2:
+  - For IT1 and IT2:
     - `raw_ref_sha256` and `raw_ref_jcs` MUST be non-null.
-  - For Tier 3:
+  - For IT3:
     - `raw_ref_sha256` and `raw_ref_jcs` MUST be null.
 - Deterministic ordering:
   - Before writing Parquet, rows MUST be sorted by:
@@ -370,8 +384,8 @@ Detections join bridge (required when `detections/…` are included):
   - The join bridge Parquet dataset MUST be written using the deterministic Parquet writer rules in
     `045_storage_formats.md`.
 - Uniqueness (fail closed):
-  - For Tier 1 and Tier 2 events: `(run_id, raw_ref_sha256)` MUST be unique.
-  - For Tier 3 events under `dual_key_v1`: `(run_id, event_id)` MUST be unique.
+  - For IT1 and IT2 events: `(run_id, raw_ref_sha256)` MUST be unique.
+  - For IT3 events under `dual_key_v1`: `(run_id, event_id)` MUST be unique.
 - Consumer join guidance:
   - event_id to raw_ref:
     - Join detections on `(run_id, event_id)` to the bridge, then join features on
@@ -404,10 +418,12 @@ invocation:
 
    - Marker fields MUST be removed from all feature artifacts (both the canonical marker string and
      the derived token).
-   - For Parquet feature stores, marker-blind MUST be implemented by rewriting Parquet datasets and
-     dropping the marker columns (see "Normalized OCSF feature store materialization").
+   - For Parquet feature stores, marker-blind MUST be implemented by rewriting Parquet datasets,
+     dropping the marker columns, and (when a `raw_json` column is present) rewriting `raw_json` so
+     marker fields are stripped before canonical JSON serialization (see "Normalized OCSF feature
+     store materialization").
    - Removing marker fields MUST NOT change `metadata.extensions.purple_axiom.raw_ref` values
-     (raw_ref participates in event joins for Tier 1 and Tier 2 events).
+     (raw_ref participates in event joins For IT1 and IT2 events).
    - Marker fields MUST still be retained in labels/provenance artifacts when present in ground
      truth, so auditors can confirm end-to-end attribution.
 
@@ -548,7 +564,9 @@ A dataset release directory MUST have the following structure:
     - `checksums.txt`
     - `signature.ed25519` (optional)
     - `public_key.ed25519` (optional)
-
+  - `unredacted/` (optional; internal posture only; excluded from checksums/signing)
+    - `runs/<run_id>/...` (quarantined/unredacted byte copies)
+    
 ### Slice rules (normative)
 
 #### Transform policy (normative)
@@ -560,7 +578,8 @@ Mandated transforms (v0.1):
 
 - JSONL -> Parquet transcode for normalized OCSF events when the source run lacks a Parquet dataset.
 - marker-blind Parquet rewrite for normalized OCSF events to drop synthetic correlation marker
-  fields.
+  fields (including rewriting `raw_json` when present so marker fields are removed prior to
+  serialization).
 
 Builders MUST NOT apply any other transformation (including JSON reserialization, Parquet
 recompression, partition reshaping, or file renaming) unless this spec is updated to require it.
@@ -592,7 +611,8 @@ For each included run:
   - pinned pack manifests/snapshots if present in the run bundle,
   - reporting artifacts and other human-readable descriptive context used for auditing (for example,
     `report/…` and scenario metadata snapshots),
-  - but MUST NOT contain quarantined/unredacted artifacts in `public` posture.
+  - but MUST NOT contain quarantined/unredacted byte copies (those MAY appear only under
+    `unredacted/**` when `release_posture="internal"` and operator intent gates permit it).
 
 #### Normalized OCSF feature store materialization (normative)
 
@@ -642,8 +662,10 @@ Schema projection (v0.1 minimum; normative):
 - The output Parquet dataset MUST include at minimum the required columns defined in
   `045_storage_formats.md` for `normalized/ocsf_events/`.
 - The builder MUST include `raw_json` (string) containing the canonical JSON serialization of the
-  full event object (per `025_data_contracts.md` canonical JSON requirements) to preserve payload
-  without requiring full columnization.
+  full event object after applying any feature-variant field stripping required by this spec (in
+  particular: marker-blind stripping of the synthetic correlation marker fields), per
+  `025_data_contracts.md` canonical JSON requirements, to preserve payload without requiring full
+  columnization.
 - Additional columns are OPTIONAL. If present, they MUST use canonical dotted paths, MUST be
   nullable-by-default when newly introduced, and MUST have type stability within the dataset for the
   run.
@@ -669,6 +691,14 @@ run and dropping the marker columns:
 Requirements (normative):
 
 - Marker columns MUST be absent from the output schema (not present with null values).
+- If a `raw_json` (string) column is present in the source dataset, the rewrite MUST also rewrite
+  `raw_json` such that marker fields are removed from the serialized JSON:
+  - Each `raw_json` value MUST parse as a JSON object (fail closed if parsing fails).
+  - The rewrite MUST remove (when present) the following keys from the parsed object:
+    - `metadata.extensions.purple_axiom.synthetic_correlation_marker`
+    - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`
+  - The rewritten `raw_json` value MUST equal the UTF-8 string rendering of
+    `canonical_json_bytes(marker_stripped_object)` (per `025_data_contracts.md`). 
 - The rewrite MUST NOT change `metadata.event_id` values.
 - The rewrite MUST preserve deterministic ordering and deterministic filenames per
   `045_storage_formats.md`.
@@ -679,6 +709,13 @@ Requirements (normative):
 ### Manifest file name
 
 - The dataset release MUST include `dataset_manifest.json` at its root.
+
+Contract binding (normative):
+
+- `dataset_manifest.json` MUST be validated as a contract-backed workspace export artifact with
+  `contract_id = "dataset_manifest"` (schema_version `"pa:dataset_manifest:v1"`).
+- Tooling MUST validate `dataset_manifest.json` using the workspace contract registry in
+  `json_document` mode (fail closed on validation errors).
 
 ### Manifest schema (normative)
 
@@ -828,6 +865,13 @@ Hash basis object:
 
 ### Split configuration (`splits/split_config.json`)
 
+Contract binding (normative):
+
+- `splits/split_config.json` MUST be validated as a contract-backed workspace export artifact with
+  `contract_id = "dataset_splits_config"` (schema_version `"pa:dataset_splits_config:v1"`).
+- Tooling MUST validate `splits/split_config.json` using the workspace contract registry in
+  `json_document` mode (fail closed on validation errors).
+
 The dataset release MUST include a split config that declares:
 
 - `contract_version`: SemVer string (MUST be `0.1.0`)
@@ -884,6 +928,14 @@ For each run:
 
 The dataset build MUST emit:
 
+Contract binding (normative):
+
+- `splits/split_assignments.jsonl` MUST be validated as a contract-backed workspace export artifact
+  with `contract_id = "dataset_split_assignment"` (schema_version
+  `"pa:dataset_split_assignment:v1"`).
+- Tooling MUST validate `splits/split_assignments.jsonl` using the workspace contract registry in
+  `jsonl_lines` mode (fail closed on validation errors).
+
 - `splits/split_assignments.jsonl` with one JSON object per run:
   - `contract_version`: SemVer string (MUST be `0.1.0`)
   - `schema_version`: `"pa:dataset_split_assignment:v1"`
@@ -902,7 +954,7 @@ Hugging Face projection for convenience.
 If a Hugging Face projection is generated, it MUST:
 
 - be derived from `views/features` and (optionally) `views/labels`,
-- never include quarantined/unredacted artifacts,
+- never include any `unredacted/**` subtree content (quarantined/unredacted artifacts),
 - include the dataset release card (`docs/README.md`) with:
   - clear licensing,
   - composition and provenance notes,
@@ -999,7 +1051,7 @@ CI MUST include a fixture dataset build that:
      - join keys exist in features and labels:
        - `run_id`
        - `metadata.event_id`
-       - `metadata.extensions.purple_axiom.raw_ref` present for Tier 1 and Tier 2 events and null
+       - `metadata.extensions.purple_axiom.raw_ref` present For IT1 and IT2 events and null
          for Tier 3,
      - event-level re-attachment works under the declared `event_joins.policy`:
        - Tier 1 and Tier 2 join on `(run_id, raw_ref)`,
@@ -1022,7 +1074,7 @@ CI MUST include a fixture dataset build that:
   1. integrity artifacts:
 
      - `security/checksums.txt` exists and matches the required line format and ordering,
-     - `security/checksums.txt` does not include itself or `security/signature.ed25519`,
+     - `security/checksums.txt` does not include any `unredacted/**` subtree paths,
 
   1. (when staging is enabled) publish-gate hygiene:
 
@@ -1033,7 +1085,7 @@ CI MUST include a fixture dataset build that:
 Dataset build MUST fail closed (non-zero exit) for:
 
 - missing required artifacts for declared tasks (unless explicitly configured to skip),
-- presence of quarantined/unredacted artifacts in `public` posture,
+- presence of any `unredacted/**` subtree content when `release_posture != "internal"`,
 - output collisions or unsafe publish conditions, including:
   - the final output directory already exists under `exports/datasets/`,
   - both feature variants would resolve to the same `<dataset_id>/<dataset_version>/` path,
@@ -1044,7 +1096,8 @@ Dataset build MUST fail closed (non-zero exit) for:
   - selected Parquet source is missing `_schema.json` or has no Parquet part files,
   - JSONL parse failures or missing required fields (`time`, `metadata.event_id`) during transcode,
   - duplicate `metadata.event_id` detected during transcode,
-  - marker-blind rewrite leaves marker columns present or changes any `metadata.event_id`,
+  - marker-blind rewrite leaves marker columns present, leaves marker fields present in `raw_json`
+    (when the `raw_json` column exists), or changes any `metadata.event_id`,
 - non-deterministic outputs detected by self-checks (for example unstable Parquet filenames or
   ordering, or manifest reorder instability),
 - schema validation failures for included contract-backed artifacts,
@@ -1054,14 +1107,16 @@ Dataset build MUST fail closed (non-zero exit) for:
   - `dataset_manifest.json.build.features_variant` and `dataset_manifest.json.dataset_version` are
     inconsistent,
 - event join policy violations:
-  - Tier 1 or Tier 2 events with `metadata.extensions.purple_axiom.raw_ref == null`,
-  - Tier 3 events with `metadata.extensions.purple_axiom.raw_ref != null`,
+  - IT1 or IT2 events with `metadata.extensions.purple_axiom.raw_ref == null`,
+  - IT3 events with `metadata.extensions.purple_axiom.raw_ref != null`,
   - missing required join bridge output when `detections/…` are included,
   - join bridge ordering or uniqueness violations (as specified in "Event join keys and join
     bridge"),
 - artifact handling boundary violations:
   - any `withheld | quarantined | absent` placeholder artifact present under `views/features/**` or
     `views/labels/**`,
+  - any quarantined/unredacted byte copies present outside `unredacted/**` (for example under
+    `views/**`),    
 - provenance-only leakage boundary violations:
   - any provenance-only descriptive artifacts present under `views/features/` or `views/labels/`,
   - any derived label table under `views/labels/` that includes scenario names, descriptions,
@@ -1125,9 +1180,9 @@ We classify each dataset in the golden catalog into one of:
 This catalog is a governance index of approved datasets. Catalog entries are intended to reference
 one or more dataset releases (export artifacts) that implement the approved dataset.
 
-### Evidence required to mark a dataset “Golden”
+### Evidence required to mark a dataset "Golden"
 
-A dataset is not “golden” until the following evidence artifacts exist and are linked from the
+A dataset is not "golden" until the following evidence artifacts exist and are linked from the
 catalog entry:
 
 1. **Golden card record** (governance artifact)
@@ -1167,7 +1222,7 @@ catalog entry:
 
 1. **Sensitivity classification**
 
-   - Run PII scan + document results (especially for “naturally occurring” query datasets).
+   - Run PII scan + document results (especially for "naturally occurring" query datasets).
    - Tag content-risk categories relevant to distribution policy.
 
 1. **Deterministic build**
@@ -1187,7 +1242,7 @@ catalog entry:
   (`golden_dataset_card`, `golden_dataset_approvals`, `golden_dataset_catalog`) (schema validation +
   cross-artifact invariants).
 - [ ] Implement/standardize **gating controls** (ACL groups, acknowledgement/click-through, audit
-  logging) for “Gated” datasets.
+  logging) for "Gated" datasets.
 
 ### Future extensions (non-normative)
 

@@ -774,7 +774,8 @@ Normative requirements:
   selectors (exact `artifact_paths[]`, `artifact_globs[]`, and/or normalized `metadata.source_type`
   for OCSF).
 - For artifacts that are contract-backed (including contract-backed artifacts under
-  `runs/<run_id>/logs/**`), redaction MUST preserve schema validity:
+  `runs/<run_id>/logs/`; log classification is file-level per ADR-0009), redaction MUST preserve
+  schema validity:
   - Redaction MUST NOT change JSON structure (keys, arrays, and non-string types) for schema-backed
     JSON artifacts.
   - If post-redaction contract validation fails, export/share tooling MUST fail closed for that

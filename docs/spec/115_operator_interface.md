@@ -83,11 +83,10 @@ This spec explicitly does NOT define:
   \+ durable UI control-plane state), `logs/` (appliance logs), `plans/` (draft plans), and
   `exports/` (derived export outputs).
 - **Quarantine path**: The run-bundle subpath excluded from default disclosure. The quarantine
-  directory is `runs/<run_id>/<security.redaction.unredacted_dir>`, where
-  `security.redaction.unredacted_dir` MUST be a **run-relative** directory name (no leading `/` or
-  `\\`, no `..` segments, and no URL-encoded equivalents). Implementations MUST normalize the value
-  by trimming leading/trailing separators and then treating it as `<dir>/` for containment checks.
-  Default: `runs/<run_id>/unredacted/`.
+  directory is `runs/<run_id>/<security.redaction.unredacted_dir>` (default:
+  `runs/<run_id>/unredacted/`). Validation and canonicalization rules for
+  `security.redaction.unredacted_dir` are defined in `120_config_reference.md`; implementations MUST
+  apply the canonicalization rules before containment checks.
 - **Control artifacts**: Durable, run-local files under `runs/<run_id>/control/` used for
   operator-driven run control (cancel/resume/retry) without introducing a database for pipeline
   correctness.
@@ -678,7 +677,7 @@ The global UI audit log MUST be written under the workspace root at:
 
 - `logs/ui_audit.jsonl`
 
-This is distinct from run-local logs at `runs/<run_id>/logs/**`.
+This is distinct from run-local logs at `runs/<run_id>/logs/`.
 
 ### Minimum required audit event set (v0.2)
 

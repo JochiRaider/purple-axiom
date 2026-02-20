@@ -72,7 +72,7 @@ deterministically via stable join keys.
 - **Tier terminology (dataset-doc-local; normative)**:
   - In this document, unqualified `"Tier N"` terminology is invalid and MUST NOT be used.
   - Identity tiers MUST be referenced as `IT1`, `IT2`, `IT3`.
-  - OCSF field tiers MUST be referenced as `FT0`, `FT1`, `FT2`, `FT3`, `FT-R`.    
+  - OCSF field tiers MUST be referenced as `FT0`, `FT1`, `FT2`, `FT3`, `FT-R`.
 - **raw_ref**: canonical raw-origin pointer for an event, stored at
   `metadata.extensions.purple_axiom.raw_ref`.
   - Structured object (not a single string); see "Event join keys and join bridge (normative)".
@@ -176,7 +176,7 @@ A dataset release MUST include the following identifiers:
   - When included, quarantined/unredacted bytes MUST be written under the dedicated dataset-release
     subtree `unredacted/runs/<run_id>/...` and MUST NOT appear under any `views/**` subtree.
   - The `unredacted/**` subtree MUST be excluded from `security/checksums.txt` (and therefore from
-    `security/signature.ed25519` when signing is enabled).    
+    `security/signature.ed25519` when signing is enabled).
   - Internal releases MUST include a prominent "NOT FOR TRAINING WITHOUT GOVERNANCE REVIEW" notice
     in the dataset release card (`docs/README.md`).
 
@@ -238,8 +238,8 @@ A dataset release MUST support the following views:
    - MUST retain join keys needed to re-attach labels:
      - `run_id`,
      - `metadata.event_id` (required for determinism and detection joins),
-     - `metadata.extensions.purple_axiom.raw_ref` (required For IT1 and IT2 events; MUST be
-       null for Tier 3 events).
+     - `metadata.extensions.purple_axiom.raw_ref` (required For IT1 and IT2 events; MUST be null for
+       Tier 3 events).
 
 1. **labels view**
 
@@ -317,9 +317,9 @@ Rules:
 - A consumer MUST be able to re-attach labels deterministically using:
   - `run_id` joins for run-level labels (v0.1 technique labels), and
   - event-level joins under the dataset release event join policy (v0.1 default: `dual_key_v1`):
-    - Primary: `(run_id, metadata.extensions.purple_axiom.raw_ref)` when `raw_ref != null` (IT1
-      and IT2 events).
-    - Fallback (IT3 only): `(run_id, metadata.event_id)` when `raw_ref == null
+    - Primary: `(run_id, metadata.extensions.purple_axiom.raw_ref)` when `raw_ref != null` (IT1 and
+      IT2 events).
+    - Fallback (IT3 only): `(run_id, metadata.event_id)` when \`raw_ref == null
 - Any label-bearing artifact included under `views/labels/` MUST either:
   - carry the required join keys as fields (`run_id` and either `raw_ref` or `metadata.event_id`
     depending on scope), or
@@ -566,7 +566,7 @@ A dataset release directory MUST have the following structure:
     - `public_key.ed25519` (optional)
   - `unredacted/` (optional; internal posture only; excluded from checksums/signing)
     - `runs/<run_id>/...` (quarantined/unredacted byte copies)
-    
+
 ### Slice rules (normative)
 
 #### Transform policy (normative)
@@ -698,7 +698,7 @@ Requirements (normative):
     - `metadata.extensions.purple_axiom.synthetic_correlation_marker`
     - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`
   - The rewritten `raw_json` value MUST equal the UTF-8 string rendering of
-    `canonical_json_bytes(marker_stripped_object)` (per `025_data_contracts.md`). 
+    `canonical_json_bytes(marker_stripped_object)` (per `025_data_contracts.md`).
 - The rewrite MUST NOT change `metadata.event_id` values.
 - The rewrite MUST preserve deterministic ordering and deterministic filenames per
   `045_storage_formats.md`.
@@ -933,10 +933,12 @@ Contract binding (normative):
 - `splits/split_assignments.jsonl` MUST be validated as a contract-backed workspace export artifact
   with `contract_id = "dataset_split_assignment"` (schema_version
   `"pa:dataset_split_assignment:v1"`).
+
 - Tooling MUST validate `splits/split_assignments.jsonl` using the workspace contract registry in
   `jsonl_lines` mode (fail closed on validation errors).
 
 - `splits/split_assignments.jsonl` with one JSON object per run:
+
   - `contract_version`: SemVer string (MUST be `0.1.0`)
   - `schema_version`: `"pa:dataset_split_assignment:v1"`
   - `run_id`
@@ -1051,8 +1053,8 @@ CI MUST include a fixture dataset build that:
      - join keys exist in features and labels:
        - `run_id`
        - `metadata.event_id`
-       - `metadata.extensions.purple_axiom.raw_ref` present For IT1 and IT2 events and null
-         for Tier 3,
+       - `metadata.extensions.purple_axiom.raw_ref` present For IT1 and IT2 events and null for Tier
+         3,
      - event-level re-attachment works under the declared `event_joins.policy`:
        - Tier 1 and Tier 2 join on `(run_id, raw_ref)`,
        - Tier 3 behavior matches the policy (v0.1 default: fallback join on
@@ -1116,7 +1118,7 @@ Dataset build MUST fail closed (non-zero exit) for:
   - any `withheld | quarantined | absent` placeholder artifact present under `views/features/**` or
     `views/labels/**`,
   - any quarantined/unredacted byte copies present outside `unredacted/**` (for example under
-    `views/**`),    
+    `views/**`),
 - provenance-only leakage boundary violations:
   - any provenance-only descriptive artifacts present under `views/features/` or `views/labels/`,
   - any derived label table under `views/labels/` that includes scenario names, descriptions,

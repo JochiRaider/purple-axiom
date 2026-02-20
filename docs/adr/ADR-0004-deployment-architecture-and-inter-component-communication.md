@@ -73,8 +73,8 @@ Non-goal (v0.1): a required long-running daemon or scheduler control plane.
 - `inputs/**` (when present) contains run-scoped operator inputs and baseline references (when
   regression is enabled). All stages MUST treat `inputs/**` as read-only.
 - When environment configuration is enabled, the runner MUST record the configuration boundary as
-  additive substage `runner.environment_config` and MUST emit deterministic operability evidence
-  under `runs/<run_id>/logs/**`.
+  additive substage `runner.environment_config` and MUST emit structured operability evidence under
+  `runs/<run_id>/logs/` (log classification is file-level per ADR-0009).
 
 #### Optional packaging (Docker Compose)
 
@@ -245,7 +245,7 @@ Orchestrator (one-shot, run host)
   |
   |-- [lab_provider] resolve inventory snapshot -> publish inventory artifact -> record stage outcome
   |
-  |-- [runner.environment_config] (optional) preflight/readiness gate: validate resources + config invariants + required collectors/log sources -> logs/** -> record substage outcome
+  |-- [runner.environment_config] (optional) preflight/readiness gate: validate resources + config invariants + required collectors/log sources -> logs/ (classified per ADR-0009) -> record substage outcome
   |
   |-- [runner] execute scenario actions -> write ground_truth.jsonl + runner/actions/<action_id>/** -> record stage outcome
   |

@@ -37,7 +37,7 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Contract registry](#contract-registry)
     - [Authoritative contract registry index (normative)](#authoritative-contract-registry-index-normative)
       - [Minimal registry shape (normative)](#minimal-registry-shape-normative)
-      - [Glob semantics (glob\_v1) (normative)](#glob-semantics-glob_v1-normative)
+      - [Glob semantics (glob_v1) (normative)](#glob-semantics-glob_v1-normative)
       - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
       - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
       - [Contract version constant (normative)](#contract-version-constant-normative)
@@ -59,6 +59,7 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Validation engine and publish gates](#validation-engine-and-publish-gates)
     - [Definitions](#definitions)
     - [JSON Schema dialect (normative)](#json-schema-dialect-normative)
+    - [Universal placeholder field support (v0.1) (normative)](#universal-placeholder-field-support-v01-normative)
     - [Reference resolution (local-only, normative)](#reference-resolution-local-only-normative)
     - [Deterministic error ordering and error caps (normative)](#deterministic-error-ordering-and-error-caps-normative)
     - [Contract validation report artifact (normative)](#contract-validation-report-artifact-normative)
@@ -88,7 +89,7 @@ invariants that cannot be expressed in JSON Schema alone.
       - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
     - [Measurement layers for conclusions (triage taxonomy)](#measurement-layers-for-conclusions-triage-taxonomy)
     - [Run manifest](#run-manifest)
-    - [Run results summary (run\_results.json)](#run-results-summary-run_resultsjson)
+    - [Run results summary (run_results.json)](#run-results-summary-run_resultsjson)
     - [Ground truth timeline](#ground-truth-timeline)
     - [Stable action identity](#stable-action-identity)
     - [Inputs and reproducible hashing](#inputs-and-reproducible-hashing)
@@ -802,6 +803,26 @@ verification.
 - If a contract schema declares a `$schema` value that is not Draft 2020-12, the implementation MUST
   treat this as a configuration error and MUST fail closed for any stage that requires the affected
   contract.
+
+### Universal placeholder field support (v0.1) (normative)
+
+To preserve stable paths and contract validation when evidence is withheld, quarantined, or absent
+(per `090_security_safety.md`), contract-backed JSON artifacts MUST support a universal placeholder
+field.
+
+Normative requirements:
+
+- For every contract with `validation_mode="json_document"` (contract-backed JSON artifacts), the
+  schema MUST allow an optional top-level `placeholder` object with the shape `pa.placeholder.v1`
+  defined in `090_security_safety.md` ("Placeholder artifacts").
+  - This requirement applies even when a schema otherwise disallows unknown properties (for example
+    `additionalProperties: false`).
+- Producers MUST emit a schema-valid placeholder instance at the **standard artifact path** whenever
+  the artifact content is handled as `withheld`, `quarantined`, or `absent`, as defined by
+  `090_security_safety.md`.
+- Contract validation tooling MUST treat placeholder instances as ordinary schema instances: the
+  placeholder field does not waive any other schema constraint unless the contract explicitly says
+  so.
 
 ### Reference resolution (local-only, normative)
 

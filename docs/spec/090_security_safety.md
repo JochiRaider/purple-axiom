@@ -70,6 +70,18 @@ Scenario safety interaction (normative):
 - evidence-tier artifact: Tier 1 evidence artifacts governed by redaction/withhold/quarantine rules
   (see [Storage formats](045_storage_formats.md)).
 
+### Path notation (normative)
+
+This document uses two equivalent notations for run-bundle paths:
+
+- Run-bundle rooted: `runs/<run_id>/<path>`
+- Run-relative: `<path>`
+
+Translation rule (normative): when this document shows `runs/<run_id>/X`, the corresponding
+run-relative path is `X`. Contract schemas, `artifact_path` fields, and
+`evidence_refs[].artifact_path` values MUST use the run-relative form unless a field explicitly
+states otherwise.
+
 ## Core principles
 
 - Local-first, isolated lab by default.
@@ -184,8 +196,9 @@ MUST be explicitly enabled and logged, and rule content MUST be pinned and hashe
   - Server components (when required) MUST run as internal-only supporting services (see
     `020_architecture.md`) and MUST NOT be reachable from outside lab network ranges.
   - The allowlist MUST be explicit and reviewable. Allowed endpoints MUST be recorded in
-    deterministic run evidence (for example as part of `runner.environment_config` evidence under
-    `runs/<run_id>/logs/**`).
+    deterministic run evidence (for example, as part of `runner.environment_config` evidence in a
+    contract-backed run artifact, or in a deterministic evidence log under `logs/` as classified by
+    ADR-0009).
   - "Internal endpoints" MUST remain within the lab boundary (for example within lab provider
     inventory networks and/or CIDRs declared in `lab.networks.cidrs`).
   - Any attempted connection by a noise engine to a non-internal or non-allowlisted endpoint MUST be
@@ -348,12 +361,12 @@ Redaction application MUST be controlled by config `security.redaction.enabled`.
 
 Config key map (normative):
 
-| Key                                                    | Type    | Default                   | Meaning                                                                                                            |
-| ------------------------------------------------------ | ------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `security.redaction.enabled`                           | boolean | `true`                    | Global gate for applying redaction + redacted-safe promotion into standard long-term locations.                    |
-| `security.redaction.disabled_behavior`                 | enum    | `withhold_from_long_term` | Determines handling when `security.redaction.enabled=false`: `withhold_from_long_term` or `quarantine_unredacted`. |
-| `security.redaction.allow_unredacted_evidence_storage` | boolean | `false`                   | Explicit permission gate required to persist any unredacted evidence in the quarantine directory.                  |
-| `security.redaction.unredacted_dir`                    | string  | `unredacted/`             | Quarantine directory relative to the run bundle root; MUST be excluded from default packaging/export.              |
+| Key                                                    | Type    | Default                   | Meaning                                                                                                                                                            |
+| ------------------------------------------------------ | ------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `security.redaction.enabled`                           | boolean | `true`                    | Global gate for applying redaction + redacted-safe promotion into standard long-term locations.                                                                    |
+| `security.redaction.disabled_behavior`                 | enum    | `withhold_from_long_term` | Determines handling when `security.redaction.enabled=false`: `withhold_from_long_term` or `quarantine_unredacted`.                                                 |
+| `security.redaction.allow_unredacted_evidence_storage` | boolean | `false`                   | Explicit permission gate required to persist any unredacted evidence in the quarantine directory.                                                                  |
+| `security.redaction.unredacted_dir`                    | string  | `unredacted/`             | Quarantine directory relative to the run bundle root (validation + canonicalization in `120_config_reference.md`); MUST be excluded from default packaging/export. |
 
 ### Disabled posture semantics
 
@@ -374,8 +387,8 @@ The pipeline MUST apply one of the following deterministic behaviors, controlled
     `security.redaction.allow_unredacted_evidence_storage: true`.
   - The pipeline MUST write deterministic placeholders in standard artifact locations.
   - Unredacted evidence MUST be written only under the quarantine directory
-    `runs/<run_id>/<security.redaction.unredacted_dir>` (default: `runs/<run_id>/unredacted/`),
-    which MUST be excluded from default packaging/export.
+    `<security.redaction.unredacted_dir>` (default: `unredacted/`), which MUST be excluded from
+    default packaging/export.
 
 Redaction handling MUST be logged and surfaced in reports, including the affected artifact relative
 path and handling (`withheld` or `quarantined`).
@@ -391,7 +404,9 @@ Schema-aware placeholder pattern (normative):
 - For contract-backed JSON artifacts (`*.json`):
 
   - The placeholder MUST be valid JSON and MUST validate against the artifact schema.
-  - Schemas MUST allow an optional top-level `placeholder` object with the shape defined below.
+  - Contract-backed JSON artifact schemas (`validation_mode="json_document"`) MUST allow an optional
+    top-level `placeholder` object with the shape defined below (universal v0.1 rule; see
+    `025_data_contracts.md` and `026_contract_spine.md`).
   - When `placeholder` is present, the artifact MUST NOT include unredacted sensitive content
     elsewhere in the object; any required non-placeholder fields MUST use safe sentinel values only.
     - For schema-required timestamp fields (for example `generated_at_utc`), implementations MUST
@@ -463,8 +478,11 @@ Determinism requirements (normative):
 Quarantine mapping (normative):
 
 - When `handling=quarantined`, the unredacted bytes MUST be written under
-  `runs/<run_id>/<security.redaction.unredacted_dir>/` preserving the standard relative path (for
-  example, `unredacted/runner/actions/<action_id>/requirements_evaluation.json`).
+  `runs/<run_id>/<security.redaction.unredacted_dir>/` preserving the standard run-relative path
+  beneath that directory.
+  - Example: if `security.redaction.unredacted_dir=unredacted/`, the quarantined copy of
+    `runner/actions/<action_id>/requirements_evaluation.json` is written at
+    `runs/<run_id>/unredacted/runner/actions/<action_id>/requirements_evaluation.json`.
 - When `handling=withheld` or `handling=absent`, unredacted bytes MUST NOT be written under
   `security.redaction.unredacted_dir` for that artifact.
 
@@ -680,7 +698,8 @@ Normative requirements:
 
 ## Changelog
 
-| Date       | Change                                                                                                                |
-| ---------- | --------------------------------------------------------------------------------------------------------------------- |
-| 2026-01-24 | Clarify that `logs/` contains both deterministic evidence (exported/checksummed) and volatile diagnostics (excluded). |
-| 2026-01-12 | Formatting update                                                                                                     |
+| Date       | Change                                                                                                                                    |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-19 | Tighten `logs/` wording, add explicit path-notation translation, and centralize `security.redaction.unredacted_dir` validation reference. |
+| 2026-01-24 | Clarify that `logs/` contains both deterministic evidence (exported/checksummed) and volatile diagnostics (excluded).                     |
+| 2026-01-12 | Formatting update                                                                                                                         |

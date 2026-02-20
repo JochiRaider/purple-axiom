@@ -229,7 +229,8 @@ Common keys:
   Notes:
 
   - When `environment_config.mode != off`, the orchestrator records the substage outcome as
-    `runner.environment_config` and emits deterministic evidence under `runs/<run_id>/logs/**` (see
+    `runner.environment_config` and emits structured operability evidence under
+    `runs/<run_id>/logs/` (log classification is file-level per ADR-0009; see
     [architecture](020_architecture.md)).
 
   - Environment configuration is the recommended v0.1 integration point for generating benign
@@ -617,7 +618,7 @@ Notes:
 - Collector self-telemetry MUST be exported upstream (for example Prometheus self-scrape plus OTLP
   export) to support resource budgets and agent liveness (dead-on-arrival detection).
 - For v0.1, the config SHOULD also set `suppress_rendering_info: true` and a persistent `storage`
-  extension for bookmarks (see the [telemetry pipeline specification](040_telemetry_pipeline.md)).  
+  extension for bookmarks (see the [telemetry pipeline specification](040_telemetry_pipeline.md)).
 - OTel Collector configuration shape is owned by upstream OTel. Purple Axiom only references the
   path and hashes it.
 - `telemetry.otel.checkpoint_corruption` does not generate collector configuration. It is a policy
@@ -1090,13 +1091,29 @@ Common keys:
   - `disabled_behavior` (optional, default: `withhold_from_long_term`):
     `withhold_from_long_term | quarantine_unredacted`
     - `withhold_from_long_term`: write deterministic placeholders in standard artifact locations
-    - `quarantine_unredacted`: write unredacted evidence to `runs/<run_id>/unredacted/`.
-    - `runs/<run_id>/unredacted/` MUST be excluded from default exports/packaging.
+    - `quarantine_unredacted`: write unredacted evidence to the quarantine directory
+      `runs/<run_id>/<security.redaction.unredacted_dir>` (default: `runs/<run_id>/unredacted/`).
+    - The quarantine directory MUST be excluded from default exports/packaging.
   - `allow_unredacted_evidence_storage` (optional, default: false)
     - When `true` and `disabled_behavior: quarantine_unredacted`, the pipeline MAY persist
       unredacted evidence to the quarantine path.
   - `unredacted_dir` (optional, default: `unredacted/`): relative directory under the run bundle
     root for quarantined evidence
+    - Validation (normative):
+      - The value MUST be a run-relative POSIX directory path.
+      - The value MUST NOT start with `/` and MUST NOT contain `\\`.
+      - The value MUST NOT contain any `.` or `..` path segment.
+      - The value MUST NOT contain empty segments (`//`) and MUST NOT contain a NUL byte.
+      - To defend against traversal in downstream URL/path handling, implementations MUST also apply
+        the above constraints to the value after a single RFC 3986 percent-decode pass; if percent
+        decoding fails, the value MUST be rejected.
+    - Canonicalization (normative):
+      - For containment checks and prefix comparisons, implementations MUST canonicalize the value
+        by:
+        1. trimming all leading and trailing `/` characters, then
+        1. appending exactly one trailing `/`.
+      - Canonicalization MUST NOT perform Unicode normalization and MUST treat the value as raw
+        UTF-8 bytes for determinism.
 - `secrets`
   - `provider` (optional): `env | file | keychain | custom` (default: `env`)
   - `refs` (optional): map of named secret refs

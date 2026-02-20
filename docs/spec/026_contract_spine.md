@@ -282,6 +282,30 @@ Each schema MUST include a `contract_version` constant (SemVer string, expressed
 `contracts[].contract_version` for the same `contract_id`, validation tooling MUST fail closed
 (misconfiguration).
 
+### Universal placeholder support for contract-backed JSON artifacts (v0.1)
+
+Contract-backed artifacts are required to maintain stable paths even when evidence is withheld,
+quarantined, or absent due to the effective redaction/safety posture.
+
+Normative requirements:
+
+- For every contract with `validation_mode="json_document"` (contract-backed JSON artifacts), the
+  schema MUST allow an optional top-level `placeholder` object with the shape `pa.placeholder.v1` as
+  defined in `090_security_safety.md` ("Placeholder artifacts").
+- Presence of `placeholder` MUST NOT make an otherwise-invalid artifact instance "schema-valid".
+  Unless an artifact contract explicitly states otherwise, all other invariants and constraints
+  continue to apply.
+  - If an artifact contract has schema-required non-placeholder fields, placeholder instances MUST
+    satisfy those requirements using redacted-safe sentinel values as defined in
+    `090_security_safety.md`.
+- Contract authors SHOULD factor the `pa.placeholder.v1` definition into shared `$defs` to avoid
+  drift, but schema factoring choices are implementation-defined.
+
+Verification hook (normative):
+
+- Content CI MUST include a lint rule that fails if any `validation_mode="json_document"` schema is
+  missing the `placeholder` property.
+
 ## Interfaces
 
 This section defines the Contract Spine interfaces. Names are normative; language bindings MAY vary

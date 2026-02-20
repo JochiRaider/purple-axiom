@@ -71,8 +71,7 @@ Notes:
 - Stage outcome reason codes:
   - reporting stage: see [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)
     "Reporting stage (`reporting`)"
-  - regression substage: see ADR-0005 "Regression compare substage
-    (`reporting.regression_compare`)"
+  - regression substage: see ADR-0005 "Regression compare substage (`reporting.regression_compare`)"
 
 ### Isolation test fixture(s)
 

@@ -195,7 +195,7 @@ Verb definitions (v0.1):
   - Input immutability (normative): `replay` MUST treat `ground_truth.jsonl`, `raw_parquet/**` (when
     present), and `normalized/**` (when present) as read-only.
   - MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or
-    `raw_parquet/**` except for operability logs under `logs/**`.
+    `raw_parquet/**` except for operability logs under `logs/` (classified per ADR-0009).
   - When regression comparison is enabled, `replay` MUST treat any pre-existing artifacts under
     `inputs/**` as read-only and MUST NOT rewrite them. See "Run bundle (coordination plane)" for
     baseline reference materialization semantics.
@@ -238,9 +238,9 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
   and which versions/config hashes were used.
 - When environment configuration is enabled, the orchestrator MUST record the configuration boundary
   as additive substage `runner.environment_config` in the stage outcome surface (`manifest.json`,
-  and `logs/health.json` when enabled) and MUST ensure deterministic operability evidence is emitted
-  under `runs/<run_id>/logs/**` (schema and filenames are implementation-defined here; see the
-  [operability specification][operability-spec]).
+  and `logs/health.json` when enabled) and MUST ensure structured operability evidence is emitted
+  under `runs/<run_id>/logs/` (log classification is file-level per ADR-0009; schema and filenames
+  are implementation-defined here; see the [operability specification][operability-spec]).
 
 Regression comparison (when enabled) reads baseline reference artifacts under
 `runs/<run_id>/inputs/` and emits deltas under `runs/<run_id>/report/**`.
@@ -1348,9 +1348,10 @@ Environment configuration boundary (normative, v0.1):
   readiness canaries).
 - When such configuration is performed, the orchestrator MUST record an additive substage outcome
   `runner.environment_config` in `manifest.json` and, when
-  `operability.health.emit_health_files=true`, in `logs/health.json`. It MUST also emit
-  deterministic operability evidence under `runs/<run_id>/logs/**` (schema and filenames are
-  implementation-defined here; see the [operability specification][operability-spec]).
+  `operability.health.emit_health_files=true`, in `logs/health.json`. It MUST also emit structured
+  operability evidence under `runs/<run_id>/logs/` (log classification is file-level per ADR-0009;
+  schema and filenames are implementation-defined here; see the
+  [operability specification][operability-spec]).
 - Environment configuration is distinct from per-action requirements evaluation in `prepare`. It
   MUST NOT change the semantics of per-action lifecycle outcomes.
 

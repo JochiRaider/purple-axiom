@@ -85,8 +85,8 @@ Notes:
 
 - Default `fail_mode`: `fail_closed`
 - Stage outcome reason codes: see
-  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) "Runner stage
-  (`runner`)" (and substage `runner.environment_config`).
+  [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md) "Runner stage (`runner`)"
+  (and substage `runner.environment_config`).
 
 ### Isolation test fixture(s)
 

@@ -351,13 +351,18 @@ Deterministic expansion ordering (normative):
 #### Validation mode metadata (normative)
 
 - Each `bindings[]` entry MUST include `validation_mode`.
+
 - `validation_mode` defines how the bytes at `artifact_glob` are interpreted for contract
   validation.
+
 - Implementations MUST treat `validation_mode` as the only authoritative switch for validation
   behavior.
+
   - Implementations MUST NOT select validation behavior based on file extension (for example
     `.json`, `.jsonl`, `.yaml`) or based on `contracts[].format`.
+
 - Supported modes (v0.1):
+
   - `json_document`: parse as a UTF-8 JSON document and validate the full document against its
     schema.
   - `jsonl_lines`: parse as UTF-8 JSON Lines and validate each line (each JSON object) against its
@@ -366,16 +371,23 @@ Deterministic expansion ordering (normative):
     its schema.
     - YAML documents MUST be decoded into a JSON-compatible in-memory representation (object/array
       and scalar types) prior to JSON Schema validation.
+
 - Supported modes (v0.2.0+; contracts_version >= 0.2.0):
-  - `parquet_dataset_v1`: Validate a Parquet dataset directory anchored by a required `_schema.json` snapshot.
-    - The binding's `artifact_glob` MUST point to the dataset’s `_schema.json` file (for example `normalized/ocsf_events/_schema.json`).
-    - The dataset directory is the parent directory of `_schema.json` (for example `normalized/ocsf_events/`).
+
+  - `parquet_dataset_v1`: Validate a Parquet dataset directory anchored by a required `_schema.json`
+    snapshot.
+    - The binding's `artifact_glob` MUST point to the dataset’s `_schema.json` file (for example
+      `normalized/ocsf_events/_schema.json`).
+    - The dataset directory is the parent directory of `_schema.json` (for example
+      `normalized/ocsf_events/`).
     - Validation MUST include:
       - `_schema.json` validates against the `parquet_schema_snapshot` contract (JSON document).
       - Dataset directory exists and contains ≥1 `*.parquet` part file.
       - All part files share a single physical schema.
-      - Physical schema matches `_schema.json.columns[]` (`name`, `physical_type`, `logical_type`, `nullable`).
-      - Required normalized OCSF minimum columns (as defined in `045_storage_formats.md` and `050_normalization_ocsf.md`) are present and type-stable.
+      - Physical schema matches `_schema.json.columns[]` (`name`, `physical_type`, `logical_type`,
+        `nullable`).
+      - Required normalized OCSF minimum columns (as defined in `045_storage_formats.md` and
+        `050_normalization_ocsf.md`) are present and type-stable.
 
 - If the registry references a `validation_mode` value that the implementation does not support,
   contract validation MUST fail closed with a configuration error.
@@ -1092,12 +1104,14 @@ Publish-gate integration. For each binding-derived expected output, the stage wr
 with `required=true` MUST be treated as validation failures (no promotion). Missing outputs with
 `required=false` MUST NOT be treated as failures and MUST NOT be contract-validated.
 
-
 Version selection (normative):
 
-- For runs where `manifest.versions.contracts_version` is `0.1.x`, implementations MUST use `stage_enablement_matrix_v1`.
-- For runs where `manifest.versions.contracts_version >= 0.2.0`, implementations MUST use `stage_enablement_matrix_v2`.
-- `stage_enablement_matrix_v2` is identical to v1 unless explicitly noted; v2 updates normalization required outputs to reflect Parquet-only normalized events.
+- For runs where `manifest.versions.contracts_version` is `0.1.x`, implementations MUST use
+  `stage_enablement_matrix_v1`.
+- For runs where `manifest.versions.contracts_version >= 0.2.0`, implementations MUST use
+  `stage_enablement_matrix_v2`.
+- `stage_enablement_matrix_v2` is identical to v1 unless explicitly noted; v2 updates normalization
+  required outputs to reflect Parquet-only normalized events.
 
 ```yaml
 # stage_enablement_matrix_v1 (normative)
@@ -1625,7 +1639,8 @@ single logical artifact with deterministic selection rules.
       dataset representation).
     - Else, if `normalized/ocsf_events.jsonl` exists, it MUST be treated as the OCSF event store
       (JSONL representation).
-    - If both exist, the reader MUST fail closed with `error_code="artifact_representation_conflict"`.
+    - If both exist, the reader MUST fail closed with
+      `error_code="artifact_representation_conflict"`.
 
 ### `manifest.versions` interpretation and comparability hooks
 

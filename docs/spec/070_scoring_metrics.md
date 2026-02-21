@@ -42,18 +42,19 @@ This section is the stage-local view of:
 
 #### Required inputs
 
-| contract_id           | Where found                        | Required?                                        |
-| --------------------- | ---------------------------------- | ------------------------------------------------ |
-| `range_config`        | `inputs/range.yaml`                | required                                         |
-| `ground_truth`        | `ground_truth.jsonl`               | required                                         |
-| `criteria_result`     | `criteria/results.jsonl`           | required (when `validation.enabled=true`)        |
-| `detection_instance`  | `detections/detections.jsonl`      | required (when `detection.sigma.enabled=true`)   |
-| `mapping_coverage`    | `normalized/mapping_coverage.json` | required                                         |
+| contract_id               | Where found                           | Required?                                                                                                 |
+| ------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `range_config`            | `inputs/range.yaml`                   | required                                                                                                  |
+| `ground_truth`            | `ground_truth.jsonl`                  | required                                                                                                  |
+| `criteria_result`         | `criteria/results.jsonl`              | required (when `validation.enabled=true`)                                                                 |
+| `detection_instance`      | `detections/detections.jsonl`         | required (when `detection.sigma.enabled=true`)                                                            |
+| `mapping_coverage`        | `normalized/mapping_coverage.json`    | required                                                                                                  |
 | `parquet_schema_snapshot` | `normalized/ocsf_events/_schema.json` | required (Tier 1 coverage + latency attribution; consumes Parquet dataset at `normalized/ocsf_events/**`) |
 
 Notes:
 
-- For `manifest.versions.contracts_version >= 0.2.0`, JSONL (`normalized/ocsf_events.jsonl`) MUST NOT be required/used; it is legacy v0.1.x only.
+- For `manifest.versions.contracts_version >= 0.2.0`, JSONL (`normalized/ocsf_events.jsonl`) MUST
+  NOT be required/used; it is legacy v0.1.x only.
 
 - Scoring consumes additional stage outputs (for example `bridge/`,
   `normalized/mapping_profile_snapshot.json`) but those are not required for the minimal contracted

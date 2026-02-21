@@ -158,7 +158,8 @@ Verb definitions (v0.1):
 - `simulate`
 
   - Stages executed: the canonical v0.1 pipeline stage order, filtered to the stages enabled for
-    this run by `025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`) (see
+    this run by `025_data_contracts.md`'s `stage_enablement_matrix_v1` or
+    `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`) (see
     [Stage execution order](#stage-execution-order) and
     [ADR-0004: Deployment architecture and inter-component communication][adr-0004]).
   - Intent: perform a complete run and produce a complete run bundle.
@@ -174,7 +175,8 @@ Verb definitions (v0.1):
     → `reporting` (and optional `signing`).
   - Verb selection and config gates further restrict this subset:
     - Verbs select a deterministic subset of stages.
-    - Per-run stage enablement is defined by `025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`).
+    - Per-run stage enablement is defined by `025_data_contracts.md`'s `stage_enablement_matrix_v1`
+      or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`).
     - Stages that are disabled for a run MUST be absent from the outcome surface (not recorded as
       `skipped`) per ADR-0005.
   - Preconditions: the candidate run bundle MUST already contain `ground_truth.jsonl` and either:
@@ -600,7 +602,8 @@ Preamble (normative, per
 
 The orchestrator MUST execute the enabled pipeline stages in the canonical relative order below for
 v0.1. "Enabled" is determined by the verb semantics and then further filtered by
-`025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`).
+`025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by
+`manifest.versions.contracts_version`).
 
 Canonical relative order (v0.1):
 
@@ -1363,6 +1366,9 @@ defines the minimum IO contract for v0.1.
 | `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                      | `scoring/summary.json`                                                                                                                                                                                                                     |
 | `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `inputs/**` (when regression enabled)       | `report/report.json`, `report/thresholds.json`, `report/run_timeline.md`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
 | `signing`       | Finalized `manifest.json`, selected artifacts                                                              | `security/**` (checksums, signature, public key)                                                                                                                                                                                           |
+
+**Note (normative):** "Raw preservation is enabled" means `telemetry.raw_preservation.enabled=true`
+(see `120_config_reference.md`).
 
 **Note**: This table defines the **minimum** contract. Implementations MAY produce additional
 artifacts, but MUST produce at least these outputs for the stage to be considered successful.

@@ -43,12 +43,12 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id                | path/glob                                  | Required? |
-| -------------------------- | ------------------------------------------ | --------- |
-| `parquet_schema_snapshot`  | `normalized/ocsf_events/_schema.json`      | required (v0.2+) |
+| contract_id                | path/glob                                  | Required?                     |
+| -------------------------- | ------------------------------------------ | ----------------------------- |
+| `parquet_schema_snapshot`  | `normalized/ocsf_events/_schema.json`      | required (v0.2+)              |
 | `ocsf_event_envelope`      | `normalized/ocsf_events.jsonl`             | required (v0.1.x legacy only) |
-| `mapping_coverage`         | `normalized/mapping_coverage.json`         | required  |
-| `mapping_profile_snapshot` | `normalized/mapping_profile_snapshot.json` | required  |
+| `mapping_coverage`         | `normalized/mapping_coverage.json`         | required                      |
+| `mapping_profile_snapshot` | `normalized/mapping_profile_snapshot.json` | required                      |
 
 #### Required inputs
 

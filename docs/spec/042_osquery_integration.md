@@ -65,17 +65,22 @@ Non-canonical forms:
 
 ## Raw staging in the run bundle
 
-When `telemetry.sources.osquery.enabled=true`, the pipeline MUST stage the source-native results log
-under `runs/<run_id>/raw/osquery/osqueryd.results.log`.
+When `telemetry.sources.osquery.enabled=true` and `telemetry.raw_preservation.enabled=true`, the
+pipeline MUST stage the source-native results log under
+`runs/<run_id>/raw/osquery/osqueryd.results.log`.
 
 Notes:
 
-- This staged path is the canonical evidence-tier representation path for osquery results.
-- The file at this path MUST appear in either `present`, `withheld`, or `quarantined` form under the
-  project redaction policy (path is constant, but content may be a deterministic placeholder and/or
-  stored under the run quarantine directory).
+- This staged path is the canonical evidence-tier representation path for osquery results (when
+  evidence-tier raw preservation is enabled).
+- When `telemetry.raw_preservation.enabled=true`, the file at this path MUST appear in either
+  `present`, `withheld`, or `quarantined` form under the project redaction policy (path is constant,
+  but content may be a deterministic placeholder and/or stored under the run quarantine directory).
+- When `telemetry.raw_preservation.enabled=false`, the pipeline MUST NOT create this file (it MUST
+  be absent) and MUST still produce the derived analytics-tier dataset under `raw_parquet/osquery/`
+  (see below).
 - This path corresponds to `telemetry.sources.osquery.output_path` (v0.1 conformance value:
-  `raw/osquery/`).
+  `raw/osquery/`), which is REQUIRED only when `telemetry.raw_preservation.enabled=true`.
 - The pipeline MAY also stage adjacent files (example: `osqueryd.*.log`) under the same directory,
   but they MUST be clearly separated from the results log.
 
@@ -176,10 +181,11 @@ Baseline profile gate (fail closed when enabled):
 - When `telemetry.baseline_profile.enabled=true`, the telemetry validator evaluates
   `runs/<run_id>/inputs/telemetry_baseline_profile.json` and emits a health substage outcome with
   `stage="telemetry.baseline_profile"`.
-- For `source_type=osquery` (identity source type; see ADR-0002), baseline signal matching uses the
-  osquery NDJSON fields `name` (required) and `action` (optional). Therefore, ingestion/staging
-  SHOULD preserve these fields (or preserve their semantics deterministically if renamed in an
-  intermediate store).
+- For `identity_source_type=osquery` (identity-family discriminator used for identity-scoped
+  matching; not `metadata.source_type`; see ADR-0002), baseline signal matching uses the osquery
+  NDJSON fields `name` (required) and `action` (optional). Therefore, ingestion/staging SHOULD
+  preserve these fields (or preserve their semantics deterministically if renamed in an intermediate
+  store).
 
 File-tailed crash/restart + rotation continuity (required when osquery is enabled):
 
@@ -201,10 +207,45 @@ File-tailed crash/restart + rotation continuity (required when osquery is enable
   the raw line) and the normalizer MUST account for it as an ingest or parse error (see
   [Conformance fixtures and tests](#conformance-fixtures-and-tests)).
 
-## Derived raw Parquet (required when osquery is enabled)
+### Parse-error accounting (normative)
 
-When `telemetry.sources.osquery.enabled=true`, the pipeline MUST convert staged NDJSON lines into a
-Parquet dataset under `runs/<run_id>/raw_parquet/osquery/`.
+This section defines the single authoritative measurement point for osquery ingest/parse errors so
+CI assertions are deterministic.
+
+- Location: `runs/<run_id>/logs/counters.json` (contract: `counters`; see `025_data_contracts.md`).
+- Counter name: `osquery_ndjson_parse_errors_total` (u64).
+
+Semantics:
+
+- When `telemetry.sources.osquery.enabled=true`,
+  `counters.counters.osquery_ndjson_parse_errors_total` MUST be present.
+- The counter MUST equal the number of osquery result records (one input line from
+  `runs/<run_id>/raw/osquery/osqueryd.results.log`) that cannot be normalized due to an ingest/parse
+  failure.
+  - This includes:
+    - JSON parsing failures (the line is not valid JSON), and
+    - required-field parse failures (for example missing `unixTime` or `unixTime` not parseable as a
+      signed 64-bit integer epoch-seconds value).
+  - Each input line MUST contribute at most `+1` to this counter.
+- When no ingest/parse failures occur, the counter MUST be present and MUST be `0`.
+
+## Derived raw Parquet (produced when osquery is enabled)
+
+When `telemetry.sources.osquery.enabled=true`, the telemetry stage MUST convert staged NDJSON lines
+into a Parquet dataset under `runs/<run_id>/raw_parquet/osquery/` prior to normalization.
+
+Retention and export policy (normative):
+
+- `raw_parquet/**` is an analytics-tier operational staging store. It MUST be excluded from the v0.1
+  default export profile and from signing/checksum scope (see
+  `ADR-0009-run-export-policy-and-log-classification.md`).
+- Implementations MAY prune `raw_parquet/**` after successful normalization, subject to disk budget
+  policy (see [storage formats](045_storage_formats.md)). Implementations MUST NOT prune
+  `raw_parquet/osquery/` before normalization consumes it.
+- Operators who need to export `raw_parquet/osquery/**` (for example, for machine-learning dataset
+  purposes) SHOULD use the dataset release workflow under `<workspace_root>/exports/datasets/` (see
+  `085_golden_datasets.md`). Dataset releases MAY include raw stores (including
+  `raw_parquet/osquery/**`) only when the release posture permits it.
 
 The dataset directory MUST include `_schema.json` (see Parquet dataset conventions in
 [storage formats](045_storage_formats.md)).
@@ -227,12 +268,33 @@ Determinism requirements:
 
 - `raw_json` MUST be the parsed JSON object re-serialized via RFC 8785 (JCS) prior to hashing or
   stable joins (see ADR-0002 "Event Identity and Provenance").
+
 - For `action="snapshot"`, implementations MUST canonicalize the `snapshot` array to a deterministic
   order before serializing `snapshot_json` and `raw_json`:
+
   - Canonicalize each element object using RFC 8785 (JCS) to a UTF-8 string.
   - Sort elements by that canonical string (bytewise ascending).
   - Serialize the array in that sorted order.
+
 - `raw_line` MUST NOT be used for identity.
+
+- Row ordering (normative): before writing Parquet, implementations MUST sort all rows by the
+  following total ordering (lowest tuple wins):
+
+  1. `time` ascending (nulls sort first)
+  1. `host_identifier` ascending (nulls sort first; UTF-8 byte order, no locale)
+  1. `query_name` ascending (nulls sort first; UTF-8 byte order, no locale)
+  1. `action` ascending (nulls sort first; UTF-8 byte order, no locale)
+  1. `raw_json` ascending (nulls sort first; UTF-8 byte order, no locale)
+
+- Deterministic dataset emission (normative):
+
+  - The dataset MUST NOT be partitioned in v0.1 (no `key=value/` subdirectories).
+  - The dataset directory MUST contain:
+    - `_schema.json`
+    - one or more Parquet data files named `part-0000.parquet`, `part-0001.parquet`, (zero-padded
+      4-digit, monotonically increasing, no gaps)
+  - Filenames MUST NOT include UUIDs, timestamps, random salts, or process-derived IDs.
 
 ## Normalization to OCSF
 
@@ -298,11 +360,29 @@ For routed rows, the normalizer MUST:
   - `query_name`
   - `action`
   - `columns` (object) or `snapshot` (array), whichever was present
-  - `raw_json` (canonical JSON for the record, or a redacted-safe representation)
+  - `raw_json_sha256` (stable digest reference to the canonical record JSON; format:
+    `sha256:<64hex>`)
 - If `normalization.raw_preservation.policy=full`, `raw.osquery` MUST include all `minimal` fields
   and MAY additionally include:
-  - `raw_line` (if available from ingestion)
   - `log.file.path` (if provided by the collector)
+- When `raw.osquery` is emitted, it MAY additionally include:
+  - `notes` (array of strings; OPTIONAL): redaction-safe, deterministic note tokens describing known
+    mapping limitations (example: `snapshot_state_observation_activity_id_99`). Notes MUST NOT
+    include raw payload values, host-specific paths, usernames, or timestamps.
+
+Raw record embedding (normative):
+
+- Normalized events MUST NOT embed the full osquery record as a JSON string. Specifically,
+  `raw.osquery.raw_json` and `raw.osquery.raw_line` MUST NOT be emitted in normalized outputs.
+- The stable link from normalized events to the canonical record is `raw.osquery.raw_json_sha256`,
+  computed as SHA-256 over the UTF-8 bytes of the canonical record JSON
+  (`raw_parquet/osquery/raw_json`, RFC 8785 (JCS), after snapshot canonicalization).
+- The canonical record JSON string and original raw line remain in evidence/analytics-tier
+  artifacts:
+  - `raw/osquery/osqueryd.results.log` (evidence-tier; placeholder/withheld/quarantine semantics
+    apply),
+  - `raw_parquet/osquery/raw_json` and `raw_parquet/osquery/raw_line` (analytics-tier; excluded from
+    the v0.1 default export profile and signing scope).
 
 Additional mapping (v0.1, optional):
 
@@ -326,25 +406,58 @@ Identity basis object:
   "query_name": "<name>",
   "action": "<action>",
   "unix_time": <unixTime_int>,
-  "payload": <columns_or_snapshot_canonical_json>
+  "payload": <stable_payload_or_fingerprint_object>
 }
 ```
 
 Rules:
 
 - `unix_time` MUST be derived by parsing `unixTime` as an integer epoch seconds value.
-- `payload` MUST be canonical JSON (RFC 8785, JCS) of either the `columns` object (for `added` /
-  `removed`) or the `snapshot` array (for `snapshot`).
-- For `snapshot` payloads, the array MUST be canonicalized to a deterministic order prior to RFC
-  8785 serialization:
+
+- Stable payload selection (Tier 3):
+
+  - For `action in {"added","removed"}`, `stable_payload` MUST be the `columns` object.
+  - For `action="snapshot"`, `stable_payload` MUST be the `snapshot` array after applying the
+    snapshot canonicalization rules below.
+
+- Canonical stable payload bytes:
+
+  - `stable_payload_bytes = canonical_json_bytes(stable_payload)` where `canonical_json_bytes` is
+    RFC 8785 (JCS) output (UTF-8).
+
+- Inline vs fingerprint payload selection (v0.1 deterministic):
+
+  - Let `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES = 262144`.
+
+  - If `len(stable_payload_bytes) <= OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES`, then
+    `identity_basis.payload` MUST equal `stable_payload`.
+
+  - If `len(stable_payload_bytes) > OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES`, then:
+
+    - `identity_basis.payload` MUST equal `{"fingerprint": "<sha256_hex>"}` and MUST NOT embed
+      `stable_payload`.
+    - `fingerprint` MUST be computed as `sha256(stable_payload_bytes)` and MUST be encoded as
+      lowercase hex of the full 32-byte digest (64 hex chars).
+    - The full source-native record bytes MUST remain preserved in the evidence-tier staged results
+      log at `runs/<run_id>/raw/osquery/osqueryd.results.log` (or its withheld/quarantined forms),
+      so reprocessing can recover the payload even when identity uses a fingerprint.
+
+- Snapshot canonicalization (required when `action="snapshot"` and `stable_payload` is a snapshot
+  array):
+
   - Canonicalize each element object using RFC 8785 (JCS) to a UTF-8 string.
   - Sort elements by that canonical string (bytewise ascending).
-  - Serialize the array in that sorted order.
+  - Use the resulting sorted array as `stable_payload` (for both `stable_payload_bytes` and any
+    embedded `identity_basis.payload` form).
+
 - `calendarTime` MUST NOT be included in identity.
+
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (if present) MUST NOT be included
   in identity.
+
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (if present) MUST NOT be
   included in identity.
+
 - For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id` (see
   [data contracts](025_data_contracts.md)).
 
@@ -378,8 +491,9 @@ without additional context.
 **action=snapshot (scheduled query snapshot logging)**: Snapshot rows represent bulk table state at
 a point in time, not discrete per-entity events. When snapshot rows are emitted as event-like rows
 (for example, via snapshot event logging), they MUST be normalized as state observations rather than
-activity. v0.1 routes these to the standard class but with `activity_id=99` (Other), and includes an
-explanation in `raw.osquery.notes`.
+activity. v0.1 routes these to the standard class but with `activity_id=99` (Other). When
+`raw.osquery` is emitted, the normalizer MUST include the note token
+`snapshot_state_observation_activity_id_99` in `raw.osquery.notes`.
 
 #### Windows
 
@@ -405,25 +519,37 @@ source as best-effort and requires fixture validation on the supported Windows b
 (including validation that ProcessStart events are emitted as expected).
 
 **action=snapshot**: Snapshot rows remain bulk table state, not discrete events. Snapshot-derived
-rows continue to be routed to the standard class with `activity_id=99` (Other), with rationale
-recorded in `raw.osquery.notes`.
+rows continue to be routed to the standard class with `activity_id=99` (Other). When `raw.osquery`
+is emitted, the normalizer MUST include the note token `snapshot_state_observation_activity_id_99`
+in `raw.osquery.notes`.
 
 These limitations do not prevent normalization but may affect Tier 1 field coverage metrics (see the
 [OCSF field tiers spec](055_ocsf_field_tiers.md)).
 
 ## Conformance fixtures and tests
 
-A conformant implementation MUST include fixture-driven tests with deterministic golden outputs.
+Fixture cases under `tests/fixtures/osquery/` MUST follow the canonical fixture-case layout defined
+in `100_test_strategy_ci.md` ("Fixture index"): each case is a leaf directory containing `inputs/`
+and `expected/`.
 
-### Required fixtures
+Required fixture case set (v0.1, minimum):
 
-Add the following fixtures under `tests/fixtures/osquery/` (recommended convention):
+- `osquery_smoke`
 
-- `osqueryd.results.log` (NDJSON):
+`osquery_smoke` structure (normative):
+
+- `tests/fixtures/osquery/osquery_smoke/inputs/osqueryd.results.log` (NDJSON):
   - At least 2 differential rows (`added`, `removed`) for `process_events`.
-  - At least 1 snapshot row (`snapshot`) for `file_events`.
+  - At least 1 snapshot row (`snapshot`) for `file_events`whose canonical stable payload exceeds
+    `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES` (exercises `payload.fingerprint` behavior).
+  - At least 1 row for `socket_events`.
   - At least 1 row for an unknown `query_name` (to validate unrouted behavior).
   - At least 1 invalid JSON line (to validate parse-error accounting).
+- `tests/fixtures/osquery/osquery_smoke/expected/` MUST include deterministic golden outputs at
+  run-relative paths (mirroring the run bundle layout), at minimum:
+  - `raw/osquery/osqueryd.results.log` (byte-identical to `inputs/osqueryd.results.log`)
+  - `normalized/mapping_coverage.json`
+  - `normalized/ocsf_events.jsonl`
 
 ### Required assertions
 
@@ -432,8 +558,12 @@ A v0.1 implementation MUST satisfy:
 - Parsing:
   - Valid NDJSON lines are ingested and parsed.
   - Invalid JSON lines are counted as ingest or parse errors and do not produce normalized events.
+    - The authoritative count MUST be recorded as
+      `counters.counters.osquery_ndjson_parse_errors_total` in `runs/<run_id>/logs/counters.json`.
 - Routing:
-  - `process_events`, `file_events`, and `socket_events` map to their expected `class_uid`.
+  - `process_events` maps to `class_uid = 1007`.
+  - `file_events` maps to `class_uid = 1001`.
+  - `socket_events` maps to `class_uid = 4001`.
   - Unknown `query_name` values do not produce mapped normalized events (`class_uid > 0`) and are
     recorded as unrouted or unmapped in `normalized/mapping_coverage.json`.
   - Marker-bearing records (those carrying
@@ -442,21 +572,41 @@ A v0.1 implementation MUST satisfy:
     unrouted, they MUST still be emitted with `class_uid = 0`.
 - Identity determinism:
   - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values.
+  - The fixture set MUST exercise both Tier 3 payload forms:
+    - at least one case where `identity_basis.payload` embeds `stable_payload`, and
+    - at least one case where `identity_basis.payload.fingerprint` is used due to
+      `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES`.
 - Contract alignment:
   - All osquery-derived normalized events include `metadata.extensions.purple_axiom.raw_ref` and it
     is `null`.
-- Raw preservation (staged + normalized):
-  - The staged raw results log is present at `runs/<run_id>/raw/osquery/osqueryd.results.log`
-    (actual content or deterministic placeholder when withheld/quarantined).
+  - When `telemetry.raw_preservation.enabled=true`, the staged raw results log is present at
+    `runs/<run_id>/raw/osquery/osqueryd.results.log` (actual content or deterministic placeholder
+    when withheld/quarantined).
+  - When `telemetry.raw_preservation.enabled=false`, the staged raw results log MUST be absent.
   - When `normalization.raw_preservation.enabled=true` and
     `normalization.raw_preservation.policy != "none"`, routed normalized events contain
-    `raw.osquery.raw_json` (or an explicitly redacted-safe representation when redaction is
-    enabled).
+    `raw.osquery.raw_json_sha256`.
+  - For `action="snapshot"`, when `raw.osquery` is emitted, `raw.osquery.notes` MUST contain the
+    note token `snapshot_state_observation_activity_id_99`.
+  - Routed normalized events MUST NOT contain `raw.osquery.raw_json` or `raw.osquery.raw_line`.
   - When `normalization.raw_preservation.enabled=false` (or `policy="none"`), routed normalized
     events MUST NOT contain `raw.osquery`.
 - Derived raw Parquet:
-  - When `telemetry.sources.osquery.enabled=true`, `runs/<run_id>/raw_parquet/osquery/` exists and
-    includes `_schema.json`.
+  - When `telemetry.sources.osquery.enabled=true`, the telemetry stage MUST produce
+    `runs/<run_id>/raw_parquet/osquery/_schema.json` and one or more `part-*.parquet` files prior to
+    normalization.
+  - Implementations MAY prune `raw_parquet/**` after successful normalization (see
+    `045_storage_formats.md`). If `runs/<run_id>/raw_parquet/osquery/` is present at end-of-run, it
+    MUST include `_schema.json` and one or more `part-*.parquet` files.
+  - The dataset directory contains no subdirectories (v0.1 forbids partitioned layouts).
+  - Part filenames are deterministic:
+    - `part-0000.parquet`, `part-0001.parquet`, ... (zero-padded 4-digit, monotonically increasing,
+      no gaps)
+    - no timestamps, UUIDs, or random salts in filenames
+  - Row ordering is deterministic:
+    - When reading the dataset as the concatenation of part files in filename order, rows are sorted
+      by `(time, host_identifier, query_name, action, raw_json)` per the "Row ordering (normative)"
+      rule above.
 
 ## Sample inputs and outputs (non-normative)
 
@@ -500,8 +650,7 @@ A v0.1 implementation MUST satisfy:
         "path": "/usr/bin/bash",
         "cmdline": "bash -lc whoami"
       },
-      "raw_json": "JCS_CANONICAL_JSON_STRING",
-      "raw_line": "RAW_LINE_IF_AVAILABLE"
+      "raw_json_sha256": "sha256:<64hex>"
     }
   }
 }
@@ -509,12 +658,11 @@ A v0.1 implementation MUST satisfy:
 
 ## Key decisions
 
-- osquery results are ingested from the filesystem logger and staged as raw evidence.
+- osquery results are ingested from the filesystem logger and converted to analytics-tier Parquet;
+  evidence-tier raw staging is optional and controlled by `telemetry.raw_preservation.enabled`.
 - Routing to OCSF is keyed by `query_name`, with explicit handling for unknown routes.
 - Identity is computed deterministically from canonicalized payloads and timestamps.
 - Platform limitations are documented and do not prevent normalization.
-
-## References
 
 ## References
 
@@ -529,7 +677,7 @@ A v0.1 implementation MUST satisfy:
 
 | Date      | Change                                       |
 | --------- | -------------------------------------------- |
-| 2/20/2026 | update                                       |
+| 2/21/2026 | update                                       |
 | 1/24/2026 | update                                       |
 | 1/18/2026 | spec update                                  |
 | TBD       | Style guide migration (no technical changes) |

@@ -178,25 +178,25 @@ Selected optional report inputs are *not* guaranteed to exist.
 
 - For `manifest.versions.contracts_version >= 0.2.0`, normalized events are Parquet-only at
   `normalized/ocsf_events/**` (with the required schema snapshot at
-  `normalized/ocsf_events/_schema.json`). `normalized/ocsf_events.jsonl` is legacy v0.1.x only
-  and MUST NOT be used for v0.2+ runs.
+  `normalized/ocsf_events/_schema.json`). `normalized/ocsf_events.jsonl` is legacy v0.1.x only and
+  MUST NOT be used for v0.2+ runs.
 
-| Path                                                        | Source stage  | Purpose                                                            |
-| ----------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
-| `runner/`                                                   | runner        | Per-action transcripts and cleanup evidence                        |
-| `runner/principal_context.json`                             | runner        | Redaction-safe principal context summary                           |
-| `inputs/baseline_run_ref.json`                              | reporting     | Resolved regression baseline reference (when enabled)              |
-| `inputs/baseline/manifest.json`                             | reporting     | Baseline manifest snapshot (when enabled)                          |
-| `logs/cache_provenance.json`                                | orchestrator  | Cache hit/miss provenance (when enabled)                           |
-| `plan/expanded_graph.json`                                  | runner        | Compiled plan graph (v0.2+)                                        |
-| `plan/expansion_manifest.json`                              | runner        | Matrix expansion manifest (v0.2+)                                  |
+| Path                                                                       | Source stage  | Purpose                                                            |
+| -------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
+| `runner/`                                                                  | runner        | Per-action transcripts and cleanup evidence                        |
+| `runner/principal_context.json`                                            | runner        | Redaction-safe principal context summary                           |
+| `inputs/baseline_run_ref.json`                                             | reporting     | Resolved regression baseline reference (when enabled)              |
+| `inputs/baseline/manifest.json`                                            | reporting     | Baseline manifest snapshot (when enabled)                          |
+| `logs/cache_provenance.json`                                               | orchestrator  | Cache hit/miss provenance (when enabled)                           |
+| `plan/expanded_graph.json`                                                 | runner        | Compiled plan graph (v0.2+)                                        |
+| `plan/expansion_manifest.json`                                             | runner        | Matrix expansion manifest (v0.2+)                                  |
 | `normalized/ocsf_events/` (includes `normalized/ocsf_events/_schema.json`) | normalization | Full normalized event store (Parquet dataset; v0.2+ canonical)     |
-| `bridge/mapping_pack_snapshot.json`                         | detection     | Bridge inputs snapshot for reproducibility                         |
-| `bridge/compiled_plans/`                                    | detection     | Per-rule compilation outputs                                       |
-| `normalized/mapping_profile_snapshot.json`                  | normalization | Mapping profile snapshot for drift detection                       |
-| `security/checksums.txt`                                    | signing       | SHA-256 checksums for long-term artifacts                          |
-| `security/signature.ed25519`                                | signing       | Ed25519 signature over checksums                                   |
-| `report/junit.xml`                                          | reporting     | CI-native JUnit test report (one testcase per action or scenario). |
+| `bridge/mapping_pack_snapshot.json`                                        | detection     | Bridge inputs snapshot for reproducibility                         |
+| `bridge/compiled_plans/`                                                   | detection     | Per-rule compilation outputs                                       |
+| `normalized/mapping_profile_snapshot.json`                                 | normalization | Mapping profile snapshot for drift detection                       |
+| `security/checksums.txt`                                                   | signing       | SHA-256 checksums for long-term artifacts                          |
+| `security/signature.ed25519`                                               | signing       | Ed25519 signature over checksums                                   |
+| `report/junit.xml`                                                         | reporting     | CI-native JUnit test report (one testcase per action or scenario). |
 
 ## Required reporting outputs (v0.1)
 

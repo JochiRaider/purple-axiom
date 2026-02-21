@@ -671,14 +671,15 @@ During the deprecation window, writers SHOULD populate both:
 
 #### Required dataset schema snapshot (`_schema.json`)
 
-Each Parquet dataset directory MUST include a deterministic schema snapshot file named `_schema.json`
-at the dataset root.
+Each Parquet dataset directory MUST include a deterministic schema snapshot file named
+`_schema.json` at the dataset root.
 
 Minimum fields (normative):
 
-- `contract_version` (string; required). MUST equal the contract version for `parquet_schema_snapshot`.
-- `schema_id` (string; required). A stable identifier for the dataset schema surface. For normalized OCSF
-  events, this SHOULD be `pa.parquet.normalized.ocsf_events`.
+- `contract_version` (string; required). MUST equal the contract version for
+  `parquet_schema_snapshot`.
+- `schema_id` (string; required). A stable identifier for the dataset schema surface. For normalized
+  OCSF events, this SHOULD be `pa.parquet.normalized.ocsf_events`.
 - `schema_version` (string; required). Semantic version for the schema snapshot itself (changes when
   columns are added/removed/changed).
 - `columns` (array; required). A list of columns in the dataset, each item including:
@@ -690,8 +691,8 @@ Minimum fields (normative):
   - `nullable` (boolean; required). Whether the column is nullable.
   - Deterministic ordering: `columns` must be serialized with canonical column ordering, and stable
     within a schema version.
-- `aliases` (object; optional). When present, a map of `alias_name` → `canonical_name` (strings). This
-  supports forward-compatible renames and/or mixed producer versions.
+- `aliases` (object; optional). When present, a map of `alias_name` → `canonical_name` (strings).
+  This supports forward-compatible renames and/or mixed producer versions.
   - Deterministic ordering: `aliases` must be serialized with keys sorted lexicographically.
 
 #### Querying historical runs (union + projection)

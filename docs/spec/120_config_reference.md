@@ -564,6 +564,13 @@ Common keys:
     - Terminology note (normative): this telemetry baseline profile is a *telemetry validation*
       input. It MUST NOT be used as a benign noise/workload generator. Benign background activity is
       configured separately via `runner.environment_config.noise_profile`.
+- `raw_preservation` (optional)
+  - `enabled` (optional, default: true)
+    - When `true`, telemetry MAY stage evidence-tier raw telemetry under `raw/` (for example
+      `raw/osquery/**`), subject to `security.redaction` handling.
+    - When `false`, telemetry MUST NOT stage evidence-tier raw telemetry under `raw/`.
+    - This flag corresponds to "raw preservation is enabled" in ADR-0009 default export profile
+      selection.
 - `sources` (optional)
   - Additional sources (example: `unix`, `osquery`, `pcap`, `netflow`)
   - v0.1: `pcap` and `netflow` are placeholder contracts only (collection/ingestion is not
@@ -572,7 +579,7 @@ Common keys:
   - Each source should include (when applicable):
     - `enabled`
     - `config_path` or equivalent
-    - `output_path` under `raw/`
+    - `output_path` under `raw/` (required only when `telemetry.raw_preservation.enabled=true`)
   - v0.1 reserved output paths (normative when implemented):
     - `pcap.output_path` MUST be `raw/pcap/` (manifest: `raw/pcap/manifest.json`)
     - `netflow.output_path` MUST be `raw/netflow/` (manifest: `raw/netflow/manifest.json`)
@@ -606,8 +613,11 @@ Common keys:
         `metadata.source_type = "osquery"` can be set during normalization.
       - `receiver_id` (optional): logical receiver id in the OTel config (example:
         `filelog/osquery`) for traceability.
-    - `output_path` (required): destination directory under the run bundle `raw/` where osquery raw
-      logs are staged (example: `raw/osquery/`)
+    - `output_path` (conditional): destination directory under the run bundle `raw/` where osquery
+      raw logs are staged (example: `raw/osquery/`)
+      - REQUIRED when `telemetry.raw_preservation.enabled=true`.
+      - When `telemetry.raw_preservation.enabled=false`, this key MAY be omitted (and is ignored if
+        present).
 
 See the [osquery integration specification](042_osquery_integration.md) for format requirements,
 OTel receiver examples, normalization routing, and fixtures.
@@ -648,6 +658,8 @@ extraction):
       payloads must not be externalized; record a deterministic summary instead).
   - `sidecar` (optional)
     - `enabled` (optional, default: true)
+      - Effective only when `telemetry.raw_preservation.enabled=true`. When raw preservation is
+        disabled, this MUST be treated as `false`.
       - When `true`, oversize payloads MUST be externalized using the deterministic sidecar
         addressing scheme defined by `045_storage_formats.md` (event-specific directory +
         `field_path_hash`).
@@ -668,6 +680,8 @@ extraction):
     - Native container exports MAY be supported behind an explicit config gate, but docs SHOULD
       refer to them generically (or omit them entirely) until the capability is implemented.
   - `enabled` (optional, default: false)
+    - Requires `telemetry.raw_preservation.enabled=true`. When raw preservation is disabled, this
+      MUST be treated as `false`.
     - When `true`, the implementation MAY export source-native container artifacts as additional
       evidence-tier material.
   - `dir` (optional, default: `raw/evidence/`): relative directory under the run bundle root for

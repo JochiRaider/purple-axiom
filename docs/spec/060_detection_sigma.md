@@ -46,10 +46,10 @@ This section is the stage-local view of:
 
 #### Required inputs
 
-| contract_id           | Where found                    | Required?                            |
-| --------------------- | ------------------------------ | ------------------------------------ |
-| `range_config`        | `inputs/range.yaml`            | required                             |
-| `manifest`            | `manifest.json`                | required (version pins + provenance) |
+| contract_id               | Where found                           | Required?                                                          |
+| ------------------------- | ------------------------------------- | ------------------------------------------------------------------ |
+| `range_config`            | `inputs/range.yaml`                   | required                                                           |
+| `manifest`                | `manifest.json`                       | required (version pins + provenance)                               |
 | `parquet_schema_snapshot` | `normalized/ocsf_events/_schema.json` | required (consumes Parquet dataset at `normalized/ocsf_events/**`) |
 
 Notes:

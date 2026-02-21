@@ -31,7 +31,7 @@ related:
 ### Owned output roots (published paths)
 
 - `raw_parquet/` (analytics-tier telemetry; non-contract in v0.1)
-- `raw/` (evidence-tier raw preservation; optional)
+- `raw/` (evidence-tier raw preservation; optional; when `telemetry.raw_preservation.enabled=true`)
 - `logs/` (contracted validator outputs)
 
 ### Inputs/Outputs
@@ -71,10 +71,10 @@ Notes:
 
 ### Config keys used
 
-- `telemetry.*` (OTel, baseline profile gate, and source enablement)
+- `telemetry.*` (OTel, baseline profile gate, source enablement, and evidence-tier raw preservation)
 - `operability.*` (run limits, budgets, health files)
 - `security.network.*` (egress policy canary)
-- `security.redaction.*` (raw preservation / quarantine behavior)
+- `security.redaction.*` (withhold/quarantine behavior for evidence-tier artifacts)
 
 ### Default fail mode and outcome reasons
 
@@ -854,11 +854,13 @@ When `telemetry.baseline_profile.enabled=true`:
      - `tags_all`: all present in asset `tags`
      - `tags_any`: at least one present in asset `tags`
    - If no profiles match an asset, the gate MUST fail with `reason_code=baseline_profile_not_met`.
-   - For `source_type=windows_eventlog` (identity source type; see ADR-0002), signal matching MUST
-     use `<System>` fields extracted from raw XML (`Channel`, optional `Provider/@Name`, optional
+   - For `identity_source_type=windows_eventlog` (identity-family discriminator used for
+     identity-scoped matching; not `metadata.source_type`; see ADR-0002), signal matching MUST use
+     `<System>` fields extracted from raw XML (`Channel`, optional `Provider/@Name`, optional
      `EventID`).
-   - For `source_type=osquery` (identity source type; see ADR-0002), signal matching MUST use NDJSON
-     fields (`name`, optional `action`).
+   - For `identity_source_type=osquery` (identity-family discriminator used for identity-scoped
+     matching; not `metadata.source_type`; see ADR-0002), signal matching MUST use NDJSON fields
+     (`name`, optional `action`).
 1. Failure semantics (all fail-closed):
    - Missing/unreadable profile: `reason_code=baseline_profile_missing`
    - Contract/schema invalid: `reason_code=baseline_profile_invalid`

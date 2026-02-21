@@ -103,7 +103,7 @@ The default export profile (v0.1) MUST include:
   - `inputs/**`
   - `ground_truth.jsonl`
   - `runner/**`
-  - `raw/**` (when raw preservation is enabled)
+  - `raw/**` (when raw preservation is enabled; `telemetry.raw_preservation.enabled=true`)
   - `normalized/**`
   - `criteria/**`
   - `bridge/**`

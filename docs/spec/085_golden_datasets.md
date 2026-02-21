@@ -642,8 +642,8 @@ The builder MUST resolve the normalized OCSF source representation based on the 
   1. `runs/<run_id>/normalized/ocsf_events.jsonl` MUST NOT exist; if present, the build MUST fail
      closed.
 - For `contracts_version` `0.1.x` (legacy compatibility):
-  1. If `runs/<run_id>/normalized/ocsf_events/` exists and contains one or more `*.parquet` files, the
-     builder MUST treat it as the preferred source representation.
+  1. If `runs/<run_id>/normalized/ocsf_events/` exists and contains one or more `*.parquet` files,
+     the builder MUST treat it as the preferred source representation.
   1. Else if `runs/<run_id>/normalized/ocsf_events.jsonl` exists, the builder MUST treat it as the
      transcode source representation.
   1. Else the build MUST fail closed.
@@ -1037,12 +1037,14 @@ CI MUST include a fixture dataset build that:
 - takes a fixed set of small run bundles as input (stored as test fixtures), including at minimum:
   - one v0.2+ Parquet-only normalized-store run (`contracts_version >= 0.2.0`; has
     `normalized/ocsf_events/` and `normalized/ocsf_events/_schema.json`, and MUST NOT have
-    `normalized/ocsf_events.jsonl`) to exercise byte-for-byte copy (marker-assisted) and deterministic
-    rewrite (marker-blind),
+    `normalized/ocsf_events.jsonl`) to exercise byte-for-byte copy (marker-assisted) and
+    deterministic rewrite (marker-blind),
+
   - one v0.2+ run that contains a Parquet normalized store *and* a forbidden
     `normalized/ocsf_events.jsonl` file, to assert the builder rejects deprecated JSONL in v0.2+,
 
   - Legacy v0.1 compatibility fixtures (optional but recommended):
+
     - one JSONL-only normalized-store run (no `normalized/ocsf_events/`, has
       `normalized/ocsf_events.jsonl`) to force JSONL -> Parquet transcode,
     - one run that contains both Parquet and JSONL representations to assert conflict/deprecation

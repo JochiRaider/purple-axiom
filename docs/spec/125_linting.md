@@ -309,6 +309,9 @@ Recommended CLI shape:
 - `pa lint <path> [<path> ...]`
 - `--target <target_kind>` optional; if omitted, the tool MAY infer target kind deterministically
   from path patterns.
+- `--backend <backend_id>` optional; if provided, selects the backend profile used for
+  backend-specific validation checks when linting `sigma-rule` targets. If omitted, the linter MUST
+  use `detection.sigma.bridge.backend` from the provided config.
 
 Inference MUST be deterministic and MUST fail closed if ambiguous:
 
@@ -527,8 +530,35 @@ Intended for Sigma YAML rules.
 Minimum rule requirements:
 
 - Safe YAML parsing per `pa.yaml_decode.v1`.
-- Sigma structural validity per the pinned Sigma tooling assumptions.
-- Deterministic rule discovery and hashing semantics aligned with the Sigma stage.
+- Sigma structural validity per the pinned Sigma tooling assumptions (at minimum, `id` and `title`).
+- Deterministic rule discovery and hashing semantics aligned with the Sigma stage (canonical rule
+  hashing per `060_detection_sigma.md`, "Canonical rule hashing").
+
+Sigma parsing and resolution requirements (normative):
+
+- The linter MUST classify each rule as an event rule (`SigmaRule`) or a correlation rule
+  (`SigmaCorrelationRule`) and MUST parse it using the canonical parsing model defined in
+  `060_detection_sigma.md` (TODO: add a stable section anchor, e.g. "Parsing model").
+
+- The linter MUST parse to the canonical AST form (`sigma_ast_v1`) (TODO: defined in
+  `060_detection_sigma.md`) for:
+
+  - `SigmaRule.detection.condition` (including `x of`, pipe aggregation, and `near`).
+  - `SigmaCorrelationRule.correlation` (including correlation type normalization and required-field
+    presence checks).
+
+- The linter MUST perform deterministic reference resolution checks:
+
+  - `ref` identifiers MUST exist in the rule’s `detection` selector identifier set.
+  - `x of <pattern>` expansions MUST be deterministic and MUST NOT be empty.
+  - Correlation `rules` references MUST resolve within the lint input set (or configured pack
+    scope). Missing or ambiguous references MUST be reported.
+
+- If a backend profile is selected (for example via resolved config
+  `detection.sigma.bridge.backend`), the linter MUST run backend-profile validation against the
+  parsed `sigma_ast_v1` using configured backend restrictions (when present). Findings SHOULD map to
+  the same non-executable `reason_code` values used by bridge compilation (see
+  `065_sigma_to_ocsf_bridge.md`, "Non-executable classification mapping").
 
 ### Target kind `report-html`
 

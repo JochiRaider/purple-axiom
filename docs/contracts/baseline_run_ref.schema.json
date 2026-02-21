@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "baseline_run_ref.schema.json",
+  "title": "Baseline run reference",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "baseline_run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_manifest_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_manifest_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Resolvable reference to the baseline manifest (e.g., runs/<id>/manifest.json or an external ref)."
+    },
+    "baseline_manifest_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-fA-F]{64}$"
+    }
+  },
+  "required": ["contract_version", "baseline_manifest_ref"],
+  "oneOf": [
+    { "required": ["baseline_run_id"] },
+    { "required": ["baseline_manifest_path"] }
+  ]
+}

@@ -185,6 +185,225 @@ Rules without valid ATT&CK tags:
   - `detection` selectors and conditions
   - `tags` (include ATT&CK technique tags when available)
 
+## Parsing model
+
+This section defines the canonical parsing surface for Sigma rules in Purple Axiom. Parsing is
+always in-scope, including deprecated Sigma condition constructs (for example pipe aggregation and
+`near`). Backend-specific acceptance and executability are handled later during bridge compilation
+(see `065_sigma_to_ocsf_bridge.md` and `120_config_reference.md`).
+
+### Parsing entrypoints
+
+The Sigma loader MUST classify each YAML document as exactly one of the following rule entrypoints:
+
+- `SigmaRule` (event rule): a Sigma detection rule with a top-level `detection:` mapping.
+- `SigmaCorrelationRule` (correlation meta rule): a Sigma meta rule with a top-level `correlation:`
+  mapping and no `detection:` mapping.
+
+Classification rules (normative):
+
+- A rule MUST be treated as `SigmaCorrelationRule` if the top-level document contains a
+  `correlation` key.
+- Otherwise, a rule MUST be treated as `SigmaRule` if the top-level document contains a `detection`
+  key.
+- A rule MUST NOT contain both `detection` and `correlation`. If both are present, the rule MUST be
+  marked non-executable with `reason_code="backend_compile_error"`.
+
+### YAML decode profile
+
+Sigma rule YAML MUST be decoded using the same safe YAML subset required by linting (see
+`125_linting.md`, "YAML parsing"):
+
+- Exactly one YAML document per file (multi-document YAML MUST be rejected).
+- Anchors, aliases, custom tags, and non-scalar keys MUST be rejected.
+- On decode success, the implementation MUST preserve original scalar string values verbatim (no
+  implicit case-folding or trimming).
+
+### Condition expression grammar
+
+For `SigmaRule` (event rules), the implementation MUST parse `detection.condition` into a condition
+AST using the canonical grammar below.
+
+Reserved keywords are case-insensitive:
+
+- boolean operators: `and`, `or`, `not`
+- quantifier operators: `of`, `them`, `all`
+- deprecated constructs: `near`, pipe operator `|`
+- aggregation keywords: `count`, `min`, `max`, `avg`, `sum`, `by`
+
+#### Canonical grammar
+
+The following EBNF is authoritative for parsing `detection.condition` into a `sigma_ast_v1`
+condition tree:
+
+```ebnf
+condition        ::= pipe_expr ;
+
+pipe_expr        ::= or_expr ( "|" aggregation_expr )? ;
+
+or_expr          ::= and_expr ( OR and_expr )* ;
+and_expr         ::= unary_expr ( AND unary_expr )* ;
+
+unary_expr       ::= NOT unary_expr
+                   | primary ;
+
+primary          ::= "(" condition ")"
+                   | near_expr
+                   | of_expr
+                   | ref ;
+
+ref              ::= IDENT ;
+
+of_expr          ::= quantifier OF of_target ;
+quantifier       ::= INT | "all" ;
+of_target        ::= "them" | PATTERN | IDENT ;
+
+near_expr        ::= "near" IDENT near_clause* ;
+near_clause      ::= AND ( NOT? IDENT ) ;
+
+aggregation_expr ::= agg_call ( BY group_fields )? comparator INT ;
+agg_call         ::= agg_func "(" ( field )? ")" ;
+agg_func         ::= "count" | "min" | "max" | "avg" | "sum" ;
+group_fields     ::= field ( "," field )* ;
+
+field            ::= FIELD_IDENT ;
+
+comparator       ::= ">" | ">=" | "<" | "<=" | "=" | "!=" ;
+```
+
+Lexing rules (normative):
+
+- `IDENT` and `FIELD_IDENT` are tokenized as non-whitespace sequences excluding the reserved
+  delimiter characters `(`, `)`, `|`, and `,`.
+- `PATTERN` is an `IDENT` that contains `*` (glob wildcard). `*` matches zero or more characters.
+- `INT` is an ASCII base-10 non-negative integer.
+- Whitespace MAY appear between any tokens.
+
+#### Operator precedence
+
+The parser MUST implement the following precedence rules (highest to lowest):
+
+1. Parentheses/grouping
+1. `x of …` / `all of …`
+1. `not`
+1. `and`
+1. `or`
+1. Pipe aggregation operator `|` (lowest precedence)
+
+#### `them` semantics and deterministic expansion
+
+`them` and pattern targets exist to refer to sets of selector identifiers defined in the rule’s
+`detection:` block.
+
+Definitions (normative):
+
+- A "search identifier" is any key in the `detection:` mapping other than `condition` whose value is
+  a selector definition.
+- Search identifiers whose names begin with `_` are reserved and MUST be excluded from `them`
+  expansion.
+
+Expansion rules (normative):
+
+- `N of them` ranges over all search identifiers in the rule excluding underscore-prefixed
+  identifiers, in deterministic order.
+- `N of <pattern>` ranges over all search identifiers whose names match `<pattern>` (glob `*`), in
+  deterministic order.
+- Deterministic order is ascending bytewise lexical order of the identifier string (UTF-8, no locale
+  collation).
+
+If a pattern expansion is empty, the rule MUST be marked non-executable with
+`reason_code="backend_compile_error"`.
+
+### Sigma condition AST contract
+
+The parser MUST emit a `sigma_ast_v1` condition tree with the following node set.
+
+Node shapes (normative; JSON form shown for clarity):
+
+- Boolean operators:
+
+  - `{"op":"and","args":[<expr>...]}`
+  - `{"op":"or","args":[<expr>...]}`
+  - `{"op":"not","arg":<expr>}`
+
+- References:
+
+  - `{"op":"ref","name":"<search_identifier>"}`
+
+- Quantified selection expansion:
+
+  - `{"op":"of","quantifier":{"kind":"all"},"target":{"kind":"them"}}`
+  - `{"op":"of","quantifier":{"kind":"n","n":<int>},"target":{"kind":"pattern","pattern":"selection*"}}`
+  - `{"op":"of","quantifier":{"kind":"n","n":<int>},"target":{"kind":"id","id":"keywords"}}`
+
+- Deprecated pipe aggregation:
+
+  - `{"op":"pipe","base":<expr>,"aggregation":<aggregation>}`
+
+  where `<aggregation>` is:
+
+  - `{"op":"aggregation","function":"count|min|max|avg|sum","field":<field|null>,"group_by":[<field>...],"comparator":"gt|gte|lt|lte|eq|neq","threshold":<int>}`
+
+  Comparator normalization (normative):
+
+  - `>` → `gt`, `>=` → `gte`, `<` → `lt`, `<=` → `lte`, `=` → `eq`, `!=` → `neq`.
+
+- Deprecated near:
+
+  - `{"op":"near","primary":"<search_identifier>","constraints":[{"mode":"include|exclude","ref":"<search_identifier>"}...]}`
+
+Optional spans (recommended):
+
+- Any node MAY include `span:{ "start":<int>, "end":<int> }` representing UTF-8 byte offsets into
+  the original `detection.condition` string.
+
+Determinism requirements (normative):
+
+- When emitting `args` arrays, the parser MUST preserve the explicit order implied by the source
+  expression (after parsing and normalization), except where set expansion (`them` or pattern) is
+  required.
+- Any set expansion performed during parsing or validation MUST use the deterministic ordering rules
+  defined above.
+
+### Correlation rule parsing
+
+For `SigmaCorrelationRule`, the implementation MUST parse the top-level `correlation:` mapping into
+a `sigma_ast_v1` correlation object.
+
+Canonical correlation fields (normative):
+
+- `correlation.type` (required; string): correlation type.
+- `correlation.rules` (required; array of strings): referenced rules by `id` or `title` (resolved
+  during bridge compilation).
+- `correlation.timespan` (required; string): duration (parsed to milliseconds by the bridge as
+  `timespan_ms`).
+- `correlation.group-by` or `correlation.group_by` (optional; array of strings): group-by keys.
+- `correlation.condition` (optional; object): comparator map (for example `{"gte":2}`) or normalized
+  form.
+- `correlation.aliases` (optional; object): alias map used to unify correlation keys across
+  referenced rules.
+
+Type normalization (normative):
+
+- The parser MUST accept lexical aliases for correlation types.
+- At minimum, the following aliases MUST be accepted and normalized to `ordered_temporal`:
+  - `ordered_temporal`
+  - `temporal_ordered`
+
+The parsed correlation AST MUST preserve the original source values and MUST normalize key spelling
+to the canonical internal form:
+
+- `group-by` → `group_by`
+
+### Parse validity vs backend acceptance
+
+- Parsing MUST be attempted for all rules selected for the run, including rules that use deprecated
+  Sigma constructs.
+- Parsing MUST NOT be gated on backend capabilities.
+- Backend acceptance (executable vs non-executable) MUST be decided during bridge compilation, using
+  backend-specific validation and capability restrictions (see `065_sigma_to_ocsf_bridge.md` and
+  `120_config_reference.md`).
+
 ## Execution model
 
 Sigma evaluation is a two-stage process.
@@ -198,10 +417,13 @@ Sigma evaluation is a two-stage process.
      - If a rule requires `raw.*`, behavior is governed by
        `detection.sigma.bridge.raw_fallback_enabled` and MAY render the rule non-executable with
        reason code `raw_fallback_disabled` and reason domain `bridge_compiled_plan`.
-   - Produce a backend-neutral compiled-plan IR (bridge IR):
-     - The bridge IR is `pa_eval_v1` and is persisted in `bridge/compiled_plans/<rule_id>.plan.json`
-       under `backend.plan_kind="pa_eval_v1"` and `backend.plan` (see `065_sigma_to_ocsf_bridge.md`,
-       "Plan IR format (pa_eval_v1)").
+   - Parse and compile the rule via the Sigma-to-OCSF bridge:
+     - The bridge MUST parse the rule into `sigma_ast_v1` (see "Parsing model") and persist the AST
+       in `bridge/compiled_plans/<rule_id>.plan.json` under `sigma_ast`.
+     - If (and only if) the selected backend validates the parsed AST as executable, the bridge MUST
+       lower it to the backend-neutral evaluation IR `pa_eval_v1` and persist it in the same plan
+       file under `backend.plan_kind="pa_eval_v1"` and `backend.plan` (see
+       `065_sigma_to_ocsf_bridge.md`, "Plan IR format (pa_eval_v1)").
    - Select a backend executor to run the IR:
      - Batch: `native_pcre2` MUST be the v0.1 default when `detection.sigma.bridge.backend` is
        omitted.
@@ -275,20 +497,20 @@ The `non_executable_reason` object MUST also include a human-readable explanatio
 
 ### Reason codes (normative)
 
-| Reason code               | Category      | Description                                                                                                      |
-| ------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                                                        |
-| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                                                 |
-| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                                                   |
-| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                                               |
-| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                                                      |
-| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                                                 |
-| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (v0.1 default: PCRE2 with bounded execution for `\|re`) |
-| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                                            |
-| `unsupported_correlation` | Sigma feature | Correlation rule uses unsupported correlation type or semantics for the selected backend                         |
-| `unsupported_aggregation` | Sigma feature | Aggregation semantics are out of scope for v0.1 outside Sigma correlations (default backend: `native_pcre2`)     |
-| `backend_compile_error`   | Backend       | Backend compilation failed                                                                                       |
-| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                                             |
+| Reason code               | Category      | Description                                                                                                                                                                                                                                |
+| ------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                                                                                                                                                                                  |
+| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                                                                                                                                                                           |
+| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                                                                                                                                                                             |
+| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                                                                                                                                                                         |
+| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                                                                                                                                                                                |
+| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                                                                                                                                                                           |
+| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (v0.1 default: PCRE2 with bounded execution for `\|re`)                                                                                                                           |
+| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                                                                                                                                                                      |
+| `unsupported_correlation` | Sigma feature | Correlation rule uses unsupported correlation type or semantics for the selected backend                                                                                                                                                   |
+| `unsupported_aggregation` | Sigma feature | Condition-string aggregation and temporal constructs (including pipe aggregation, `near`, `within`, and related keywords) are parsed but are not executable under the v0.1 default backend unless represented as a Sigma correlation rule. |
+| `backend_compile_error`   | Backend       | Backend compilation failed                                                                                                                                                                                                                 |
+| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                                                                                                                                                                       |
 
 Non-executable rules do not produce detection instances but are included in bridge coverage
 reporting and contribute to gap classification.
@@ -478,9 +700,15 @@ A detection instance is **attributed** to a ground truth action when all of the 
 
 Note (v0.1):
 
-- Since correlation/aggregation rules are out of scope, each detection instance MUST represent
-  exactly one matched event (`matched_event_ids` length 1). This ensures `first_seen_utc`
-  corresponds to the matched event time deterministically for join and latency metrics.
+- For event-rule detections, each detection instance MUST represent exactly one matched event
+  (`matched_event_ids` length 1). This ensures `first_seen_utc` corresponds to the matched event
+  time deterministically for join and latency metrics.
+- For correlation-rule detections, a detection instance MAY represent multiple matched events
+  (`matched_event_ids` length >= 1). In this case:
+  - `first_seen_utc` MUST equal the minimum event timestamp across `matched_event_ids`.
+  - `last_seen_utc` MUST equal the maximum event timestamp across `matched_event_ids`.
+  - `matched_event_ids` MUST be sorted in ascending bytewise lexical order (UTF-8) to keep the
+    artifact deterministic.
 
 ### Unattributed detections
 
@@ -502,15 +730,21 @@ Detection instances MUST validate against
 
 ### Required fields
 
-| Field               | Type   | Description                                                                            |
-| ------------------- | ------ | -------------------------------------------------------------------------------------- |
-| `rule_id`           | string | Sigma rule identifier (typically a UUID)                                               |
-| `rule_title`        | string | Sigma rule title                                                                       |
-| `rule_source`       | string | Always `"sigma"` for Sigma-originated detections                                       |
-| `run_id`            | string | Run identifier                                                                         |
-| `first_seen_utc`    | string | RFC 3339 UTC timestamp in fixed form `YYYY-MM-DDTHH:MM:SS.mmmZ` (event-time)           |
-| `last_seen_utc`     | string | RFC 3339 UTC timestamp in fixed form `YYYY-MM-DDTHH:MM:SS.mmmZ` (event-time)           |
-| `matched_event_ids` | array  | Sorted array of `metadata.event_id` references (v0.1: exactly 1 event id per instance) |
+| Field               | Type   | Description                                                                  |
+| ------------------- | ------ | ---------------------------------------------------------------------------- |
+| `rule_id`           | string | Sigma rule identifier (typically a UUID)                                     |
+| `rule_title`        | string | Sigma rule title                                                             |
+| `rule_source`       | string | Always `"sigma"` for Sigma-originated detections                             |
+| `run_id`            | string | Run identifier                                                               |
+| `first_seen_utc`    | string | RFC 3339 UTC timestamp in fixed form `YYYY-MM-DDTHH:MM:SS.mmmZ` (event-time) |
+| `last_seen_utc`     | string | RFC 3339 UTC timestamp in fixed form `YYYY-MM-DDTHH:MM:SS.mmmZ` (event-time) |
+| `matched_event_ids` | array  | Sorted array of `metadata.event_id` references.                              |
+
+Note:
+
+- For `matched_event_ids`: event rules, MUST be length 1. For correlation rules, MUST be length >= 1
+  and MAY include up to `detection.sigma.bridge.backend_options.max_matched_event_ids` IDs
+  (deterministic truncation required if exceeded).
 
 ### Recommended fields
 
@@ -595,19 +829,22 @@ the normative taxonomy defined in [Scoring metrics](070_scoring_metrics.md).
 ### Correlation rules
 
 Sigma correlation rules (multi-event sequences, temporal conditions, aggregations with thresholds)
-are **out of scope for v0.1**.
+are in-scope for parsing and bridge compilation.
 
-Rules containing `correlation` blocks MUST be marked non-executable with
-`non_executable_reason.reason_code: "unsupported_correlation"`.
+Executability is backend-specific. Rules containing `correlation` blocks MUST be marked
+non-executable with `non_executable_reason.reason_code: "unsupported_correlation"` when the selected
+bridge backend cannot represent or execute the requested correlation semantics (see
+`065_sigma_to_ocsf_bridge.md`).
 
 ### Aggregation functions
 
-Sigma aggregation keywords (`count`, `sum`, `avg`, `min`, `max`, `near`) are **out of scope for
-v0.1** unless the backend explicitly supports them.
+Sigma aggregation constructs (including pipe aggregation and keywords `count`, `sum`, `avg`, `min`,
+`max`, and temporal constructs like `near` / `within`) are in-scope for parsing (see "Parsing
+model"), but executability is backend-defined in v0.1.
 
 The default backend (`native_pcre2`) supports Sigma correlation rules, but does not necessarily
-support arbitrary Sigma aggregation keywords inside event-rule `condition` expressions in v0.1.
-Rules requiring aggregation MUST be marked non-executable with
+support aggregation constructs inside event-rule `condition` expressions in v0.1. Rules requiring
+aggregation inside event-rule `condition` expressions MUST be marked non-executable with
 `non_executable_reason.reason_code: "unsupported_aggregation"`.
 
 ### Timeframe modifiers

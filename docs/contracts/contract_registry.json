@@ -194,6 +194,14 @@
       "format": "json"
     },
     {
+      "contract_id": "baseline_run_ref",
+      "schema_path": "docs/contracts/baseline_run_ref.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Regression baseline pointer for reporting (inputs/baseline_run_ref.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
       "contract_id": "mapping_coverage",
       "schema_path": "docs/contracts/mapping_coverage.schema.json",
       "contract_version": "0.1.0",
@@ -434,6 +442,8 @@
     { "artifact_glob": "criteria/results.jsonl", "contract_id": "criteria_result", "stage_owner": "validation", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "detections/detections.jsonl", "contract_id": "detection_instance", "stage_owner": "detection", "validation_mode": "jsonl_lines" },
     { "artifact_glob": "ground_truth.jsonl", "contract_id": "ground_truth", "stage_owner": "runner", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "inputs/baseline_run_ref.json", "contract_id": "baseline_run_ref", "stage_owner": "reporting", "validation_mode": "json_document" },
+    { "artifact_glob": "inputs/baseline/manifest.json", "contract_id": "manifest", "stage_owner": "reporting", "validation_mode": "json_document" },  
     { "artifact_glob": "inputs/environment_noise_profile.json", "contract_id": "environment_noise_profile", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "inputs/plan_draft.yaml", "contract_id": "plan_draft", "stage_owner": "orchestrator", "validation_mode": "yaml_document" },
     { "artifact_glob": "inputs/range.yaml", "contract_id": "range_config", "stage_owner": "orchestrator", "validation_mode": "yaml_document" },

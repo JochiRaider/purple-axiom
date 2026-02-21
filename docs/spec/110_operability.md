@@ -64,11 +64,12 @@ stage-level outcomes and stable `reason_code` tokens used to explain failures an
   inventory used for that run.
   - This requirement applies to `lab.provider: manual` as well.
 - The manifest MUST include, at minimum:
-  - provider type (`lab.provider`)
-  - snapshot hash (sha256; `lab.inventory_snapshot_sha256`)
-  - either:
-    - the resolved asset list, or
-    - a run-relative pointer to `logs/lab_inventory_snapshot.json`
+  - provider type (`manifest.lab.provider`)
+  - snapshot hash (sha256; `manifest.lab.inventory_snapshot_sha256`)
+  - snapshot pointer (`manifest.lab.assets`): run-relative path `logs/lab_inventory_snapshot.json`
+  - `manifest.lab.inventory_source_ref` (optional; when applicable; secrets redacted or omitted)
+- v0.1: producers MUST NOT embed the resolved asset list in the manifest; consumers MUST read
+  `logs/lab_inventory_snapshot.json`.
 
 ## Collector observability (required)
 
@@ -118,8 +119,7 @@ defined below and write them to `runs/<run_id>/logs/counters.json`.
 The pipeline MUST also record a stage outcome entry with:
 
 - `stage: "detection.performance_budgets"`
-- `reason_domain: "operability"`
-- `status: "success" | "failed"`
+- `status: "success" | "failed" | "skipped"`
 
 If one or more configured budgets are exceeded, the stage outcome MUST be recorded as:
 

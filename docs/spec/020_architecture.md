@@ -157,7 +157,9 @@ Verb definitions (v0.1):
 
 - `simulate`
 
-  - Stages executed: the canonical v0.1 stage sequence (see
+  - Stages executed: the canonical v0.1 pipeline stage order, filtered to the stages enabled for
+    this run by `025_data_contracts.md`'s `stage_enablement_matrix_v1` (see
+    [Stage execution order](#stage-execution-order) and
     [ADR-0004: Deployment architecture and inter-component communication][adr-0004]).
   - Intent: perform a complete run and produce a complete run bundle.
   - When environment configuration is enabled, the orchestrator MUST record an additive `runner`
@@ -168,8 +170,13 @@ Verb definitions (v0.1):
 
 - `replay`
 
-  - Default stages executed: `normalization` → `validation` → `detection` → `scoring` → `reporting`
-    (and optional `signing`).
+  - Default stages executed (when enabled): `normalization` → `validation` → `detection` → `scoring`
+    → `reporting` (and optional `signing`).
+  - Verb selection and config gates further restrict this subset:
+    - Verbs select a deterministic subset of stages.
+    - Per-run stage enablement is defined by `025_data_contracts.md`'s `stage_enablement_matrix_v1`.
+    - Stages that are disabled for a run MUST be absent from the outcome surface (not recorded as
+      `skipped`) per ADR-0005.
   - Preconditions: the candidate run bundle MUST already contain `ground_truth.jsonl` and either:
     - `raw_parquet/**` (full replay; `normalization` and `validation` are executed), OR
     - a normalized event store (normalized-input replay; v0.2+):
@@ -187,11 +194,18 @@ Verb definitions (v0.1):
         mapping profile hash for the run, computed using the hashing rules in
         `025_data_contracts.md` ("mapping_profile_snapshot.json").
     - Stage behavior (normative):
-      - Stages executed: `detection` → `scoring` → `reporting` (and optional `signing`).
-      - The orchestrator MUST record `normalization` and `validation` as `status="skipped"` with
+      - Stages executed: the enabled subset of `detection` → `scoring` → `reporting` (and optional
+        `signing`), preserving canonical relative order.
+      - The orchestrator MUST record `normalization` as `status="skipped"` with
         `fail_mode="warn_and_skip"` and `reason_code="normalized_store_reused"`.
-      - If the match criteria fail and `raw_parquet/**` is absent, `replay` MUST fail closed with
-        `reason_code="normalized_store_incompatible"`.
+      - If `validation` is enabled for this run, the orchestrator MUST record `validation` as
+        `status="skipped"` with `fail_mode="warn_and_skip"` and
+        `reason_code="normalized_store_reused"`.
+      - If the match criteria fail and `raw_parquet/**` is absent:
+        - The orchestrator MUST record `normalization` as `status="failed"` with
+          `fail_mode="fail_closed"` and `reason_code="normalized_store_incompatible"`.
+        - The orchestrator MUST record each subsequent enabled stage as `status="skipped"` with
+          `fail_mode="warn_and_skip"` and `reason_code="blocked_by_upstream_failure"`.
   - Input immutability (normative): `replay` MUST treat `ground_truth.jsonl`, `raw_parquet/**` (when
     present), and `normalized/**` (when present) as read-only.
   - MUST NOT execute `runner` or `telemetry`, and MUST NOT create new artifacts under `runner/**` or
@@ -352,61 +366,79 @@ Implementation notes:
 
 #### Publish gate (normative, v0.1)
 
-- Stages MUST write candidate outputs under `runs/<run_id>/.staging/<stage_id>/`.
-- Before publishing, stages MUST validate required contract-backed artifacts (presence + schema).
+- Stages (and the orchestrator when publishing orchestrator-owned artifacts) MUST write candidate
+  outputs under `runs/<run_id>/.staging/<stage_id>/`, where `<stage_id>` is the active publish owner
+  id (a `stage_owner` value from the contract registry; pipeline stage ids plus the reserved owner
+  token `orchestrator`).
+- Before publishing, the publisher MUST validate required contract-backed artifacts (presence +
+  schema).
 - Publishing MUST be an atomic rename/move from staging into final run-bundle paths.
-- If validation fails, stages MUST NOT partially publish final-path artifacts.
-- On contract validation failure, the stage MUST emit a contract validation report at
-  `runs/<run_id>/logs/contract_validation/<stage_id>.json`.
+- If validation fails, the publisher MUST NOT partially publish final-path artifacts.
+- On contract validation failure, the publisher MUST emit a contract validation report at
+  `runs/<run_id>/logs/contract_validation/<stage_id>.json` (use `<stage_id>="orchestrator"` for
+  orchestrator-owned publish sessions).
 
 ## Run bundle layout
 
-**Summary**: The run bundle (`runs/<run_id>/`) is the filesystem contract boundary between stages.
-Paths are stable (no timestamps in filenames), and `manifest.json` is the authoritative index of
-what exists in the bundle.
+The run bundle is a deterministic on-disk folder rooted at:
 
-Normative top-level entries (run-relative):
+- `<workspace_root>/runs/<run_id>/`
 
-| Path                                      | Purpose                                                                                           |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `manifest.json`                           | Authoritative run index and provenance pins                                                       |
-| `inputs/`                                 | Pinned run inputs (scenario, range config; optional plan draft when enabled).                     |
-| `inputs/plan_draft.yaml`                  | Plan draft snapshot (v0.2+; when plan compilation/execution is enabled).                          |
-| `inputs/baseline/`                        | Baseline run snapshot materialization (regression; optional but recommended)                      |
-| `inputs/baseline_run_ref.json`            | Baseline selection and resolution record (regression; required when enabled)                      |
-| `ground_truth.jsonl`                      | Append-only action timeline (what was attempted)                                                  |
-| `runner/`                                 | Runner evidence (per-action subdirs, ledgers, verification, reconciliation)                       |
-| `runner/principal_context.json`           | Run-level runner evidence (principal/execution context; when enabled)                             |
-| `raw_parquet/`                            | Raw telemetry datasets (Parquet)                                                                  |
-| `raw/`                                    | Evidence-tier payloads and source-native blobs (when enabled)                                     |
-| `normalized/`                             | OCSF-normalized event store and mapping coverage                                                  |
-| `criteria/`                               | Criteria pack snapshot and evaluation results                                                     |
-| `bridge/`                                 | Sigma-to-OCSF bridge artifacts (router tables, compiled plans, coverage)                          |
-| `detections/`                             | Detection output artifacts                                                                        |
-| `scoring/`                                | Scoring summaries and metrics                                                                     |
-| `report/`                                 | Report outputs (required: `report/report.json`, `report/thresholds.json`)                         |
-| `logs/`                                   | Operability summaries and debug logs; not considered long-term storage                            |
-| `logs/health.json`                        | Stage/substage outcomes mirror (when enabled; see operability)                                    |
-| `logs/telemetry_validation.json`          | Telemetry validation evidence (when validation enabled)                                           |
-| `logs/lab_inventory_snapshot.json`        | Inventory snapshot produced by `lab_provider` (referenced by manifest)                            |
-| `logs/contract_validation/`               | Contract validation reports by stage (emitted on validation failure)                              |
-| `logs/cache_provenance.json`              | Cache provenance and determinism logs (when caching is enabled)                                   |
-| `logs/dedupe_index/`                      | Volatile normalization runtime index (restart-oriented; excluded from default exports/checksums). |
-| `security/`                               | Integrity artifacts when signing is enabled                                                       |
-| `security/redaction_policy_snapshot.json` | Snapshot of the effective redaction policy (recommended when redaction is enabled).               |
-| `unredacted/`                             | Quarantined sensitive artifacts (when enabled); excluded from default disclosure                  |
-| `plan/`                                   | [v0.2+] Plan expansion and execution artifacts                                                    |
+**This section is explicitly non-exhaustive.**
 
-Common per-action evidence location (run-relative):
+- The machine-authoritative inventory of **contract-backed** run-bundle artifacts (including
+  ownership) is `contract_registry.json` (run-bundle) and, for workspace-root artifacts,
+  `workspace_contract_registry.json`.
+- Human-readable layout semantics and feature-gated requiredness are defined in
+  `025_data_contracts.md`.
 
-- `runner/actions/<action_id>/...` (contracted per-action evidence; for example: `stdout.txt`,
-  `stderr.txt`, `executor.json`, and additional artifacts such as `cleanup_verification.json`,
-  `requirements_evaluation.json`, `side_effect_ledger.json`, `state_reconciliation_report.json`).
+Selected stable paths (non-exhaustive; run-relative):
 
-See [ADR-0004: Deployment architecture and inter-component communication][adr-0004] for filesystem
-publish semantics, the [data contracts specification][data-contracts] for contracted artifact paths
-and schemas, and the [storage formats specification][storage-formats-spec] for Parquet and
-evidence-tier layout rules.
+| Path                                     | Purpose                                                                                                                                                                    |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `manifest.json`                          | Run index and stage outcomes surface (contract-backed).                                                                                                                    |
+| `run_results.json`                       | Compact run summary for CI time-to-signal (contract-backed; orchestrator-owned).                                                                                           |
+| `range/`                                 | The selected range, its sources, and any derived stable snapshots.                                                                                                         |
+| `runner/`                                | Runner invocation and executable identity/provenance.                                                                                                                      |
+| `raw/`                                   | Raw telemetry dumps (optional; redaction-sensitive).                                                                                                                       |
+| `raw_parquet/`                           | Raw telemetry as Parquet parts (optional; for replay / debugging).                                                                                                         |
+| `normalized/`                            | Normalized event store(s) and mapping artifacts.                                                                                                                           |
+| `criteria/`                              | Validation criteria inputs, results, and provenance.                                                                                                                       |
+| `detections/`                            | Detection outputs and evidence.                                                                                                                                            |
+| `scores/`                                | Scoring outputs and evidence.                                                                                                                                              |
+| `report/`                                | Reporting products (e.g., `report/report.json`, `report/thresholds.json`).                                                                                                 |
+| `inputs/`                                | Input snapshots and pointers materialized for determinism and replay.                                                                                                      |
+| `inputs/plan_draft.yaml`                 | Finalized plan draft snapshot (contract-backed; orchestrator-owned).                                                                                                       |
+| `inputs/environment_noise_profile.json`  | Optional environment noise profile snapshot (contract-backed; orchestrator-owned).                                                                                         |
+| `inputs/telemetry_baseline_profile.json` | Optional telemetry baseline profile snapshot (contract-backed; orchestrator-owned).                                                                                        |
+| `inputs/baseline_run_ref.json`           | Regression baseline pointer (contract-backed; reporting-owned; required when regression is enabled).                                                                       |
+| `inputs/baseline/manifest.json`          | Optional baseline manifest snapshot (contract-backed; reporting-owned; immutable when present).                                                                            |
+| `logs/`                                  | Operability surface: deterministic evidence + volatile diagnostics (see ADR-0009); deterministic evidence under `logs/` MUST be retained for the full run retention period |
+| `logs/counters.json`                     | Tier-0 operability counters snapshot (contract-backed; orchestrator-owned).                                                                                                |
+| `logs/telemetry_validation.json`         | Telemetry validation evidence (required when telemetry stage is enabled).                                                                                                  |
+| `logs/contract_validation/`              | Per-owner contract validation reports on publish-gate failures.                                                                                                            |
+| `logs/lab_inventory_snapshot.json`       | Deterministic lab environment inventory snapshot for auditability.                                                                                                         |
+| `logs/cache_provenance.json`             | Run cache hit/miss and upstream provenance for replay fast paths.                                                                                                          |
+| `logs/dedupe_index/**`                   | Deterministic indices for deduplication.                                                                                                                                   |
+| `workspace/**`                           | Workspace-global state pointers relevant to this run (read-only for stages).                                                                                               |
+| `security/`                              | Redaction policies and security posture snapshots.                                                                                                                         |
+| `plan/`                                  | Execution plan artifacts, including finalized plan and provenance.                                                                                                         |
+| `control/`                               | Control-plane requests/decisions and audit trail (reserved; v0.2+ forward-compat).                                                                                         |
+
+Per-action evidence location (normative):
+
+- `extract` MUST add `range/` source snapshots and update `manifest.json`.
+- `simulate` MUST populate the output surfaces for each enabled stage and update `manifest.json`
+  (e.g., `runner/` always; `raw_parquet/` when telemetry is enabled; `normalized/` always;
+  `criteria/`, `detections/`, `scores/`, and `report/` when their stages are enabled).
+- `replay` MUST populate (or reuse) `normalized/` and MUST populate the output surfaces for each
+  enabled downstream stage (`criteria/`, `detections/`, `scores/`, `report/`), and update
+  `manifest.json`.
+- `export` MUST write export bundles under the workspace-root reserved namespace `exports/**`
+  (outside the run bundle) and MUST NOT pollute run-relative outputs except via `report/` and
+  `manifest.json`.
+
+See ADR-0004 for the full workspace and evidence-tier layout rules.
 
 ## Workspace layout (v0.1+ normative)
 
@@ -507,6 +539,11 @@ Normative requirements:
 - A run MUST be considered present if and only if `runs/<run_id>/manifest.json` exists and validates
   against the manifest contract.
 
+- If initialization fails before a valid `manifest.json` can be published, the run MUST be treated
+  as not present by this rule. If the failure is due to contract validation of orchestrator-owned
+  artifacts, the orchestrator MUST still emit
+  `runs/<run_id>/logs/contract_validation/orchestrator.json` as the deterministic forensic surface.
+
 - Implementations MAY maintain a derived workspace run registry at
   `<workspace_root>/state/run_registry.json` for fast discovery, but it MUST be rebuildable by a
   deterministic scan of `runs/<run_id>/manifest.json` surfaces:
@@ -543,6 +580,12 @@ MUST NOT change the semantics of the parent stage outcome.
 See [ADR-0005: Stage outcomes and failure classification][adr-0005] for stage outcome definitions
 and failure classification.
 
+Note: The identifiers in the table below are **pipeline stage ids**. Contract ownership uses
+`stage_owner` ids from the contract registry, which include all pipeline stage ids plus the reserved
+owner token `orchestrator`. A stage being marked "Optional" here refers to a capability (e.g.
+`signing`) rather than config gating. If a pipeline stage is disabled for a run by configuration, it
+MUST be absent from the outcome surface (not recorded as `skipped`) per ADR-0005.
+
 ## Stage execution order
 
 Preamble (normative, per
@@ -555,7 +598,11 @@ Preamble (normative, per
   running the first stage.
 - The orchestrator MUST treat `manifest.json` as the authoritative run index throughout the run.
 
-The orchestrator MUST execute stages in the following order for v0.1:
+The orchestrator MUST execute the enabled pipeline stages in the canonical relative order below for
+v0.1. "Enabled" is determined by the verb semantics and then further filtered by
+`025_data_contracts.md`'s `stage_enablement_matrix_v1`.
+
+Canonical relative order (v0.1):
 
 1. `lab_provider`
 1. `runner`
@@ -565,7 +612,16 @@ The orchestrator MUST execute stages in the following order for v0.1:
 1. `detection`
 1. `scoring`
 1. `reporting`
-1. `signing` (optional; when enabled, MUST be last)
+1. `signing` (capability-optional; when enabled, MUST be last)
+
+Rules:
+
+- Verbs (for example `replay`) select a deterministic subset of stages; config gates further
+  restrict that subset.
+- Stages that are disabled for a run MUST be absent from the outcome surface (not recorded as
+  `skipped`) per ADR-0005.
+- Stages that are enabled but deliberately short-circuited (for example `normalized_store_reused`)
+  MUST be recorded as `status="skipped"` with a stage-scoped `reason_code` per ADR-0005.
 
 Note: Telemetry collection MAY run concurrently with `runner` (collectors are typically started
 before `runner` begins and stopped after it completes). The `telemetry` stage boundary refers to the
@@ -706,13 +762,21 @@ required contract outputs (v0.1)”). Implementations MUST NOT rely on the defau
 Deterministic stage → contract-backed outputs (normative):
 
 - The contract registry (`contract_registry.json`) is the source of truth for stage ownership of
-  contract-backed artifacts via `bindings[].stage_owner`.
+  contract-backed artifacts via `bindings[].stage_owner`. Each contract-backed artifact path MUST be
+  bound to exactly one `stage_owner` (single-writer).
 - The contract registry (`contract_registry.json`) is also the source of truth for validation
   dispatch of contract-backed artifacts via `bindings[].validation_mode` (see
   `025_data_contracts.md`).
+- When a publish session begins (`PublishGate.begin_stage(stage_id)`), `stage_id` MUST be a valid
+  `stage_owner` value from the active contract registry (pipeline stage ids plus the reserved owner
+  token `orchestrator`). Orchestrator-owned artifacts (bindings with `stage_owner="orchestrator"`)
+  MUST be published via a session opened with `stage_id="orchestrator"`.
 - The orchestrator (or stage wrapper) MUST construct `expected_outputs[]` by joining the current
   `stage_id` to `bindings[].stage_owner` and mapping concrete artifact paths to `contract_id` via
   `artifact_glob`.
+  - Literal rule: for any binding without glob metacharacters, the stage wrapper MUST include the
+    literal `artifact_glob` path in `expected_outputs[]` even if the file is absent in staging (so
+    requiredness can be enforced).
   - Expansion rule: for any binding with glob metacharacters (for example `*` or `**`), the stage
     wrapper MUST expand `artifact_glob` using `glob_v1` semantics defined in `025_data_contracts.md`
     ("Glob semantics (glob_v1)") over the set of staged regular files under
@@ -730,8 +794,10 @@ Deterministic stage → contract-backed outputs (normative):
 Finalize semantics (normative):
 
 - All outputs for a stage MUST be written under `runs/<run_id>/.staging/<stage_id>/` first.
-- Output-root guardrail: a stage MUST NOT write or promote any run-bundle output outside its
-  declared output roots (see "Stage IO boundaries" above). Violations MUST fail closed.
+- Output-root guardrail: a stage MUST NOT write or promote any run-bundle output outside its allowed
+  output roots for the active `stage_id`. Allowed roots are derived from the active contract
+  registry bindings for that `stage_id` plus an explicit allowlist for non-contract outputs (see
+  `026_contract_spine.md`). Violations MUST fail closed.
 - `finalize()` MUST validate all **contract-backed** expected outputs (i.e., entries with
   `contract_id` set) using `ContractValidator` before any atomic promotion.
   - Expected outputs with `contract_id=null` are not schema-validated.
@@ -834,7 +900,8 @@ Persistence semantics (normative):
 
 Required ordering behavior (normative):
 
-- Stage outcomes MUST be emitted in stable ordering (canonical stage order).
+- Stable ordering: stage outcomes MUST be emitted in canonical stage order, filtered to the stages
+  that are present for the run (the sink MUST NOT synthesize outcomes for disabled stages).
 - Substages, when present, MUST be ordered immediately after their parent stage, sorted
   lexicographically by full `stage` string.
 
@@ -1135,14 +1202,11 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
      - Contract alignment (schema-owned reason fields): for contract-backed artifacts,
        `reason_domain` MUST equal the artifact schema’s `contract_id` (see
        `docs/contracts/contract_registry.json`).
-       - Exemption (placeholder namespace): fields under the top-level `placeholder` object are
-         governed by the placeholder contract. `placeholder.reason_domain` MUST be
-         `artifact_placeholder` (and `placeholder.reason_code` is paired per that contract), and
-         `placeholder.reason_domain` MUST NOT be subject to the contract-alignment check. Rationale:
-         placeholders must be schema-valid while using a fixed placeholder reason domain.
      - Exemption (placeholder namespace): fields under the top-level `placeholder` object are
        governed by the placeholder contract. `placeholder.reason_domain` MUST be
-       `artifact_placeholder` and MUST NOT be subject to the contract-alignment check (see
+       `artifact_placeholder` (and `placeholder.reason_code` is paired per that contract), and
+       `placeholder.reason_domain` MUST NOT be subject to the contract-alignment check. Rationale:
+       placeholders must be schema-valid while using a fixed placeholder reason domain (see
        `090_security_safety.md`, "Placeholder artifacts").
      - For non-contract placeholder/operator-interface artifacts, `reason_domain` MUST be one of the
        explicitly documented constants (`artifact_placeholder`, `operator_interface`)..
@@ -1186,6 +1250,22 @@ are mandatory (names are suggestions; harness/framework is implementation-define
    - Assert: no contracted outputs appear in final locations; only staging contains partial data.
    - Assert: rerun behavior is deterministic (either cleanly resumes and publishes, or fails closed
      with a stable storage/consistency reason code).
+
+1. `publish_gate_output_root_guardrail_fail_closed`
+
+   - Attempt to publish an output outside `allowed_roots(stage_id)` (e.g., `reporting` staging a
+     file under `normalized/`), and assert publish fails closed, emits a validation report, and
+     promotes nothing.
+
+1. `publish_gate_extra_roots_allow_non_contract_outputs`
+
+   - Telemetry publishes a non-contract artifact under `raw_parquet/` (declared via extra roots) and
+     asserts it can be promoted.
+
+1. `publish_gate_registry_roots_consistency`
+
+   - Static test: compute `allowed_roots(stage_owner)` and verify every registry binding’s
+     `artifact_glob` is contained by those roots (fails closed on mismatch).
 
 1. `contract_validation_report_location_and_ordering`
 
@@ -1276,7 +1356,7 @@ defines the minimum IO contract for v0.1.
 | --------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `lab_provider`  | Run configuration, provider inputs                                                                         | `logs/lab_inventory_snapshot.json` (inventory snapshot; referenced by manifest)                                                                                                                                                            |
 | `runner`        | Inventory snapshot, scenario plan                                                                          | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); (v0.2+: `plan/**`)                                                                                                         |
-| `telemetry`     | inventory snapshot, `inputs/range.yaml`, `inputs/scenario.yaml`, `ground_truth.jsonl` lifecycle timestamps | `raw_parquet/**`, `raw/**` (when raw preservation is enabled), `logs/telemetry_validation.json` (when telemetry validation is enabled)                                                                                                     |
+| `telemetry`     | inventory snapshot, `inputs/range.yaml`, `inputs/scenario.yaml`, `ground_truth.jsonl` lifecycle timestamps | `raw_parquet/**`, `raw/**` (when raw preservation is enabled), `logs/telemetry_validation.json`                                                                                                                                            |
 | `normalization` | `raw_parquet/**`, mapping profiles                                                                         | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                                            |
 | `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                              | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                                              |
 | `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                     | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                                                 |

@@ -70,7 +70,10 @@ under `runs/<run_id>/raw/osquery/osqueryd.results.log`.
 
 Notes:
 
-- This staged file is the canonical evidence-tier representation for osquery results.
+- This staged path is the canonical evidence-tier representation path for osquery results.
+- The file at this path MUST appear in either `present`, `withheld`, or `quarantined` form under the
+  project redaction policy (path is constant, but content may be a deterministic placeholder and/or
+  stored under the run quarantine directory).
 - This path corresponds to `telemetry.sources.osquery.output_path` (v0.1 conformance value:
   `raw/osquery/`).
 - The pipeline MAY also stage adjacent files (example: `osqueryd.*.log`) under the same directory,
@@ -184,8 +187,8 @@ File-tailed crash/restart + rotation continuity (required when osquery is enable
   crash/restart and rotation continuity test and record results in
   `runs/<run_id>/logs/telemetry_validation.json` under `assets[].file_tailed_continuity_test`
   (including `loss_pct` and `dup_pct`).
-- In CI (R-01), the continuity test asserts `loss_pct == 0` across a window spanning rotation and a
-  crash boundary; duplication is acceptable but must be measured and reported as `dup_pct`.
+- In CI, the continuity test asserts `loss_pct == 0` across a window spanning rotation and a crash
+  boundary; duplication is acceptable but must be measured and reported as `dup_pct`.
 
 ### Required exporter tagging
 
@@ -198,12 +201,15 @@ File-tailed crash/restart + rotation continuity (required when osquery is enable
   the raw line) and the normalizer MUST account for it as an ingest or parse error (see
   [Conformance fixtures and tests](#conformance-fixtures-and-tests)).
 
-## Derived raw Parquet (optional but recommended)
+## Derived raw Parquet (required when osquery is enabled)
 
-The pipeline MAY convert staged NDJSON lines into a Parquet dataset under
-`runs/<run_id>/raw_parquet/osquery/`.
+When `telemetry.sources.osquery.enabled=true`, the pipeline MUST convert staged NDJSON lines into a
+Parquet dataset under `runs/<run_id>/raw_parquet/osquery/`.
 
-When emitted, the dataset MUST include, at minimum, the following columns:
+The dataset directory MUST include `_schema.json` (see Parquet dataset conventions in
+[storage formats](045_storage_formats.md)).
+
+The dataset MUST include, at minimum, the following columns:
 
 | Column            | Type          | Notes                                                                |
 | ----------------- | ------------- | -------------------------------------------------------------------- |
@@ -233,6 +239,8 @@ Determinism requirements:
 ### Source type
 
 - The normalizer MUST set `metadata.source_type = "osquery"` for osquery-derived events.
+- For all osquery-derived normalized events (routed or unrouted), the normalizer MUST set
+  `metadata.extensions.purple_axiom.raw_ref = null` (field MUST be present; Tier 3 contract rule).
 
 ### Routing by query_name
 
@@ -259,8 +267,12 @@ Rules:
   Marker-bearing records MUST NOT be dropped; if a record carries
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
   `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, the normalizer MUST still
-  emit a minimal envelope with `class_uid = 0`, preserve whichever marker fields are present, and
-  preserve the source payload in `raw` (see [OCSF normalization spec](050_normalization_ocsf.md)).
+  emit a minimal envelope with `class_uid = 0` and preserve whichever marker fields are present.
+  When `normalization.raw_preservation.enabled=true`, the normalizer MUST also preserve the source
+  payload under `raw.osquery` per `normalization.raw_preservation.policy` (see
+  [Minimal mapping obligations (v0.1)](#minimal-mapping-obligations-v01)). When raw preservation is
+  disabled (or `policy=none`), the normalizer MUST NOT include the source payload under
+  `raw.osquery`.
 - Implementations MAY provide an explicit allowlist of additional `query_name` routes via mapping
   profile material.
 
@@ -270,20 +282,27 @@ For routed rows, the normalizer MUST:
 
 - Emit a valid OCSF envelope as defined in the [OCSF normalization spec](050_normalization_ocsf.md)
   and the [OCSF field tiers spec](055_ocsf_field_tiers.md).
-- Preserve the full source payload under an explicit `raw.osquery` object so source fidelity is not
-  lost.
+- Preserve source payload under `raw.osquery` only when
+  `normalization.raw_preservation.enabled=true`. The exact fields included MUST follow
+  `normalization.raw_preservation.policy` (see below).
 - The normalizer MUST set:
   - `metadata.identity_tier = 3`
   - `metadata.source_event_id = null` (osquery does not provide a stable native record id)
   - `metadata.time_precision = "s"`
 
-Minimum `raw.osquery` contents:
+`raw.osquery` payload (conditional):
 
-- `query_name`
-- `action`
-- `columns` (object) or `snapshot` (array), whichever was present
-- `raw_json` (canonical JSON for the record, or a redacted-safe representation)
-- `raw_line` (if available from ingestion)
+- If `normalization.raw_preservation.enabled=false` or `normalization.raw_preservation.policy=none`,
+  the normalizer MUST NOT emit `raw.osquery`.
+- If `normalization.raw_preservation.policy=minimal`, `raw.osquery` MUST include:
+  - `query_name`
+  - `action`
+  - `columns` (object) or `snapshot` (array), whichever was present
+  - `raw_json` (canonical JSON for the record, or a redacted-safe representation)
+- If `normalization.raw_preservation.policy=full`, `raw.osquery` MUST include all `minimal` fields
+  and MAY additionally include:
+  - `raw_line` (if available from ingestion)
+  - `log.file.path` (if provided by the collector)
 
 Additional mapping (v0.1, optional):
 
@@ -420,13 +439,24 @@ A v0.1 implementation MUST satisfy:
   - Marker-bearing records (those carrying
     `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
     `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`) MUST NOT be dropped; if
-    unrouted, they MUST still be emitted with `class_uid = 0` and preserved raw payload.
+    unrouted, they MUST still be emitted with `class_uid = 0`.
 - Identity determinism:
   - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values.
-- Raw preservation:
-  - The staged raw results log is present at `runs/<run_id>/raw/osquery/osqueryd.results.log`.
-  - Routed normalized events contain `raw.osquery.raw_json` (or an explicitly redacted-safe
-    representation when redaction is enabled).
+- Contract alignment:
+  - All osquery-derived normalized events include `metadata.extensions.purple_axiom.raw_ref` and it
+    is `null`.
+- Raw preservation (staged + normalized):
+  - The staged raw results log is present at `runs/<run_id>/raw/osquery/osqueryd.results.log`
+    (actual content or deterministic placeholder when withheld/quarantined).
+  - When `normalization.raw_preservation.enabled=true` and
+    `normalization.raw_preservation.policy != "none"`, routed normalized events contain
+    `raw.osquery.raw_json` (or an explicitly redacted-safe representation when redaction is
+    enabled).
+  - When `normalization.raw_preservation.enabled=false` (or `policy="none"`), routed normalized
+    events MUST NOT contain `raw.osquery`.
+- Derived raw Parquet:
+  - When `telemetry.sources.osquery.enabled=true`, `runs/<run_id>/raw_parquet/osquery/` exists and
+    includes `_schema.json`.
 
 ## Sample inputs and outputs (non-normative)
 
@@ -454,7 +484,12 @@ A v0.1 implementation MUST satisfy:
     "scenario_id": "SCENARIO_ID",
     "collector_version": "otelcol-contrib",
     "normalizer_version": "purple-axiom-normalizer",
-    "source_type": "osquery"
+    "source_type": "osquery",
+    "extensions": {
+      "purple_axiom": {
+        "raw_ref": null
+      }
+    }
   },
   "raw": {
     "osquery": {
@@ -494,6 +529,7 @@ A v0.1 implementation MUST satisfy:
 
 | Date      | Change                                       |
 | --------- | -------------------------------------------- |
+| 2/20/2026 | update                                       |
 | 1/24/2026 | update                                       |
 | 1/18/2026 | spec update                                  |
 | TBD       | Style guide migration (no technical changes) |

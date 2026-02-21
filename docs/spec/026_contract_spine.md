@@ -425,9 +425,45 @@ Publish-gate staging layout (normative):
 
 Output-root guardrail (normative):
 
-- A stage MUST NOT write or promote any run-bundle output outside its declared output roots (see
-  `020_architecture.md`, "Stage IO boundaries").
-- Violations MUST fail closed and MUST NOT promote any staged outputs.
+- A publish session owner (`stage_id`) MUST NOT write or promote any run-bundle output outside its
+  declared output roots (see `020_architecture.md`, “Stage IO boundaries”) and any stage-specific
+  output-root extensions documented by the owning stage spec.
+
+- For enforcement, the publish gate MUST compute a deterministic allowlist of run-relative roots:
+
+  - `allowed_roots(stage_id) = contract_roots(stage_id) ∪ extra_roots(stage_id)`.
+
+- `contract_roots(stage_id)` (normative):
+
+  - Construct `contract_roots(stage_id)` by mapping each contract registry binding where
+    `binding.stage_owner == stage_id` to a conservative root derived from `binding.artifact_glob`:
+
+    - If the glob has no `/`, the root is the literal file path (example: `manifest.json`).
+    - If the glob begins with `inputs/`:
+      - If it has 3+ path segments (`inputs/<seg2>/...`), the root is `inputs/<seg2>/`.
+      - Else (it is `inputs/<file>`), the root is the literal file path (to avoid widening ownership
+        to all of `inputs/`).
+    - Otherwise, the root is the first path segment plus `/` (example:
+      `runner/actions/*/executor.json` → `runner/`).
+
+- `extra_roots(stage_id)` (normative):
+
+  - `extra_roots(stage_id)` is an explicit, stage-scoped allowlist for permitted non-contract
+    outputs.
+  - v0.1 required:
+    - `extra_roots("telemetry")` MUST include `raw_parquet/`.
+    - `extra_roots("telemetry")` MUST include `raw/` when raw preservation is enabled.
+
+- Path containment check (normative):
+
+  - Roots that end with `/` are directory roots and use prefix containment.
+  - Roots that do not end with `/` are file roots and require exact match.
+
+- Enforcement (normative):
+
+  - Any attempt to stage or promote an output whose final run-relative path is not contained by
+    `allowed_roots(stage_id)` MUST fail closed and MUST NOT promote any staged outputs.
+  - This check applies to both expected outputs and any lenient unexpected non-contract outputs.
 
 Deterministic stage → contract-backed outputs (normative):
 

@@ -490,14 +490,69 @@ For `native_pcre2`, `backend.settings` MUST include at minimum:
 
 ### Backend adapter contract (normative, v0.1)
 
-This section defines the minimum executable subset and deterministic compilation requirements for
-the evaluator backend adapter. It is authoritative for:
+This section defines the deterministic parsing, validation, and compilation requirements for the
+evaluator backend adapter. Parsing is fully in-scope: the adapter MUST parse Sigma rules into a
+canonical Sigma AST surface (`sigma_ast_v1`) even when downstream execution is not supported.
+Executability is a backend decision made during capability validation and lowering (not a
+bridge-global supported subset).
 
-- what the bridge MUST compile and execute in v0.1 (supported subset),
-- how compilation MUST be made deterministic, and
-- which conditions MUST be classified as non-executable (fail closed).
+It is authoritative for:
+
+- the canonical parsing surface and deterministic reference-resolution steps performed by the
+  bridge,
+- how compilation MUST be made deterministic (stable ordering, stable IDs, stable plan
+  serialization), and
+- which conditions MUST be classified as non-executable (fail closed) when routing, aliasing,
+  reference resolution, or backend lowering cannot represent the parsed AST.
+
+#### Compilation pipeline (normative)
+
+For each selected Sigma rule document, bridge compilation MUST follow this pipeline:
+
+1. YAML decode (safe subset) -> `SigmaRule` / `SigmaCorrelationRule`.
+1. Parse -> `sigma_ast_v1`:
+   - Event rules: parse `detection.condition` into a condition AST.
+   - Correlation rules: parse `correlation` into a correlation AST (including type normalization).
+1. Reference resolution (deterministic):
+   - Resolve `ref` nodes to declared search identifiers.
+   - Resolve `of` targets:
+     - `them`: exclude underscore-prefixed identifiers; expand in bytewise lexical order.
+     - `pattern`: glob match; expand in bytewise lexical order.
+   - Resolve correlation `rules` references to rule ids in the compilation input set:
+     - Prefer exact match on `id`; otherwise exact match on `title`.
+     - Missing or ambiguous references MUST fail closed as non-executable.
+1. Apply mapping pack:
+   - Apply field alias map + transforms for all referenced Sigma fields.
+   - Parse and normalize correlation `timespan` to `timespan_ms`.
+1. Backend validation (capability gate):
+   - Determine the effective capability profile:
+     - Start with backend defaults (if any).
+     - Apply config overrides (if present); overrides MUST be enforced.
+   - If the rule requires any construct outside the effective profile, mark non-executable with the
+     appropriate reason code (for example `unsupported_operator`, `unsupported_aggregation`,
+     `unsupported_correlation`).
+1. Lowering:
+   - If validated, lower to `pa_eval_v1` and emit the compiled plan envelope.
+
+Backend module hooks (logical interface):
+
+- `capabilities() -> CapabilityProfile` (optional; used for introspection and linting).
+- `validate(sigma_ast_v1, context) -> ValidationResult`
+- `lower(sigma_ast_v1, context) -> pa_eval_v1`
 
 #### Common requirements (all backends)
+
+1. Parsing model (normative):
+
+   - For each evaluated Sigma rule, the adapter MUST parse rule YAML into a structured rule object
+     (`SigmaRule` or `SigmaCorrelationRule`) and MUST parse `detection.condition` (and
+     `correlation:` when present) into `sigma_ast_v1` (see `060_detection_sigma.md`, "Parsing
+     model").
+   - The adapter MUST perform deterministic reference resolution (selector references, `x of`
+     expansion, correlation rule references) prior to backend-specific lowering.
+   - If parsing or reference resolution fails, the rule MUST be compiled as non-executable
+     (`executable=false`) with a deterministic `non_executable_reason` (do not treat as "no
+     matches").
 
 1. Output artifacts:
 
@@ -531,17 +586,29 @@ the evaluator backend adapter. It is authoritative for:
 
 1. Backend-neutral compiled-plan IR boundary (normative):
 
-   - To support optional backends without losing determinism, compilation MUST produce a
-     backend-neutral intermediate representation (IR) after routing + alias resolution and before
-     any backend-specific lowering.
-   - For v0.1, the IR is the `pa_eval_v1` plan IR defined below. The IR MUST be stored under
+   - To support optional backends without losing determinism, compilation MUST produce two
+     backend-neutral representations with a strict boundary:
+
+     - `sigma_ast_v1` (always): the canonical parse output of the Sigma rule. This representation is
+       produced after decoding and before routing, and is authoritative for parsing, linting, and
+       diagnostics.
+
+     - `pa_eval_v1` (only when `executable=true`): the backend-neutral evaluation plan IR produced
+       after routing + alias resolution and before any backend-specific lowering. The `pa_eval_v1`
+       plan IR is defined below.
+
+   - The compiled plan envelope MUST always include `sigma_ast` (`sigma_ast_v1`).
+
+   - When `executable=true`, the compiled plan MUST include `pa_eval_v1` under
      `backend.plan_kind="pa_eval_v1"` and `backend.plan`.
-   - Backend adapters MUST treat `pa_eval_v1` as the semantic source of truth. If a backend requires
-     an internal representation (for example SQL, an in-memory bytecode, or a streaming query), it
-     MUST deterministically lower from this IR.
+
+   - Backend adapters MUST treat `sigma_ast_v1` as the semantic source of truth for parsing and
+     linting, and MUST treat `pa_eval_v1` as the semantic source of truth for evaluation when
+     present. Backends MUST NOT attempt to reinterpret the original Sigma YAML differently.
+
    - Backends MUST NOT introduce backend-specific semantics at the IR layer. Any backend that cannot
-     preserve the IR semantics MUST mark the rule non-executable (fail closed) using the appropriate
-     `reason_code`.
+     preserve the `pa_eval_v1` semantics MUST mark the rule non-executable (fail closed) using the
+     appropriate `reason_code`.
 
 1. Deterministic lowering requirements (normative):
 
@@ -629,12 +696,15 @@ Supported correlation fields (minimum):
 
 Out of scope in v0.1 (MUST be marked non-executable when encountered):
 
-- Temporal aggregation semantics inside event rules (example: `count()`, `near`, `within`) unless
-  expressed as a Sigma correlation rule.
+- Sigma condition-string temporal aggregation semantics (including `count`, `near`, `within`, and
+  pipes) unless expressed as a Sigma correlation rule. These constructs MUST still be parsed into
+  `sigma_ast_v1` prior to classification.
 - Field modifiers that require binary transforms (example: `base64`, `utf16`, `windash`) unless the
   mapping pack has already materialized an equivalent normalized value.
 - Regex patterns that are not compatible with the configured regex dialect or are rejected by the
   regex safety policy (see "Regex dialect and safety").
+- Sigma correlation types outside the v0.1 supported set (for example `value_sum`, `value_avg`,
+  `value_percentile`).
 
 #### Native evaluator adapter requirements (native_pcre2, normative)
 
@@ -643,8 +713,9 @@ in-process evaluator.
 
 ##### MVP compilation gate
 
-- The adapter MUST treat any Sigma construct not listed in the supported subset as non-executable in
-  v0.1.
+- The adapter MUST parse all Sigma constructs covered by `sigma_ast_v1` (including deprecated
+  aggregation/temporal constructs) and MUST treat any construct not listed in the supported
+  evaluation subset as non-executable in v0.1.
 - The adapter MUST emit `executable=false` with an appropriate `non_executable_reason` whenever:
   - a modifier/operator is not supported,
   - routing is ambiguous or unmapped,
@@ -656,6 +727,9 @@ in-process evaluator.
 `pa_eval_v1` is the bridge's backend-neutral plan IR for batch evaluation. The `native_pcre2`
 backend executes this IR directly; any other batch backend MUST deterministically lower from this IR
 while preserving the semantics defined below.
+
+A compiled plan MUST always include `sigma_ast` (`sigma_ast_v1`) under the top-level key
+`sigma_ast`, regardless of `executable`.
 
 When `executable=true`, a compiled plan MUST include IR content under `backend.plan` with:
 
@@ -806,10 +880,16 @@ When present, `backend.plan.correlation` MUST conform to the following minimal s
 - `group_by`: array of correlation field names (stable order as in source)
 - `condition`: optional object `{ "op": "gte|gt|lte|lt|eq", "value": <number> }`
 - `field`: required for `value_count` (correlation field name)
-- `aliases`: optional mapping:
+- `aliases`: optional mapping (correlation key unification):
   - `<correlation_field_name>` -> object:
     - `<rule_id>` -> `<sigma_field_name>`
 - `generate`: optional boolean (default false)
+
+Alias resolution stage (normative):
+
+- Values in `aliases` MUST be Sigma field names (pre-OCSF), not OCSF paths.
+- The bridge MUST apply correlation alias resolution in Sigma field space prior to applying the
+  mapping pack field alias map and transforms to obtain OCSF fields.
 
 Field resolution and key extraction (normative):
 
@@ -834,7 +914,8 @@ Correlation types (normative, minimal):
 - `value_count`: Count distinct values of the `field` across all matched events in the group.
 - `temporal`: Count distinct referenced rule ids present in the group.
 - `ordered_temporal`: Succeeds if there exists an in-order sequence of matched events whose rule id
-  order matches the order in `correlation.rules` within the same group.
+  order matches the order in `correlation.rules` within the same group. Lexical alias:
+  `temporal_ordered` (normalized to `ordered_temporal`).
 
 Unless otherwise specified by the Sigma rule, the default `condition` for `temporal` and
 `ordered_temporal` MUST be: `>= len(correlation.rules)`.
@@ -893,6 +974,7 @@ These artifacts MUST conform to the data contracts specification, including cano
   - `compiled_plans/<rule_id>.plan.json` MUST be emitted for each evaluated rule.
   - Each plan MUST include:
     - `rule_id`
+    - `sigma_ast` (parsed Sigma AST, `sigma_ast_v1`; required even when `executable=false`)
     - `rule_sha256` (SHA-256 digest string in `sha256:<lowercase_hex>` form over canonical Sigma
       rule bytes per the data contracts specification; see canonical rule hashing guidance in
       `060_detection_sigma.md`)

@@ -62,9 +62,6 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- `tests/fixtures/lab_providers/`
-- `tests/fixtures/scenario/target_selection/`
-
 See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
 mapping.
 
@@ -184,7 +181,13 @@ Retention semantics:
 - Even though the snapshot is stored under `logs/`, implementations MUST retain it for the full
   retention period of the run bundle and MUST NOT treat it as prunable debug logging.
 - The run manifest MUST reference the snapshot path and hash as the authoritative inventory input
-  for downstream stages.
+  for downstream stages:
+  - `manifest.lab.assets` MUST be the run-relative POSIX path `logs/lab_inventory_snapshot.json`.
+    - v0.1: producers MUST NOT embed the resolved asset array in the manifest; consumers MUST read
+      `logs/lab_inventory_snapshot.json` and join on `assets[].asset_id`.
+  - `manifest.lab.inventory_snapshot_sha256` MUST equal the canonical digest string computed over
+    the published snapshot bytes (`sha256:<lowercase_hex>`).
+  - `manifest.lab.provider` MUST equal the effective provider id (`lab.provider`).
 
 ### Canonical asset shape
 
@@ -243,8 +246,14 @@ At run start, a provider implementation MUST:
 1. Atomically publish the snapshot to its final run bundle location.
 1. Compute `lab.inventory_snapshot_sha256` over the published snapshot bytes (recorded as a
    `sha256:<lowercase_hex>` digest string).
-1. Record provider identity, `inventory_source_ref` (when applicable), snapshot path, and the
-   snapshot hash in the manifest.
+1. Record provider identity and the authoritative inventory snapshot reference in the manifest:
+   - `manifest.lab.provider` (string): effective provider id (`lab.provider`).
+   - `manifest.lab.assets` (string): run-relative POSIX path to the published snapshot
+     (`logs/lab_inventory_snapshot.json`).
+   - `manifest.lab.inventory_snapshot_sha256` (string): `sha256:<lowercase_hex>` over the published
+     snapshot bytes.
+   - `manifest.lab.inventory_source_ref` (string, optional): deterministic reference to the upstream
+     inventory source, with all secrets redacted or omitted.
 
 Provider implementations MAY be:
 
@@ -282,6 +291,14 @@ Fail-closed (`stage="lab_provider"`, `fail_mode="fail_closed"`) mappings:
 - Duplicate `asset_id` in the resolved `lab.assets` set MUST use `reason_code="asset_id_collision"`.
 - API provider query errors or timeouts MUST use `reason_code="provider_api_error"` (reserved for
   v0.3+).
+- Missing/unresolvable required integration credentials MUST use
+  `reason_code="integration_credentials_missing"` (reserved for v0.3+; see
+  `090_security_safety.md`).
+- Invalid/unauthorized integration credentials MUST use
+  `reason_code="integration_credentials_invalid"` (reserved for v0.3+; see
+  `090_security_safety.md`).
+- Detected leakage of resolved integration credential values into any persisted output MUST use
+  `reason_code="integration_credentials_leaked"` (reserved for v0.3+; see `090_security_safety.md`).
 - Non-deterministic resolved `asset_id` set across retries within a single run start MUST use
   `reason_code="unstable_asset_id_resolution"`.
 
@@ -320,6 +337,19 @@ When API-based providers are enabled in v0.3+, they MUST preserve run reproducib
 
 - Providers MUST record a deterministic `inventory_source_ref` in the manifest (for example: API
   endpoint and query parameters), with all secrets redacted or omitted.
+  - When recorded under the lab manifest namespace, the field SHOULD be
+    `manifest.lab.inventory_source_ref`.
+- Credential handling (normative):
+  - If the provider requires credentials, it MUST obtain them from
+    `security.integration_credentials[<integration_id>]`, where `<integration_id>` is RECOMMENDED to
+    equal the effective provider id (`lab.provider`).
+  - Providers MUST perform a credential preflight before any external API call:
+    - Missing/unresolvable required credentials MUST fail closed with
+      `reason_code="integration_credentials_missing"`.
+    - Invalid/unauthorized credentials MUST fail closed with
+      `reason_code="integration_credentials_invalid"`.
+  - Detected leakage of resolved integration credential values into any persisted output MUST fail
+    closed with `reason_code="integration_credentials_leaked"`.
 - Providers MUST use deterministic request parameters and ordering. Time-window dependent queries
   MUST be explicitly pinned by configuration; otherwise the provider MUST fail closed.
 - If the provider performs retries, it MUST compare the resolved `asset_id` set across attempts. If
@@ -493,15 +523,26 @@ When `lab.provider != manual`, resolution MUST:
    - Operators SHOULD normalize host identifiers to lowercase ASCII when using DNS hostnames.
 1. The match MUST be exact and MUST yield exactly one host. Otherwise, fail closed.
 1. Enrichment (deterministic, non-destructive):
-   - If `lab.assets[].hostname` is unset, the resolved snapshot MUST set `hostname` to the matched
-     inventory host `name`.
+   - If `lab.assets[].hostname` is unset, the resolved snapshot MUST set `hostname`
+     deterministically using connection-host precedence:
+     - If the matched inventory host has `vars.ansible_host` and it is not an IP literal, the
+       resolved snapshot MUST set `hostname` to `vars.ansible_host`.
+       - An `ansible_host` value is considered an IP literal iff it passes the same syntactic IP
+         literal validation used for the snapshot `ip` field (no DNS resolution).
+     - Else, the resolved snapshot MUST set `hostname` to the matched inventory host `name`.
+   - If the resolved snapshot sets `hostname` from `vars.ansible_host` and
+     `lab.assets[].provider_asset_ref` is unset, the resolved snapshot MUST set `provider_asset_ref`
+     to the matched inventory host `name` to preserve the upstream inventory identifier for
+     debugging.
    - If `lab.assets[].ip` is unset and the matched inventory host has `ip`, the resolved snapshot
      MUST set `ip`.
    - If `lab.assets[].vars` is unset, the resolved snapshot MUST set `vars` to the matched inventory
      host `vars` (after allowlist + normalization + secret suppression).
    - If `lab.assets[].vars` is set, the provider MUST merge only missing allowlisted keys from the
      matched inventory host `vars` and MUST NOT override keys already specified by the operator.
-   - Provider-native identifiers MAY be recorded in the snapshot as `provider_asset_ref`. Downstream
+   - Provider-native identifiers MAY be recorded in the snapshot as `provider_asset_ref`. For
+     file-based inventory providers, `provider_asset_ref` MAY also preserve an upstream inventory
+     host identifier when `hostname` is populated from a different connection host. Downstream
      stages MUST NOT require `provider_asset_ref` for deterministic joining (joins are on
      `asset_id`).
 
@@ -514,7 +555,10 @@ Implementations MUST include fixtures that demonstrate deterministic adapter beh
 - The fixtures MUST include at least:
   - one host with `ansible_port` expressed as a string in INI and as an integer in YAML/JSON,
     proving type normalization,
-  - one host with an IPv6 management IP, proving canonical IPv6 serialization.
+  - one host with an IPv6 management IP, proving canonical IPv6 serialization,
+  - one host where the inventory host `name` is an alias and `vars.ansible_host` is a DNS hostname,
+    proving `assets[].hostname` is populated from `vars.ansible_host` when unset (and
+    `provider_asset_ref` preserves the inventory host identifier when unset).
 - A golden `lab_inventory_snapshot.json` produced from those fixtures.
 - A golden `lab.inventory_snapshot_sha256` computed over the published snapshot bytes
   (`canonical_json_bytes(lab_inventory_snapshot.json)`), encoded as `sha256:<lowercase_hex>`.

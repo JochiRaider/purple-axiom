@@ -24,6 +24,9 @@ related:
 ### Owned output roots (published paths)
 
 - `report/`
+- `inputs/baseline_run_ref.json` (when `reporting.regression.enabled=true`)
+- `inputs/baseline/manifest.json` (optional; immutable snapshot when present; when
+  `reporting.regression.enabled=true`)
 
 ### Inputs/Outputs
 
@@ -35,10 +38,12 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id         | path/glob                | Required?                                  |
-| ------------------- | ------------------------ | ------------------------------------------ |
-| `report.schema`     | `report/report.json`     | required (when `reporting.emit_json=true`) |
-| `thresholds.schema` | `report/thresholds.json` | required                                   |
+| contract_id         | path/glob                       | Required?                                           |
+| ------------------- | ------------------------------- | --------------------------------------------------- |
+| `report.schema`     | `report/report.json`            | required (when `reporting.emit_json=true`)          |
+| `thresholds.schema` | `report/thresholds.json`        | required                                            |
+| `baseline_run_ref`  | `inputs/baseline_run_ref.json`  | required (when `reporting.regression.enabled=true`) |
+| `manifest`          | `inputs/baseline/manifest.json` | optional (when `reporting.regression.enabled=true`) |
 
 #### Required inputs
 

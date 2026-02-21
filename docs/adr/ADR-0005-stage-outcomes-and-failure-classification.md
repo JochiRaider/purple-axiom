@@ -660,11 +660,12 @@ Minimum artifacts when enabled: `normalized/**`, `normalized/mapping_coverage.js
 
 #### FATAL reason codes
 
-| Reason code                  | Severity | Description                                                                       |
-| ---------------------------- | -------- | --------------------------------------------------------------------------------- |
-| `mapping_profile_invalid`    | FATAL    | Mapping profile cannot be loaded or is schema-invalid.                            |
-| `ocsf_schema_mismatch`       | FATAL    | Pinned OCSF version differs across normalizer and bridge.                         |
-| `event_id_generation_failed` | FATAL    | Deterministic event identity cannot be computed for a record under strict policy. |
+| Reason code                     | Severity | Description                                                                                           |
+| ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `mapping_profile_invalid`       | FATAL    | Mapping profile cannot be loaded or is schema-invalid.                                                |
+| `ocsf_schema_mismatch`          | FATAL    | Pinned OCSF version differs across normalizer and bridge.                                             |
+| `event_id_generation_failed`    | FATAL    | Deterministic event identity cannot be computed for a record under strict policy.                     |
+| `normalized_store_incompatible` | FATAL    | Cached normalized store is incompatible with the current replay request (and no raw fallback exists). |
 
 #### NON-FATAL reason codes
 
@@ -679,6 +680,12 @@ Minimum artifacts when enabled: `normalized/**`, `normalized/mapping_coverage.js
 - If `normalization.strict_mode=true` (or normalization stage `fail_mode=fail_closed`), any
   `timestamp_parse_failed` MAY be escalated to a stage failure (FATAL) if configured as such.
   Default v0.1 policy: drop-and-count, warn-and-skip.
+
+#### SKIPPED reason codes
+
+| Reason code               | Severity | Description                                                                 |
+| ------------------------- | -------- | --------------------------------------------------------------------------- |
+| `normalized_store_reused` | SKIPPED  | Stage was short-circuited because a compatible normalized store was reused. |
 
 #### Quality gate: Tier 1 coverage (substage permitted)
 

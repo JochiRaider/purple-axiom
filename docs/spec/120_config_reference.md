@@ -109,7 +109,8 @@ Notes:
 
 - `lab.assets` remains the canonical, contract-level shape used throughout the pipeline.
 - When `provider != manual`, Purple Axiom resolves provider inventory into `lab.assets` at run start
-  and records the snapshot and hash in the manifest.
+  and records the snapshot pointer and hash in the manifest (`manifest.lab.assets` and
+  `manifest.lab.inventory_snapshot_sha256`).
 
 ### Runner (runner)
 
@@ -795,6 +796,28 @@ Common keys:
         - `max_matched_event_ids` (integer, optional): maximum number of event ids to attach to a
           single correlation detection instance. If exceeded, the evaluator MUST truncate
           deterministically.
+        - `capabilities` (object, optional)
+          - Capability profile / allowlist restrictions for backend acceptance, linting, and run
+            reproducibility.
+          - If `capabilities` is provided in config, the backend MUST enforce it.
+          - If `capabilities` is omitted, the backend MUST apply its internal defaults.
+          - The backend SHOULD record the effective capability profile in the compiled plan envelope
+            under `backend.settings`.
+          - Standard shape:
+            - `allowed_condition_nodes` (array of strings, optional): e.g.
+              `["and","or","not","ref","of","pipe"]`
+            - `allowed_aggregation_functions` (array of strings, optional): e.g.
+              `["count","min","max","avg","sum"]`
+            - `allowed_comparators` (array of strings, optional): e.g.
+              `["gt","gte","lt","lte","eq","neq"]`
+            - `allowed_correlation_types` (array of strings, optional): e.g.
+              `["event_count","value_count","temporal","ordered_temporal"]`
+            - `allow_wildcard_patterns` (boolean, optional): whether `selection*`-style targets are
+              allowed
+            - `limits` (object, optional)
+              - `max_expanded_identifiers` (integer, optional)
+              - `max_group_by_fields` (integer, optional)
+              - `max_correlated_rules` (integer, optional)
         - `regex` (object, optional)
           - `max_pattern_length` (integer, optional)
           - `match_limit` (integer, optional)

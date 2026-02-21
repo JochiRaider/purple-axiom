@@ -1187,11 +1187,15 @@ stage_enablement_matrix_v1:
       any_of:
         - { path: reporting.emit_json }
         - { path: reporting.emit_html }
-    required_contract_ids_when_enabled: []
-    optional_contract_ids_when_enabled: []
+    required_contract_ids_when_enabled:
+      - thresholds.schema
+    optional_contract_ids_when_enabled:
+      - manifest
     conditional_required_contracts:
       - contract_id: report.schema
         required_if: { path: reporting.emit_json }
+      - contract_id: baseline_run_ref
+        required_if: { path: reporting.regression.enabled }
 
   signing:
     enabled_if: { path: security.signing.enabled }
@@ -2056,8 +2060,12 @@ Recommended manifest additions (normative in schema when implemented):
 
 - `lab.provider` (string): `manual | ludus | terraform | vagrant | other`
 - `lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot
-- `lab.assets` (array): resolved assets used by the run (or pointer to
-  `logs/lab_inventory_snapshot.json`)
+- `lab.assets` (string): run-relative POSIX path pointer to the resolved inventory snapshot artifact
+  (`logs/lab_inventory_snapshot.json`).
+  - v0.1: producers MUST NOT embed the resolved asset array in the manifest; consumers MUST read
+    `logs/lab_inventory_snapshot.json` and join on `assets[].asset_id`.
+- `lab.inventory_source_ref` (string, optional): deterministic reference to the upstream inventory
+  source, with all secrets redacted or omitted.
 - `normalization.ocsf_version` (string): pinned OCSF version used by the normalizer for this run.
   - When `normalized/mapping_profile_snapshot.json` is present, `normalization.ocsf_version` SHOULD
     match `mapping_profile_snapshot.ocsf_version`.
@@ -3214,6 +3222,8 @@ This artifact is stored under `bridge/compiled_plans/<rule_id>.plan.json`.
 
 Purpose:
 
+- Per-rule compilation outputs produced by the Sigma-to-OCSF bridge (see
+  `065_sigma_to_ocsf_bridge.md`).
 - Stores the deterministic, backend-specific compilation output for each Sigma rule evaluated in
   this run.
 - Provides machine-checkable reasons for non-executable rules (routing failure, unmapped fields,
@@ -3227,6 +3237,11 @@ Key semantics (normative when produced):
 
 - Plans MUST be keyed by stable `rule_id` and MUST include `rule_sha256` (hash of canonical Sigma
   rule content) for drift detection.
+- Each compiled plan MUST embed the parsed Sigma AST (`sigma_ast_v1`) under the top-level key
+  `sigma_ast`, regardless of whether the rule is executable.
+- The compiled plan schema MUST be updated to include the `sigma_ast` object (TODO: add
+  `docs/contracts/sigma_ast_v1.schema.json` and reference it from
+  `docs/contracts/bridge_compiled_plan.schema.json`).
 - Plans MUST declare `executable: true | false` and, when false, MUST include
   `non_executable_reason`.
 

@@ -46,7 +46,7 @@ This section is the stage-local view of:
 
 | contract_id            | path/glob                        | Required?                                               |
 | ---------------------- | -------------------------------- | ------------------------------------------------------- |
-| `telemetry_validation` | `logs/telemetry_validation.json` | optional (when `telemetry.otel.enabled=true`)           |
+| `telemetry_validation` | `logs/telemetry_validation.json` | required (when `telemetry.otel.enabled=true`)           |
 | `pcap_manifest`        | `raw/pcap/manifest.json`         | optional (placeholder source; when enabled/implemented) |
 | `netflow_manifest`     | `raw/netflow/manifest.json`      | optional (placeholder source; when enabled/implemented) |
 
@@ -124,8 +124,8 @@ stable processing spine, in order:
      debugging and matching).
 1. **Account** for the record:
    - update per-run counters in `runs/<run_id>/logs/counters.json` (see the operability spec), and
-   - when telemetry validation is enabled, record any required per-asset evidence in
-     `runs/<run_id>/logs/telemetry_validation.json`.
+   - Record any required per-asset evidence in `runs/<run_id>/logs/telemetry_validation.json` (this
+     artifact is required whenever the telemetry stage is enabled).
 
 Constraints (normative):
 
@@ -1011,7 +1011,8 @@ Recommended additional fields (network egress policy enforcement):
 
 Recommended additional fields (agent liveness / dead-on-arrival triage):
 
-- `agent_liveness` (object, OPTIONAL; REQUIRED when telemetry validation is enabled)
+- `agent_liveness` (object, OPTIONAL; REQUIRED when telemetry stage is enabled
+  (`telemetry.otel.enabled=true`)): optional telemetry-liveness evidence.
   - `startup_grace_seconds` (int)
   - `required_metric_names` (array of strings; sorted)
   - `assets` (array of objects; sorted by `asset_id` ascending)

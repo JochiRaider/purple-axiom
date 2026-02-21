@@ -50,12 +50,16 @@ This section is the stage-local view of:
 | --------------------- | ------------------------------ | ------------------------------------ |
 | `range_config`        | `inputs/range.yaml`            | required                             |
 | `manifest`            | `manifest.json`                | required (version pins + provenance) |
-| `ocsf_event_envelope` | `normalized/ocsf_events.jsonl` | required                             |
+| `parquet_schema_snapshot` | `normalized/ocsf_events/_schema.json` | required (consumes Parquet dataset at `normalized/ocsf_events/**`) |
 
 Notes:
 
-- Detection evaluation is defined over the normalized store. v0.1 binds the normalized stream as
-  JSONL (`normalized/ocsf_events.jsonl`).
+- Detection evaluation is defined over the normalized store.
+  - For `manifest.versions.contracts_version >= 0.2.0`, detection consumes the Parquet dataset at
+    `normalized/ocsf_events/**` and relies on the contract-backed schema snapshot at
+    `normalized/ocsf_events/_schema.json`.
+  - JSONL (`normalized/ocsf_events.jsonl`) is legacy v0.1.x only and MUST NOT be used for v0.2+
+    runs.
 - Rule inputs (Sigma YAML) and mapping packs are pack-like **non-contract** inputs; the stage
   snapshots the effective mapping pack material to `bridge/mapping_pack_snapshot.json`.
 

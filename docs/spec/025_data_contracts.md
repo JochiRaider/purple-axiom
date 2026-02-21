@@ -366,6 +366,17 @@ Deterministic expansion ordering (normative):
     its schema.
     - YAML documents MUST be decoded into a JSON-compatible in-memory representation (object/array
       and scalar types) prior to JSON Schema validation.
+- Supported modes (v0.2.0+; contracts_version >= 0.2.0):
+  - `parquet_dataset_v1`: Validate a Parquet dataset directory anchored by a required `_schema.json` snapshot.
+    - The binding's `artifact_glob` MUST point to the dataset’s `_schema.json` file (for example `normalized/ocsf_events/_schema.json`).
+    - The dataset directory is the parent directory of `_schema.json` (for example `normalized/ocsf_events/`).
+    - Validation MUST include:
+      - `_schema.json` validates against the `parquet_schema_snapshot` contract (JSON document).
+      - Dataset directory exists and contains ≥1 `*.parquet` part file.
+      - All part files share a single physical schema.
+      - Physical schema matches `_schema.json.columns[]` (`name`, `physical_type`, `logical_type`, `nullable`).
+      - Required normalized OCSF minimum columns (as defined in `045_storage_formats.md` and `050_normalization_ocsf.md`) are present and type-stable.
+
 - If the registry references a `validation_mode` value that the implementation does not support,
   contract validation MUST fail closed with a configuration error.
 
@@ -1081,6 +1092,13 @@ Publish-gate integration. For each binding-derived expected output, the stage wr
 with `required=true` MUST be treated as validation failures (no promotion). Missing outputs with
 `required=false` MUST NOT be treated as failures and MUST NOT be contract-validated.
 
+
+Version selection (normative):
+
+- For runs where `manifest.versions.contracts_version` is `0.1.x`, implementations MUST use `stage_enablement_matrix_v1`.
+- For runs where `manifest.versions.contracts_version >= 0.2.0`, implementations MUST use `stage_enablement_matrix_v2`.
+- `stage_enablement_matrix_v2` is identical to v1 unless explicitly noted; v2 updates normalization required outputs to reflect Parquet-only normalized events.
+
 ```yaml
 # stage_enablement_matrix_v1 (normative)
 #
@@ -1150,6 +1168,122 @@ stage_enablement_matrix_v1:
     enabled_if: { const: true }
     required_contract_ids_when_enabled:
       - ocsf_event_envelope
+      - mapping_coverage
+      - mapping_profile_snapshot
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  validation:
+    enabled_if: { path: validation.enabled }
+    required_contract_ids_when_enabled:
+      - criteria_pack_manifest
+      - criteria_entry
+      - criteria_result
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  detection:
+    enabled_if: { path: detection.sigma.enabled }
+    required_contract_ids_when_enabled:
+      - bridge_coverage
+      - bridge_compiled_plan
+      - bridge_mapping_pack
+      - bridge_router_table
+      - detection_instance
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  scoring:
+    enabled_if: { path: scoring.enabled }
+    required_contract_ids_when_enabled:
+      - summary
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  reporting:
+    enabled_if:
+      any_of:
+        - { path: reporting.emit_json }
+        - { path: reporting.emit_html }
+    required_contract_ids_when_enabled:
+      - thresholds.schema
+    optional_contract_ids_when_enabled:
+      - manifest
+    conditional_required_contracts:
+      - contract_id: report.schema
+        required_if: { path: reporting.emit_json }
+      - contract_id: baseline_run_ref
+        required_if: { path: reporting.regression.enabled }
+
+  signing:
+    enabled_if: { path: security.signing.enabled }
+    required_contract_ids_when_enabled: []
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+# stage_enablement_matrix_v2 (normative; contracts_version >= 0.2.0)
+stage_enablement_matrix_v2:
+  orchestrator:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - manifest
+      - range_config
+      - counters
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts:
+      - contract_id: audit_event
+        required_if: { path: control_plane.audit.enabled }
+      - contract_id: cache_provenance
+        required_if: { path: cache.emit_cache_provenance }
+      - contract_id: telemetry_baseline_profile
+        required_if: { path: telemetry.baseline_profile.enabled }
+      # v0.2+ (ADR-0008): default false when absent
+      - contract_id: threat_intel_pack_manifest
+        required_if: { path: threat_intel.enabled }
+      - contract_id: threat_intel_indicator
+        required_if: { path: threat_intel.enabled }
+
+  lab_provider:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - lab_inventory_snapshot
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts: []
+
+  runner:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - ground_truth
+      - requirements_evaluation
+      - resolved_inputs_redacted
+      - side_effect_ledger
+      - principal_context
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts:
+      - contract_id: runner_executor_evidence
+        required_if: { path: runner.atomic.capture_executor_metadata }
+      - contract_id: cleanup_verification
+        required_if: { path: runner.atomic.cleanup.verify }
+      - contract_id: principal_context
+        required_if: { path: runner.identity.emit_principal_context }
+      - contract_id: state_reconciliation_report
+        required_if: { path: runner.atomic.state_reconciliation.enabled }
+
+  telemetry:
+    enabled_if: { path: telemetry.otel.enabled }
+    required_contract_ids_when_enabled:
+      - telemetry_validation
+    optional_contract_ids_when_enabled: []
+    conditional_required_contracts:
+      - contract_id: pcap_manifest
+        required_if: { path: telemetry.sources.pcap.enabled }
+      - contract_id: netflow_manifest
+        required_if: { path: telemetry.sources.netflow.enabled }
+
+  normalization:
+    enabled_if: { const: true }
+    required_contract_ids_when_enabled:
+      - parquet_schema_snapshot
       - mapping_coverage
       - mapping_profile_snapshot
     optional_contract_ids_when_enabled: []
@@ -1480,11 +1614,18 @@ Some artifacts have more than one allowed physical representation. Consumers MUS
 single logical artifact with deterministic selection rules.
 
 - Logical artifact id: `normalized.ocsf_events`
-  - If `normalized/ocsf_events/` exists, it MUST be treated as the OCSF event store (Parquet dataset
-    representation).
-  - Else, if `normalized/ocsf_events.jsonl` exists, it MUST be treated as the OCSF event store
-    (JSONL representation).
-  - If both exist, the reader MUST fail closed with `error_code="artifact_representation_conflict"`.
+  - For runs where `manifest.versions.contracts_version >= 0.2.0`:
+    - `normalized/ocsf_events/` MUST exist and MUST be treated as the OCSF event store (Parquet
+      dataset representation).
+    - `normalized/ocsf_events/_schema.json` MUST exist and MUST validate against the
+      `parquet_schema_snapshot` contract.
+    - `normalized/ocsf_events.jsonl` MUST NOT exist; if present, the reader MUST fail closed.
+  - For runs where `manifest.versions.contracts_version` is `0.1.x` (legacy compatibility):
+    - If `normalized/ocsf_events/` exists, it MUST be treated as the OCSF event store (Parquet
+      dataset representation).
+    - Else, if `normalized/ocsf_events.jsonl` exists, it MUST be treated as the OCSF event store
+      (JSONL representation).
+    - If both exist, the reader MUST fail closed with `error_code="artifact_representation_conflict"`.
 
 ### `manifest.versions` interpretation and comparability hooks
 
@@ -2938,11 +3079,28 @@ Purpose:
 - Provides a vendor-neutral event stream for detection evaluation.
 - Enforces required provenance and stable event identity.
 
+Representation (normative):
+
+- For runs where `manifest.versions.contracts_version >= 0.2.0`:
+  - The normalized store MUST be a Parquet dataset directory at `normalized/ocsf_events/`.
+  - `normalized/ocsf_events/_schema.json` MUST exist and is contract-backed as
+    `parquet_schema_snapshot`.
+  - `normalized/ocsf_events.jsonl` MUST NOT be produced; if present, treat it as an
+    invalid/deprecated representation and fail closed.
+- For runs where `manifest.versions.contracts_version` is `0.1.x` (legacy compatibility):
+  - The normalized store MAY be represented as `normalized/ocsf_events.jsonl` (JSONL) validating
+    against the `ocsf_event_envelope` logical row contract.
+  - Implementations MAY support an explicit, deterministic transcode/upgrade step from JSONL to
+    Parquet for forward compatibility.
+
 Validation:
 
-- For JSONL, each line must validate against `ocsf_event_envelope.schema.json`.
-- For Parquet, the required columns and types are enforced by the storage spec and validator logic
-  (see the [storage formats spec](045_storage_formats.md)).
+- For `contracts_version >= 0.2.0`, publish-time validation is selected by the contract registry
+  (`validation_mode=parquet_dataset_v1`) and MUST validate:
+  - `_schema.json` against `parquet_schema_snapshot`, and
+  - the co-located Parquet dataset (see the [storage formats spec](045_storage_formats.md)).
+- The `ocsf_event_envelope` JSON Schema remains the logical row contract (documentation + optional
+  CI spot-checking), even though JSONL is not a v0.2+ storage representation.
 
 Required envelope (minimum):
 

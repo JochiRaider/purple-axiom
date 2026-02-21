@@ -158,7 +158,7 @@ Verb definitions (v0.1):
 - `simulate`
 
   - Stages executed: the canonical v0.1 pipeline stage order, filtered to the stages enabled for
-    this run by `025_data_contracts.md`'s `stage_enablement_matrix_v1` (see
+    this run by `025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`) (see
     [Stage execution order](#stage-execution-order) and
     [ADR-0004: Deployment architecture and inter-component communication][adr-0004]).
   - Intent: perform a complete run and produce a complete run bundle.
@@ -174,14 +174,14 @@ Verb definitions (v0.1):
     → `reporting` (and optional `signing`).
   - Verb selection and config gates further restrict this subset:
     - Verbs select a deterministic subset of stages.
-    - Per-run stage enablement is defined by `025_data_contracts.md`'s `stage_enablement_matrix_v1`.
+    - Per-run stage enablement is defined by `025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`).
     - Stages that are disabled for a run MUST be absent from the outcome surface (not recorded as
       `skipped`) per ADR-0005.
   - Preconditions: the candidate run bundle MUST already contain `ground_truth.jsonl` and either:
     - `raw_parquet/**` (full replay; `normalization` and `validation` are executed), OR
     - a normalized event store (normalized-input replay; v0.2+):
-      - `normalized/ocsf_events/` (Parquet dataset; MUST include
-        `normalized/ocsf_events/_schema.json`), OR `normalized/ocsf_events.jsonl`, AND
+      - `normalized/ocsf_events/` (Parquet dataset directory; MUST include
+        `normalized/ocsf_events/_schema.json`), AND
       - `normalized/mapping_profile_snapshot.json`.
   - Normalized-input replay fast path (v0.2+; normative when used):
     - If a normalized event store exists and its normalization provenance matches the current
@@ -600,7 +600,7 @@ Preamble (normative, per
 
 The orchestrator MUST execute the enabled pipeline stages in the canonical relative order below for
 v0.1. "Enabled" is determined by the verb semantics and then further filtered by
-`025_data_contracts.md`'s `stage_enablement_matrix_v1`.
+`025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`).
 
 Canonical relative order (v0.1):
 

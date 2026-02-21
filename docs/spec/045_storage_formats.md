@@ -210,8 +210,11 @@ Recommended storage and formats (BDP profile `detection_eval_v1`):
 
 - BDP manifest: JSON (canonical UTF-8) at `baseline_package_manifest.json`.
 - Ground truth: JSONL at `run/ground_truth.jsonl` (same contract as run bundles).
-- Normalized events: either Parquet dataset at `run/normalized/ocsf_events/` or JSONL at
-  `run/normalized/ocsf_events.jsonl` (same logical artifact representation rules as run bundles).
+- Normalized events:
+  - For `contracts_version >= 0.2.0`: Parquet dataset at `run/normalized/ocsf_events/` (MUST include
+    `run/normalized/ocsf_events/_schema.json`).
+  - Legacy v0.1.x: `run/normalized/ocsf_events.jsonl` MAY be present as a transcode input only and
+    SHOULD NOT be treated as a v0.2+ contract surface.
 - Integrity: `security/checksums.txt` (and optional Ed25519 signature/public key) following the
   standard checksums/signature rules used for shareable bundles.
 
@@ -668,35 +671,28 @@ During the deprecation window, writers SHOULD populate both:
 
 #### Required dataset schema snapshot (`_schema.json`)
 
-To make historical runs queryable without guesswork, each Tier 2 Parquet dataset directory MUST
-include a schema snapshot:
-
-- Path: `runs/<run_id>/<dataset_dir>/_schema.json`
-  - Example: `runs/<run_id>/normalized/ocsf_events/_schema.json`
-
-The snapshot MUST be deterministic and MUST NOT include volatile fields (timestamps, hostnames,
-random IDs).
+Each Parquet dataset directory MUST include a deterministic schema snapshot file named `_schema.json`
+at the dataset root.
 
 Minimum fields (normative):
 
-- `schema_id` (string)
-  - Recommended: `pa.parquet.<dataset_kind>` (example: `pa.parquet.normalized.ocsf_events`)
-- `schema_version` (string; SemVer)
-- `columns` (array), each:
-  - `name` (string; canonical dotted path, for example `metadata.event_id`)
-  - `type` (string; Arrow-style scalar, for example `int64`, `string`, `timestamp_ms_utc`)
-  - `nullable` (bool)
-- `aliases` (object; optional but REQUIRED when any column has been deprecated/renamed)
-  - Keys are canonical column names.
-  - Values are ordered arrays of acceptable physical column names, most-preferred first.
-  - Example:
-    - `"actor.user.name": ["actor.user.name", "user.name"]`
-
-Deterministic ordering (normative):
-
-- `columns[]` MUST be sorted by `name` using bytewise UTF-8 lexical ordering (no locale,
-  case-sensitive).
-- Each `aliases[<key>]` list MUST be in deterministic preference order.
+- `contract_version` (string; required). MUST equal the contract version for `parquet_schema_snapshot`.
+- `schema_id` (string; required). A stable identifier for the dataset schema surface. For normalized OCSF
+  events, this SHOULD be `pa.parquet.normalized.ocsf_events`.
+- `schema_version` (string; required). Semantic version for the schema snapshot itself (changes when
+  columns are added/removed/changed).
+- `columns` (array; required). A list of columns in the dataset, each item including:
+  - `name` (string; required). Canonical column name.
+  - `physical_type` (string; required). Arrow/Parquet physical type (example: `string`, `int64`,
+    `boolean`). (See "Type tokens" below.)
+  - `logical_type` (string; required). Logical type token (example: `string`, `int64`,
+    `timestamp_ms_utc`). (See "Type tokens" below.)
+  - `nullable` (boolean; required). Whether the column is nullable.
+  - Deterministic ordering: `columns` must be serialized with canonical column ordering, and stable
+    within a schema version.
+- `aliases` (object; optional). When present, a map of `alias_name` → `canonical_name` (strings). This
+  supports forward-compatible renames and/or mixed producer versions.
+  - Deterministic ordering: `aliases` must be serialized with keys sorted lexicographically.
 
 #### Querying historical runs (union + projection)
 

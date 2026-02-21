@@ -1,5 +1,5 @@
 {
-  "registry_version": "0.1.0",
+  "registry_version": "0.2.0",
   "contracts": [
     {
       "contract_id": "audit_event",
@@ -222,6 +222,14 @@
       "schema_path": "docs/contracts/mapping_profile_snapshot.schema.json",
       "contract_version": "0.1.0",
       "purpose": "Normalization mapping profile snapshot (normalized/mapping_profile_snapshot.json).",
+      "artifact_kind": "run_artifact",
+      "format": "json"
+    },
+    {
+      "contract_id": "parquet_schema_snapshot",
+      "schema_path": "docs/contracts/parquet_schema_snapshot.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Parquet dataset schema snapshot (_schema.json) for Tier 2 datasets (v0.2+).",
       "artifact_kind": "run_artifact",
       "format": "json"
     },
@@ -458,7 +466,7 @@
     { "artifact_glob": "run_results.json", "contract_id": "run_results", "stage_owner": "orchestrator", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/mapping_coverage.json", "contract_id": "mapping_coverage", "stage_owner": "normalization", "validation_mode": "json_document" },
     { "artifact_glob": "normalized/mapping_profile_snapshot.json", "contract_id": "mapping_profile_snapshot", "stage_owner": "normalization", "validation_mode": "json_document" },
-    { "artifact_glob": "normalized/ocsf_events.jsonl", "contract_id": "ocsf_event_envelope", "stage_owner": "normalization", "validation_mode": "jsonl_lines" },
+    { "artifact_glob": "normalized/ocsf_events/_schema.json", "contract_id": "parquet_schema_snapshot", "stage_owner": "normalization", "validation_mode": "parquet_dataset_v1" },
     { "artifact_glob": "raw/netflow/manifest.json", "contract_id": "netflow_manifest", "stage_owner": "telemetry", "validation_mode": "json_document" },
     { "artifact_glob": "raw/pcap/manifest.json", "contract_id": "pcap_manifest", "stage_owner": "telemetry", "validation_mode": "json_document" },
     { "artifact_glob": "report/report.json", "contract_id": "report.schema", "stage_owner": "reporting", "validation_mode": "json_document" },

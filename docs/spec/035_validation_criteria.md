@@ -51,10 +51,11 @@ This section is the stage-local view of:
 | --------------------- | ------------------------------ | ------------------------------------------ |
 | `range_config`        | `inputs/range.yaml`            | required                                   |
 | `ground_truth`        | `ground_truth.jsonl`           | required                                   |
-| `ocsf_event_envelope` | `normalized/ocsf_events.jsonl` | required (criteria evaluation query layer) |
+| `parquet_schema_snapshot` | `normalized/ocsf_events/_schema.json` | required (criteria evaluation query layer; consumes Parquet dataset at `normalized/ocsf_events/**`) |
 
 Notes:
 
+- For `manifest.versions.contracts_version >= 0.2.0`, JSONL (`normalized/ocsf_events.jsonl`) MUST NOT be required/used; it is legacy v0.1.x only.
 - This stage consumes additional **non-contract** inputs in v0.1:
   - the criteria pack source material from configured `validation.criteria_pack.paths`
   - optional runner artifacts such as `runner/actions/*/cleanup_verification.json`

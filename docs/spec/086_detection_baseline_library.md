@@ -104,11 +104,12 @@ compatible normalized event store is already present.
 
 Requirements (v0.2+; normative when used):
 
-- If `normalized/ocsf_events/` (or `normalized/ocsf_events.jsonl`) and
+- If `normalized/ocsf_events/` (Parquet dataset; MUST include `normalized/ocsf_events/_schema.json`) and
   `normalized/mapping_profile_snapshot.json` exist in the candidate run bundle, and the snapshot is
   compatible with the run's effective version control for normalization (at minimum: `ocsf_version`
   and `mapping_profile_sha256` match), `replay` MUST begin at `detection` (skipping `normalization`
   and `validation`).
+  - Note: Legacy v0.1 bundles that only include `normalized/ocsf_events.jsonl` do not qualify for this fast path.
 - If compatibility cannot be established (for example, `normalized/mapping_profile_snapshot.json` is
   missing), the orchestrator MUST NOT assume the normalized store is current. It MUST either:
   - execute `normalization` from `raw_parquet/**` (if present), or

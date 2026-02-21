@@ -34,16 +34,34 @@
     },
     "decision": {
       "type": "string",
-      "enum": ["same_run", "continuation_run", "denied"],
+      "enum": [
+        "same_run",
+        "continuation_run",
+        "denied"
+      ],
       "description": "Decision outcome: same_run continues the existing run; continuation_run requires a new run; denied rejects the request."
     },
     "run_id": {
       "description": "Run UUID selected by the decision. For denied, this MUST be null. For same_run, this SHOULD be the current run. For continuation_run, this MUST be the newly created run.",
-      "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+      "anyOf": [
+        {
+          "$ref": "#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "baseline_run_id": {
       "description": "When decision=continuation_run, this MUST be the prior run used as the baseline. Otherwise MUST be null.",
-      "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+      "anyOf": [
+        {
+          "$ref": "#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "reason_domain": {
       "const": "control_retry_decision",
@@ -52,31 +70,52 @@
     "reason_code": {
       "$ref": "#/$defs/reason_code",
       "description": "Stable lower_snake_case reason code describing why the decision was made."
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
     }
   },
   "oneOf": [
     {
       "title": "Denied",
       "properties": {
-        "decision": { "const": "denied" },
-        "run_id": { "type": "null" },
-        "baseline_run_id": { "type": "null" }
+        "decision": {
+          "const": "denied"
+        },
+        "run_id": {
+          "type": "null"
+        },
+        "baseline_run_id": {
+          "type": "null"
+        }
       }
     },
     {
       "title": "Same run",
       "properties": {
-        "decision": { "const": "same_run" },
-        "run_id": { "$ref": "#/$defs/uuid" },
-        "baseline_run_id": { "type": "null" }
+        "decision": {
+          "const": "same_run"
+        },
+        "run_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "baseline_run_id": {
+          "type": "null"
+        }
       }
     },
     {
       "title": "Continuation run",
       "properties": {
-        "decision": { "const": "continuation_run" },
-        "run_id": { "$ref": "#/$defs/uuid" },
-        "baseline_run_id": { "$ref": "#/$defs/uuid" }
+        "decision": {
+          "const": "continuation_run"
+        },
+        "run_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "baseline_run_id": {
+          "$ref": "#/$defs/uuid"
+        }
       }
     }
   ],
@@ -104,6 +143,61 @@
       "maxLength": 128,
       "pattern": "^[a-z][a-z0-9_]*$",
       "description": "Stable lower_snake_case reason code."
+    },
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
+            }
+          }
+        }
+      ]
     }
   },
   "examples": [

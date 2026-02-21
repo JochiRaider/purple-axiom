@@ -107,7 +107,7 @@
           }
         ]
       }
-    },    
+    },
     "scenario": {
       "type": "object",
       "additionalProperties": false,
@@ -267,7 +267,7 @@
           }
         }
       }
-    },    
+    },
     "targets": {
       "type": "array",
       "minItems": 1,
@@ -383,6 +383,9 @@
         }
       },
       "additionalProperties": false
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
     }
   },
   "$defs": {
@@ -542,6 +545,61 @@
           "description": "If present, versions.contracts MUST include entries for every contract-backed artifact that was published for the run. Equality against actual produced artifacts is enforced by the contract validation/publish-gate engine."
         }
       ]
+    },
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
+            }
+          }
+        }
+      ]
     }
-  }  
+  }
 }

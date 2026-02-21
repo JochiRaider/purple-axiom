@@ -6,7 +6,13 @@
   "type": "object",
   "additionalProperties": false,
   "$comment": "Normative semantics (append-only, write-ahead flush, stable ordering, and lifecycle attribution) are specified in docs/spec/025_data_contracts.md. JSON Schema cannot fully enforce monotonic seq increments or crash-safe append behavior; CI MUST validate those invariants.",
-  "required": ["ledger_format", "schema_version", "run_id", "action_id", "entries"],
+  "required": [
+    "ledger_format",
+    "schema_version",
+    "run_id",
+    "action_id",
+    "entries"
+  ],
   "properties": {
     "ledger_format": {
       "type": "string",
@@ -72,27 +78,49 @@
     "entries": {
       "type": "array",
       "description": "Ordered ledger entries. Order is authoritative and MUST follow seq ascending with no gaps.",
-      "items": { "$ref": "#/$defs/ledger_entry" }
+      "items": {
+        "$ref": "#/$defs/ledger_entry"
+      }
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
     }
   },
   "allOf": [
     {
       "if": {
-        "properties": { "withheld": { "const": true } },
-        "required": ["withheld"]
+        "properties": {
+          "withheld": {
+            "const": true
+          }
+        },
+        "required": [
+          "withheld"
+        ]
       },
       "then": {
-        "required": ["withheld_reason_code"],
+        "required": [
+          "withheld_reason_code"
+        ],
         "properties": {
-          "entries": { "type": "array", "maxItems": 0 }
+          "entries": {
+            "type": "array",
+            "maxItems": 0
+          }
         }
       }
     }
   ],
   "dependentSchemas": {
     "quarantine_path": {
-      "properties": { "withheld": { "const": true } },
-      "required": ["withheld"]
+      "properties": {
+        "withheld": {
+          "const": true
+        }
+      },
+      "required": [
+        "withheld"
+      ]
     }
   },
   "$defs": {
@@ -116,7 +144,10 @@
       "type": "object",
       "additionalProperties": false,
       "description": "Redaction-safe structured details for prerequisite fetch/install attempts (get_prereq_command). Raw commands MUST NOT be recorded here; use hashes and artifact references only.",
-      "required": ["dependency_ordinal", "get_prereq_command_sha256"],
+      "required": [
+        "dependency_ordinal",
+        "get_prereq_command_sha256"
+      ],
       "properties": {
         "dependency_ordinal": {
           "type": "integer",
@@ -129,7 +160,10 @@
         },
         "prereqs_mode": {
           "type": "string",
-          "enum": ["check_then_get", "get_only"],
+          "enum": [
+            "check_then_get",
+            "get_only"
+          ],
           "description": "Effective prerequisites mode when this attempt occurred (only modes that execute get_prereq_command are permitted)."
         },
         "get_prereq_command_sha256": {
@@ -163,11 +197,17 @@
           "description": "Optional process exit code for the get/install attempt (informational; primary outcome is recorded via disposition)."
         }
       }
-    },    
+    },
     "ledger_entry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["seq", "phase", "effect_type", "disposition", "summary"],
+      "required": [
+        "seq",
+        "phase",
+        "effect_type",
+        "disposition",
+        "summary"
+      ],
       "properties": {
         "seq": {
           "type": "integer",
@@ -181,7 +221,12 @@
         },
         "phase": {
           "type": "string",
-          "enum": ["prepare", "execute", "revert", "teardown"],
+          "enum": [
+            "prepare",
+            "execute",
+            "revert",
+            "teardown"
+          ],
           "description": "Lifecycle phase to which this side effect is attributable."
         },
         "effect_type": {
@@ -216,7 +261,11 @@
           "type": "object",
           "additionalProperties": false,
           "description": "Optional target identifier for the mutated/emitted entity.",
-          "required": ["namespace", "type", "id"],
+          "required": [
+            "namespace",
+            "type",
+            "id"
+          ],
           "properties": {
             "namespace": {
               "type": "string",
@@ -261,13 +310,78 @@
       "allOf": [
         {
           "if": {
-            "properties": { "effect_type": { "const": "prereq_install" } },
-            "required": ["effect_type"]
+            "properties": {
+              "effect_type": {
+                "const": "prereq_install"
+              }
+            },
+            "required": [
+              "effect_type"
+            ]
           },
           "then": {
-            "required": ["details"],
+            "required": [
+              "details"
+            ],
             "properties": {
-              "details": { "$ref": "#/$defs/prereq_install_details" }
+              "details": {
+                "$ref": "#/$defs/prereq_install_details"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
             }
           }
         }

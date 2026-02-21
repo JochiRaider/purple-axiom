@@ -42,7 +42,9 @@
     },
     "effective_mode": {
       "type": "string",
-      "enum": ["observe_only"],
+      "enum": [
+        "observe_only"
+      ],
       "description": "Effective reconciliation mode. v0.1 is observe-only (repair out of scope)."
     },
     "status": {
@@ -51,7 +53,12 @@
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["items_total", "drift_detected", "unknown", "skipped"],
+      "required": [
+        "items_total",
+        "drift_detected",
+        "unknown",
+        "skipped"
+      ],
       "properties": {
         "items_total": {
           "type": "integer",
@@ -108,22 +115,38 @@
       "type": "object",
       "description": "Forward-compatible extension point (implementation-defined).",
       "additionalProperties": true
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
     }
   },
   "$defs": {
     "report_status": {
       "type": "string",
-      "enum": ["clean", "drift_detected", "unknown", "skipped"],
+      "enum": [
+        "clean",
+        "drift_detected",
+        "unknown",
+        "skipped"
+      ],
       "description": "Aggregate report status."
     },
     "item_source": {
       "type": "string",
-      "enum": ["cleanup_verification", "side_effect_ledger"],
+      "enum": [
+        "cleanup_verification",
+        "side_effect_ledger"
+      ],
       "description": "Which input produced this item."
     },
     "item_status": {
       "type": "string",
-      "enum": ["match", "mismatch", "unknown", "skipped"],
+      "enum": [
+        "match",
+        "mismatch",
+        "unknown",
+        "skipped"
+      ],
       "description": "Reconciliation outcome for an item."
     },
     "reason_code": {
@@ -134,7 +157,11 @@
     "reconciliation_item": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "status", "reason_code"],
+      "required": [
+        "source",
+        "status",
+        "reason_code"
+      ],
       "properties": {
         "source": {
           "$ref": "#/$defs/item_source"
@@ -157,11 +184,25 @@
         },
         "expected": {
           "description": "Optional expected state fragment used for comparison (shape is implementation-defined).",
-          "type": ["object", "string", "number", "boolean", "array", "null"]
+          "type": [
+            "object",
+            "string",
+            "number",
+            "boolean",
+            "array",
+            "null"
+          ]
         },
         "observed": {
           "description": "Optional observed state fragment used for comparison (shape is implementation-defined).",
-          "type": ["object", "string", "number", "boolean", "array", "null"]
+          "type": [
+            "object",
+            "string",
+            "number",
+            "boolean",
+            "array",
+            "null"
+          ]
         },
         "evidence": {
           "type": "object",
@@ -172,22 +213,101 @@
       "allOf": [
         {
           "if": {
-            "properties": { "source": { "const": "cleanup_verification" } },
-            "required": ["source"]
+            "properties": {
+              "source": {
+                "const": "cleanup_verification"
+              }
+            },
+            "required": [
+              "source"
+            ]
           },
           "then": {
-            "required": ["check_id"],
-            "not": { "required": ["ledger_seq"] }
+            "required": [
+              "check_id"
+            ],
+            "not": {
+              "required": [
+                "ledger_seq"
+              ]
+            }
           }
         },
         {
           "if": {
-            "properties": { "source": { "const": "side_effect_ledger" } },
-            "required": ["source"]
+            "properties": {
+              "source": {
+                "const": "side_effect_ledger"
+              }
+            },
+            "required": [
+              "source"
+            ]
           },
           "then": {
-            "required": ["ledger_seq"],
-            "not": { "required": ["check_id"] }
+            "required": [
+              "ledger_seq"
+            ],
+            "not": {
+              "required": [
+                "check_id"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
+            }
           }
         }
       ]

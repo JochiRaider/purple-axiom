@@ -66,6 +66,9 @@
         "failed"
       ],
       "description": "Status recommendation derived from stage outcomes and threshold gates."
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
     }
   },
   "$defs": {
@@ -167,6 +170,61 @@
                 "minimum": 0,
                 "maximum": 1
               }
+            }
+          }
+        }
+      ]
+    },
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
             }
           }
         }

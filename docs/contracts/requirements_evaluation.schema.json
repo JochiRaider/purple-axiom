@@ -4,7 +4,13 @@
   "title": "Requirements evaluation (per-action runner evidence)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contract_version", "action_id", "action_key", "generated_at_utc", "requirements"],
+  "required": [
+    "contract_version",
+    "action_id",
+    "action_key",
+    "generated_at_utc",
+    "requirements"
+  ],
   "properties": {
     "contract_version": {
       "const": "0.1.0",
@@ -34,7 +40,11 @@
     "requirements": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["declared", "evaluation", "results"],
+      "required": [
+        "declared",
+        "evaluation",
+        "results"
+      ],
       "properties": {
         "declared": {
           "$ref": "#/$defs/requirements_declared",
@@ -42,7 +52,11 @@
         },
         "evaluation": {
           "type": "string",
-          "enum": ["satisfied", "unsatisfied", "unknown"],
+          "enum": [
+            "satisfied",
+            "unsatisfied",
+            "unknown"
+          ],
           "description": "Aggregate evaluation outcome."
         },
         "results": {
@@ -77,6 +91,9 @@
       "type": "object",
       "description": "Reserved for forward-compatible extensions; not interpreted by v0.1 consumers.",
       "additionalProperties": true
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
     }
   },
   "$defs": {
@@ -92,12 +109,21 @@
     },
     "os_family": {
       "type": "string",
-      "enum": ["windows", "linux", "macos"],
+      "enum": [
+        "windows",
+        "linux",
+        "macos"
+      ],
       "description": "Coarse OS family constraint (v0.1 minimal set)."
     },
     "privilege_level": {
       "type": "string",
-      "enum": ["user", "admin", "system", "unknown"],
+      "enum": [
+        "user",
+        "admin",
+        "system",
+        "unknown"
+      ],
       "description": "Coarse privilege constraint (v0.1 minimal set)."
     },
     "tool_token": {
@@ -117,7 +143,9 @@
           "properties": {
             "os": {
               "type": "array",
-              "items": { "$ref": "#/$defs/os_family" },
+              "items": {
+                "$ref": "#/$defs/os_family"
+              },
               "minItems": 1,
               "uniqueItems": true,
               "description": "Allowed OS families."
@@ -130,7 +158,9 @@
         },
         "tools": {
           "type": "array",
-          "items": { "$ref": "#/$defs/tool_token" },
+          "items": {
+            "$ref": "#/$defs/tool_token"
+          },
           "minItems": 1,
           "uniqueItems": true,
           "description": "Required tools/capabilities."
@@ -146,25 +176,43 @@
     },
     "requirement_status": {
       "type": "string",
-      "enum": ["satisfied", "unsatisfied", "unknown"]
+      "enum": [
+        "satisfied",
+        "unsatisfied",
+        "unknown"
+      ]
     },
     "requirement_kind": {
       "type": "string",
-      "enum": ["platform", "privilege", "tool"]
+      "enum": [
+        "platform",
+        "privilege",
+        "tool"
+      ]
     },
     "requirement_result_kind_key": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "key", "status"],
+      "required": [
+        "kind",
+        "key",
+        "status"
+      ],
       "properties": {
-        "kind": { "$ref": "#/$defs/requirement_kind" },
+        "kind": {
+          "$ref": "#/$defs/requirement_kind"
+        },
         "key": {
           "type": "string",
           "minLength": 1,
           "description": "Evaluated token (OS family, privilege level, or tool token)."
         },
-        "status": { "$ref": "#/$defs/requirement_status" },
-        "reason_code": { "$ref": "#/$defs/reason_code" },
+        "status": {
+          "$ref": "#/$defs/requirement_status"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/reason_code"
+        },
         "details": {
           "type": "object",
           "description": "Optional, redacted-safe details. Avoid over-specific environment probes by default.",
@@ -175,16 +223,26 @@
     "requirement_result_category_token": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["category", "token", "status"],
+      "required": [
+        "category",
+        "token",
+        "status"
+      ],
       "properties": {
-        "category": { "$ref": "#/$defs/requirement_kind" },
+        "category": {
+          "$ref": "#/$defs/requirement_kind"
+        },
         "token": {
           "type": "string",
           "minLength": 1,
           "description": "Evaluated token (OS family, privilege level, or tool token)."
         },
-        "status": { "$ref": "#/$defs/requirement_status" },
-        "reason_code": { "$ref": "#/$defs/reason_code" },
+        "status": {
+          "$ref": "#/$defs/requirement_status"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/reason_code"
+        },
         "details": {
           "type": "object",
           "description": "Optional, redacted-safe details. Avoid over-specific environment probes by default.",
@@ -195,18 +253,28 @@
     "requirement_result": {
       "description": "Per-check requirement evaluation result. Supports (kind,key) and the transitional (category,token) naming.",
       "oneOf": [
-        { "$ref": "#/$defs/requirement_result_kind_key" },
-        { "$ref": "#/$defs/requirement_result_category_token" }
+        {
+          "$ref": "#/$defs/requirement_result_kind_key"
+        },
+        {
+          "$ref": "#/$defs/requirement_result_category_token"
+        }
       ]
     },
     "content_handling": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode"],
+      "required": [
+        "mode"
+      ],
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["present", "withheld", "quarantined"],
+          "enum": [
+            "present",
+            "withheld",
+            "quarantined"
+          ],
           "description": "Content handling mode for this artifact."
         },
         "reason": {
@@ -220,6 +288,61 @@
           "description": "Optional run-relative path to quarantined unredacted material (when mode=quarantined)."
         }
       }
+    },
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
+            }
+          }
+        }
+      ]
     }
   }
 }

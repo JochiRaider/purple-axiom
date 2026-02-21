@@ -63,10 +63,14 @@
     "command_shell_specific": {
       "description": "Evidence-only: shell-specific command string(s) actually invoked (after executor-specific rewriting/quoting).",
       "oneOf": [
-        { "type": "string" },
+        {
+          "type": "string"
+        },
         {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "minItems": 1
         }
       ]
@@ -82,6 +86,66 @@
       "type": "object",
       "description": "Optional extension point for future fields. Producers SHOULD keep this deterministic (stable key ordering is enforced via JCS in hashed contexts, not here).",
       "additionalProperties": true
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
+    }
+  },
+  "$defs": {
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
+            }
+          }
+        }
+      ]
     }
   }
 }

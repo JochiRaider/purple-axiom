@@ -7,7 +7,10 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract_version", "results"],
+      "required": [
+        "contract_version",
+        "results"
+      ],
       "properties": {
         "contract_version": {
           "type": "string",
@@ -17,20 +20,27 @@
         "results": {
           "type": "array",
           "minItems": 0,
-          "items": { "$ref": "#/$defs/cleanup_check_result" },
+          "items": {
+            "$ref": "#/$defs/cleanup_check_result"
+          },
           "description": "Cleanup verification check results. Producers MUST emit a deterministic ordering (see spec)."
         },
         "extensions": {
           "type": "object",
           "description": "Optional extension point for future metadata about the verification run.",
           "additionalProperties": true
+        },
+        "placeholder": {
+          "$ref": "#/$defs/pa_placeholder_v1"
         }
       }
     },
     {
       "type": "array",
       "minItems": 0,
-      "items": { "$ref": "#/$defs/cleanup_check_result" },
+      "items": {
+        "$ref": "#/$defs/cleanup_check_result"
+      },
       "description": "Legacy form: bare array of cleanup check results."
     }
   ],
@@ -38,7 +48,15 @@
     "cleanup_check_result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["check_id", "type", "target", "status", "reason_code", "attempts", "elapsed_ms"],
+      "required": [
+        "check_id",
+        "type",
+        "target",
+        "status",
+        "reason_code",
+        "attempts",
+        "elapsed_ms"
+      ],
       "properties": {
         "check_id": {
           "type": "string",
@@ -58,7 +76,12 @@
         },
         "status": {
           "type": "string",
-          "enum": ["pass", "fail", "indeterminate", "skipped"],
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "skipped"
+          ],
           "description": "Verification outcome."
         },
         "reason_code": {
@@ -88,6 +111,61 @@
           "additionalProperties": true
         }
       }
+    },
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
+            }
+          }
+        }
+      ]
     }
   }
 }

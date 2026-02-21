@@ -5,7 +5,13 @@
   "description": "Runner evidence artifact: runs/<run_id>/runner/principal_context.json. Records typed principal identity used during the run without secrets. Deterministic ordering requirements (normative, enforced outside JSON Schema): principals[] sorted by principal_id ascending (UTF-8 byte order); action_principal_map[] sorted by action_id ascending (UTF-8 byte order).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contract_version", "run_id", "generated_at_utc", "principals", "action_principal_map"],
+  "required": [
+    "contract_version",
+    "run_id",
+    "generated_at_utc",
+    "principals",
+    "action_principal_map"
+  ],
   "properties": {
     "contract_version": {
       "type": "string",
@@ -29,7 +35,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["principal_id", "kind", "assertion_source"],
+        "required": [
+          "principal_id",
+          "kind",
+          "assertion_source"
+        ],
         "properties": {
           "principal_id": {
             "type": "string",
@@ -52,7 +62,12 @@
           "assertion_source": {
             "type": "string",
             "description": "How the principal identity was determined.",
-            "enum": ["live_probe", "configured", "inferred", "unknown"]
+            "enum": [
+              "live_probe",
+              "configured",
+              "inferred",
+              "unknown"
+            ]
           },
           "redacted_fingerprint": {
             "type": "string",
@@ -71,7 +86,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["action_id", "principal_id"],
+        "required": [
+          "action_id",
+          "principal_id"
+        ],
         "properties": {
           "action_id": {
             "type": "string",
@@ -86,6 +104,66 @@
         }
       },
       "default": []
+    },
+    "placeholder": {
+      "$ref": "#/$defs/pa_placeholder_v1"
+    }
+  },
+  "$defs": {
+    "pa_placeholder_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placeholder_version",
+        "handling",
+        "reason_code",
+        "reason_domain"
+      ],
+      "properties": {
+        "placeholder_version": {
+          "type": "string",
+          "const": "pa.placeholder.v1"
+        },
+        "handling": {
+          "type": "string",
+          "enum": [
+            "withheld",
+            "quarantined",
+            "absent"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "reason_domain": {
+          "type": "string",
+          "const": "artifact_placeholder"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "handling": {
+                "const": "absent"
+              }
+            },
+            "required": [
+              "handling"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": false
+            }
+          }
+        }
+      ]
     }
   }
 }

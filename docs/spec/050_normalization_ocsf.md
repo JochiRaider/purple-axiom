@@ -268,8 +268,10 @@ be driven by the osquery scheduled query name:
 Unrouted behavior:
 
 - The normalizer MUST NOT guess a `class_uid` for an unknown `query_name`.
-- Unknown `query_name` rows MUST be preserved in `raw/` and MUST be counted in
-  `normalized/mapping_coverage.json` as unrouted or unmapped.
+- Unknown `query_name` rows MUST NOT be dropped. They MUST be counted in
+  `normalized/mapping_coverage.json` as unrouted or unmapped. The source payload for unknown routes
+  MUST be staged to telemetry raw retention surfaces as defined in the osquery integration spec
+  (analytics-tier `raw_parquet/osquery/**` and, when enabled, evidence-tier `raw/osquery/**`).
 - If an unknown `query_name` row carries either
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` or
   `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, the normalizer MUST still

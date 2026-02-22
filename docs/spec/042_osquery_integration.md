@@ -219,14 +219,29 @@ Semantics:
 
 - When `telemetry.sources.osquery.enabled=true`,
   `counters.counters.osquery_ndjson_parse_errors_total` MUST be present.
-- The counter MUST equal the number of osquery result records (one input line from
-  `runs/<run_id>/raw/osquery/osqueryd.results.log`) that cannot be normalized due to an ingest/parse
-  failure.
+
+- The counter MUST equal the number of osquery receiver records observed by the pipeline that cannot
+  be normalized due to an ingest/parse failure. The counter MUST also equal the number of rows in
+  `runs/<run_id>/raw_parquet/osquery/` where `parse_error_kind != null` (that is, one per input line
+  that cannot be normalized due to an ingest/parse failure).
+
+  - Definition (normative): an "osquery receiver record" is one record originating from the osquery
+    ingest path (for example, an OpenTelemetry LogRecord emitted by the collector's osquery results
+    tailing receiver) that the pipeline accepts for processing into the osquery raw Parquet dataset
+    under `runs/<run_id>/raw_parquet/osquery/`.
+
+  - This definition applies regardless of whether evidence-tier raw staging is enabled
+    (`telemetry.raw_preservation.enabled=true|false`). The counter MUST NOT depend on the presence
+    of `runs/<run_id>/raw/osquery/osqueryd.results.log`.
+
   - This includes:
-    - JSON parsing failures (the line is not valid JSON), and
+
+    - JSON parsing failures (the record body is not valid JSON), and
     - required-field parse failures (for example missing `unixTime` or `unixTime` not parseable as a
       signed 64-bit integer epoch-seconds value).
-  - Each input line MUST contribute at most `+1` to this counter.
+
+  - Each osquery receiver record MUST contribute at most `+1` to this counter.
+
 - When no ingest/parse failures occur, the counter MUST be present and MUST be `0`.
 
 ## Derived raw Parquet (produced when osquery is enabled)
@@ -252,25 +267,135 @@ The dataset directory MUST include `_schema.json` (see Parquet dataset conventio
 
 The dataset MUST include, at minimum, the following columns:
 
-| Column            | Type          | Notes                                                                |
-| ----------------- | ------------- | -------------------------------------------------------------------- |
-| `time`            | int64         | Epoch ms derived from `unixTime`                                     |
-| `query_name`      | string        | From `name`                                                          |
-| `host_identifier` | string        | From `hostIdentifier`                                                |
-| `action`          | string        | `added`, `removed`, or `snapshot`                                    |
-| `columns_json`    | string (JSON) | Present for `added` or `removed`, else null                          |
-| `snapshot_json`   | string (JSON) | Present for `snapshot`, else null                                    |
-| `raw_json`        | string (JSON) | Canonical JSON representation of the record (see determinism notes)  |
-| `raw_line`        | string        | Original line as read (from body / `log.record.original`), else null |
-| `log.file.path`   | string        | If provided by the collector, else null                              |
+| Column                          | Type          | Notes                                                                                                                                             |
+| ------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `time`                          | int64         | Epoch ms derived from `unixTime`; null when `parse_error_kind` is non-null                                                                        |
+| `query_name`                    | string        | From `name`; null when `parse_error_kind` is non-null                                                                                             |
+| `host_identifier`               | string        | From `hostIdentifier`; null when `parse_error_kind` is non-null                                                                                   |
+| `action`                        | string        | `added`, `removed`, or `snapshot`; null when `parse_error_kind` is non-null                                                                       |
+| `columns_json`                  | string (JSON) | Canonical JSON string for `columns` when `parse_error_kind` is null and `action` is `added` or `removed`; may be truncated (see below); else null |
+| `snapshot_json`                 | string (JSON) | Canonical JSON string for `snapshot` when `parse_error_kind` is null and `action` is `snapshot`; may be truncated (see below); else null          |
+| `raw_json`                      | string (JSON) | Canonical record JSON (RFC 8785 JCS) when `parse_error_kind` is null; may be truncated (see below); else null                                     |
+| `raw_line`                      | string        | Original line as read (from body / `log.record.original`), with line terminator stripped; required for all rows; may be truncated (see below)     |
+| `log.file.path`                 | string        | If provided by the collector, else null                                                                                                           |
+| `parse_error_kind`              | string        | Null when parsed ok; else `json_parse_error` or `required_field_error`                                                                            |
+| `columns_json_sha256`           | string        | `sha256:<64hex>` over full pre-truncation UTF-8 bytes of canonical `columns_json`; null when `columns_json` is null                               |
+| `columns_json_truncated`        | bool          | True iff `columns_json` was truncated due to `telemetry.payload_limits.max_field_chars`; null when `columns_json` is null                         |
+| `columns_json_overflow_bytes`   | int64         | Full pre-truncation UTF-8 byte length; null unless `columns_json_truncated=true`                                                                  |
+| `columns_json_overflow_sha256`  | string        | Required when truncated; MUST equal `columns_json_sha256`; null otherwise                                                                         |
+| `columns_json_overflow_ref`     | string        | Required when truncated and sidecar enabled; run-relative POSIX path; null otherwise                                                              |
+| `snapshot_json_sha256`          | string        | `sha256:<64hex>` over full pre-truncation UTF-8 bytes of canonical `snapshot_json`; null when `snapshot_json` is null                             |
+| `snapshot_json_truncated`       | bool          | True iff `snapshot_json` was truncated due to `telemetry.payload_limits.max_field_chars`; null when `snapshot_json` is null                       |
+| `snapshot_json_overflow_bytes`  | int64         | Full pre-truncation UTF-8 byte length; null unless `snapshot_json_truncated=true`                                                                 |
+| `snapshot_json_overflow_sha256` | string        | Required when truncated; MUST equal `snapshot_json_sha256`; null otherwise                                                                        |
+| `snapshot_json_overflow_ref`    | string        | Required when truncated and sidecar enabled; run-relative POSIX path; null otherwise                                                              |
+| `raw_json_sha256`               | string        | `sha256:<64hex>` over full pre-truncation UTF-8 bytes of canonical `raw_json`; null when `raw_json` is null                                       |
+| `raw_json_truncated`            | bool          | True iff `raw_json` was truncated due to `telemetry.payload_limits.max_field_chars`; null when `raw_json` is null                                 |
+| `raw_json_overflow_bytes`       | int64         | Full pre-truncation UTF-8 byte length; null unless `raw_json_truncated=true`                                                                      |
+| `raw_json_overflow_sha256`      | string        | Required when truncated; MUST equal `raw_json_sha256`; null otherwise                                                                             |
+| `raw_json_overflow_ref`         | string        | Required when truncated and sidecar enabled; run-relative POSIX path; null otherwise                                                              |
+| `raw_line_sha256`               | string        | `sha256:<64hex>` over full pre-truncation UTF-8 bytes of `raw_line` (after line terminator stripping)                                             |
+| `raw_line_truncated`            | bool          | True iff `raw_line` was truncated due to `telemetry.payload_limits.max_field_chars`                                                               |
+| `raw_line_overflow_bytes`       | int64         | Full pre-truncation UTF-8 byte length; null unless `raw_line_truncated=true`                                                                      |
+| `raw_line_overflow_sha256`      | string        | Required when truncated; MUST equal `raw_line_sha256`; null otherwise                                                                             |
+| `raw_line_overflow_ref`         | string        | Required when truncated and sidecar enabled; run-relative POSIX path; null otherwise                                                              |
+
+Payload truncation and sidecars (normative):
+
+- `telemetry.payload_limits.max_field_chars` applies to `columns_json`, `snapshot_json`, `raw_json`,
+  and `raw_line` after each field is fully materialized in its canonical string form.
+- Canonicalization requirements (normative):
+  - `columns_json` MUST be the `columns` object re-serialized via RFC 8785 (JCS) (no trailing
+    newline).
+  - `snapshot_json` MUST be the `snapshot` array after applying the snapshot canonicalization rules
+    below, then serialized via RFC 8785 (JCS) (no trailing newline).
+  - `raw_json` MUST be the full record object serialized via RFC 8785 (JCS) (no trailing newline).
+  - `raw_line` MUST be the original line content as read, with the line terminator stripped (no
+    trailing newline in the stored value).
+- For each field `F ∈ {columns_json, snapshot_json, raw_json, raw_line}`:
+  - When `F` is non-null (and for `raw_line`, always), implementations MUST compute `F_sha256` as
+    `sha256:<64hex>` over the full pre-truncation UTF-8 bytes of `F`.
+  - If `F` exceeds `telemetry.payload_limits.max_field_chars`, implementations MUST:
+    - set `F_truncated=true`,
+    - set `F_overflow_bytes` to the full pre-truncation UTF-8 byte length,
+    - set `F_overflow_sha256` and require it to equal `F_sha256`, and
+    - truncate `F` to the first `telemetry.payload_limits.max_field_chars` Unicode scalar values.
+  - If `F` does not exceed `telemetry.payload_limits.max_field_chars`, implementations MUST:
+    - set `F_truncated=false`, and
+    - set `F_overflow_bytes`, `F_overflow_sha256`, and `F_overflow_ref` to null.
+
+Sidecar addressing (normative):
+
+- Sidecar objects MUST follow `045_storage_formats.md` “Sidecar blob store” conventions.
+- The per-record directory key for osquery raw Parquet sidecars is `record_id_dir`, derived from
+  `raw_line_sha256` by stripping the `sha256:` prefix (result: 64 lowercase hex characters).
+- `field_path` MUST equal the base column name (`columns_json`, `snapshot_json`, `raw_json`,
+  `raw_line`).
+- `field_path_hash` MUST be `sha256_hex(UTF8(field_path))` (lowercase hex; no `sha256:` prefix).
+- File extension MUST be:
+  - `.json` for `columns_json`, `snapshot_json`, `raw_json`
+  - `.bin` for `raw_line`
+- When sidecar writing is enabled and `F_truncated=true`, `F_overflow_ref` MUST equal the
+  run-relative POSIX path:
+  `${telemetry.payload_limits.sidecar.dir}/${record_id_dir}/${field_path_hash}<ext>`.
+
+Determinism note (normative):
+
+- For rows where `parse_error_kind == null`, consumers MUST treat `raw_json_sha256` (not `raw_json`)
+  as the stable join key at the osquery raw Parquet layer, because `raw_json` MAY be truncated under
+  payload limits.
+- For rows where `parse_error_kind != null` (and therefore `raw_json` is null), consumers MUST treat
+  `raw_line_sha256` as the stable join key at the osquery raw Parquet layer.
 
 Determinism requirements:
 
-- `raw_json` MUST be the parsed JSON object re-serialized via RFC 8785 (JCS) prior to hashing or
-  stable joins (see ADR-0002 "Event Identity and Provenance").
+Parse-failure row representation (normative):
 
-- For `action="snapshot"`, implementations MUST canonicalize the `snapshot` array to a deterministic
-  order before serializing `snapshot_json` and `raw_json`:
+- The dataset MUST include parse-failure rows (it MUST NOT drop them). There MUST be exactly one
+  dataset row per input line in the osquery results stream for the run.
+
+  - When `telemetry.raw_preservation.enabled=true`, the authoritative input is the staged file
+    `runs/<run_id>/raw/osquery/osqueryd.results.log` and the dataset row count MUST equal the number
+    of lines in that file.
+
+- A row is a parse-failure row iff `parse_error_kind` is non-null.
+
+- `parse_error_kind` is a closed set:
+
+  - `json_parse_error`: the input line is not valid JSON.
+  - `required_field_error`: the input line parses as JSON but fails the canonical v0.1 required
+    field rules (missing/invalid `unixTime`, missing/invalid `name`, missing/invalid
+    `hostIdentifier`, missing/invalid `action`, or invalid `columns`/`snapshot` shape per `action`).
+
+- For parse-failure rows (`parse_error_kind != null`), the dataset MUST set:
+
+  - `time = null`
+  - `query_name = null`
+  - `host_identifier = null`
+  - `action = null`
+  - `columns_json = null`
+  - `snapshot_json = null`
+  - `raw_json = null`
+  - `raw_line` MUST be populated with the original line content as read (subject to payload limits;
+    see above).
+  - `raw_line_sha256` MUST be populated (computed over the full pre-truncation line bytes).
+
+- For non-error rows (`parse_error_kind == null`), the dataset MUST satisfy:
+
+  - `time`, `query_name`, `host_identifier`, `action`, `raw_json`, and `raw_line` MUST be non-null.
+  - `raw_json_sha256` and `raw_line_sha256` MUST be non-null.
+  - Exactly one of `columns_json` or `snapshot_json` MUST be non-null (and the other MUST be null),
+    per `action`.
+  - If `columns_json` is non-null, `columns_json_sha256` MUST be non-null.
+  - If `snapshot_json` is non-null, `snapshot_json_sha256` MUST be non-null.
+
+- For rows where `parse_error_kind == null`, `raw_json` MUST be the parsed JSON object re-serialized
+  via RFC 8785 (JCS) prior to hashing or stable joins (see ADR-0002 "Event Identity and
+  Provenance").
+
+- For rows where `parse_error_kind == null` and `action="snapshot"`, implementations MUST
+  canonicalize the `snapshot` array to a deterministic order before serializing `snapshot_json` and
+  `raw_json`:
 
   - Canonicalize each element object using RFC 8785 (JCS) to a UTF-8 string.
   - Sort elements by that canonical string (bytewise ascending).
@@ -281,15 +406,24 @@ Determinism requirements:
 - Row ordering (normative): before writing Parquet, implementations MUST sort all rows by the
   following total ordering (lowest tuple wins):
 
+  1. `parse_error_kind` ascending (nulls sort first; UTF-8 byte order, no locale)
   1. `time` ascending (nulls sort first)
   1. `host_identifier` ascending (nulls sort first; UTF-8 byte order, no locale)
   1. `query_name` ascending (nulls sort first; UTF-8 byte order, no locale)
   1. `action` ascending (nulls sort first; UTF-8 byte order, no locale)
+  1. `raw_json_sha256` ascending (nulls sort first; UTF-8 byte order, no locale)
+  1. `raw_line_sha256` ascending (UTF-8 byte order, no locale)
   1. `raw_json` ascending (nulls sort first; UTF-8 byte order, no locale)
+  1. `raw_line` ascending (nulls sort first; UTF-8 byte order, no locale)
+  1. `log.file.path` ascending (nulls sort first; UTF-8 byte order, no locale)
 
 - Deterministic dataset emission (normative):
 
-  - The dataset MUST NOT be partitioned in v0.1 (no `key=value/` subdirectories).
+  - The osquery raw Parquet dataset MUST NOT be partitioned in v0.1 (no `key=value/`
+    subdirectories).
+  - Note (non-normative): This restriction is specific to `runs/<run_id>/raw_parquet/osquery/`.
+    Other Parquet datasets (for example, `normalized/ocsf_events/`) may use partitioned layouts per
+    `045_storage_formats.md` "Partitioning strategy".
   - The dataset directory MUST contain:
     - `_schema.json`
     - one or more Parquet data files named `part-0000.parquet`, `part-0001.parquet`, (zero-padded
@@ -434,13 +568,20 @@ Rules:
 
   - If `len(stable_payload_bytes) > OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES`, then:
 
-    - `identity_basis.payload` MUST equal `{"fingerprint": "<sha256_hex>"}` and MUST NOT embed
+    - `identity_basis.payload` MUST equal `{"fingerprint": "<lowercase_hex>"}` and MUST NOT embed
       `stable_payload`.
+
     - `fingerprint` MUST be computed as `sha256(stable_payload_bytes)` and MUST be encoded as
-      lowercase hex of the full 32-byte digest (64 hex chars).
-    - The full source-native record bytes MUST remain preserved in the evidence-tier staged results
-      log at `runs/<run_id>/raw/osquery/osqueryd.results.log` (or its withheld/quarantined forms),
-      so reprocessing can recover the payload even when identity uses a fingerprint.
+      `<lowercase_hex>` only (64 hex chars), with no `sha256:` prefix (regex: `^[0-9a-f]{64}$`).
+
+    - If `telemetry.raw_preservation.enabled=false`, the normalization stage MUST fail closed with
+      `reason_code=payload_too_large_without_raw_preservation` and MUST NOT publish normalized
+      outputs.
+
+    - If `telemetry.raw_preservation.enabled=true`, the full source-native record bytes MUST remain
+      preserved in the evidence-tier staged results log at
+      `runs/<run_id>/raw/osquery/osqueryd.results.log` (or its withheld/quarantined forms), so
+      reprocessing can recover the payload even when identity uses a fingerprint.
 
 - Snapshot canonicalization (required when `action="snapshot"` and `stable_payload` is a snapshot
   array):
@@ -539,17 +680,34 @@ Required fixture case set (v0.1, minimum):
 `osquery_smoke` structure (normative):
 
 - `tests/fixtures/osquery/osquery_smoke/inputs/osqueryd.results.log` (NDJSON):
+
   - At least 2 differential rows (`added`, `removed`) for `process_events`.
   - At least 1 snapshot row (`snapshot`) for `file_events`whose canonical stable payload exceeds
     `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES` (exercises `payload.fingerprint` behavior).
   - At least 1 row for `socket_events`.
   - At least 1 row for an unknown `query_name` (to validate unrouted behavior).
-  - At least 1 invalid JSON line (to validate parse-error accounting).
+  - At least 1 invalid JSON line (to validate `parse_error_kind="json_parse_error"` and parse-error
+    accounting).
+  - At least 1 valid JSON line with a required-field failure (for example missing `unixTime` or an
+    unparseable `unixTime`) (to validate `parse_error_kind="required_field_error"` and parse-error
+    accounting).
+
 - `tests/fixtures/osquery/osquery_smoke/expected/` MUST include deterministic golden outputs at
   run-relative paths (mirroring the run bundle layout), at minimum:
+
   - `raw/osquery/osqueryd.results.log` (byte-identical to `inputs/osqueryd.results.log`)
   - `normalized/mapping_coverage.json`
   - `normalized/ocsf_events.jsonl`
+
+- `osquery_payload_too_large_raw_disabled`
+
+`osquery_payload_too_large_raw_disabled` intent (normative):
+
+- Inputs MUST disable evidence-tier raw preservation (`telemetry.raw_preservation.enabled=false`)
+  while providing at least one osquery record whose canonical `stable_payload_bytes` exceeds
+  `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES`.
+- Expected outcome: the run fails at normalization with
+  `reason_code=payload_too_large_without_raw_preservation` and no normalized outputs are published.
 
 ### Required assertions
 
@@ -558,8 +716,16 @@ A v0.1 implementation MUST satisfy:
 - Parsing:
   - Valid NDJSON lines are ingested and parsed.
   - Invalid JSON lines are counted as ingest or parse errors and do not produce normalized events.
-    - The authoritative count MUST be recorded as
-      `counters.counters.osquery_ndjson_parse_errors_total` in `runs/<run_id>/logs/counters.json`.
+    - The authoritative count MUST be recorded as `counters.osquery_ndjson_parse_errors_total` in
+      `runs/<run_id>/logs/counters.json`.
+  - Derived raw Parquet parse-failure rows:
+    - The derived raw Parquet dataset MUST include a row with `parse_error_kind="json_parse_error"`
+      for the invalid JSON input line, with `raw_json = null` and `raw_line` populated.
+    - The derived raw Parquet dataset MUST include a row with
+      `parse_error_kind="required_field_error"` for the required-field-failure input line, with
+      `raw_json = null` and `raw_line` populated.
+    - `counters.counters.osquery_ndjson_parse_errors_total` MUST equal the number of rows in the
+      derived raw Parquet dataset where `parse_error_kind != null`.
 - Routing:
   - `process_events` maps to `class_uid = 1007`.
   - `file_events` maps to `class_uid = 1001`.
@@ -572,17 +738,19 @@ A v0.1 implementation MUST satisfy:
     unrouted, they MUST still be emitted with `class_uid = 0`.
 - Identity determinism:
   - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values.
-  - The fixture set MUST exercise both Tier 3 payload forms:
-    - at least one case where `identity_basis.payload` embeds `stable_payload`, and
-    - at least one case where `identity_basis.payload.fingerprint` is used due to
-      `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES`.
+- The fixture set MUST exercise both Tier 3 payload forms:
+  - at least one case where `identity_basis.payload` embeds `stable_payload`, and
+  - at least one case where `identity_basis.payload.fingerprint` is used due to
+    `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES` and matches `^[0-9a-f]{64}$` (no `sha256:` prefix).
 - Contract alignment:
   - All osquery-derived normalized events include `metadata.extensions.purple_axiom.raw_ref` and it
     is `null`.
   - When `telemetry.raw_preservation.enabled=true`, the staged raw results log is present at
     `runs/<run_id>/raw/osquery/osqueryd.results.log` (actual content or deterministic placeholder
     when withheld/quarantined).
-  - When `telemetry.raw_preservation.enabled=false`, the staged raw results log MUST be absent.
+  - When `telemetry.raw_preservation.enabled=false`, if any record’s `stable_payload_bytes` exceeds
+    `OSQUERY_TIER3_PAYLOAD_INLINE_MAX_BYTES`, the normalization stage MUST fail closed with
+    `reason_code=payload_too_large_without_raw_preservation`.
   - When `normalization.raw_preservation.enabled=true` and
     `normalization.raw_preservation.policy != "none"`, routed normalized events contain
     `raw.osquery.raw_json_sha256`.
@@ -598,15 +766,27 @@ A v0.1 implementation MUST satisfy:
   - Implementations MAY prune `raw_parquet/**` after successful normalization (see
     `045_storage_formats.md`). If `runs/<run_id>/raw_parquet/osquery/` is present at end-of-run, it
     MUST include `_schema.json` and one or more `part-*.parquet` files.
-  - The dataset directory contains no subdirectories (v0.1 forbids partitioned layouts).
+  - The dataset directory contains no subdirectories (osquery raw Parquet is non-partitioned in
+    v0.1).
   - Part filenames are deterministic:
     - `part-0000.parquet`, `part-0001.parquet`, ... (zero-padded 4-digit, monotonically increasing,
       no gaps)
     - no timestamps, UUIDs, or random salts in filenames
   - Row ordering is deterministic:
     - When reading the dataset as the concatenation of part files in filename order, rows are sorted
-      by `(time, host_identifier, query_name, action, raw_json)` per the "Row ordering (normative)"
-      rule above.
+      by `(time, host_identifier, query_name, action, raw_json_sha256)` per the "Row ordering
+      (normative)" rule above.
+  - Payload limits and sidecars:
+    - The fixture case MUST include at least one record whose canonical `raw_json` exceeds
+      `telemetry.payload_limits.max_field_chars` under default config (exercises truncation).
+    - For that record:
+      - `raw_json_truncated=true`
+      - `raw_json_sha256` is present and is computed over the full pre-truncation canonical JSON
+        bytes
+      - `raw_json_overflow_sha256` is present and equals `raw_json_sha256`
+      - When `telemetry.raw_preservation.enabled=true` and
+        `telemetry.payload_limits.sidecar.enabled=true`, `raw_json_overflow_ref` is present and the
+        referenced sidecar blob exists at the expected path.
 
 ## Sample inputs and outputs (non-normative)
 

@@ -298,7 +298,10 @@ Tier 3 payload guidance (normative):
   - It MUST be computed as `sha256(canonical_stable_payload_bytes)` where
     `canonical_stable_payload_bytes = canonical_json_bytes(stable_payload)` and `stable_payload`
     excludes volatile fields.
-  - The fingerprint MUST be encoded as lowercase hex of the full 32-byte digest (64 hex chars).
+  - The fingerprint MUST be encoded as `<lowercase_hex>` only (64 hex chars), with no `sha256:`
+    prefix.
+    - Regex: `^[0-9a-f]{64}$`.
+    - Note: This is an identity-basis scalar (not a run-bundle digest string field value).
 - If `payload` is used, it MUST contain only stable fields and MUST be canonicalizable under RFC
   8785 (JCS).
 

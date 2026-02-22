@@ -653,6 +653,9 @@ extraction):
   - `max_field_chars` (optional, default: 262144)
     - Maximum character length for any single promoted string field at staging time (deterministic
       truncation bound).
+    - Applies to large promoted string fields in raw Parquet staging, including osquery
+      `raw_parquet/osquery/` fields `raw_json`, `columns_json`, `snapshot_json`, and `raw_line` (see
+      `042_osquery_integration.md`).
   - `max_binary_bytes` (optional, default: 262144)
     - Maximum decoded byte length for extracted binary payloads written to sidecar (oversize decoded
       payloads must not be externalized; record a deterministic summary instead).
@@ -667,12 +670,23 @@ extraction):
         the raw Windows Event Log overflow constraints in `045_storage_formats.md`. Concretely:
         implementations MUST either (a) avoid truncation by configuration, or (b) fail closed on
         overflow.
-    - `dir` (optional, default: `raw/evidence/blobs/wineventlog/`)
-      - Relative directory under the run bundle root used as the sidecar prefix.
-      - Sidecar objects MUST be addressed deterministically beneath this prefix using:
-        - `event_id_dir` (filesystem-safe directory derived from `metadata.event_id`), and
-        - `field_path_hash` (filename stem), as defined by `045_storage_formats.md` “Sidecar blob
-          store”.
+  - `dir` (optional, default: `raw/evidence/blobs/wineventlog/`)
+    - Relative directory under the run bundle root used as the sidecar prefix.
+
+    - Sidecar objects MUST be addressed deterministically beneath this prefix using:
+
+      - a per-record directory key, and
+      - `field_path_hash` (filename stem), as defined by `045_storage_formats.md` “Sidecar blob
+        store”.
+
+    - Directory key selection (normative):
+
+      - If `metadata.event_id` is available at the time the sidecar is written, the directory key
+        MUST be `event_id_dir` as defined by `045_storage_formats.md`.
+      - If `metadata.event_id` is not available at sidecar-write time (example: raw-stage datasets),
+        the dataset specification MUST define an alternative deterministic directory key derived
+        from a stable content digest (example: `record_id_dir` derived from `raw_json_sha256` for
+        osquery raw Parquet).
 - `native_container_exports` (optional)
   - v0.1 policy (normative):
     - The pipeline MUST NOT require native container exports. Pipeline correctness MUST NOT depend

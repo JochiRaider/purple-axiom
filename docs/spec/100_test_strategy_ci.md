@@ -209,7 +209,7 @@ Conventions (normative):
 | Cross-cutting: detection content bundle (`detection_content_release_v1`) | `tests/fixtures/content_bundles/detection_content_release_v1/`                                                                                                                        | `content_bundle_offline_validation_smoke`, `run_plus_content_bundle_validation_smoke`                                                                   |
 | `lab_provider`                                                           | `tests/fixtures/lab_providers/`                                                                                                                                                       | `provider_smoke`, `failure_mapping_smoke`                                                                                                               |
 | `runner`                                                                 | `tests/fixtures/runner/lifecycle/`<br>`tests/fixtures/runner/state_reconciliation/`<br>`tests/fixtures/runner/noise_profile/`                                                         | `lifecycle_smoke`, `invalid_transition_blocked`, `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`, `noise_profile_canonicalization_crlf_lf` |
-| `telemetry`                                                              | `tests/fixtures/telemetry/synthetic_marker/`<br>`tests/fixtures/unix_logs/`<br>`tests/fixtures/osquery/`                                                                              | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`                                                                                            |
+| telemetry                                                                | `tests/fixtures/telemetry/synthetic_marker/`<br>`tests/fixtures/unix_logs/`<br>`tests/fixtures/osquery/`                                                                              | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`, `egress_policy_canary_smoke`                                                              |
 | `normalization`                                                          | `tests/fixtures/normalization/`                                                                                                                                                       | `tier1_core_common_smoke`, `actor_identity_smoke`                                                                                                       |
 | `validation` (criteria evaluation)                                       | `tests/fixtures/criteria/`                                                                                                                                                            | `criteria_time_window_smoke`, `criteria_eval_smoke`, `criteria_authoring_compile_smoke`, `criteria_pack_lint_smoke`                                     |
 | `detection` (Sigma + Bridge)                                             | `tests/fixtures/sigma_rule_tests/<test_id>/`                                                                                                                                          | `rule_smoke`, `unsupported_feature_rejected`                                                                                                            |
@@ -406,6 +406,41 @@ Scanner requirement (normative):
   negatives.
 - The scanning helper MUST enumerate scanned files in deterministic order (run-relative path sort).
 - The scanning helper MUST NOT print the sentinel secret value in any failure output.
+
+### Evaluator sandbox
+
+The evaluator sandbox is a trust boundary. The contract requirements live in
+`090_security_safety.md` ("Evaluator sandbox contract").
+
+Minimum required tests (normative):
+
+- `evaluator_sandbox_network_egress_denied_by_default`
+
+  - Setup: run a minimal "sandbox probe" inside the evaluator sandbox that attempts an outbound TCP
+    connection (use the configured `security.network.egress_canary` target or an equivalent
+    deterministic test endpoint).
+  - Expected:
+    - the connection attempt fails within a deterministic timeout, and
+    - no network bytes are transmitted beyond the sandbox boundary.
+
+- `evaluator_sandbox_filesystem_write_outside_run_bundle_denied`
+
+  - Setup: run a sandbox probe that attempts to create/modify a file outside `runs/<run_id>/`.
+  - Expected:
+    - the write attempt is denied and no files outside `runs/<run_id>/` are created or modified.
+
+- `evaluator_sandbox_treat_rule_packs_as_data`
+
+  - Setup: provide an input ruleset containing common template/macro markers (e.g. `{{ ... }}`,
+    `${...}`, or backticks) and run the compile/evaluate path that consumes rules.
+  - Expected:
+    - no template/macro execution occurs, and
+    - the input is treated as literal data or rejected deterministically as invalid.
+
+Notes (non-normative):
+
+- These tests are intended to run in Content CI (no lab required) by targeting the sandbox
+  implementation directly (or via a lightweight sandbox-probe harness).
 
 ### Normalization and mapping
 

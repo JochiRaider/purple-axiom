@@ -555,8 +555,16 @@ When enabled:
 - Sidecar payloads live under Tier 1 evidence:
   - `raw/evidence/blobs/wineventlog/`
 - Sidecar objects MUST be addressed deterministically by:
-  - `event_id_dir` (directory; filesystem-safe stable identifier derived from `metadata.event_id`)
+  - `record_dir` (directory; filesystem-safe stable identifier for the originating record)
   - `field_path_hash` (filename stem)
+
+`record_dir` selection (normative):
+
+- When `metadata.event_id` is available at sidecar-write time, `record_dir` MUST equal
+  `event_id_dir`.
+- When `metadata.event_id` is not available at sidecar-write time (example: raw-stage datasets), the
+  dataset specification MUST define a stable digest-derived directory key (for example
+  `record_id_dir`) and `record_dir` MUST equal that key.
 
 `event_id_dir` definition (normative):
 
@@ -566,6 +574,14 @@ When enabled:
   after the final `:` character.
   - Example: `pa:eid:v1:0123456789abcdef0123456789abcdef` -> `0123456789abcdef0123456789abcdef`
 - In v0.1, `event_id_dir` MUST be lowercase hex.
+
+`record_id_dir` definition (normative; digest-keyed records):
+
+- `record_id_dir` MUST be derived deterministically from a stable digest field provided by the
+  dataset specification.
+- For digest strings in the form `sha256:<lowercase_hex>`, implementations MUST derive
+  `record_id_dir` as the suffix after `sha256:` (the lowercase hex only).
+- In v0.1, `record_id_dir` MUST be lowercase hex.
 
 `field_path_hash` definition (normative):
 
@@ -585,8 +601,9 @@ File extensions (normative):
 
 Examples:
 
-- `raw/evidence/blobs/wineventlog/<event_id_dir>/<field_path_hash>.bin`
-- `raw/evidence/blobs/wineventlog/<event_id_dir>/<field_path_hash>.xml`
+- `raw/evidence/blobs/wineventlog/<record_dir>/<field_path_hash>.bin`
+- `raw/evidence/blobs/wineventlog/<record_dir>/<field_path_hash>.xml`
+- `raw/evidence/blobs/wineventlog/<record_dir>/<field_path_hash>.json`
 
 Reference fields (normative):
 

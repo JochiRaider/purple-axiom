@@ -158,8 +158,7 @@ Verb definitions (v0.1):
 - `simulate`
 
   - Stages executed: the canonical v0.1 pipeline stage order, filtered to the stages enabled for
-    this run by `025_data_contracts.md`'s `stage_enablement_matrix_v1` or
-    `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`) (see
+    this run by `025_data_contracts.md`'s `stage_enablement_matrix_v1` (see
     [Stage execution order](#stage-execution-order) and
     [ADR-0004: Deployment architecture and inter-component communication][adr-0004]).
   - Intent: perform a complete run and produce a complete run bundle.
@@ -175,16 +174,17 @@ Verb definitions (v0.1):
     → `reporting` (and optional `signing`).
   - Verb selection and config gates further restrict this subset:
     - Verbs select a deterministic subset of stages.
-    - Per-run stage enablement is defined by `025_data_contracts.md`'s `stage_enablement_matrix_v1`
-      or `stage_enablement_matrix_v2` (selected by `manifest.versions.contracts_version`).
+    - Per-run stage enablement is defined by `025_data_contracts.md`'s `stage_enablement_matrix_v1`.
     - Stages that are disabled for a run MUST be absent from the outcome surface (not recorded as
       `skipped`) per ADR-0005.
   - Preconditions: the candidate run bundle MUST already contain `ground_truth.jsonl` and either:
     - `raw_parquet/**` (full replay; `normalization` and `validation` are executed), OR
     - a normalized event store (normalized-input replay; v0.2+):
-      - `normalized/ocsf_events/` (Parquet dataset directory; MUST include
-        `normalized/ocsf_events/_schema.json`), AND
+      - `normalized/ocsf_events.jsonl` (contract-backed; canonical replay input), AND
       - `normalized/mapping_profile_snapshot.json`.
+      - If `normalized/ocsf_events/` (Parquet dataset directory) also exists, replay MUST treat it
+        as a cache only and MUST prefer `normalized/ocsf_events.jsonl` as the authoritative replay
+        input.
   - Normalized-input replay fast path (v0.2+; normative when used):
     - If a normalized event store exists and its normalization provenance matches the current
       version control for the run, the orchestrator MUST skip directly to `detection`.
@@ -220,10 +220,14 @@ Verb definitions (v0.1):
 
   - Stages executed: none.
   - Intent: package a run bundle (or disclosed subset) for sharing or archival.
-  - By default, exports MUST exclude `unredacted/**` and MUST NOT disclose artifacts that are not
-    redaction-safe under the configured policy.
-  - Export outputs (for example, an archive file) are implementation-defined and MAY be written
-    outside the run bundle.
+  - By default, exports MUST exclude the configured quarantine directory resolved from
+    `security.redaction.unredacted_dir` and MUST NOT disclose artifacts that are not redaction-safe
+    under the configured policy.
+  - `export` MUST treat `runs/<run_id>/` as read-only input and MUST NOT create, modify, or delete
+    any run-bundle artifacts.
+  - Export outputs MUST be written under the reserved run export namespace
+    `<workspace_root>/exports/<run_id>/<export_id>/` and MUST include `export_manifest.json`. Output
+    filenames within the export bundle are implementation-defined.
 
 - `destroy`
 
@@ -407,7 +411,7 @@ Selected stable paths (non-exhaustive; run-relative):
 | `normalized/`                            | Normalized event store(s) and mapping artifacts.                                                                                                                           |
 | `criteria/`                              | Validation criteria inputs, results, and provenance.                                                                                                                       |
 | `detections/`                            | Detection outputs and evidence.                                                                                                                                            |
-| `scores/`                                | Scoring outputs and evidence.                                                                                                                                              |
+| `scoring/`                               | Scoring outputs and evidence.                                                                                                                                              |
 | `report/`                                | Reporting products (e.g., `report/report.json`, `report/thresholds.json`).                                                                                                 |
 | `inputs/`                                | Input snapshots and pointers materialized for determinism and replay.                                                                                                      |
 | `inputs/plan_draft.yaml`                 | Finalized plan draft snapshot (contract-backed; orchestrator-owned).                                                                                                       |
@@ -421,24 +425,23 @@ Selected stable paths (non-exhaustive; run-relative):
 | `logs/contract_validation/`              | Per-owner contract validation reports on publish-gate failures.                                                                                                            |
 | `logs/lab_inventory_snapshot.json`       | Deterministic lab environment inventory snapshot for auditability.                                                                                                         |
 | `logs/cache_provenance.json`             | Run cache hit/miss and upstream provenance for replay fast paths.                                                                                                          |
-| `logs/dedupe_index/**`                   | Deterministic indices for deduplication.                                                                                                                                   |
-| `workspace/**`                           | Workspace-global state pointers relevant to this run (read-only for stages).                                                                                               |
+| `logs/dedupe_index/**`                   | Volatile restart/deduplication index (diagnostic only).                                                                                                                    |
 | `security/`                              | Redaction policies and security posture snapshots.                                                                                                                         |
 | `plan/`                                  | Execution plan artifacts, including finalized plan and provenance.                                                                                                         |
 | `control/`                               | Control-plane requests/decisions and audit trail (reserved; v0.2+ forward-compat).                                                                                         |
 
 Per-action evidence location (normative):
 
-- `extract` MUST add `range/` source snapshots and update `manifest.json`.
+- `build` MUST add `range/` source snapshots and update `manifest.json`.
 - `simulate` MUST populate the output surfaces for each enabled stage and update `manifest.json`
   (e.g., `runner/` always; `raw_parquet/` when telemetry is enabled; `normalized/` always;
-  `criteria/`, `detections/`, `scores/`, and `report/` when their stages are enabled).
+  `criteria/`, `detections/`, `scoring/`, and `report/` when their stages are enabled).
 - `replay` MUST populate (or reuse) `normalized/` and MUST populate the output surfaces for each
-  enabled downstream stage (`criteria/`, `detections/`, `scores/`, `report/`), and update
+  enabled downstream stage (`criteria/`, `detections/`, `scoring/`, `report/`), and update
   `manifest.json`.
-- `export` MUST write export bundles under the workspace-root reserved namespace `exports/**`
-  (outside the run bundle) and MUST NOT pollute run-relative outputs except via `report/` and
-  `manifest.json`.
+- `export` MUST write export bundles under the reserved run export namespace
+  `<workspace_root>/exports/<run_id>/<export_id>/` (outside the run bundle) and MUST treat
+  `runs/<run_id>/` as read-only input (it MUST NOT create, modify, or delete run-bundle artifacts).
 
 See ADR-0004 for the full workspace and evidence-tier layout rules.
 
@@ -588,6 +591,226 @@ owner token `orchestrator`. A stage being marked "Optional" here refers to a cap
 `signing`) rather than config gating. If a pipeline stage is disabled for a run by configuration, it
 MUST be absent from the outcome surface (not recorded as `skipped`) per ADR-0005.
 
+## Architecture viewpoints
+
+Purple Axiom documentation is organized using explicit architecture viewpoints (context, logical and
+data, process and state, deployment, operational). This section provides:
+
+1. A viewpoint index mapping each major concern to the single authoritative document.
+1. The authoritative system context and trust boundary view for v0.1.
+
+### Viewpoint index
+
+Context
+
+- Authority: this section for actors, trust boundaries, and allowed/denied flows.
+- Enforcement detail: `090_security_safety.md` and `110_operability.md`.
+
+Logical and data
+
+- `025_data_contracts.md` (artifact schemas and contract bindings)
+- `045_storage_formats.md` (JSONL/Parquet formats and schema snapshots)
+- `050_normalization_ocsf.md` and `055_ocsf_field_tiers.md` (OCSF mapping rules and tiering)
+- `065_sigma_to_ocsf_bridge.md` and `060_detection_sigma.md` (Sigma compilation, bridge IR,
+  evaluator IO)
+
+Process and state
+
+- ADR-0004 (deterministic stage ordering and inter-component communication)
+- ADR-0005 (stage outcome semantics and reason codes)
+- ADR-0007 (lifecycle state machine templates and conformance)
+
+Deployment
+
+- `015_lab_providers.md` (provider boundary and asset topology)
+- `040_telemetry_pipeline.md` (collector deployment, ingest/export, telemetry validation
+  checkpoints)
+
+Operational
+
+- `110_operability.md` (health, canaries, counters, failure handling)
+- `100_test_strategy_ci.md` (fixture-driven conformance and CI gates)
+- `120_config_reference.md` (config keys for network, secrets, signing, and safety defaults)
+
+### System context and trust boundaries
+
+This section is authoritative for the system context and trust boundary model. It MUST remain
+consistent with the enforcement requirements in `090_security_safety.md` and the canary and health
+requirements in `110_operability.md`.
+
+#### External actors and systems
+
+- Operator: invokes the pipeline via CLI or future UI.
+- CI runner: invokes the pipeline in automated workflows.
+- Secret provider: supplies credential material referenced by config (environment, CI secrets,
+  vault).
+- Pack sources and registries: sources of scenarios, criteria packs, mapping packs, and rule packs.
+- Lab provider: provisions lab assets and enforces lab network policy.
+- Lab assets: Windows/Linux endpoints under test.
+- Telemetry collector: privileged local service on each asset that exports telemetry to the
+  orchestrator.
+
+#### Trust boundaries
+
+Each trust boundary is named so other specs and tests can refer to it unambiguously.
+
+- TB-ORCH: Orchestrator host boundary.
+
+  - Includes the orchestrator process, adapter implementations, and the run workspace.
+  - Assumption: local host executes the pipeline, but all external inputs are untrusted by default.
+
+- TB-EVAL: Evaluator sandbox boundary.
+
+  - A constrained execution boundary used for criteria and detection evaluation.
+  - Assumption: evaluator inputs (rules, packs, event data) are untrusted; sandbox must enforce
+    least privilege.
+
+- TB-LAB: Lab boundary.
+
+  - Includes the lab provider control plane, lab networks, and target assets.
+  - Assumption: lab assets may be adversarial or compromised during execution; containment is
+    required.
+
+- TB-COL: Collector boundary.
+
+  - The telemetry collector service on a lab asset that ingests local signals and exports them
+    off-host.
+  - Assumption: collector is privileged on the asset; it must be constrained and its export must be
+    authenticated.
+
+- TB-SUPPLY: Supply chain boundary.
+
+  - Any external content source (git, registries, downloaded packs, pinned baseline datasets).
+  - Assumption: content is untrusted until pinned, hashed, and when enabled, signature-verified.
+
+- TB-SECRETS: Secret material boundary.
+
+  - Credential values resolved from secret providers.
+  - Assumption: secrets must not cross into logs, artifacts, or evaluator execution contexts.
+
+#### Context and trust boundary diagram
+
+```text
++--------------------------+         +--------------------------------------+
+| External actors          |         | TB-SUPPLY: Pack sources/registries   |
+|                          |         | (untrusted until pinned/verified)    |
+|  - Operator              |         |  - scenarios, packs, rules, BDPs     |
+|  - CI runner             |         +-------------------+------------------+
++------------+-------------+                             |
+             | invoke (local CLI)                        | explicit fetch/resolve
+             v                                           | (pinned + hashed)
++----------------------------------------------------------------------------------+
+| TB-ORCH: Orchestrator host                                                        |
+|                                                                                   |
+|  Orchestrator (one-shot pipeline driver + adapter registry)                       |
+|    |                                                                              |
+|    | writes                                                                       |
+|    v                                                                              |
+|  runs/<run_id>/... (contract-backed artifacts + deterministic logs)               |
+|                                                                                   |
+|  +----------------------------------+                                             |
+|  | TB-EVAL: Evaluator sandbox       |                                             |
+|  |  - criteria evaluation           |  Deny by default: outbound network          |
+|  |  - sigma evaluation              |  Constrain FS: read-only inputs, write-only |
+|  +----------------------------------+  outputs under runs/<run_id>/               |
+|                                                                                   |
+|  Allowed outbound calls from TB-ORCH are limited to:                              |
+|   - Lab provider API (TB-LAB)                                                     |
+|   - Explicit, pinned content fetch (TB-SUPPLY)                                    |
++----------------------------+-----------------------------------------------------+
+                             |
+                             | provision / remote execution / containment policy
+                             v
++----------------------------------------------------------------------------------+
+| TB-LAB: Lab provider + assets                                                     |
+|                                                                                   |
+|  Lab provider control plane (inventory, provision, enforce lab network policy)    |
+|                                                                                   |
+|  +-----------------------------+                                                  |
+|  | Target asset(s)             |                                                  |
+|  |   +----------------------+  |    Telemetry export (mTLS)                       |
+|  |   | TB-COL: OTel         |--+----------------------------------------------->  |
+|  |   | Collector            |        Ingest receiver on TB-ORCH                   |
+|  |   +----------------------+                                                     |
+|  |   Default: outbound egress denied (provider-enforced)                          |
+|  +-----------------------------+                                                  |
++----------------------------------------------------------------------------------+
+```
+
+#### Allowed and denied flows
+
+The following flows are normative for v0.1.
+
+Allowed
+
+- Operator/CI MAY invoke the orchestrator locally and provide config/scenario inputs.
+- TB-ORCH MAY call the lab provider control plane to provision assets and execute scenarios.
+- TB-COL MAY export telemetry off-host to TB-ORCH using authenticated transport (mTLS).
+- TB-ORCH MAY retrieve content from TB-SUPPLY only via an explicit fetch/resolve step that:
+  - pins versions and/or hashes, and
+  - records provenance in the run bundle.
+
+Denied by default
+
+- TB-EVAL MUST NOT have outbound network access by default.
+- Lab asset outbound egress MUST be denied by default; allowlisting MUST be explicit and recorded.
+- Secrets from TB-SECRETS MUST NOT be persisted to logs or artifacts and MUST NOT be accessible to
+  TB-EVAL unless explicitly passed as data inputs.
+
+#### Failure domains and blast radius
+
+- Orchestrator crash or kill:
+
+  - Effect: run may be incomplete; outputs may be partially written.
+  - Containment: publish gate semantics and run lock must prevent partially published artifacts.
+
+- Collector crash or misconfiguration:
+
+  - Effect: telemetry missing/incomplete; telemetry validation gates fail.
+  - Containment: telemetry stage must fail closed when required signals/canaries are absent.
+
+- Lab egress policy misconfiguration:
+
+  - Effect: unintended outbound reachability from assets.
+  - Containment: network egress canary must detect and fail the run when effective policy is deny.
+
+- Pack corruption or tampering:
+
+  - Effect: inputs or exported bundles may be modified.
+  - Containment: checksums/signatures must fail closed when tampering is detected.
+
+#### Boundary enforcement test map
+
+Every trust boundary listed above MUST have at least one enforcement test referenced here. The test
+strategy doc is the authoritative index for fixture roots and CI gates.
+
+- TB-ORCH:
+
+  - `run_lock_exclusive_single_writer`
+  - `publish_gate_output_root_guardrail_fail_closed`
+
+- TB-SECRETS:
+
+  - `tests/fixtures/integration_credentials/v1/` (`leak_detected_fails_closed`)
+
+- TB-LAB egress:
+
+  - `telemetry.network.egress_policy` canary
+  - `egress_policy_canary_smoke` (telemetry fixture set)
+
+- TB-COL:
+
+  - `synthetic_marker_smoke` (telemetry fixture set)
+
+- TB-EVAL:
+
+  - `evaluator_sandbox_network_egress_denied_by_default`
+  - `evaluator_sandbox_filesystem_write_outside_run_bundle_denied`
+
+- TB-SUPPLY:
+
+  - `tests/fixtures/signing/v1/` (`tamper_detected`)
+
 ## Stage execution order
 
 Preamble (normative, per
@@ -602,8 +825,7 @@ Preamble (normative, per
 
 The orchestrator MUST execute the enabled pipeline stages in the canonical relative order below for
 v0.1. "Enabled" is determined by the verb semantics and then further filtered by
-`025_data_contracts.md`'s `stage_enablement_matrix_v1` or `stage_enablement_matrix_v2` (selected by
-`manifest.versions.contracts_version`).
+`025_data_contracts.md`'s `stage_enablement_matrix_v1`.
 
 Canonical relative order (v0.1):
 

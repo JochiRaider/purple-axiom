@@ -660,12 +660,13 @@ Minimum artifacts when enabled: `normalized/**`, `normalized/mapping_coverage.js
 
 #### FATAL reason codes
 
-| Reason code                     | Severity | Description                                                                                           |
-| ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `mapping_profile_invalid`       | FATAL    | Mapping profile cannot be loaded or is schema-invalid.                                                |
-| `ocsf_schema_mismatch`          | FATAL    | Pinned OCSF version differs across normalizer and bridge.                                             |
-| `event_id_generation_failed`    | FATAL    | Deterministic event identity cannot be computed for a record under strict policy.                     |
-| `normalized_store_incompatible` | FATAL    | Cached normalized store is incompatible with the current replay request (and no raw fallback exists). |
+| Reason code                                  | Severity | Description                                                                                                                                          |
+| -------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mapping_profile_invalid`                    | FATAL    | Mapping profile cannot be loaded or is schema-invalid.                                                                                               |
+| `ocsf_schema_mismatch`                       | FATAL    | Pinned OCSF version differs across normalizer and bridge.                                                                                            |
+| `event_id_generation_failed`                 | FATAL    | Deterministic event identity cannot be computed for a record under strict policy.                                                                    |
+| `payload_too_large_without_raw_preservation` | FATAL    | A record requires Tier 3 fingerprinting, but `telemetry.raw_preservation.enabled=false` (no evidence-tier raw bytes to support replay expectations). |
+| `normalized_store_incompatible`              | FATAL    | Cached normalized store is incompatible with the current replay request (and no raw fallback exists).                                                |
 
 #### NON-FATAL reason codes
 

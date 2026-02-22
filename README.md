@@ -30,7 +30,12 @@ can diff, gate, and trend over time:
 - **Validation**: expected vs observed telemetry and cleanup verification (criteria packs)
 - **Detections**: what rules were applicable/executable and what fired (Sigma)
 - **Scoring**: coverage, latency, and deterministic gap classification with threshold gate inputs
-- **Reporting**: a run bundle you can diff, gate in CI, and trend over time
+- **Reporting**: a run bundle you can diff, gate in CI, and trend over time — including a
+  self-contained HTML report (`report/report.html`) alongside machine-readable `report/report.json`
+  and CI-facing `report/thresholds.json`
+- **Linting**: a CLI-first authoring and CI validation surface (`pa lint`) that emits a
+  deterministic `lint.json` for fast feedback on configuration, scenario, and detection content
+  artifacts without requiring a lab
 - **Integrity (optional)**: checksums and signatures over selected artifacts for tamper evidence
 
 ### Why it exists
@@ -39,7 +44,8 @@ Most detection engineering loops still look like "run a test, eyeball logs, call
 
 Purple Axiom replaces that with a **contract-backed** pipeline where each stage reads its inputs
 from the **run bundle** and publishes schema-validated outputs back into the same run bundle. The
-**filesystem is the inter-stage contract boundary**.
+**filesystem is the inter-stage contract boundary**. A **Contract Spine** enforces publish-gate
+validation, contract registry resolution, and deterministic serialization across all stages.
 
 ### Core philosophy
 
@@ -80,8 +86,11 @@ Authoritative v0.1 scope boundary: `docs/spec/010_scope.md`.
 ### Project status and version scope
 
 - **v0.1 (normative):** single-scenario runs, one-shot orchestrator, filesystem-coordinated stages,
-  Atomic Red Team execution, endpoint-first telemetry, OCSF normalization, criteria validation,
-  Sigma detection evaluation, scoring, reporting, and optional signing.
+  Atomic Red Team execution, endpoint-first telemetry (Windows Event Log, Sysmon, Linux auditd,
+  osquery), OCSF normalization, criteria validation, Sigma detection evaluation, scoring, reporting
+  (JSON + HTML + CI thresholds), linting (`pa lint`), Baseline Detection Packages (BDP) as
+  first-class CI artifacts, Contract Spine conformance (publish-gate validation, contract registry,
+  deterministic serialization), two-lane CI model (Content CI / Run CI), and optional signing.
 - **v0.2+ (reserved / future):** multi-action plans, matrix expansion, threat-intel inputs, and an
   operator interface / appliance model (see `docs/spec/115_operator_interface.md` and ADR-0006).
 
@@ -139,11 +148,15 @@ Purple Axiom v0.1 uses a single-host, local-first topology with a one-shot orche
   - validate contract-backed outputs against local schemas
   - atomically promote staged outputs into their final run-bundle locations
 
+- The **Contract Spine** (`docs/spec/026_contract_spine.md`) is the canonical seam for contract
+  registry resolution, publish-gate validation, deterministic serialization, reader semantics, and
+  CI conformance. It prevents contract drift across producers (stages, orchestrator) and consumers
+  (CI, reporting, exporters).
+
 #### Workspace root boundary (v0.1+)
 
 The workspace root is the directory that contains `runs/`. Only reserved workspace directories may
-be written outside a run bundle (for example `runs/.locks/`, and optionally `cache/` and
-`exports/`).
+be written outside a run bundle (for example `runs/.locks/`, and optionally `cache/`, `exports/`).
 
 ```mermaid
 flowchart TB
@@ -151,6 +164,8 @@ flowchart TB
     runs["runs/ (required)"]
     cache["cache/ (reserved; optional)"]
     exports["exports/ (reserved; optional)"]
+    baselines["exports/baselines/ (BDPs; reserved)"]
+    content_bundles["exports/content_bundles/ (reserved)"]
     state["state/ (reserved; v0.2+)"]
     plans["plans/ (reserved; v0.2+)"]
     wlogs["logs/ (reserved; v0.2+)"]
@@ -165,6 +180,8 @@ flowchart TB
   end
 
   runs --> R
+  exports --> baselines
+  exports --> content_bundles
   locks -. exclusive write lock .-> R
 ```
 
@@ -211,8 +228,9 @@ Authoritative topology and IO boundaries:
 ### Range lifecycle verbs (entrypoints)
 
 The orchestrator MAY expose stable lifecycle verbs (entrypoints) that map to deterministic subsets
-of stages. In v0.1, `simulate` is the only verb required for completeness; other verbs are allowed
-interface surfaces when implemented.
+of stages. In v0.1, `simulate` is the only verb required for completeness; `build` semantics are
+required but may be implicit within `simulate`. Other verbs are allowed interface surfaces when
+implemented.
 
 Common invariants (v0.1):
 
@@ -225,7 +243,9 @@ Common invariants (v0.1):
 
 Verb mapping (v0.1):
 
-- `build`: inventory resolution and input pinning (`lab_provider`).
+- `build`: inventory resolution and input pinning (`lab_provider`). Required for v0.1 compliance;
+  MAY be executed implicitly as the first step of `simulate` if not exposed as a separate operator
+  command.
 - `simulate`: canonical stage sequence (`lab_provider` → `runner` → `telemetry` → `normalization` →
   `validation` → `detection` → `scoring` → `reporting` → optional `signing`).
 - `replay`: downstream recomputation from existing datasets (default: `normalization` → `validation`
@@ -233,7 +253,14 @@ Verb mapping (v0.1):
 - `export`: package run bundles for sharing (policy-controlled; excludes `unredacted/**` by
   default).
 - `destroy`: clean up run-local resources and optionally tear down lab resources (explicit enable
-  required).
+  required; RECOMMENDED when lab providers provision or mutate lab resources).
+
+CI operational readiness entrypoints (required for v0.1):
+
+- `ci-content`: exercises Contract Spine validation, schema/lint gates, and content bundle
+  build/validation in an offline-safe way (no lab provider required).
+- `ci-run`: exercises a representative end-to-end run via either BDP replay or a minimal lab run,
+  producing contract-backed `run_results.json` and reporting outputs.
 
 ```mermaid
 flowchart TB
@@ -243,6 +270,8 @@ flowchart TB
     replay["replay"]
     exportv["export"]
     destroy["destroy"]
+    cicontent["ci-content (required)"]
+    cirun["ci-run (required)"]
   end
 
   subgraph stages["Stages"]
@@ -267,6 +296,8 @@ flowchart TB
 
   exportv --> bundle["export bundle (implementation-defined)"]
   destroy --> cleanup["cleanup (implementation-defined)"]
+  cicontent --> content["contract/schema/lint gates (no lab)"]
+  cirun --> runbdp["BDP replay or minimal lab run"]
 ```
 
 Authoritative definition: `docs/spec/020_architecture.md` ("Range lifecycle verbs (v0.1; normative
@@ -304,7 +335,9 @@ sequenceDiagram
   O->>L: release(best-effort)
 ```
 
-Authoritative references: `docs/spec/025_data_contracts.md` (publish-gate validation) and
+Authoritative references: `docs/spec/026_contract_spine.md` (Contract Spine: registry resolution,
+publish-gate validation, deterministic serialization, reader semantics, and CI conformance gate),
+`docs/spec/025_data_contracts.md` (schema contracts and determinism rules), and
 `docs/adr/ADR-0007-state-machines.md` (lifecycle FSM template).
 
 ## Part 3: Details of interest
@@ -345,9 +378,21 @@ Run status (`manifest.status`) is derived deterministically from recorded outcom
 - `partial`: otherwise, any stage failed with `fail_mode=warn_and_skip`
 - `success`: otherwise
 
-### CI posture (reporting as the CI interface)
+### CI posture (two-lane model)
 
-The reporting stage emits a CI-facing recommendation and exit code:
+Purple Axiom v0.1 CI is split into two explicit lanes:
+
+- **Content CI** (fast, no lab required): validates content-like artifacts and compilation outputs
+  without invoking a lab provider. The **Contract Spine conformance gate** runs first and MUST pass
+  before other Content CI checks proceed. Content CI also validates Sigma ruleset determinism,
+  mapping pack conformance, Sigma compilation to compiled plans, criteria pack schemas, and Baseline
+  Detection Package integrity. Invoked via `ci-content`.
+
+- **Run CI** (integration): executes detection evaluation against a pinned Baseline Detection
+  Package (BDP replay) or a minimal end-to-end lab run, produces contract-backed `run_results.json`
+  and reporting outputs. Invoked via `ci-run`.
+
+The reporting stage drives the CI verdict and exit code:
 
 - exit `0`: success
 - exit `10`: partial (artifacts usable but quality gates failed or were indeterminate)
@@ -356,7 +401,42 @@ The reporting stage emits a CI-facing recommendation and exit code:
 CI workflows can gate on `report/thresholds.json.status_recommendation`.
 
 Authoritative references: `docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md`,
-`docs/spec/080_reporting.md`, `docs/spec/105_ci_operational_readiness.md`.
+`docs/spec/026_contract_spine.md`, `docs/spec/080_reporting.md`,
+`docs/spec/100_test_strategy_ci.md`, and `docs/spec/105_ci_operational_readiness.md`.
+
+### Authoring and linting (`pa lint`)
+
+`pa lint` is a CLI-first linting surface that provides fast, deterministic, local-first validation
+for authoring inputs — including `range.yaml`, scenario files, Sigma rules, and other project-owned
+artifacts. It emits:
+
+- human-readable output to stdout/stderr, and
+- a machine-readable `lint.json` (RFC 8785 canonical JSON) for CI and Operator Interface
+  consumption.
+
+Linting is offline-only (no network fetch, no remote `$ref` resolution) and fail-closed on ambiguous
+references. Exit codes: `0` on clean, `20` on findings at or above the configured fail threshold.
+
+Authoritative reference: `docs/spec/125_linting.md`.
+
+### Baseline Detection Packages (BDPs)
+
+A Baseline Detection Package (BDP) is a redaction-safe, lightweight subset of a completed run bundle
+containing only the artifacts needed to evaluate detections (normalized OCSF events plus ground
+truth), omitting heavy evidence-tier content.
+
+BDPs are stored outside `runs/` under the workspace export root:
+
+```
+exports/baselines/<baseline_id>/<baseline_version>/
+```
+
+A compliant v0.1 implementation MUST make at least one pinned BDP available to Run CI, enabling
+detection regression testing without re-running a lab. BDP integrity (manifest + checksums; optional
+signature) MUST be validated before use.
+
+Authoritative references: `docs/spec/086_detection_baseline_library.md` and
+`docs/spec/045_storage_formats.md`.
 
 ### OCSF field tiers and a practical coverage gate
 
@@ -386,6 +466,9 @@ Default export and signing/checksum scope MUST:
 - exclude `.staging/**`,
 - exclude `unredacted/**` unless explicitly requested and permitted.
 
+`raw_parquet/**` is an operational intermediate store (telemetry → normalization pipeline). It MUST
+be excluded from the default export profile and from signing/checksum scope in all cases.
+
 Deterministic evidence logs allowlist (included when present):
 
 - `logs/health.json`
@@ -400,6 +483,7 @@ Volatile diagnostics (excluded by default) include:
 
 - `logs/run.log`
 - `logs/warnings.jsonl`
+- `logs/eps_baseline.json`
 - `logs/telemetry_checkpoints/**`
 - `logs/dedupe_index/**`
 - `logs/scratch/**`
@@ -432,6 +516,7 @@ run status.
 ```text
 runs/<run_id>/
   manifest.json
+  run_results.json                # orchestrator summary (contract-backed)
   ground_truth.jsonl
 
   inputs/                         # pinned operator inputs; baseline refs when regression is enabled
@@ -440,12 +525,14 @@ runs/<run_id>/
     baseline_run_ref.json         # required when regression compare is enabled
     baseline/                     # optional snapshot form (recommended)
       manifest.json
+    baseline_packages/            # reserved; BDP manifest snapshots (when BDP replay is used)
 
   runner/                         # runner evidence: per-action artifacts, ledgers, cleanup verification
     actions/<action_id>/...
     principal_context.json        # optional (policy-controlled)
 
   raw_parquet/                    # analytics tier: structured raw telemetry tables (Parquet)
+                                  # NOTE: excluded from default exports and signing scope
   raw/                            # evidence tier: source-native payloads/blobs (optional; policy-controlled)
 
   normalized/                     # normalized OCSF event store + mapping coverage
@@ -465,19 +552,23 @@ runs/<run_id>/
   scoring/                        # summary metrics + deterministic gap classification
     summary.json
 
-  report/                         # report outputs (required: report.json, thresholds.json)
+  report/                         # report outputs (required: report.json, thresholds.json, report.html)
     report.json
     thresholds.json
     run_timeline.md
+    report.html                   # self-contained HTML report (required)
 
   logs/                           # deterministic evidence logs + volatile diagnostics (see ADR-0009)
     health.json                   # optional (when enabled)
     telemetry_validation.json     # optional (when enabled)
     counters.json                 # stable counters surface
     lab_inventory_snapshot.json
-    contract_validation/
+    contract_validation/          # publish-gate validation failure reports (per stage)
 
   security/                       # checksums/signatures + policy snapshots (when enabled)
+    checksums.txt
+    signature.ed25519             # optional
+    public_key.ed25519            # optional
   unredacted/                     # optional quarantine (explicit opt-in; excluded from exports by default)
 
   .staging/                       # internal publish-gate staging dirs (excluded from exports; may be absent)
@@ -489,6 +580,9 @@ Notes:
 - `.staging/**` is internal scratch space and MUST NOT be included in long-term exports.
 
 - `runs/.locks/<run_id>.lock` is a lock primitive and is not part of any run bundle.
+
+- `raw_parquet/**` is excluded from the default export profile and from signing/checksum scope in
+  all cases (it is an intermediate operational store, not a long-term artifact).
 
 - The normalized OCSF store has multiple allowed representations:
 
@@ -507,6 +601,8 @@ Notes:
 | See which detections fired and why                                  | `detections/detections.jsonl`    | `bridge/**` compiled plans and coverage                                                 |
 | Use the machine-readable scorecard                                  | `scoring/summary.json`           | `report/report.json` (presentation + rollups)                                           |
 | CI gating result and thresholds                                     | `report/thresholds.json`         | exit code mapping in reporting spec                                                     |
+| Validate authoring inputs locally (config, scenarios, rules)        | `pa lint <path>`                 | `lint.json` (machine-readable findings)                                                 |
+| Evaluate detections against a known-good dataset (CI replay)        | `exports/baselines/<id>/<ver>/`  | `baseline_package_manifest.json`, `run/normalized/ocsf_events/`                         |
 
 ## Part 5: Configuration
 
@@ -526,6 +622,16 @@ Configuration and contract validation are first-class parts of the runtime and C
   - `docs/spec/090_security_safety.md`
   - `docs/adr/ADR-0003-redaction-policy.md`
 
+Two contract registry instances ship with the project (both under `docs/contracts/`):
+
+- `contract_registry.json`: run-relative bindings (used by publish-gate validation and run-bundle
+  consumers)
+- `workspace_contract_registry.json`: workspace-root-relative bindings (used for workspace-level
+  artifact validation)
+
+Producers and consumers MUST treat registry selection as an explicit configuration input. Tooling
+MUST NOT interpret run-relative bindings as workspace-root-relative (or vice versa).
+
 ## Part 6: Documentation map
 
 ### Getting oriented (recommended reading order)
@@ -534,14 +640,57 @@ Configuration and contract validation are first-class parts of the runtime and C
 1. `docs/spec/010_scope.md` (scope, non-goals, operating assumptions)
 1. `docs/spec/020_architecture.md` (stage model, verbs, workspace and run bundle layout)
 1. `docs/spec/025_data_contracts.md` (schemas, publish gates, determinism rules)
+1. `docs/spec/026_contract_spine.md` (Contract Spine: registry, validation, serialization, CI gate)
 1. `docs/spec/120_config_reference.md` (what you can configure and how)
 
-### Primary specs and ADRs
+### Primary specifications
 
-See the tables in this repository under:
+| Spec                                                    | Description                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `docs/spec/000_charter.md`                              | Project charter: mission, MVP outcomes, definition of done               |
+| `docs/spec/010_scope.md`                                | Scope boundaries, non-goals, operating assumptions                       |
+| `docs/spec/015_lab_providers.md`                        | Lab provider interface and inventory resolution                          |
+| `docs/spec/020_architecture.md`                         | Stage model, verbs, workspace layout, run bundle layout                  |
+| `docs/spec/025_data_contracts.md`                       | Schemas, publish gates, determinism rules, stage enablement              |
+| `docs/spec/026_contract_spine.md`                       | Contract Spine: registry, validation, serialization, CI conformance gate |
+| `docs/spec/030_scenarios.md`                            | Scenario format and Atomic Test Plan model                               |
+| `docs/spec/031_plan_execution_model.md`                 | Plan execution model and action lifecycle                                |
+| `docs/spec/032_atomic_red_team_executor_integration.md` | Atomic Red Team executor integration contract                            |
+| `docs/spec/033_execution_adapters.md`                   | Execution adapters                                                       |
+| `docs/spec/035_validation_criteria.md`                  | Criteria packs and validation evaluation                                 |
+| `docs/spec/040_telemetry_pipeline.md`                   | Telemetry collection, canaries, checkpointing                            |
+| `docs/spec/042_osquery_integration.md`                  | osquery endpoint telemetry source                                        |
+| `docs/spec/044_unix_log_ingestion.md`                   | Linux auditd and Unix syslog ingestion                                   |
+| `docs/spec/045_storage_formats.md`                      | Storage tiers, formats, retention, BDP artifact rules                    |
+| `docs/spec/050_normalization_ocsf.md`                   | OCSF normalization, event identity, provenance                           |
+| `docs/spec/055_ocsf_field_tiers.md`                     | OCSF field tier model and coverage gating                                |
+| `docs/spec/060_detection_sigma.md`                      | Sigma rule loading, compilation, executability                           |
+| `docs/spec/065_sigma_to_ocsf_bridge.md`                 | Sigma-to-OCSF bridge, mapping packs, compiled plans                      |
+| `docs/spec/070_scoring_metrics.md`                      | Scoring: coverage, latency, gap classification, gates                    |
+| `docs/spec/080_reporting.md`                            | Reporting outputs, regression compare, CI thresholds                     |
+| `docs/spec/085_golden_datasets.md`                      | Golden dataset governance and release                                    |
+| `docs/spec/086_detection_baseline_library.md`           | Baseline Detection Packages (BDPs): format, lifecycle, CI                |
+| `docs/spec/090_security_safety.md`                      | Safety posture, redaction, secrets-by-reference                          |
+| `docs/spec/100_test_strategy_ci.md`                     | Test strategy, CI gate definitions, fixture requirements                 |
+| `docs/spec/105_ci_operational_readiness.md`             | Content CI / Run CI lanes, CI verdict and exit codes                     |
+| `docs/spec/110_operability.md`                          | Operational health, resource budgeting, observability                    |
+| `docs/spec/115_operator_interface.md`                   | Operator interface (v0.2+)                                               |
+| `docs/spec/120_config_reference.md`                     | Configuration keys, defaults, and examples                               |
+| `docs/spec/125_linting.md`                              | Linting engine, `pa lint`, lint report contract                          |
 
-- `docs/spec/` for stage and pipeline specifications
-- `docs/adr/` for architectural decisions and normative policy clarifications
+### Architectural Decision Records (ADRs)
+
+| ADR                                                                              | Description                                                             |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `docs/adr/ADR-0001-project-naming-and-versioning.md`                             | Naming conventions, ID slugs, SemVer, version pinning                   |
+| `docs/adr/ADR-0002-event-identity-and-provenance.md`                             | Deterministic event identity and provenance rules                       |
+| `docs/adr/ADR-0003-redaction-policy.md`                                          | Redaction policy, withheld/quarantined semantics                        |
+| `docs/adr/ADR-0004-deployment-architecture-and-inter-component-communication.md` | Topology, IO boundaries, publish-gate coordination                      |
+| `docs/adr/ADR-0005-stage-outcomes-and-failure-classification.md`                 | Stage outcomes, reason codes, run status derivation                     |
+| `docs/adr/ADR-0006-plan-execution-model.md`                                      | Plan execution model (v0.2+ multi-action)                               |
+| `docs/adr/ADR-0007-state-machines.md`                                            | Lifecycle FSM template and state-machine semantics                      |
+| `docs/adr/ADR-0008-Threat-intelligence-integration-model.md`                     | Threat intelligence integration (normative v0.2+; TI packs, local-only) |
+| `docs/adr/ADR-0009-run-export-policy-and-log-classification.md`                  | Run export policy, log classification, signing scope                    |
 
 ## Part 7: Requirements and pinned versions (v0.1)
 
@@ -549,22 +698,41 @@ See the tables in this repository under:
 
 - Python **3.12.3** (pinned; see `SUPPORTED_VERSIONS.md`)
 
-- External dependency pins (authoritative list in `SUPPORTED_VERSIONS.md`), including:
+- uv **0.9.18** (pinned; CI toolchain)
 
-  - OpenTelemetry Collector Contrib **0.143.1**
-  - pySigma **1.1.0**
-  - pySigma-pipeline-ocsf **0.1.1**
-  - PCRE2 (libpcre2-8) **10.47**
-  - pyarrow **22.0.0**
-  - jsonschema **4.26.0**
-  - osquery **5.14.1** (for lab endpoints)
-  - OCSF schema **1.7.0**
-  - PowerShell **7.4.6** (Atomic executor)
-  - DSC v3 (`dsc`) **3.1.2** (runner environment configuration when enabled)
-  - asciinema **2.4.0** (runner terminal session recording when enabled)
+The authoritative dependency list is `SUPPORTED_VERSIONS.md`. Key runtime pins include:
+
+| Dependency                      | Pinned version | Used by                                          |
+| ------------------------------- | -------------: | ------------------------------------------------ |
+| OpenTelemetry Collector Contrib |        0.143.1 | Telemetry collection                             |
+| pySigma                         |          1.1.0 | Sigma parsing + compilation                      |
+| pySigma-pipeline-ocsf           |          0.1.1 | Sigma-to-OCSF bridge                             |
+| PCRE2 (libpcre2-8)              |          10.47 | Regex engine for native evaluator                |
+| pyarrow                         |         22.0.0 | Storage formats (Parquet)                        |
+| jsonschema                      |         4.26.0 | Contract validation                              |
+| osquery                         |         5.14.1 | Endpoint telemetry (lab assets)                  |
+| OCSF schema                     |          1.7.0 | Normalization target                             |
+| PowerShell                      |          7.4.6 | Runner (Atomic executor)                         |
+| DSC v3 (`dsc`)                  |          3.1.2 | Runner environment configuration (when enabled)  |
+| GHOSTS (server + agent)         |          8.3.1 | Runner benign noise generation (when enabled)    |
+| asciinema                       |          2.4.0 | Runner terminal session recording (when enabled) |
+
+Key CI toolchain pins:
+
+| Dependency         | Pinned version | Used by                    |
+| ------------------ | -------------: | -------------------------- |
+| pytest             |          9.0.2 | Unit + integration tests   |
+| pytest-regressions |          2.9.1 | Golden/regression fixtures |
+| ruff               |        0.14.11 | Lint + format              |
+| pyright            |        1.1.408 | Type checking              |
+| mdformat           |          1.0.0 | Markdown format checking   |
+| pre-commit         |          4.5.1 | Local + CI hook runner     |
+
+Any dependency bump MUST be accompanied by updated pins in `SUPPORTED_VERSIONS.md` and reviewed
+updates to golden fixture outputs where behavior changes are observable.
 
 Optional packaging: Docker Compose MAY be provided for installation convenience, but it is not a
-normative requirement for v0.1.
+normative requirement for v0.1 and MUST NOT change stage semantics or determinism guarantees.
 
 ## Part 8: License
 

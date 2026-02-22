@@ -85,7 +85,8 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- `tests/fixtures/telemetry/synthetic_marker/` (marker observability)
+- `tests/fixtures/telemetry/synthetic_marker/` (marker observability; `synthetic_marker_smoke`,
+  `egress_policy_canary_smoke`)
 - TODO: specify fixture root for raw Windows event XML corpus used by telemetry collection tests
   (see `100_test_strategy_ci.md`, "Telemetry collection").
 

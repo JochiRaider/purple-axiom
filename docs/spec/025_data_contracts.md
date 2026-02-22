@@ -371,9 +371,6 @@ Deterministic expansion ordering (normative):
     its schema.
     - YAML documents MUST be decoded into a JSON-compatible in-memory representation (object/array
       and scalar types) prior to JSON Schema validation.
-
-- Supported modes (v0.2.0+; contracts_version >= 0.2.0):
-
   - `parquet_dataset_v1`: Validate a Parquet dataset directory anchored by a required `_schema.json`
     snapshot.
     - The binding's `artifact_glob` MUST point to the dataset’s `_schema.json` file (for example
@@ -386,8 +383,8 @@ Deterministic expansion ordering (normative):
       - All part files share a single physical schema.
       - Physical schema matches `_schema.json.columns[]` (`name`, `physical_type`, `logical_type`,
         `nullable`).
-      - Required normalized OCSF minimum columns (as defined in `045_storage_formats.md` and
-        `050_normalization_ocsf.md`) are present and type-stable.
+      - Required normalized OCSF minimum columns (as defined in `045_storage_formats.md`) are
+        present and type-stable.
 
 - If the registry references a `validation_mode` value that the implementation does not support,
   contract validation MUST fail closed with a configuration error.
@@ -3096,26 +3093,29 @@ Purpose:
 
 Representation (normative):
 
-- For runs where `manifest.versions.contracts_version >= 0.2.0`:
-  - The normalized store MUST be a Parquet dataset directory at `normalized/ocsf_events/`.
-  - `normalized/ocsf_events/_schema.json` MUST exist and is contract-backed as
-    `parquet_schema_snapshot`.
-  - `normalized/ocsf_events.jsonl` MUST NOT be produced; if present, treat it as an
-    invalid/deprecated representation and fail closed.
-- For runs where `manifest.versions.contracts_version` is `0.1.x` (legacy compatibility):
-  - The normalized store MAY be represented as `normalized/ocsf_events.jsonl` (JSONL) validating
-    against the `ocsf_event_envelope` logical row contract.
-  - Implementations MAY support an explicit, deterministic transcode/upgrade step from JSONL to
-    Parquet for forward compatibility.
+- The normalized store MUST be a Parquet dataset directory at `normalized/ocsf_events/`.
+
+- `normalized/ocsf_events/_schema.json` MUST exist and is contract-backed as
+  `parquet_schema_snapshot`.
+
+- `normalized/ocsf_events.jsonl` is a legacy compatibility representation:
+
+  - Consumer tooling MAY accept it only when the Parquet dataset representation is absent.
+  - Producers MUST NOT emit JSONL by default.
+  - If JSONL is present alongside the Parquet dataset representation, treat it as a conflicting
+    representation and fail closed.
+
+- Implementations MAY support an explicit, deterministic transcode/upgrade step from JSONL to
+  Parquet for forward compatibility of legacy bundles.
 
 Validation:
 
-- For `contracts_version >= 0.2.0`, publish-time validation is selected by the contract registry
+- Publish-time validation is selected by the contract registry
   (`validation_mode=parquet_dataset_v1`) and MUST validate:
   - `_schema.json` against `parquet_schema_snapshot`, and
   - the co-located Parquet dataset (see the [storage formats spec](045_storage_formats.md)).
 - The `ocsf_event_envelope` JSON Schema remains the logical row contract (documentation + optional
-  CI spot-checking), even though JSONL is not a v0.2+ storage representation.
+  CI spot-checking), even though JSONL is not the canonical storage representation.
 
 Required envelope (minimum):
 

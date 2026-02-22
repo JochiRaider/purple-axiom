@@ -248,8 +248,33 @@ winner.
   - `json_document`
   - `jsonl_lines`
   - `yaml_document`
+  - `parquet_dataset_v1`
 - If an implementation does not support a registry `validation_mode`, validation MUST fail closed
   with a configuration error.
+
+### Parquet dataset validation mode policy
+
+`validation_mode="parquet_dataset_v1"` validates a Parquet dataset directory anchored by a required
+`_schema.json` snapshot.
+
+Registry invariants (normative):
+
+- The binding's `artifact_glob` MUST point to `<dataset_dir>/_schema.json` (for example
+  `normalized/ocsf_events/_schema.json`).
+- The dataset directory is the parent directory of `_schema.json` (for example
+  `normalized/ocsf_events/`).
+
+Validation requirements (normative):
+
+- `_schema.json` MUST validate against the bound JSON Schema
+  (`contract_id=parquet_schema_snapshot`).
+- The dataset directory MUST exist and MUST contain ≥1 `*.parquet` part file.
+  - Zero-row datasets MUST still emit at least one empty part file.
+- All part files MUST share a single physical schema.
+- The part-file schema MUST match `_schema.json.columns[]` (`name`, `physical_type`, `logical_type`,
+  `nullable`).
+- Dataset-specific contract-critical columns (for example, normalized OCSF minimum required columns)
+  MUST be present and type-stable (see `045_storage_formats.md`).
 
 ### YAML validation mode policy (ingress-only; v0.1)
 
@@ -263,7 +288,7 @@ Registry invariants (normative):
   - If future versions introduce additional orchestrator-owned control-plane roots (for example
     `control/`), those MUST be added by an explicit spec update (do not silently broaden).
 - Stage-owned contract-backed outputs MUST NOT use `validation_mode="yaml_document"`.
-  - Contract-backed interstage seams remain JSON/JSONL only (canonicalized) in v0.1.
+  - Contract-backed interstage seams remain JSON/JSONL/Parquet only (canonicalized) in v0.1.
 
 Fail-closed enforcement (normative):
 
@@ -273,7 +298,7 @@ Fail-closed enforcement (normative):
 Rationale (non-normative):
 
 - YAML is accepted for operator/orchestrator-provided inputs, but deterministic interstage seams
-  remain JSON/JSONL to avoid cross-language YAML emission drift.
+  remain JSON/JSONL/Parquet to avoid cross-language YAML emission drift.
 
 ### Contract version constant
 

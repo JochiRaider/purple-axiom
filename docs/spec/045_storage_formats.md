@@ -661,13 +661,12 @@ This section defines how Parquet-backed datasets evolve over time as:
 - If semantics must change, the writer MUST introduce a new column name and deprecate the old one
   (see below).
 
-4. **Type stability**
+4. **Type stability (no type drift)**
 
-- Writers MUST NOT change the physical type of an existing column within the same schema MAJOR
-  version.
-- If a type change is necessary:
-  - Preferred: **widening** changes (for example, `int32 -> int64`) while preserving meaning.
-  - Otherwise: write to a new column name and deprecate the old one.
+- Writers MUST NOT change the `(physical_type, logical_type)` pair of an existing column name across
+  any schema version (including MAJOR versions).
+- If a type change is necessary, the writer MUST introduce a new column name and deprecate the old
+  one (see below).
 
 #### Rename policy (how to handle "field renamed" in practice)
 
@@ -737,6 +736,34 @@ Reference patterns (non-normative examples):
 - The "minimum required columns" listed below are **contract-critical** and MUST remain present and
   type-stable across all schema versions for `normalized/ocsf_events/`.
 - New OCSF fields added over time MUST be introduced as additional nullable columns.
+
+### JSONL to Parquet mapping rules for normalized OCSF
+
+These rules define the canonical mapping between the logical row contract (`ocsf_event_envelope`,
+typically expressed as JSON/JSONL) and the Parquet storage representation
+(`normalized/ocsf_events/**`).
+
+Mapping requirements (normative):
+
+- For any field present in the Parquet dataset, the Parquet column name MUST be the canonical dotted
+  field path (example: `metadata.event_id`).
+- Numeric identity fields (example: `time`, `class_uid`) MUST remain numeric in Parquet across all
+  schema versions (see "Type stability (no type drift)").
+- Timestamp fields MUST NOT be represented as strings in Parquet in any schema version.
+
+Specific timestamp rules (normative):
+
+- `time`:
+  - JSON/JSONL: integer milliseconds since epoch (UTC).
+  - Parquet: `physical_type=int64`, `logical_type=int64` (ms since epoch).
+- `metadata.ingest_time_utc` (when present):
+  - JSON/JSONL: RFC3339 timestamp string in UTC (example: `2026-01-08T14:30:00Z`).
+  - Parquet: `physical_type=int64`, `logical_type=timestamp_ms_utc`.
+  - Parquet writers MUST parse the RFC3339 value deterministically and MUST store the equivalent UTC
+    millisecond timestamp. Writers MUST reject non-UTC values (fail closed) rather than silently
+    storing ambiguous local times.
+  - `metadata.ingest_time_utc` MUST NOT be stored as `physical_type=string` in Parquet in any schema
+    version.
 
 ## Normalized OCSF Parquet schema (minimum required columns)
 
@@ -817,14 +844,16 @@ Canonical raw payload (required):
 - `payload_overflow_ref` (string, nullable; run-relative sidecar path when overflow is written)
 - `payload_overflow_sha256` (string, nullable; `sha256:<lowercase_hex>` digest of the sidecar
   payload bytes)
+- `payload_overflow_bytes` (int64, nullable; byte length of the sidecar payload bytes when overflow
+  is written)
 
 Overflow constraints (normative):
 
-- If `event_xml_truncated = true`, then `payload_overflow_ref` and `payload_overflow_sha256` MUST be
-  present.
-- If `event_xml_truncated = false`, then `payload_overflow_ref` and `payload_overflow_sha256` MUST
-  be absent.
-- When present, `payload_overflow_sha256` MUST equal `event_xml_sha256`.
+- If `event_xml_truncated = true`, then `payload_overflow_ref`, `payload_overflow_sha256`, and
+  `payload_overflow_bytes` MUST be present.
+- If `event_xml_truncated = false`, then `payload_overflow_ref`, `payload_overflow_sha256`, and
+  `payload_overflow_bytes` MUST be absent.
+- When present, `payload_overflow_sha256` MUST equal `event_xml_sha256`..
 
 Rendered message strings are non-authoritative:
 

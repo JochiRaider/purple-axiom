@@ -1409,7 +1409,7 @@ that adopt it:
      the `runs/<run_id>/` prefix).
    - Control-plane artifacts under `control/` MUST be bound with `stage_owner="orchestrator"`.
    - Validation modes MUST use the existing registry vocabulary: `json_document`, `yaml_document`,
-     `jsonl_lines`.
+     `jsonl_lines`, `parquet_dataset_v1`.
 
    | Run artifact (location)                      | Registry `artifact_glob`       | `contract_id`             | `schema_path`                                        | `stage_owner`  | `validation_mode` |
    | -------------------------------------------- | ------------------------------ | ------------------------- | ---------------------------------------------------- | -------------- | ----------------- |

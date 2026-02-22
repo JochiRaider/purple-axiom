@@ -747,7 +747,7 @@ Notes (v0.1):
 - `output` (optional)
   - `format`: `jsonl | parquet` (recommended: `parquet` for long-term)
   - `parquet` (optional)
-    - `compression`: `zstd | snappy | none` (default: `zstd`)
+    - `compression`: `zstd | snappy | none` (default: `snappy`)
     - `row_group_size` (optional)
     - `partitioning` (optional): list (example: `["class_uid"]`)
 
@@ -1388,7 +1388,7 @@ normalization:
   output:
     format: parquet
     parquet:
-      compression: zstd
+      compression: snappy
       partitioning: ["class_uid"]
 
 validation:

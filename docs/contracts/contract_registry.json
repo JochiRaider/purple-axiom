@@ -229,7 +229,7 @@
       "contract_id": "parquet_schema_snapshot",
       "schema_path": "docs/contracts/parquet_schema_snapshot.schema.json",
       "contract_version": "0.1.0",
-      "purpose": "Parquet dataset schema snapshot (_schema.json) for Tier 2 datasets (v0.2+).",
+      "purpose": "Parquet dataset schema snapshot (_schema.json) for Tier 2 datasets (v0.1+).",
       "artifact_kind": "run_artifact",
       "format": "json"
     },

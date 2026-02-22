@@ -43,12 +43,11 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id                | path/glob                                  | Required?                     |
-| -------------------------- | ------------------------------------------ | ----------------------------- |
-| `parquet_schema_snapshot`  | `normalized/ocsf_events/_schema.json`      | required (v0.2+)              |
-| `ocsf_event_envelope`      | `normalized/ocsf_events.jsonl`             | required (v0.1.x legacy only) |
-| `mapping_coverage`         | `normalized/mapping_coverage.json`         | required                      |
-| `mapping_profile_snapshot` | `normalized/mapping_profile_snapshot.json` | required                      |
+| contract_id                | path/glob                                  | Required? |
+| -------------------------- | ------------------------------------------ | --------- |
+| `parquet_schema_snapshot`  | `normalized/ocsf_events/_schema.json`      | required  |
+| `mapping_coverage`         | `normalized/mapping_coverage.json`         | required  |
+| `mapping_profile_snapshot` | `normalized/mapping_profile_snapshot.json` | required  |
 
 #### Required inputs
 
@@ -61,9 +60,12 @@ Notes:
 
 - This stage consumes **non-contract** inputs in v0.1, notably `raw_parquet/**` (telemetry
   analytics-tier store) and mapping profiles.
-- For `manifest.versions.contracts_version >= 0.2.0`, Parquet is the canonical normalized store and
-  is contract-backed via the required schema snapshot at `normalized/ocsf_events/_schema.json`.
-  `normalized/ocsf_events.jsonl` is legacy v0.1.x only and MUST NOT be emitted for v0.2+ runs.
+- The canonical normalized store is the Parquet dataset at `normalized/ocsf_events/**` and is
+  contract-backed via the required schema snapshot at `normalized/ocsf_events/_schema.json`
+  (`contract_id=parquet_schema_snapshot`).
+- `normalized/ocsf_events.jsonl` is a legacy compatibility representation. If an implementation
+  emits JSONL for debugging or interchange, it MUST be treated as **non-contract** and MUST NOT be
+  required by downstream stages (detection/scoring/reporting).
 
 ### Config keys used
 
@@ -293,24 +295,10 @@ Note (normative): `normalized/mapping_profile_snapshot.json` is the normalizatio
 snapshot. It is distinct from `bridge/mapping_pack_snapshot.json` (Sigma-to-OCSF bridge provenance)
 which is emitted by the detection stage when Sigma bridge evaluation is enabled.
 
-When normalization produces an OCSF event store, the required storage representation is versioned by
-`manifest.versions.contracts_version`:
+When normalization produces an OCSF event store, the normalizer MUST emit:
 
-- For `contracts_version >= 0.2.0`:
-  - The normalizer MUST emit the Parquet dataset directory:
-    - `normalized/ocsf_events/` (Parquet dataset directory)
-  - The normalizer MUST emit the contract-backed schema snapshot:
-    - `normalized/ocsf_events/_schema.json` (`contract_id=parquet_schema_snapshot`)
-  - The normalizer MUST NOT emit `normalized/ocsf_events.jsonl`.
-- For `contracts_version` `0.1.x` (legacy compatibility):
-  - The normalizer MUST emit the contract-backed JSONL envelope:
-    - `normalized/ocsf_events.jsonl` (`contract_id=ocsf_event_envelope`)
-  - Implementations MAY also emit a Parquet dataset directory for internal optimization:
-    - `normalized/ocsf_events/` (Parquet dataset directory; MUST include
-      `normalized/ocsf_events/_schema.json`)
-
-If both representations are present in a legacy v0.1.x run, they MUST be derived from the same
-normalized event stream for the run (no divergence in `metadata.event_id`).
+- `normalized/ocsf_events/` (Parquet dataset directory)
+- `normalized/ocsf_events/_schema.json` (`contract_id=parquet_schema_snapshot`)
 
 ### Deduplication and replay
 

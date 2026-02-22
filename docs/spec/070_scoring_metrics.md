@@ -53,12 +53,18 @@ This section is the stage-local view of:
 
 Notes:
 
-- For `manifest.versions.contracts_version >= 0.2.0`, JSONL (`normalized/ocsf_events.jsonl`) MUST
-  NOT be required/used; it is legacy v0.1.x only.
+- Scoring consumes the normalized store via the Parquet dataset representation at
+  `normalized/ocsf_events/**` (schema snapshot: `normalized/ocsf_events/_schema.json`).
+
+- JSONL (`normalized/ocsf_events.jsonl`) is legacy v0.1.x compatibility only and MUST NOT be
+  required/used when the Parquet dataset representation is present.
 
 - Scoring consumes additional stage outputs (for example `bridge/`,
   `normalized/mapping_profile_snapshot.json`) but those are not required for the minimal contracted
   scoring summary.
+
+- Some scoring artifacts are optional-by-config and should be absent when the corresponding feature
+  is disabled.
 
 ### Config keys used
 
@@ -364,7 +370,8 @@ Inputs (v0.1). The attribution algorithm consumes:
 
 - `detections/detections.jsonl` (detection instances; required)
 - `ground_truth.jsonl` (executed actions; required)
-- `normalized/ocsf_events.jsonl` (event envelope; REQUIRED for marker join)
+- `normalized/ocsf_events/**` (Parquet dataset; REQUIRED for marker join; schema snapshot at
+  `normalized/ocsf_events/_schema.json`)
 - `criteria/results.jsonl` (criteria evaluation outputs; OPTIONAL; used when present)
 
 Executed action. An action is considered executed for attribution if

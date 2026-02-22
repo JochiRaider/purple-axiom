@@ -933,8 +933,8 @@ Minimum required fields for `logs/telemetry_validation.json`:
       `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`).
 - `assets` (array of objects; sorted by `asset_id` ascending)
   - `asset_id` (string)
-  - `collector_config_sha256` (string; lowercase hex; 64 chars)
-  - `checkpoint_store_fingerprint_sha256` (string; lowercase hex; 64 chars)
+  - `collector_config_sha256` (string; `sha256:<lowercase_hex>`)
+  - `checkpoint_store_fingerprint_sha256` (string; `sha256:<lowercase_hex>`)
   - `collector_restart_test` (object)
     - `passed` (bool)
   - `checkpoint_loss_test` (object)
@@ -952,8 +952,8 @@ Minimum required fields for `logs/telemetry_validation.json`:
 
 Collector config hashing (normative):
 
-- `collector_config_sha256` MUST be the SHA-256 of the exact effective OTel Collector config used by
-  the asset during the validation window, encoded as lowercase hex.
+- `collector_config_sha256` MUST be the SHA-256 digest string (`sha256:<lowercase_hex>`) of the
+  exact effective OTel Collector config used by the asset during the validation window.
 - Before hashing, implementations MUST normalize line endings by converting CRLF (`\r\n`) to LF
   (`\n`). Implementations MUST NOT perform other whitespace normalization.
 - If the config is generated from templates, the hash MUST be computed over the fully rendered
@@ -961,8 +961,8 @@ Collector config hashing (normative):
 
 Checkpoint store fingerprinting (normative):
 
-- `checkpoint_store_fingerprint_sha256` MUST be a stable fingerprint of the collector checkpoint
-  store directory contents, encoded as lowercase hex.
+- `checkpoint_store_fingerprint_sha256` MUST be a stable fingerprint digest string
+  (`sha256:<lowercase_hex>`) of the collector checkpoint store directory contents.
 
 - The fingerprint MUST be computed as:
 
@@ -974,7 +974,7 @@ Checkpoint store fingerprinting (normative):
   1. Sort file entries by `path` ascending (UTF-8 byte order; no locale).
   1. Serialize the sorted list as canonical JSON (object keys sorted; UTF-8; no insignificant
      whitespace requirements beyond what the JSON serializer deterministically emits).
-  1. Compute SHA-256 over the UTF-8 bytes of that JSON and encode as lowercase hex.
+  1. Compute SHA-256 over the UTF-8 bytes of that JSON and encode as `sha256:<lowercase_hex>`.
 
 Recommended additional fields (operator UX and regression tracking):
 
@@ -1081,8 +1081,8 @@ raw Parquet writing and any optional sidecar extraction:
 1. Raw event XML promotion rules (analytics tier).
    - The raw Windows Event Log Parquet dataset MUST include:
      - `event_xml` (string; raw event XML, possibly truncated)
-     - `event_xml_sha256` (string; sha256 over the full pre-truncation UTF-8 byte sequence of the
-       raw event XML payload, hex lowercase)
+     - `event_xml_sha256` (string; REQUIRED): SHA-256 digest string (`sha256:<lowercase_hex>`) over
+       the full pre-truncation canonical XML payload bytes (UTF-8; CRLF normalized to LF)
      - `event_xml_truncated` (bool)
      - `payload_overflow_bytes` (int, OPTIONAL; REQUIRED when `event_xml_truncated=true`)
      - `payload_overflow_sha256` (string, OPTIONAL; REQUIRED when `event_xml_truncated=true`; MUST
@@ -1091,13 +1091,15 @@ raw Parquet writing and any optional sidecar extraction:
        `sidecar.enabled=true`; run-relative POSIX-style path)
    - If `event_xml` exceeds `max_event_xml_bytes`, the pipeline MUST:
      - set `event_xml_truncated=true`,
-     - set `payload_overflow_bytes` to the full pre-truncation UTF-8 byte length,
-     - compute `event_xml_sha256` as SHA-256 over the full pre-truncation UTF-8 bytes,
+     - set `payload_overflow_bytes` to the full pre-truncation canonical byte length (UTF-8; CRLF
+       normalized to LF),
+     - compute `event_xml_sha256` as SHA-256 over the full pre-truncation canonical bytes (UTF-8;
+       CRLF normalized to LF),
      - set `payload_overflow_sha256` to the same value as `event_xml_sha256`,
-     - inline `event_xml` as the largest prefix of the UTF-8 byte sequence whose length is
+     - inline `event_xml` as the largest prefix of the canonical UTF-8 byte sequence whose length is
        `<= max_event_xml_bytes` and that is valid UTF-8 (truncate on a codepoint boundary; no
        replacement characters), and
-     - when sidecar is enabled, write the full pre-truncation XML bytes to sidecar and set
+     - when sidecar is enabled, write the full canonical bytes to sidecar and set
        `payload_overflow_ref` (when sidecar is disabled, `payload_overflow_ref` MUST be null).
 1. Binary extraction rules (optional but mechanically testable).
    - If the raw XML contains a binary-like field value (hex or base64) and its decoded length is \<=
@@ -1108,8 +1110,10 @@ raw Parquet writing and any optional sidecar extraction:
      `binary_present=true` and `binary_oversize=true`).
 1. Sidecar blob store (when enabled).
    - When `sidecar.enabled=true`, sidecar payloads MUST be keyed deterministically by
-     `(run_id, metadata.event_id, field_path)` using
-     `runs/<run_id>/<sidecar.dir>/<metadata.event_id>/<field_path_hash>.<ext>`.
+     `(run_id, event_id_dir, field_path)` using
+     `runs/<run_id>/<sidecar.dir>/<event_id_dir>/<field_path_hash>.<ext>`.
+   - `event_id_dir` MUST be a filesystem-safe stable identifier derived from `metadata.event_id`
+     (see `045_storage_formats.md`, "event_id_dir definition (normative)").
    - `field_path_hash` MUST be SHA-256 of the UTF-8 bytes of `field_path` and encoded as lowercase
      hex.
    - Sidecar writes MUST respect redaction posture; when `security.redaction.enabled=false`, sidecar
@@ -1168,22 +1172,23 @@ If the pipeline attempts to decode binary payloads from `raw_event_xml` and deco
 - Treat the failure as non-fatal (do not drop the record solely due to binary decode failure).
 - Omit decoded bytes from normalized output.
 - Emit a bounded, deterministic summary for that field consisting of `encoding`,
-  `encoded_len_bytes`, `encoded_sha256` (sha256 over the encoded string bytes, UTF-8), and
-  `decode_error_code` (stable token from `invalid_encoding`, `invalid_hex`, `invalid_base64`,
-  `size_limit_exceeded`).
+  `encoded_len_bytes`, `encoded_sha256` (SHA-256 digest string `sha256:<lowercase_hex>` over the
+  encoded string bytes, UTF-8), and `decode_error_code` (stable token from `invalid_encoding`,
+  `invalid_hex`, `invalid_base64`, `size_limit_exceeded`).
 - Increment `wineventlog_binary_decode_failed_total`.
 
 #### Oversize payload sidecar naming (deterministic)
 
 When `sidecar.enabled: true` and a payload overflows `max_event_xml_bytes`, the sidecar object name
-MUST be derived deterministically from `(metadata.event_id, field_path)`:
+MUST be derived deterministically from `(event_id_dir, field_path)`:
 
-- `payload_overflow_sha256` MUST be lowercase hex.
+- `payload_overflow_sha256` MUST be a SHA-256 digest string (`sha256:<lowercase_hex>`).
 - The `field_path` token for the full overflow payload MUST be `event_xml`.
 - `field_path_hash` MUST be SHA-256 of the UTF-8 bytes of `field_path`, encoded as lowercase hex.
 - The sidecar filename MUST be `${field_path_hash}.xml`.
 - `payload_overflow_ref` MUST be the POSIX-style run-relative path
-  `${sidecar.dir}/${metadata.event_id}/${field_path_hash}.xml` (even on Windows).
+  `${sidecar.dir}/${event_id_dir}/${field_path_hash}.xml` (even on Windows).
+- `event_id_dir` MUST be derived from `metadata.event_id` per `045_storage_formats.md`.
 
 If writing the sidecar object fails, the pipeline MUST:
 

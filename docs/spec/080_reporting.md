@@ -176,10 +176,17 @@ Notes (health files and outcome sources):
 
 Selected optional report inputs are *not* guaranteed to exist.
 
-- For `manifest.versions.contracts_version >= 0.2.0`, normalized events are Parquet-only at
-  `normalized/ocsf_events/**` (with the required schema snapshot at
-  `normalized/ocsf_events/_schema.json`). `normalized/ocsf_events.jsonl` is legacy v0.1.x only and
-  MUST NOT be used for v0.2+ runs.
+Notes:
+
+- The normalized store is the Parquet dataset at `normalized/ocsf_events/**` (schema snapshot:
+  `normalized/ocsf_events/_schema.json`).
+- JSONL (`normalized/ocsf_events.jsonl`) is legacy compatibility only:
+  - If JSONL is present alongside the Parquet dataset representation, the run bundle MUST be treated
+    as invalid (conflicting representations).
+  - If JSONL is present and the Parquet dataset representation is absent, treat JSONL as a legacy
+    representation and prefer deterministic transcode to Parquet in tooling.
+- Some artifacts are "optional but promoted": they may be absent depending on config and disk
+  budgets, but if present they are included in default exports.
 
 | Path                                                                       | Source stage  | Purpose                                                            |
 | -------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
@@ -190,7 +197,7 @@ Selected optional report inputs are *not* guaranteed to exist.
 | `logs/cache_provenance.json`                                               | orchestrator  | Cache hit/miss provenance (when enabled)                           |
 | `plan/expanded_graph.json`                                                 | runner        | Compiled plan graph (v0.2+)                                        |
 | `plan/expansion_manifest.json`                                             | runner        | Matrix expansion manifest (v0.2+)                                  |
-| `normalized/ocsf_events/` (includes `normalized/ocsf_events/_schema.json`) | normalization | Full normalized event store (Parquet dataset; v0.2+ canonical)     |
+| `normalized/ocsf_events/` (includes `normalized/ocsf_events/_schema.json`) | normalization | Full normalized event store (Parquet dataset; canonical)           |
 | `bridge/mapping_pack_snapshot.json`                                        | detection     | Bridge inputs snapshot for reproducibility                         |
 | `bridge/compiled_plans/`                                                   | detection     | Per-rule compilation outputs                                       |
 | `normalized/mapping_profile_snapshot.json`                                 | normalization | Mapping profile snapshot for drift detection                       |

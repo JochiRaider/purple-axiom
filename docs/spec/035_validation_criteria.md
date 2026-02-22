@@ -55,8 +55,10 @@ This section is the stage-local view of:
 
 Notes:
 
-- For `manifest.versions.contracts_version >= 0.2.0`, JSONL (`normalized/ocsf_events.jsonl`) MUST
-  NOT be required/used; it is legacy v0.1.x only.
+- Criteria evaluation consumes the normalized store via the Parquet dataset representation at
+  `normalized/ocsf_events/**` (schema snapshot: `normalized/ocsf_events/_schema.json`).
+- JSONL (`normalized/ocsf_events.jsonl`) is legacy compatibility only and MUST NOT be required/used
+  when the Parquet dataset representation is present.
 - This stage consumes additional **non-contract** inputs in v0.1:
   - the criteria pack source material from configured `validation.criteria_pack.paths`
   - optional runner artifacts such as `runner/actions/*/cleanup_verification.json`

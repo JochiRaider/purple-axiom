@@ -130,6 +130,7 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Extensions and vendor fields](#extensions-and-vendor-fields)
     - [Runner namespace: environment noise profile (v0.1)](#runner-namespace-environment-noise-profile-v01)
       - [Noise profile snapshot and hashing (normative)](#noise-profile-snapshot-and-hashing-normative)
+    - [Runner namespace: execution-definition provenance (v0.1)](#runner-namespace-execution-definition-provenance-v01)
       - [`extensions.principal_id` (action-scoped, optional)](#extensionsprincipal_id-action-scoped-optional)
   - [Redaction and sensitive data](#redaction-and-sensitive-data)
   - [Validation workflow](#validation-workflow)
@@ -180,7 +181,7 @@ with this document referenced as needed.
 
 ## Terminology
 
-- Artifact: A run-relative file produced or consumed by the pipeline.1
+- Artifact: A run-relative file produced or consumed by the pipeline.
 - Contract-backed artifact: An artifact whose path matches `docs/contracts/contract_registry.json`
   `bindings[]` and therefore has an associated schema and publish-gate validation rules.
 - Contract: A schema plus invariants for one artifact type.
@@ -248,7 +249,7 @@ The registry instance MUST include, at minimum:
     `runner/actions/*/executor.json`)
   - `contract_id` (must exist in `contracts[]`)
   - `validation_mode` (authoritative parse/validation dispatch key; used by contract validation)
-    - Allowed values (v0.1): `json_document`, `jsonl_lines`, `yaml_document`
+    - Allowed values (v0.1): `json_document`, `jsonl_lines`, `yaml_document`, `parquet_dataset_v1`
   - `stage_owner` (owning stage ID, or `orchestrator`, for deterministic stage → contract-backed
     output discovery)
     - Allowed values (v0.1): `lab_provider`, `runner`, `telemetry`, `normalization`, `validation`,
@@ -1159,8 +1160,6 @@ stage_enablement_matrix_v1:
         required_if: { path: runner.atomic.capture_executor_metadata }
       - contract_id: cleanup_verification
         required_if: { path: runner.atomic.cleanup.verify }
-      - contract_id: principal_context
-        required_if: { path: runner.identity.emit_principal_context }
       - contract_id: state_reconciliation_report
         required_if: { path: runner.atomic.state_reconciliation.enabled }
 
@@ -1240,7 +1239,14 @@ stage_enablement_matrix_v2:
       - manifest
       - range_config
       - counters
-    optional_contract_ids_when_enabled: []
+    optional_contract_ids_when_enabled:
+      - run_results
+      - plan_draft
+      - control_cancel_request
+      - control_retry_request
+      - control_retry_decision
+      - control_resume_request
+      - control_resume_decision
     conditional_required_contracts:
       - contract_id: audit_event
         required_if: { path: control_plane.audit.enabled }
@@ -1248,6 +1254,8 @@ stage_enablement_matrix_v2:
         required_if: { path: cache.emit_cache_provenance }
       - contract_id: telemetry_baseline_profile
         required_if: { path: telemetry.baseline_profile.enabled }
+      - contract_id: environment_noise_profile
+        required_if: { path: runner.environment_config.noise_profile.enabled }      
       # v0.2+ (ADR-0008): default false when absent
       - contract_id: threat_intel_pack_manifest
         required_if: { path: threat_intel.enabled }
@@ -1275,8 +1283,6 @@ stage_enablement_matrix_v2:
         required_if: { path: runner.atomic.capture_executor_metadata }
       - contract_id: cleanup_verification
         required_if: { path: runner.atomic.cleanup.verify }
-      - contract_id: principal_context
-        required_if: { path: runner.identity.emit_principal_context }
       - contract_id: state_reconciliation_report
         required_if: { path: runner.atomic.state_reconciliation.enabled }
 
@@ -1368,6 +1374,7 @@ JSON Schema. They do not replace publish-gate contract validation.
 v0.1 baseline canaries (non-exhaustive; see operability and telemetry specs for full details):
 
 - Agent liveness (push-only DOA detection): `telemetry.agent.liveness`
+- Clock synchronization / drift preflight: `telemetry.clock_sync`
 - Telemetry baseline profile gate: `telemetry.baseline_profile`
 - Windows raw-mode canary: `telemetry.windows_eventlog.raw_mode`
 - Checkpointing and replay validation: `telemetry.checkpointing.storage_integrity`
@@ -1408,7 +1415,8 @@ A run bundle is stored at `runs/<run_id>/` and follows this layout:
   - `control/retry_request.json` (v0.2+; durable retry request).
   - `control/retry_decision.json` (v0.2+; durable retry decision).
 - `criteria/` (criteria pack snapshot + criteria evaluation results)
-- `raw_parquet/` (raw telemetry datasets, long-term; see storage formats)
+- `raw_parquet/` (raw telemetry datasets, non-long-term operational staging; excluded from default
+  exports/signing; see storage formats)
 - `raw/` (evidence-tier blobs and source-native payloads where applicable)
 - `runner/` (runner evidence: transcripts, executor metadata, side-effect ledger, cleanup
   verification, state reconciliation)
@@ -2211,17 +2219,18 @@ When `operability.health.emit_health_files=false`, `runs/<run_id>/logs/health.js
 
 Recommended manifest additions (normative in schema when implemented):
 
-- `lab.provider` (string): `manual | ludus | terraform | vagrant | other`
-- `lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot
-- `lab.assets` (string): run-relative POSIX path pointer to the resolved inventory snapshot artifact
-  (`logs/lab_inventory_snapshot.json`).
-  - v0.1: producers MUST NOT embed the resolved asset array in the manifest; consumers MUST read
-    `logs/lab_inventory_snapshot.json` and join on `assets[].asset_id`.
-- `lab.inventory_source_ref` (string, optional): deterministic reference to the upstream inventory
-  source, with all secrets redacted or omitted.
-- `normalization.ocsf_version` (string): pinned OCSF version used by the normalizer for this run.
-  - When `normalized/mapping_profile_snapshot.json` is present, `normalization.ocsf_version` SHOULD
-    match `mapping_profile_snapshot.ocsf_version`.
+- `manifest.lab.provider` (string): `manual | ludus | terraform | vagrant | other`
+- `manifest.lab.inventory_snapshot_sha256` (string): hash of the resolved inventory snapshot
+- `manifest.lab.assets` (string): run-relative POSIX path pointer to the resolved inventory snapshot
+  artifact (`logs/lab_inventory_snapshot.json`).
+  - v0.1: the orchestrator MUST NOT embed the resolved asset array in the manifest; consumers MUST
+    read `logs/lab_inventory_snapshot.json` and join on `assets[].asset_id`.
+- `manifest.lab.inventory_source_ref` (string, optional): deterministic reference to the upstream
+  inventory source, with all secrets redacted or omitted.
+- `manifest.normalization.ocsf_version` (string): pinned OCSF version used by the normalizer for
+  this run.
+  - When `normalized/mapping_profile_snapshot.json` is present,
+    `manifest.normalization.ocsf_version` SHOULD match `mapping_profile_snapshot.ocsf_version`.
 
 Terminology note (normative):
 
@@ -2231,7 +2240,7 @@ Terminology note (normative):
   `bridge/mapping_pack_snapshot.json`. Specs and tooling SHOULD refer to these artifacts by full
   run-relative path to avoid ambiguity.
 
-RRecommended version recording (manifest pins)
+Recommended version recording (manifest pins)
 
 For diffable runs (CI, regression, trending, and dataset-release inputs), the manifest MUST record,
 under `manifest.versions`:
@@ -2269,7 +2278,7 @@ Stage outcomes (v0.1 baseline expectations):
 
 | Stage           | Typical `fail_mode` (v0.1 default)                     | Minimum artifacts when enabled                                | Notes                                                                                                              |
 | --------------- | ------------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `lab_provider`  | `fail_closed`                                          | `manifest.json`                                               | Failure to resolve targets deterministically is fatal.                                                             |
+| `lab_provider`  | `fail_closed`                                          | `logs/lab_inventory_snapshot.json`, `manifest.json`           | Failure to resolve targets deterministically is fatal.                                                             |
 | `runner`        | `fail_closed`                                          | `ground_truth.jsonl`, `runner/`                               | If stable `asset_id` resolution fails, the run MUST fail closed.                                                   |
 | `telemetry`     | `fail_closed`                                          | `raw_parquet/` (when enabled), `manifest.json`                | If required Windows sources are missing (e.g., Sysmon), the run MUST fail closed unless the scenario exempts them. |
 | `normalization` | `fail_closed` (when `normalization.strict_mode: true`) | `normalized/ocsf_events/`, `normalized/mapping_coverage.json` | In `warn_and_skip` style modes (if introduced later), skipped and unmapped counts MUST still be reported.          |
@@ -3410,13 +3419,22 @@ Key semantics (normative when produced):
 
 - Plans MUST be keyed by stable `rule_id` and MUST include `rule_sha256` (hash of canonical Sigma
   rule content) for drift detection.
+- Plans MUST include `mapping_pack_sha256` to bind compilation output to the mapping pack snapshot
+  used for the run.
 - Each compiled plan MUST embed the parsed Sigma AST (`sigma_ast_v1`) under the top-level key
   `sigma_ast`, regardless of whether the rule is executable.
-- The compiled plan schema MUST be updated to include the `sigma_ast` object (TODO: add
-  `docs/contracts/sigma_ast_v1.schema.json` and reference it from
-  `docs/contracts/bridge_compiled_plan.schema.json`).
-- Plans MUST declare `executable: true | false` and, when false, MUST include
-  `non_executable_reason`.
+- Plans MUST declare `executable: true | false`.
+  - When `executable=true`, the plan MUST include a backend envelope sufficient to interpret the
+    evaluation plan deterministically (at minimum: `backend.id`, `backend.plan_kind`,
+    `backend.plan`; `backend.version` and `backend.settings` are RECOMMENDED when available).
+  - When `executable=false`, the plan MUST include `non_executable_reason`.
+- The compiled plan schema (`bridge_compiled_plan.schema.json`) MUST require and validate the
+  `sigma_ast` object as `sigma_ast_v1` and MUST require `mapping_pack_sha256`.
+  - The repository MUST include a JSON Schema for the `sigma_ast_v1` object at
+    `docs/contracts/sigma_ast_v1.schema.json`.
+  - `docs/contracts/bridge_compiled_plan.schema.json` MUST define `sigma_ast` as a required
+    top-level property and MUST reference `docs/contracts/sigma_ast_v1.schema.json` as the
+    authoritative schema for that object (local `$ref`; no network fetch).
 
 ### Bridge coverage
 
@@ -3711,6 +3729,7 @@ Strict artifacts (manifest, ground truth, detections, summary) are intentionally
   - `extensions.bridge`
   - `extensions.sigma`
   - `extensions.runner`
+  - `extensions.orchestrator`
 - Each namespace value SHOULD be an object; new fields SHOULD be added within a namespace object
   rather than as top-level scalars.
 - Top-level fields outside `extensions` MUST NOT be introduced unless explicitly defined by this
@@ -3772,6 +3791,30 @@ When `runner.environment_config.noise_profile.enabled=true`:
   YAML, line endings, whitespace) MUST NOT affect execution or `profile_sha256` once snapshotted.
 
 - The snapshot MUST be treated as an input artifact and MUST be redaction-safe.
+
+### Runner namespace: execution-definition provenance (v0.1)
+
+To make criteria drift detection deterministic, the runner MUST record execution-definition
+provenance for each execution engine used by the run in the run manifest under
+`manifest.extensions.runner.execution_definitions.upstreams[]`.
+
+Minimum schema (v0.1):
+
+- `manifest.extensions.runner.execution_definitions.upstreams[]` (required array when any actions
+  were executed; sorted ascending by `engine`):
+  - `engine` (string enum): `atomic` | `caldera` | `custom`
+  - `source_ref` (string): stable revision identifier for the execution-definition source
+  - `source_tree_sha256` (optional string): lowercase hex SHA-256 of the deterministic
+    execution-definition tree hash (may be omitted when unavailable)
+
+Normative requirements:
+
+- Each `engine` value MUST appear at most once in `upstreams[]`.
+- When `source_tree_sha256` is present, it MUST be computed using the deterministic source-tree
+  hashing algorithm defined in the validation criteria specification
+  ([Validation criteria packs](035_validation_criteria.md) → Drift detection).
+- Producers MUST omit `source_tree_sha256` (rather than emitting an incorrect value) when the
+  effective source tree cannot be hashed deterministically on the current platform.
 
 #### `extensions.principal_id` (action-scoped, optional)
 

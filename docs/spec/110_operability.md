@@ -575,6 +575,17 @@ Additional normative checks:
     `extensions.synthetic_correlation_marker_token`; normalized carriers:
     `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
     `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`).
+- When `telemetry.otel.clock_sync.enabled=true`, `runs/<run_id>/logs/telemetry_validation.json` MUST
+  include a `clock_sync` object with per-asset results and evidence (see
+  `040_telemetry_pipeline.md`).
+  - The validator MUST emit a `health.json.stages[]` entry with `stage: "telemetry.clock_sync"`.
+  - Success condition: all expected assets are measurable and
+    `abs_offset_ms <= (telemetry.otel.clock_sync.max_abs_offset_seconds * 1000)`.
+  - Failure condition: otherwise `status=failed` with `fail_mode` taken from
+    `telemetry.otel.clock_sync.fail_mode` (default `fail_closed`) and deterministic `reason_code`
+    selection:
+    - `clock_offset_exceeded` if any measurable asset exceeds the threshold
+    - else `clock_offset_unmeasurable` if any expected asset is unmeasurable
 - The validator MUST emit a `health.json.stages[]` entry with `stage: "telemetry.agent.liveness"`.
   - The validator MUST treat collector self-telemetry as the OS-neutral heartbeat for each asset
     with `telemetry.otel.enabled=true` (see the telemetry pipeline specification).

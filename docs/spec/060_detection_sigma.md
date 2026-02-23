@@ -103,13 +103,14 @@ See the [Sigma-to-OCSF Bridge specification][sigma-bridge].
 In addition to the required fields, Purple Axiom recognizes the following Sigma metadata for
 filtering and reporting:
 
-| Field            | Purpose                                                         | Default behavior                              |
-| ---------------- | --------------------------------------------------------------- | --------------------------------------------- |
-| `status`         | Rule maturity (`experimental`, `test`, `stable`)                | All statuses evaluated unless filtered        |
-| `level`          | Severity (`informational`, `low`, `medium`, `high`, `critical`) | All levels evaluated unless filtered          |
-| `falsepositives` | Known false positive contexts                                   | Recorded in compiled plan for operator review |
-| `author`         | Rule authorship                                                 | Recorded for provenance                       |
-| `references`     | External references (URLs)                                      | Recorded for provenance                       |
+| Field            | Purpose                                                         | Default behavior                                                      |
+| ---------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `status`         | Rule maturity (`experimental`, `test`, `stable`)                | All statuses evaluated unless filtered                                |
+| `level`          | Severity (`informational`, `low`, `medium`, `high`, `critical`) | All levels evaluated unless filtered                                  |
+| `name`           | Stable rule reference token (for correlation `rules:`)          | Recorded for provenance; used for correlation resolution when present |
+| `falsepositives` | Known false positive contexts                                   | Recorded in compiled plan for operator review                         |
+| `author`         | Rule authorship                                                 | Recorded for provenance                                               |
+| `references`     | External references (URLs)                                      | Recorded for provenance                                               |
 
 ### Configuration-driven filtering
 
@@ -376,15 +377,40 @@ a `sigma_ast_v1` correlation object.
 Canonical correlation fields (normative):
 
 - `correlation.type` (required; string): correlation type.
-- `correlation.rules` (required; array of strings): referenced rules by `id` or `title` (resolved
-  during bridge compilation).
+- `correlation.rules` (required; array of strings): referenced rules by `id` or `name` (rule
+  reference token). As a compatibility fallback, the bridge MAY also attempt resolution by `title`
+  when `name` is absent (see `065_sigma_to_ocsf_bridge.md` for deterministic resolution order).
 - `correlation.timespan` (required; string): duration (parsed to milliseconds by the bridge as
   `timespan_ms`).
 - `correlation.group-by` or `correlation.group_by` (optional; array of strings): group-by keys.
 - `correlation.condition` (optional; object): comparator map (for example `{"gte":2}`) or normalized
   form.
+- `correlation.field` (optional; string): value field used by distinct-value aggregations (required
+  for `value_count` semantics).
 - `correlation.aliases` (optional; object): alias map used to unify correlation keys across
   referenced rules.
+- `correlation.generate` (optional; boolean): whether referenced base rules should also be emitted
+  alongside the correlation output (default false).
+
+Timespan parsing (normative):
+
+- `correlation.timespan` MUST be a duration string in the form `<n><unit>`, where:
+  - `<n>` is a base-10 integer greater than 0.
+  - `<unit>` is one of: `ms`, `s`, `m`, `h`, `d`, `w` (case-insensitive).
+- Leading and trailing ASCII whitespace MUST be ignored when parsing.
+- The parser MUST preserve the original `correlation.timespan` string verbatim in `sigma_ast_v1`.
+- During bridge compilation, the bridge MUST compute `timespan_ms` deterministically as:
+  - `ms`: `n`
+  - `s`: `n * 1_000`
+  - `m`: `n * 60_000`
+  - `h`: `n * 3_600_000`
+  - `d`: `n * 86_400_000`
+  - `w`: `n * 604_800_000`
+- If `correlation.timespan` cannot be parsed or overflows a signed 64-bit millisecond count, the
+  rule MUST be marked non-executable with:
+  - `non_executable_reason.reason_domain="bridge_compiled_plan"`
+  - `non_executable_reason.reason_code="unsupported_value_type"`
+  - `non_executable_reason.explanation` beginning with `PA_BRIDGE_INVALID_TIMESPAN:`
 
 Type normalization (normative):
 
@@ -500,20 +526,20 @@ The `non_executable_reason` object MUST also include a human-readable explanatio
 
 ### Reason codes (normative)
 
-| Reason code               | Category      | Description                                                                                                                                                                                                                                |
-| ------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                                                                                                                                                                                  |
-| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                                                                                                                                                                           |
-| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                                                                                                                                                                             |
-| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                                                                                                                                                                         |
-| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                                                                                                                                                                                |
-| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                                                                                                                                                                           |
-| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (v0.1 default: PCRE2 with bounded execution for `\|re`)                                                                                                                           |
-| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                                                                                                                                                                      |
-| `unsupported_correlation` | Sigma feature | Correlation rule uses unsupported correlation type or semantics for the selected backend                                                                                                                                                   |
-| `unsupported_aggregation` | Sigma feature | Condition-string aggregation and temporal constructs (including pipe aggregation, `near`, `within`, and related keywords) are parsed but are not executable under the v0.1 default backend unless represented as a Sigma correlation rule. |
-| `backend_compile_error`   | Backend       | Backend compilation failed                                                                                                                                                                                                                 |
-| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                                                                                                                                                                       |
+| Reason code               | Category      | Description                                                                                                                                                                                                                      |
+| ------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unroutable_logsource`    | Routing       | Sigma `logsource` matches no router entry                                                                                                                                                                                        |
+| `unmapped_field`          | Field alias   | Sigma field has no alias mapping                                                                                                                                                                                                 |
+| `raw_fallback_disabled`   | Field alias   | Rule requires `raw.*` but fallback is disabled                                                                                                                                                                                   |
+| `ambiguous_field_alias`   | Field alias   | Alias resolution is ambiguous for the routed scope                                                                                                                                                                               |
+| `unsupported_modifier`    | Sigma feature | Modifier cannot be expressed in the backend                                                                                                                                                                                      |
+| `unsupported_operator`    | Sigma feature | Operator not in supported subset                                                                                                                                                                                                 |
+| `unsupported_regex`       | Sigma feature | Regex pattern uses constructs rejected by backend policy (v0.1 default: PCRE2 with bounded execution for `\|re`)                                                                                                                 |
+| `unsupported_value_type`  | Sigma feature | Value type incompatible with operator                                                                                                                                                                                            |
+| `unsupported_correlation` | Sigma feature | Correlation rule uses unsupported correlation type or semantics for the selected backend                                                                                                                                         |
+| `unsupported_aggregation` | Sigma feature | Condition-string aggregation and temporal constructs (including pipe aggregation, `near`, and related keywords) are parsed but are not executable under the v0.1 default backend unless represented as a Sigma correlation rule. |
+| `backend_compile_error`   | Backend       | Backend compilation failed                                                                                                                                                                                                       |
+| `backend_eval_error`      | Backend       | Backend evaluation failed at runtime                                                                                                                                                                                             |
 
 Non-executable rules do not produce detection instances but are included in bridge coverage
 reporting and contribute to gap classification.
@@ -842,8 +868,8 @@ bridge backend cannot represent or execute the requested correlation semantics (
 ### Aggregation functions
 
 Sigma aggregation constructs (including pipe aggregation and keywords `count`, `sum`, `avg`, `min`,
-`max`, and temporal constructs like `near` / `within`) are in-scope for parsing (see "Parsing
-model"), but executability is backend-defined in v0.1.
+`max`, and temporal constructs like `near`) are in-scope for parsing (see "Parsing model"), but
+executability is backend-defined in v0.1.
 
 The default backend (`native_pcre2`) supports Sigma correlation rules, but does not necessarily
 support aggregation constructs inside event-rule `condition` expressions in v0.1. Rules requiring

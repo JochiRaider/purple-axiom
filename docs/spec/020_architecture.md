@@ -126,6 +126,11 @@ Common invariants (normative, v0.1):
   run lock (atomic create of `runs/.locks/<run_id>.lock` per
   [ADR-0004: Deployment architecture and inter-component communication][adr-0004]) before creating
   or mutating any run bundle artifacts (including `manifest.json`).
+  - If the run lock cannot be acquired because it already exists, the orchestrator MUST fail the
+    invocation deterministically and MUST NOT create or mutate `runs/<run_id>/` unless an explicit,
+    per-invocation operator override is present (see "Port: `RunLock`").
+  - v0.1 MUST NOT use time-based lock expiry/leases for liveness. The only stale-lock recovery
+    mechanism is a manual break-glass override (default-off) (see "Port: `RunLock`").
 - Materialize/pin operator inputs under `runs/<run_id>/inputs/` (at minimum `inputs/range.yaml` and
   `inputs/scenario.yaml`; when the plan execution model is enabled (v0.2+), also pin
   `inputs/plan_draft.yaml`) before running the first stage.
@@ -179,16 +184,15 @@ Verb definitions (v0.1):
       `skipped`) per ADR-0005.
   - Preconditions: the candidate run bundle MUST already contain `ground_truth.jsonl` and either:
     - `raw_parquet/**` (full replay; `normalization` and `validation` are executed), OR
-    - a normalized event store (normalized-input replay; v0.2+):
-      - `normalized/ocsf_events.jsonl` (contract-backed; canonical replay input), AND
+    - a normalized event store (normalized-input replay; v0.1+):
+      - `normalized/ocsf_events/_schema.json` (contract-backed; Parquet schema snapshot), AND
+      - `normalized/ocsf_events/**` (Parquet dataset directory; canonical normalized store), AND
       - `normalized/mapping_profile_snapshot.json`.
-      - If `normalized/ocsf_events/` (Parquet dataset directory) also exists, replay MUST treat it
-        as a cache only and MUST prefer `normalized/ocsf_events.jsonl` as the authoritative replay
-        input.
-  - Normalized-input replay fast path (v0.2+; normative when used):
+  - Normalized-input replay fast path (v0.1+; normative when used):
     - If a normalized event store exists and its normalization provenance matches the current
       version control for the run, the orchestrator MUST skip directly to `detection`.
     - Match criteria (normative):
+      - `normalized/ocsf_events/_schema.json` MUST validate against the data contracts.
       - `normalized/mapping_profile_snapshot.json` MUST validate against the data contracts.
       - `normalized/mapping_profile_snapshot.json.ocsf_version` MUST equal
         `manifest.versions.ocsf_version`.
@@ -247,6 +251,28 @@ Telemetry collection follows the canonical OpenTelemetry model:
 
 OTLP MAY be used between Collector tiers but MUST NOT be required between Purple Axiom's core
 stages.
+
+#### Telemetry configuration tiers (v0.1; normative)
+
+Purple Axiom v0.1 supports three explicit tiers for how collector configuration is provisioned and
+maintained. This tiering exists to keep telemetry capture deterministic, auditable, and safe by
+default.
+
+| Tier                         | Mechanism                                                                                   | v0.1 Status                 | Who / When                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------- |
+| **Pre-provisioned config**   | Configs baked before any run; collectors start pre-configured                               | REQUIRED baseline           | Operator/lab setup; outside run lifecycle                                              |
+| **Environment config apply** | `runner.environment_config` in apply mode; may place/restart collectors as pre-run substage | PERMITTED, explicitly gated | Runner, before `runner` enters the `prepare` lifecycle phase; must be enabled + logged |
+| **Control-plane RPC**        | Active remote management channel (SSH/WinRM/gRPC) used mid-run                              | FORBIDDEN                   | `control_plane.enabled` MUST be `false`                                                |
+
+Tier semantics (normative):
+
+- Tier-1 (pre-provisioned config) is the REQUIRED baseline for v0.1 runs.
+- Tier-2 (environment config apply) is permitted only when `runner.environment_config.enabled=true`
+  and `runner.environment_config.mode="apply"`, and MUST be recorded as the additive substage
+  `runner.environment_config` with deterministic operability evidence under `runs/<run_id>/logs/`.
+- Tier-3 (control-plane RPC) refers to a long-lived management channel used to mutate collector
+  configuration or runtime behavior outside the runner action lifecycle. It does not forbid remote
+  execution used by the `runner` stage to execute scenario actions.
 
 ### Run bundle (coordination plane)
 
@@ -787,6 +813,7 @@ strategy doc is the authoritative index for fixture roots and CI gates.
 - TB-ORCH:
 
   - `run_lock_exclusive_single_writer`
+  - `run_lock_break_glass_requires_explicit_force`
   - `publish_gate_output_root_guardrail_fail_closed`
 
 - TB-SECRETS:
@@ -932,17 +959,76 @@ fields, but MUST preserve the semantics below.
 
 Purpose: enforce the single-writer invariant for a run bundle.
 
+Lock file location (normative):
+
+- Primary lock path: `runs/.locks/<run_id>.lock` (workspace-root relative; `runs/.locks/` is
+  reserved for lockfiles and is not part of any run bundle).
+- The orchestrator MUST create `runs/.locks/` if absent before attempting acquisition.
+
 Required operations (minimum):
 
 - `acquire(run_id) -> acquired: bool`
-  - Semantics: MUST be an exclusive acquisition using atomic-create semantics for
-    `runs/.locks/<run_id>.lock` (or an equivalent mechanism with identical exclusivity).
+  - Semantics: MUST be an exclusive acquisition using atomic-create semantics for the primary lock
+    path (or an equivalent mechanism with identical exclusivity).
+  - If the lock already exists, it MUST return `false`.
 - `release(run_id) -> void` (best-effort; MAY be a no-op on crash)
+
+Stale lock policy (manual break-glass; deterministic):
+
+- Default posture: **no automatic expiry**. Time-based leasing MUST NOT be used in v0.1.
+- If `acquire(run_id)` returns `false`, the orchestrator MUST fail the invocation deterministically
+  and MUST NOT create or mutate `runs/<run_id>/` unless an explicit operator override is present.
+
+Operator override (normative when a CLI is exposed):
+
+- Implementations that expose a CLI MUST provide a boolean flag `--force-run-lock` (default: false).
+- `--force-run-lock` MUST be opt-in per invocation and MUST NOT be enabled by default in config
+  files or environment variables.
+
+Break-glass procedure (normative when `--force-run-lock=true`):
+
+- If `runs/.locks/<run_id>.lock` exists, the orchestrator MUST preserve it by atomically renaming it
+  within `runs/.locks/` to a deterministic stale-lock path:
+  - Format: `runs/.locks/<run_id>.lock.stale.<nnnn>` where `<nnnn>` is a zero-padded decimal ordinal
+    starting at `0001`.
+  - Selection: choose the smallest `<nnnn>` such that the destination path does not already exist.
+- After renaming, the orchestrator MUST retry `acquire(run_id)` and MUST proceed only if acquisition
+  succeeds.
+- If the rename fails because the lock disappeared (concurrent release), the orchestrator MUST retry
+  `acquire(run_id)` once without renaming and MUST proceed only if acquisition succeeds.
+- If `acquire(run_id)` still fails after the above, the orchestrator MUST treat the run as locked,
+  MUST NOT mutate `runs/<run_id>/`, and MUST exit (fail closed).
+
+Provenance recording (normative):
+
+- When break-glass succeeds, the orchestrator MUST record an append-only event in
+  `runs/<run_id>/manifest.json` under:
+
+  - `extensions.orchestrator.v` = `1`
+  - `extensions.orchestrator.run_lock.break_glass_events[]`
+
+- Each event object MUST include:
+
+  - `seq` (integer >= 1): 1-based sequence number; MUST equal the event's position in the array.
+  - `stale_lock_filename` (string): `<run_id>.lock.stale.<nnnn>`
+  - `stale_lock_sha256` (string): lowercase hex `sha256(file_bytes)` of the stale lock file.
+  - `policy` (string): constant `manual_break_glass_v1`.
+
+- Producers MUST NOT record operator identity, hostnames, usernames, or timestamps in this field.
+
+- Producers MUST update `manifest.json` using atomic replace semantics.
+
+Recovery hook:
+
+- After acquiring the lock (whether normally or via break-glass), the orchestrator MUST perform the
+  deterministic reconciliation pass defined in ADR-0004 before executing any stage.
 
 Observability:
 
 - If the lock cannot be acquired, the orchestrator MUST NOT create or mutate `runs/<run_id>/` and
   MUST fail the invocation deterministically (see conformance tests).
+- When break-glass is used, the preserved stale lock file and its hash are observable via the
+  manifest extension fields above.
 
 #### Port: `PublishGate`
 
@@ -955,7 +1041,6 @@ Required operations (minimum):
 - `StagePublishSession.write_bytes(artifact_path, bytes) -> void`
 - `StagePublishSession.write_json(artifact_path, obj, canonical: bool=true) -> void`
 - `StagePublishSession.write_jsonl(artifact_path, rows_iterable) -> void`
-- `StagePublishSession.finalize(expected_outputs: list[ExpectedOutput]) -> PublishResult`
 - `StagePublishSession.finalize(expected_outputs: list[ExpectedOutput], unexpected_outputs_policy: UnexpectedOutputsPolicy = "lenient") -> PublishResult`
 - `StagePublishSession.abort() -> void`
 
@@ -1196,6 +1281,9 @@ Normative requirements:
 - The adapter registry MUST be an in-process mapping from `(port_id, adapter_id)` to:
   - an adapter factory (constructor/function) and
   - static metadata required for provenance recording (see "Adapter provenance recording (v0.1)").
+  - The adapter factory MAY construct an in-process implementation or an in-process proxy that
+    delegates to a local out-of-process adapter server (see "Out-of-process adapter profile (local
+    IPC; host publish proxy writes)").
 - The registry MUST be constructed in the composition root at startup and MUST NOT be mutated after
   stage execution begins.
 - The registry MAY be implemented as a static mapping; this spec does not require dynamic plugin
@@ -1215,6 +1303,332 @@ Normative requirements:
     bindings.
   - Unknown adapters MUST be rejected (fail closed) unless an explicit warn-and-skip policy exists
     for that port in the effective policy snapshot.
+
+#### Out-of-process adapter profile (local IPC; host publish proxy writes)
+
+This profile defines how an adapter implementation MAY run out-of-process as a local child process
+while remaining compatible with the v0.1 ports-and-adapters architecture, determinism constraints,
+and publish-gate contract spine.
+
+This profile is a packaging + invocation contract. It does not change port semantics.
+
+Goals (informative):
+
+- Enable adapters implemented as separate processes without introducing service-to-service RPC.
+- Preserve single-writer + publish-gate semantics by ensuring all run-bundle writes are mediated by
+  the in-process host using the reference publisher.
+- Keep adapter selection deterministic (composition root + in-process adapter registry).
+- Support deterministic feature gating via a capabilities handshake.
+- Preserve run comparability via manifest adapter provenance pinning.
+
+Non-goals (informative):
+
+- Remote adapters (network sockets, daemon services, agent mesh) are out of scope for v0.1.
+- Containerization of adapter servers is out of scope for v0.1 (reserved for v0.2+).
+- Ambient discovery of adapters (scanning PATH/site-packages/entrypoints/CWD/env) remains forbidden.
+- Allowing an adapter server to write directly to any run-bundle path (including `.staging/**`) is
+  forbidden in this profile.
+
+##### Roles and boundaries
+
+- Adapter server (out-of-process):
+
+  - Implements exactly one `(port_id, adapter_id)` binding.
+  - Serves a local IPC control channel.
+  - MUST NOT write to the run bundle (including `.staging/**`).
+  - Returns results and (optionally) host-mediated publish instructions.
+
+- Adapter proxy (in-process):
+
+  - Implements the port interface in-process and translates calls to IPC messages.
+  - Owns the adapter server lifecycle (spawn, handshake, init, shutdown).
+  - Applies any publish instructions through the in-process reference publisher (`PublishGate` /
+    `StagePublishSession`) and other host enforcement surfaces.
+
+- Proxy factory (composition root):
+
+  - A registry factory that constructs the adapter proxy for a specific `(port_id, adapter_id)`
+    binding.
+
+##### Local-only IPC constraint (normative)
+
+- The host-adapter control channel MUST use local IPC only.
+- The host-adapter control channel MUST NOT use TCP/UDP sockets (including localhost) in v0.1.
+
+Allowed IPC transports (v0.1):
+
+- `stdio_json_lines_v1` (REQUIRED): newline-delimited JSON messages over stdin/stdout.
+
+Other transports (for example AF_UNIX sockets or Windows named pipes) are reserved for v0.2+.
+
+##### Transport: `stdio_json_lines_v1` (normative)
+
+Spawn rules:
+
+- The host MUST spawn the adapter server as a direct child process (no shell).
+- The host MUST NOT rely on ambient PATH resolution to locate the adapter server executable/module.
+  The spawn target MUST be derived deterministically from the registry-selected adapter provenance
+  (and policy gates).
+
+Streams:
+
+- stdin is the request stream (host → server).
+- stdout is the response/event stream (server → host).
+- stderr is human logs only (not protocol).
+
+stderr handling:
+
+- The host MUST treat stderr as sensitive output.
+- The host MUST enforce bounded stderr capture (byte limit) and bounded runtime to prevent hangs.
+- Any persisted stderr/stdout diagnostics MUST be subject to the same safety posture as other
+  persisted outputs (for example integration-credential leak detection).
+
+Protocol framing:
+
+- Each protocol message MUST be a single JSON object encoded as UTF-8 on exactly one line.
+- Line delimiter MUST be LF (`\n`). The host MAY accept CRLF and normalize to LF on read.
+- Messages MUST NOT exceed `max_message_bytes` (default 8,388,608 bytes) enforced by both sides.
+
+##### IPC envelope (normative)
+
+All protocol messages MUST use this envelope:
+
+- `v` (string; REQUIRED): `"pa:adapter-ipc:v1"`
+- `type` (string; REQUIRED): `request | response | event`
+- `id` (integer; REQUIRED for request/response): request id chosen by the host
+- `method` (string; REQUIRED for request): method name, ASCII `lower_snake_case` or dotted namespace
+- `params` (object; OPTIONAL for request): request parameters
+- `result` (object; REQUIRED for successful response): response payload
+- `error` (object; REQUIRED for error response):
+  - `code` (string; REQUIRED): stable token (`lower_snake_case`)
+  - `message` (string; REQUIRED): human-readable; MUST NOT include secrets or absolute host paths
+  - `details` (object; OPTIONAL): structured diagnostics; MUST NOT include secrets
+
+Directionality + concurrency rule (v0.1, normative):
+
+- The adapter server MUST NOT send `type="request"` messages in v0.1.
+- The host MUST NOT pipeline requests. It MUST wait for the response to request `id=n` before
+  sending request `id=n+1`.
+- The adapter server MUST assume a single in-flight request.
+
+##### Capabilities handshake (normative)
+
+Immediately after spawn, the host MUST perform a handshake before using the adapter.
+
+Host sends `method="hello"` with:
+
+- `port_id` (id_slug_v1; REQUIRED)
+- `adapter_id_expected` (id_slug_v1; REQUIRED)
+- `protocols_supported` (array[string]; REQUIRED): MUST include `"pa:adapter-ipc:v1"`
+- `features_required` (array[string]; REQUIRED):
+  - v0.1 REQUIRED: MUST include `"host_publish_proxy_v1"`
+- `limits` (object; REQUIRED):
+  - `max_message_bytes` (integer; REQUIRED)
+
+Adapter replies success with `result`:
+
+- `port_id` (id_slug_v1; REQUIRED): the served port id
+- `adapter_id` (id_slug_v1; REQUIRED)
+- `adapter_version` (semver_v1 | version_token_v1; REQUIRED)
+- `capabilities` (object; REQUIRED): port-scoped deterministic capabilities descriptor
+  - This object MUST obey the determinism rules of the owning port spec.
+- `features_supported` (array[string]; REQUIRED):
+  - MUST include `"host_publish_proxy_v1"`
+- `capabilities_sha256` (string; OPTIONAL): `sha256:<lowercase_hex>` of RFC 8785 canonical JSON of
+  `capabilities`
+
+Host verification (normative):
+
+- The host MUST fail closed if:
+  - `adapter_id != adapter_id_expected`, or
+  - `port_id` does not match the registry-selected binding, or
+  - `features_supported` does not include `"host_publish_proxy_v1"`.
+
+Notes:
+
+- The host MUST NOT treat adapter-reported `adapter_version` as authoritative for provenance.
+  Provenance pinning is determined by the registry selection + configured pins.
+
+##### Run-scoped initialization (normative)
+
+Before the first port call, the host MUST send `method="init_run"` with:
+
+- `run_id` (string; REQUIRED)
+- `stage_id` (id_slug_v1; REQUIRED): the owning stage for the publish session
+- `publish_policy` (object; REQUIRED):
+  - `allowed_roots` (array[string]; REQUIRED):
+    - Deterministic allowlist of run-relative output roots computed for `stage_id` by the host.
+    - Roots that end with `/` are directory roots (prefix containment).
+    - Roots that do not end with `/` are file roots (exact match containment).
+    - The list MUST be sorted by UTF-8 byte order.
+  - `unexpected_outputs_policy` (string; OPTIONAL): `strict | lenient`
+    - When present, this value is advisory to the server; the host remains authoritative.
+
+Adapter obligations (normative):
+
+- The adapter server MUST treat `run_id` and `stage_id` as immutable for the lifetime of the
+  process.
+- The adapter server MUST NOT write to any run-bundle path (including `.staging/**`) regardless of
+  `stage_id` or `allowed_roots`.
+
+Process scoping (normative):
+
+- In v0.1, an adapter server process MUST be scoped to exactly one `(run_id, stage_id)` tuple.
+- To serve a different run or stage, the host MUST spawn a new process.
+
+##### Host-mediated publish operations (normative)
+
+Because v0.1 requires contract-backed outputs to be published only via the in-process reference
+publisher, adapter servers in this profile do not write staged files directly.
+
+Instead, a server MAY return publish instructions to the host as part of any successful response:
+
+- `result.publish_ops` (array; OPTIONAL): list of publish operations for the host to apply through
+  the in-process `StagePublishSession` for `stage_id`.
+
+If present:
+
+- `publish_ops[]` MUST be applied by the adapter proxy before returning the port call result to its
+  caller.
+- `publish_ops[]` MUST be applied in ascending `artifact_path` order (UTF-8 byte order).
+- If multiple ops target the same `artifact_path`, the host MUST fail closed.
+
+Publish op schema (v0.1):
+
+Each publish op is an object:
+
+- `op` (string; REQUIRED): `write_json | write_jsonl | write_bytes_base64`
+- `artifact_path` (string; REQUIRED): run-relative POSIX path
+- `contract_id` (string | null; OPTIONAL):
+  - If `artifact_path` resolves to a contract registry binding, `contract_id` MUST be present and
+    MUST equal the binding’s `contract_id`.
+  - If `artifact_path` does not resolve to a contract registry binding, `contract_id` MUST be `null`
+    when present.
+
+`write_json` fields:
+
+- `value` (any JSON value; REQUIRED)
+
+`write_jsonl` fields:
+
+- `rows` (array[object]; REQUIRED): each row is one JSON object (one line)
+
+`write_bytes_base64` fields:
+
+- `bytes_b64` (string; REQUIRED): standard base64 (RFC 4648 alphabet), no whitespace
+
+Path safety (fail closed):
+
+For every `artifact_path` in `publish_ops[]`, the host MUST enforce Contract Spine path requirements
+(run-relative POSIX paths). At minimum, the host MUST reject (fail closed) any `artifact_path` that:
+
+- contains a backslash character (U+005C) (separator MUST be `/`),
+- starts with `/`,
+- contains a drive prefix (for example `C:`),
+- contains a NUL byte,
+- contains any `..` segment,
+- contains empty segments (`//`),
+- ends with `/`.
+
+Output-root guardrail (fail closed):
+
+The host MUST enforce stage output-root containment using the `publish_policy.allowed_roots`
+allowlist:
+
+- If `artifact_path` is not contained by any `allowed_roots` entry, the host MUST fail closed and
+  MUST NOT promote any staged outputs for the stage.
+
+Contract-backed writer restrictions (fail closed):
+
+When applying `publish_ops[]`, the host MUST consult the contract registry binding (if any) for
+`artifact_path` and enforce:
+
+- If `validation_mode="json_document"`, only `op="write_json"` is permitted.
+- If `validation_mode="jsonl_lines"`, only `op="write_jsonl"` is permitted.
+- If a server attempts to use `write_bytes_base64` for a contract-backed JSON or JSONL artifact, the
+  host MUST fail closed.
+- If `validation_mode="yaml_document"`, the host MUST fail closed (contract-backed YAML outputs are
+  forbidden in v0.1).
+
+Canonical bytes (normative):
+
+- For `write_json`, the host MUST publish using
+  `StagePublishSession.write_json(..., canonical=true)` so bytes match RFC 8785 (JCS).
+- For `write_jsonl`, the host MUST publish using `StagePublishSession.write_jsonl(...)` so bytes
+  match the JSONL physical invariants (LF-only; canonical JSON per line; trailing LF rule).
+
+##### Proxy factory requirements (normative)
+
+An out-of-process adapter MUST be wired via a proxy factory registered in the in-process adapter
+registry.
+
+The proxy factory MUST:
+
+- enforce adapter policy gates before spawn:
+  - reject non-builtin adapters when third-party adapters are disallowed
+  - verify signatures when required by policy
+- spawn the adapter server deterministically (no ambient discovery; no shell; no PATH-based
+  resolution)
+- perform `hello` handshake and fail closed on mismatch
+- perform `init_run` exactly once before any port method call
+- translate port interface calls into IPC requests and responses
+- apply `result.publish_ops` through the stage’s in-process `StagePublishSession` and enforce:
+  - path safety
+  - output-root guardrail
+  - contract-backed writer restrictions
+- bound execution with timeouts and output limits (stdout/stderr bytes) to prevent hangs
+- treat adapter server stderr/stdout diagnostics as sensitive and ensure persisted diagnostics do
+  not leak integration credentials (fail closed on leak)
+
+The proxy factory MUST NOT:
+
+- mutate the adapter registry after stage execution begins
+- allow the adapter server to bypass publish-gate staging and promotion semantics
+- pass resolved integration credential values via command-line arguments when invoking the adapter
+  server (use environment variables where applicable)
+
+##### Provenance pinning (normative)
+
+Out-of-process adapters participate in the existing adapter provenance record without changes:
+
+- The host MUST record the resolved adapter provenance entry for the binding in the run manifest
+  (see "Adapter provenance recording (v0.1)").
+- `source_ref` MUST NOT be an absolute host path.
+
+##### Failure mapping (guidance; non-normative)
+
+- Spawn failure because the adapter executable is missing: prefer the stage-specific "tool missing"
+  reason code where defined.
+- Handshake/protocol mismatch, or policy denial (third-party disallowed / signature invalid): treat
+  as configuration invalid (prefer `reason_code=config_schema_invalid` unless a more specific
+  stage-scoped reason code exists).
+
+##### Verification hooks (normative)
+
+The repository MUST include conformance fixtures for this profile:
+
+1. Handshake conformance:
+
+   - adapter reports mismatched `adapter_id` => host fails closed
+   - adapter omits required feature `"host_publish_proxy_v1"` => host fails closed
+
+1. Output-root guardrail:
+
+   - adapter attempts to publish an artifact outside `publish_policy.allowed_roots` via
+     `publish_ops` => host fails closed and stage publishes nothing
+
+1. Path safety:
+
+   - adapter attempts to publish `artifact_path="../manifest.json"` => host rejects (fail closed)
+
+1. Contract-backed writer restrictions:
+
+   - adapter attempts `write_bytes_base64` for a contract-backed JSON/JSONL artifact => host rejects
+     (fail closed)
+
+1. Canonical JSON/JSONL:
+
+   - fixtures assert contract-backed JSON/JSONL bytes match publisher canonical serialization rules
 
 #### Adapter provenance recording (v0.1)
 
@@ -1468,6 +1882,20 @@ are mandatory (names are suggestions; harness/framework is implementation-define
    - Assert: at most one acquires the lock; the other fails deterministically without mutating the
      run bundle.
 
+1. `run_lock_break_glass_requires_explicit_force`
+
+   - Setup: create `runs/.locks/<run_id>.lock` with arbitrary bytes (simulate a dead/crashed lock
+     owner) and ensure `runs/<run_id>/` is either absent or present but not actively being mutated.
+   - Assert (no override): an orchestrator invocation targeting the same `run_id` without an
+     explicit break-glass override fails closed and does not create or mutate `runs/<run_id>/`.
+   - Assert (override): with the explicit override enabled (canonical CLI flag: `--force-run-lock`),
+     the orchestrator:
+     - preserves the existing lock by renaming it to `runs/.locks/<run_id>.lock.stale.0001` (or the
+       next deterministic ordinal),
+     - acquires the new lock at `runs/.locks/<run_id>.lock`,
+     - records a provenance event under `extensions.orchestrator.run_lock.break_glass_events[]`, and
+     - performs the deterministic reconciliation pass before running any stage (ADR-0004).
+
 1. `publish_gate_atomic_publish_no_partial_outputs`
 
    - Setup: simulate a stage that writes multiple outputs; force an injected failure between "write"
@@ -1583,9 +2011,9 @@ defines the minimum IO contract for v0.1.
 | `runner`        | Inventory snapshot, scenario plan                                                                          | `ground_truth.jsonl`, `runner/actions/<action_id>/**` evidence; `runner/principal_context.json` (when enabled); (v0.2+: `plan/**`)                                                                                                         |
 | `telemetry`     | inventory snapshot, `inputs/range.yaml`, `inputs/scenario.yaml`, `ground_truth.jsonl` lifecycle timestamps | `raw_parquet/**`, `raw/**` (when raw preservation is enabled), `logs/telemetry_validation.json`                                                                                                                                            |
 | `normalization` | `raw_parquet/**`, mapping profiles                                                                         | `normalized/**`, `normalized/mapping_coverage.json`, `normalized/mapping_profile_snapshot.json`                                                                                                                                            |
-| `validation`    | `ground_truth.jsonl`, `normalized/**`, criteria pack snapshot                                              | `criteria/manifest.json`, `criteria/criteria.jsonl`, `criteria/results.jsonl`                                                                                                                                                              |
-| `detection`     | `normalized/**`, bridge mapping pack, Sigma rule packs                                                     | `bridge/**`, `detections/detections.jsonl`                                                                                                                                                                                                 |
-| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/**`                                      | `scoring/summary.json`                                                                                                                                                                                                                     |
+| `validation`    | `ground_truth.jsonl`, `normalized/ocsf_events/**`, criteria pack snapshot                                  | `criteria/criteria.jsonl`, `criteria/results.jsonl`, `criteria/manifest.json`                                                                                                                                                              |
+| `detection`     | `normalized/ocsf_events/**`, bridge mapping pack, Sigma rule packs                                         | `bridge/**`, `detections/detections.jsonl`, `detections/manifest.json`                                                                                                                                                                     |
+| `scoring`       | `ground_truth.jsonl`, `criteria/**`, `detections/**`, `normalized/ocsf_events/**`                          | `scoring/summary.json`, `scoring/coverage.json`, `logs/scoring_diagnostics.json`                                                                                                                                                           |
 | `reporting`     | `scoring/**`, `criteria/**`, `detections/**`, `manifest.json`, `inputs/**` (when regression enabled)       | `report/report.json`, `report/thresholds.json`, `report/run_timeline.md`, `report/**` (optional HTML + supplemental artifacts), `inputs/baseline_run_ref.json` (when regression enabled), `inputs/baseline/manifest.json` (when available) |
 | `signing`       | Finalized `manifest.json`, selected artifacts                                                              | `security/**` (checksums, signature, public key)                                                                                                                                                                                           |
 
@@ -1638,7 +2066,7 @@ Inventory input formats are defined by `lab.inventory.format` (supported: `json`
 `ansible_ini`).
 
 The inventory snapshot is treated as an input for determinism; the manifest records
-`lab.inventory_snapshot_sha256`.
+`manifest.lab.inventory_snapshot_sha256`.
 
 See the [lab providers specification][lab-providers-spec] for input format details and adapter
 requirements.
@@ -1654,6 +2082,11 @@ Environment configuration boundary (normative, v0.1):
   ready for telemetry collection and scenario execution (for example: telemetry agent bootstrap,
   collector configuration placement, baseline desired-state configuration (for example: DSC v3),
   readiness canaries).
+- When `runner.environment_config.mode="apply"`, the environment configurator MAY place, update, or
+  restart telemetry collectors/configuration as needed to satisfy Tier-2 ("Environment config
+  apply") in "Telemetry configuration tiers (v0.1; normative)". This work MUST complete before any
+  action enters the runner `prepare` lifecycle phase. Mid-run collector mutation via control-plane
+  RPC is forbidden in v0.1.
 - When such configuration is performed, the orchestrator MUST record an additive substage outcome
   `runner.environment_config` in `manifest.json` and, when
   `operability.health.emit_health_files=true`, in `logs/health.json`. It MUST also emit structured
@@ -1730,8 +2163,10 @@ for downstream normalization.
 Responsibilities:
 
 - Ensure raw Windows Event Log events are captured in raw/unrendered mode (`raw: true`) via
-  pre-provisioned collector configuration and runtime canary validation (not remote config injection
-  in v0.1).
+  pre-provisioned collector configuration (v0.1 baseline) and runtime canary validation. Per-run
+  collector reconfiguration is permitted only as Tier-2 `runner.environment_config` (apply mode)
+  before the runner `prepare` lifecycle phase; Tier-3 mid-run control-plane RPC reconfiguration is
+  forbidden in v0.1.
 - Validate agent liveness (dead-on-arrival detection) using OS-neutral collector self-telemetry
   heartbeats (substage: `telemetry.agent.liveness`).
 - Support Sysmon event collection (via Windows Event Log receiver).
@@ -1762,7 +2197,8 @@ Responsibilities:
 - Attach provenance fields: `metadata.source_type`, host identity, tool version, `scenario_id`,
   `run_id`.
 - Compute deterministic `metadata.event_id` / `metadata.uid` per [ADR-0002].
-- Emit `normalized/**` as the canonical OCSF event store.
+- Emit `normalized/ocsf_events/**` as the canonical OCSF event store (Parquet dataset; includes
+  `normalized/ocsf_events/_schema.json`).
 - Emit `normalized/mapping_coverage.json` summarizing field coverage and unmapped events.
 - Emit `normalized/mapping_profile_snapshot.json` capturing the effective mapping profile.
 

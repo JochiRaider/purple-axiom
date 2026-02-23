@@ -199,26 +199,27 @@ Conventions (normative):
 - Unless stated otherwise by a contract, fixture suites MUST compare JSON artifacts using the
   contract-defined canonical JSON rules (not text diffs).
 
-| Stage / area                                                             | Canonical fixture roots                                                                                                                                                               | Minimum fixture sets (normative)                                                                                                                        |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cross-cutting: glob matching (`glob_v1`)                                 | `tests/fixtures/glob_v1/vectors.json`                                                                                                                                                 | `glob_v1_vectors` (vectors file present and exercised)                                                                                                  |
-| Cross-cutting: event identity (`event_id.v1`)                            | `tests/fixtures/event_id/v1/`                                                                                                                                                         | `tier1_smoke`, `tier2_smoke`, `tier3_collision`, `source_type_distinct`                                                                                 |
-| Cross-cutting: redaction (`pa.redaction.v1`)                             | `tests/fixtures/redaction/v1/`                                                                                                                                                        | `allowlist_smoke`, `denylist_smoke`, `stable_hashes`                                                                                                    |
-| Cross-cutting: integration credentials (`pa.integration_credentials.v1`) | `tests/fixtures/integration_credentials/v1/`                                                                                                                                          | `logs_redaction_smoke`, `artifact_absence_smoke`, `missing_fails_closed`, `invalid_fails_closed`, `leak_detected_fails_closed`                          |
-| Cross-cutting: run results summary (`run_results`)                       | `tests/fixtures/run_results/`                                                                                                                                                         | `run_results_contract_and_hash`                                                                                                                         |
-| Cross-cutting: detection content bundle (`detection_content_release_v1`) | `tests/fixtures/content_bundles/detection_content_release_v1/`                                                                                                                        | `content_bundle_offline_validation_smoke`, `run_plus_content_bundle_validation_smoke`                                                                   |
-| `lab_provider`                                                           | `tests/fixtures/lab_providers/`                                                                                                                                                       | `provider_smoke`, `failure_mapping_smoke`                                                                                                               |
-| `runner`                                                                 | `tests/fixtures/runner/lifecycle/`<br>`tests/fixtures/runner/state_reconciliation/`<br>`tests/fixtures/runner/noise_profile/`                                                         | `lifecycle_smoke`, `invalid_transition_blocked`, `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`, `noise_profile_canonicalization_crlf_lf` |
-| telemetry                                                                | `tests/fixtures/telemetry/synthetic_marker/`<br>`tests/fixtures/unix_logs/`<br>`tests/fixtures/osquery/`                                                                              | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`, `egress_policy_canary_smoke`                                                              |
-| `normalization`                                                          | `tests/fixtures/normalization/`                                                                                                                                                       | `tier1_core_common_smoke`, `actor_identity_smoke`                                                                                                       |
-| `validation` (criteria evaluation)                                       | `tests/fixtures/criteria/`                                                                                                                                                            | `criteria_time_window_smoke`, `criteria_eval_smoke`, `criteria_authoring_compile_smoke`, `criteria_pack_lint_smoke`                                     |
-| `detection` (Sigma + Bridge)                                             | `tests/fixtures/sigma_rule_tests/<test_id>/`                                                                                                                                          | `rule_smoke`, `unsupported_feature_rejected`                                                                                                            |
-| `scoring`                                                                | `tests/fixtures/scoring/`                                                                                                                                                             | `regression_comparables_smoke`                                                                                                                          |
-| `reporting`                                                              | `tests/fixtures/reporting/defense_outcomes/`<br>`tests/fixtures/reporting/thresholds/`<br>`tests/fixtures/reporting/regression_compare/`<br>`tests/fixtures/reporting/report_render/` | `defense_outcomes_attribution_v1`, `thresholds_contract_and_ordering`, `regression_compare_smoke`, `report_render_smoke`                                |
-| `signing` (when enabled)                                                 | `tests/fixtures/signing/`                                                                                                                                                             | `checksums_smoke`, `tamper_detected`                                                                                                                    |
-| Content governance: golden datasets                                      | `tests/fixtures/golden_datasets/governance/`                                                                                                                                          | `valid_minimal_golden`, `missing_required_artifact_fails`                                                                                               |
-| Dataset exports: dataset release artifacts (workspace validation)        | `tests/fixtures/golden_datasets/releases/`                                                                                                                                            | `dataset_release_smoke_valid`, `dataset_release_schema_invalid_fails`                                                                                   |
-| CI harness: Content CI                                                   | `tests/fixtures/ci/content_ci_harness/`                                                                                                                                               | `smoke_pass`, `smoke_fail`                                                                                                                              |
+| Stage / area                                                             | Canonical fixture roots                                                                                                                                                                        | Minimum fixture sets (normative)                                                                                                                              |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cross-cutting: glob matching (`glob_v1`)                                 | `tests/fixtures/glob_v1/vectors.json`                                                                                                                                                          | `glob_v1_vectors` (vectors file present and exercised)                                                                                                        |
+| Cross-cutting: event identity (`event_id.v1`)                            | `tests/fixtures/event_id/v1/`                                                                                                                                                                  | `tier1_smoke`, `tier2_smoke`, `tier3_collision`, `source_type_distinct`                                                                                       |
+| Cross-cutting: redaction (`pa.redaction.v1`)                             | `tests/fixtures/redaction/v1/`                                                                                                                                                                 | `allowlist_smoke`, `denylist_smoke`, `stable_hashes`                                                                                                          |
+| Cross-cutting: integration credentials (`pa.integration_credentials.v1`) | `tests/fixtures/integration_credentials/v1/`                                                                                                                                                   | `logs_redaction_smoke`, `artifact_absence_smoke`, `missing_fails_closed`, `invalid_fails_closed`, `leak_detected_fails_closed`                                |
+| Cross-cutting: run lock (`pa.run_lock.v1`)                               | `tests/fixtures/run_lock/v1/`                                                                                                                                                                  | `run_lock_exclusive_single_writer`, `run_lock_break_glass_requires_explicit_force`                                                                            |
+| Cross-cutting: run results summary (`run_results`)                       | `tests/fixtures/run_results/`                                                                                                                                                                  | `run_results_contract_and_hash`                                                                                                                               |
+| Cross-cutting: detection content bundle (`detection_content_release_v1`) | `tests/fixtures/content_bundles/detection_content_release_v1/`                                                                                                                                 | `content_bundle_offline_validation_smoke`, `run_plus_content_bundle_validation_smoke`                                                                         |
+| `lab_provider`                                                           | `tests/fixtures/lab_providers/`                                                                                                                                                                | `provider_smoke`, `failure_mapping_smoke`                                                                                                                     |
+| `runner`                                                                 | `tests/fixtures/runner/lifecycle/`, `tests/fixtures/runner/state_reconciliation/`, `tests/fixtures/runner/noise_profile/`                                                                      | `lifecycle_smoke`, `invalid_transition_blocked`, `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`, `noise_profile_canonicalization_crlf_lf`       |
+| `telemetry`                                                              | `tests/fixtures/telemetry/synthetic_marker/`, `tests/fixtures/unix_logs/`, `tests/fixtures/osquery/`, `tests/fixtures/telemetry/egress_policy_canary/`, `tests/fixtures/telemetry/clock_sync/` | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`, `egress_policy_canary_smoke`, `clock_sync_skew_exceeded_smoke`, `clock_sync_unmeasurable_smoke` |
+| `normalization`                                                          | `tests/fixtures/normalization/`                                                                                                                                                                | `tier1_core_common_smoke`, `actor_identity_smoke`                                                                                                             |
+| `validation` (criteria evaluation)                                       | `tests/fixtures/criteria/`                                                                                                                                                                     | `criteria_time_window_smoke`, `criteria_eval_smoke`, `criteria_authoring_compile_smoke`, `criteria_pack_lint_smoke`                                           |
+| `detection` (Sigma + Bridge)                                             | `tests/fixtures/sigma_rule_tests/<test_id>/`                                                                                                                                                   | `rule_smoke`, `unsupported_feature_rejected`                                                                                                                  |
+| `scoring`                                                                | `tests/fixtures/scoring/`                                                                                                                                                                      | `regression_comparables_smoke`                                                                                                                                |
+| `reporting`                                                              | `tests/fixtures/reporting/defense_outcomes/`, `tests/fixtures/reporting/thresholds/`, `tests/fixtures/reporting/regression_compare/`, `tests/fixtures/reporting/report_render/`                | `defense_outcomes_attribution_v1`, `thresholds_contract_and_ordering`, `regression_compare_smoke`, `report_render_smoke`                                      |
+| `signing` (when enabled)                                                 | `tests/fixtures/signing/`                                                                                                                                                                      | `checksums_smoke`, `tamper_detected`                                                                                                                          |
+| Content governance: golden datasets                                      | `tests/fixtures/golden_datasets/governance/`                                                                                                                                                   | `valid_minimal_golden`, `missing_required_artifact_fails`                                                                                                     |
+| Dataset exports: dataset release artifacts (workspace validation)        | `tests/fixtures/golden_datasets/releases/`                                                                                                                                                     | `dataset_release_smoke_valid`, `dataset_release_schema_invalid_fails`                                                                                         |
+| CI harness: Content CI                                                   | `tests/fixtures/ci/content_ci_harness/`                                                                                                                                                        | `smoke_pass`, `smoke_fail`                                                                                                                                    |
 
 ## Unit tests
 
@@ -407,6 +408,52 @@ Scanner requirement (normative):
 - The scanning helper MUST enumerate scanned files in deterministic order (run-relative path sort).
 - The scanning helper MUST NOT print the sentinel secret value in any failure output.
 
+### Run lock (single-writer) and stale-lock break-glass
+
+The run lock is a correctness and determinism primitive: at most one orchestrator invocation may
+create or mutate a given run bundle at a time. Because the lock is best-effort release (may persist
+after crashes), v0.1 defines a manual break-glass recovery path with no automatic expiry (see
+`020_architecture.md` and ADR-0004).
+
+Content CI MUST execute this fixture set (no lab provider required).
+
+Fixture root: `tests/fixtures/run_lock/v1/`
+
+Required fixture cases (normative):
+
+- `run_lock_exclusive_single_writer`
+
+  - Setup: start two orchestrator invocations (or two lock-acquisition attempts via the
+    orchestrator’s RunLock wrapper) targeting the same `run_id`.
+  - Assertions:
+    - At most one acquisition succeeds.
+    - The losing acquisition fails deterministically.
+    - The losing acquisition MUST NOT create or mutate `runs/<run_id>/` (no `manifest.json`, no
+      published outputs).
+
+- `run_lock_break_glass_requires_explicit_force`
+
+  - Setup:
+    - Create `runs/.locks/<run_id>.lock` containing arbitrary bytes (simulate a dead/crashed owner).
+  - Assertions (no override):
+    - An invocation without the explicit override fails closed and MUST NOT create or mutate
+      `runs/<run_id>/`.
+  - Assertions (override):
+    - With the explicit override enabled (canonical CLI flag: `--force-run-lock`), the orchestrator
+      MUST:
+      - rename the existing lock file to `runs/.locks/<run_id>.lock.stale.0001` (or the next
+        deterministic ordinal),
+      - acquire a new lock at `runs/.locks/<run_id>.lock`, and
+      - record the override in `runs/<run_id>/manifest.json` under
+        `extensions.orchestrator.run_lock.break_glass_events[0]` with:
+        - `stale_lock_filename` equal to the renamed stale lock filename, and
+        - `stale_lock_sha256` equal to `sha256(file_bytes(stale_lock))`.
+
+Notes (non-normative):
+
+- The fixture harness MAY provide a test-only "acquire lock and initialize manifest, then exit"
+  entrypoint to isolate lock semantics from stage execution.
+
 ### Evaluator sandbox
 
 The evaluator sandbox is a trust boundary. The contract requirements live in
@@ -577,6 +624,35 @@ A rule unit test case MUST be representable as a directory:
       - `reason_domain` MUST be `"bridge_compiled_plan"`.
       - `reason_code` MUST be a stable token from the bridge reason code registry.
 
+#### Fixture format (v0.1+, correlation-capable)
+
+To support correlation rules that produce multiple detection instances (groups/windows), the test
+harness MUST also accept:
+
+- `schema_version` (required): `"pa:sigma_rule_test:v2"`
+- `rule_id` (required): string; MUST equal the Sigma `id`.
+- `expect` (required):
+  - `executable` (required): boolean
+  - When `executable: true`:
+    - `detection_instances` (required): array of expected detection instances (projection).
+      - Each entry MUST include:
+        - `first_seen_utc` (required): RFC 3339 UTC timestamp string.
+        - `last_seen_utc` (required): RFC 3339 UTC timestamp string.
+        - `matched_event_ids` (required): array of `metadata.event_id` strings.
+          - MUST be unique and sorted ascending.
+      - The `detection_instances` array MUST be sorted deterministically by:
+        1. `first_seen_utc` ascending
+        1. `last_seen_utc` ascending
+        1. `matched_event_ids` ascending by lexicographic comparison of the (already-sorted) array
+    - `match_count` (optional): integer; when present MUST equal `len(detection_instances)`.
+  - When `executable: false`:
+    - `non_executable_reason` (required):
+      - `reason_domain` MUST be `"bridge_compiled_plan"`.
+      - `reason_code` MUST be a stable token from the bridge reason code registry.
+
+For event-rule tests under v2, each `detection_instances[i].matched_event_ids` MUST have length 1.
+For correlation-rule tests under v2, `matched_event_ids` MAY have length >= 1.
+
 #### Execution semantics (normative)
 
 Given a test case:
@@ -585,10 +661,18 @@ Given a test case:
    Content CI.
 1. If compilation yields `executable=false`, the harness MUST compare the emitted
    `non_executable_reason` to `expect.non_executable_reason` and MUST NOT attempt evaluation.
-1. If compilation yields `executable=true`, the harness MUST evaluate the plan over `events.jsonl`
-   and compute the set of matched `metadata.event_id` values.
-1. The harness MUST fail the test if the matched event id set differs from
-   `expect.matched_event_ids` (set equality; ordering is canonicalized before comparison).
+1. If compilation yields `executable=true`:
+   - For `schema_version="pa:sigma_rule_test:v1"`:
+     - The harness MUST evaluate the plan over `events.jsonl` and compute the set of matched
+       `metadata.event_id` values.
+     - The harness MUST fail the test if the matched event id set differs from
+       `expect.matched_event_ids` (set equality; ordering is canonicalized before comparison).
+   - For `schema_version="pa:sigma_rule_test:v2"`:
+     - The harness MUST evaluate the plan over `events.jsonl` and collect the emitted detection
+       instances for this rule.
+     - The harness MUST compare a projection of each emitted instance: (`first_seen_utc`,
+       `last_seen_utc`, `matched_event_ids`) to `expect.detection_instances` using deterministic
+       ordering and canonicalization rules defined in the fixture format.
 
 #### Required golden rule test pack (verification hook)
 
@@ -598,6 +682,8 @@ The repository MUST include a golden rule test pack that runs in Content CI and 
 - One rule that should not match (`matched_event_ids: []`).
 - One rule that should be non-executable for a known `reason_code` (for example
   `reason_code="unroutable_logsource"`).
+- One correlation rule that should match and produce multiple detection instances (groups/windows),
+  expressed using `schema_version="pa:sigma_rule_test:v2"`.
 
 ### Runner and execution
 

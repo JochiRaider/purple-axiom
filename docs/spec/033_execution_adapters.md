@@ -36,7 +36,7 @@ This specification defines:
   - surfaces deterministic evidence metadata via contract-backed artifacts
 - How execution adapters participate in:
   - adapter selection + provenance recording (composition root, adapter registry)
-  - runner evidence emission (`runner/actions/<action_id>/...`)
+  - runner evidence publication (`runner/actions/<action_id>/...`) via the publish gate
 - Shared verification hooks:
   - a conformance test suite all execution adapters MUST pass
 
@@ -48,8 +48,8 @@ This specification does **not** define:
 
 ## Definitions
 
-- **Execution adapter**: a concrete implementation selected by `runner.type` that can execute one or
-  more action instances and emit deterministic evidence.
+- **Execution adapter**: a concrete implementation selected by `runner.type` by the orchestrator
+  composition root that can execute one or more action instances and emit deterministic evidence.
 - **Executor variant**: an adapter-internal execution mechanism selector. In v0.1 Atomic execution,
   this is `runner.atomic.executor` (for example `invoke_atomic_red_team`).
 - **Correlation marker**: a deterministic value computed by the runner (per action) and injected
@@ -62,6 +62,26 @@ This specification does **not** define:
   transport surfaces are supported/required for a given correlation carrier, and any constraints
   that force tokenized forms.
 
+### Executor variant normalization
+
+Executor variants appear in configuration (`runner.atomic.executor`), in adapter capability metadata
+(`supported_executor_variants[]`), in per-action evidence (`executor.json.executor`), and in
+criteria selectors (`selectors.executor`).
+
+Normative requirements:
+
+- Executor variant values MUST be normalized by:
+  1. trimming ASCII whitespace from both ends, and
+  1. lowercasing ASCII letters (`A-Z` -> `a-z`).
+- After normalization, the value MUST be non-empty and MUST match `^[a-z0-9_]+$`.
+  - Implementations MUST fail closed if normalization produces an invalid value.
+- `runner.atomic.executor` MUST be normalized at config validation time; the normalized value is the
+  effective executor variant.
+- `supported_executor_variants[]` entries MUST be normalized values.
+- Any executor variant recorded in evidence (for example
+  `runner/actions/<action_id>/executor.json.executor`) MUST equal the normalized value.
+- Executor-based criteria selection (`selectors.executor`) MUST compare normalized values.
+
 ## Architecture integration
 
 Execution adapters are extension adapters and MUST follow the adapter wiring/provenance rules in
@@ -71,10 +91,10 @@ Execution adapters are extension adapters and MUST follow the adapter wiring/pro
 
 Adapter provenance entry requirements (normative):
 
-- The execution adapter MUST be recorded as an adapter provenance binding with:
+- The orchestrator MUST record the execution adapter as an adapter provenance binding with:
   - `port_id = "runner-execution-adapter"` (id_slug_v1)
   - `adapter_id = <runner.type>` (id_slug_v1; v0.1: `atomic`)
-- Implementations MUST fail closed if `runner.type` selects an adapter that is not present in the
+- The orchestrator MUST fail closed if `runner.type` selects an adapter that is not present in the
   adapter registry.
 
 Notes:
@@ -90,17 +110,23 @@ To keep the runner core unpolluted:
 
 - The runner core MUST NOT contain backend-specific logic for executing Atomics, invoking cloud
   APIs, or driving 3rd-party frameworks.
-- The runner core MUST call the selected execution adapter through the stable interface defined here
+- The runner core MUST call the injected execution adapter through the stable interface defined here
   and MUST treat the adapter as the only component allowed to:
   - invoke backend tooling to perform technique execution, and
-  - emit backend-specific evidence artifacts under `runner/actions/<action_id>/`.
+  - produce backend-specific evidence artifacts for publication under `runner/actions/<action_id>/`.
 
 The runner core remains responsible for:
 
 - deterministic input resolution and hashing (`parameters.resolved_inputs_sha256`)
 - writing ground truth timeline rows (`ground_truth.jsonl`)
 - enforcing policy and stage boundaries (publish gate, redaction posture, egress posture)
-- selecting and recording adapter provenance and run-level version pins
+- publishing runner stage outputs via the publish gate (including adapter-owned artifacts)
+
+Publish-gate compliance (normative):
+
+- Execution adapters MUST NOT write contract-backed artifacts directly to their final run-bundle
+  paths. They MUST publish contract-backed artifacts only via the runner stage publish gate session
+  (stage writes are staged, validated, and then atomically promoted)
 
 ## Capability declaration
 
@@ -128,16 +154,16 @@ Each execution adapter MUST provide a **capability descriptor** (in-memory objec
   - v0.1 baseline: MUST include `synthetic_correlation_marker` for adapters that support that
     feature gate.
 - `correlation_carrier_matrix`: object describing adapter-specific correlation injection behavior.
-  - REQUIRED when `supported_correlation_carriers` includes `synthetic_correlation_marker`.
+  - REQUIRED when `supported_correlation_carriers` is non-empty.
   - `schema_version` MUST equal `pa:correlation-carrier-matrix:v1`.
   - See "Correlation carrier matrix" for the normative shape and semantics.
 - `supported_engines` (required): array of supported action engines.
   - Allowed values (v1): `atomic | caldera | custom`
   - Ordering: MUST be sorted ascending by UTF-8 byte order.
 - `supported_executor_variants` (optional): array of supported executor variant identifiers.
-  - Comparison: MUST be performed on lowercased values (see `035_validation_criteria.md` selector
-    semantics).
-  - Ordering: MUST be sorted ascending by UTF-8 byte order of the lowercased value.
+  - Comparison: MUST be performed on normalized values (see "Executor variant normalization" and
+    `035_validation_criteria.md` selector semantics).
+  - Ordering: MUST be sorted ascending by UTF-8 byte order of the normalized value.
   - v0.1 Atomic adapter: SHOULD include `invoke_atomic_red_team`, and MAY include `atomic_operator`
     and `other`.
 
@@ -202,8 +228,13 @@ correlation.
   `value_form` includes `token`, the adapter MUST ensure the token satisfies the transport’s
   declared constraints (when present).
 - Implementations MUST NOT perform heuristic correlation to compensate for missing required
-  transport surfaces. When required transports cannot be used, the run MUST surface deterministic
-  "missing telemetry" outcomes downstream.
+  transport surfaces.
+  - When required transports cannot be attempted, implementations MUST record the failure
+    deterministically (for example via the per-action side-effect ledger entry for the emission
+    attempt).
+  - When criteria packs are enabled, implementations MUST surface the loss of correlation as a
+    deterministic "missing telemetry" outcome by emitting a `criteria/results.jsonl` row with
+    `status=skipped`, `reason_domain="criteria_result"`, and `reason_code="missing_telemetry"`.
 
 #### Standard transport ids (v1, normative)
 
@@ -225,6 +256,16 @@ The following `transport_id` values are reserved for v1:
   transport and MUST ensure that transport results in marker-bearing telemetry when the carrier is
   enabled.
 - v0.1 RECOMMENDED minimum required transport: `marker-event-emission`.
+
+Correlation method mapping for v0.1 (normative):
+
+- For `adapter_id="atomic"` and `carrier_id="synthetic_correlation_marker"`, the configured
+  `runner.atomic.synthetic_correlation_marker.method` value selects the concrete implementation used
+  for the `marker-event-emission` transport.
+  - `auto` MUST resolve deterministically to one of `windows_eventlog | linux_syslog | filelog`
+    based on the resolved target OS (and any required config such as `filelog_path`).
+  - The `method` value is not a `transport_id`; it is an adapter-internal selector within
+    `marker-event-emission`.
 
 ### v0.1 carrier: `synthetic_correlation_marker`
 
@@ -275,23 +316,33 @@ The canonical runner evidence surface (paths + contract ids) is defined in:
 For v0.1 `engine="atomic"` actions, the runner MUST also implement the integration contract in
 `032_atomic_red_team_executor_integration.md`, including its "Contracted runner artifacts" section.
 
-This document normatively specifies only the adapter-owned portion of that surface.
+This document normatively specifies the execution adapter boundary for that surface: which
+per-action artifacts are runner-owned vs adapter-owned, and the adapter-owned minimum outputs.
 
-For each attempted action where the execution adapter is invoked, the adapter MUST ensure the run
-bundle contains, at minimum:
+For each action recorded in ground truth, the runner stage MUST ensure the run bundle contains the
+runner-owned, per-action evidence artifacts required by `025_data_contracts.md`, including at
+minimum:
 
-- `runner/actions/<action_id>/executor.json` (contract: `runner_executor_evidence`)
 - `runner/actions/<action_id>/side_effect_ledger.json` (contract: `side_effect_ledger`)
-- `runner/actions/<action_id>/side_effect_ledger.json` (contract: `side_effect_ledger`)
-  - Required across all engines/adapters. When unsupported/not applicable, implementations MUST
-    still emit the artifact at the standard path as a deterministic placeholder with
-    `placeholder.handling=absent` (see `090_security_safety.md`).
+  - Runner-owned. Required across all engines/adapters.
+  - Execution adapters MUST NOT write or rewrite the ledger file directly. Adapters MUST request
+    ledger entry appends via a runner-provided append API so the runner can satisfy the write-ahead
+    \+ flush requirements.
+  - When unsupported/not applicable, implementations MUST still emit the artifact at the standard
+    path as a deterministic placeholder with `placeholder.handling=absent` (see
+    `090_security_safety.md`).
 - `runner/actions/<action_id>/resolved_inputs_redacted.json` (contract: `resolved_inputs_redacted`)
-  - Required across all engines/adapters.
+  - Runner-owned. Required across all engines/adapters.
+  - Produced by the runner core input resolution step; execution adapters MUST treat it as an input.
   - When the resolved inputs evidence cannot be produced deterministically for this engine/adapter,
     implementations MUST still emit the artifact at the standard path as a deterministic placeholder
     with `placeholder.handling=absent` (see `090_security_safety.md`).
-  - Produced by the runner core input resolution step; execution adapters MUST treat it as an input.
+
+For each attempted action where the execution adapter is invoked, the adapter MUST produce (for
+publication under `runner/actions/<action_id>/`) the adapter-owned evidence artifacts required by
+this specification and any engine integration specification, at minimum:
+
+- `runner/actions/<action_id>/executor.json` (contract: `runner_executor_evidence`)
 - Transcript artifacts as configured (for example `stdout.txt`, `stderr.txt`) when enabled by the
   runner config and supported by the adapter.
   - If transcript capture is disabled, transcript artifacts MUST be absent (do not emit
@@ -353,9 +404,13 @@ Where:
   - resolved inputs artifact reference (`resolved_inputs_redacted.json`, when present)
   - effective runner config (with secrets withheld/redacted)
   - effective policy snapshot
+  - a publish-gate artifact sink for staging contract-backed artifacts for publication under
+    `runner/actions/<action_id>/`
+  - a runner-owned side-effect ledger append handle (write-ahead + flush) for recording
+    adapter-driven side effects
 - `execution_result` includes:
   - stable action phase outcomes and reason codes
-  - references to contract-backed evidence artifacts produced under `runner/actions/<action_id>/`
+  - references to contract-backed evidence artifacts published under `runner/actions/<action_id>/`
 
 ## v0.1 execution adapters
 
@@ -456,9 +511,11 @@ Minimum conformance checks (normative):
 
    - For each adapter, the suite MUST include fixtures that trigger common failure classes and
      assert the emitted `reason_domain` + `reason_code` values.
-   - Common failure classes (v0.1 baseline for Atomic execution) are enumerated in
-     `032_atomic_red_team_executor_integration.md` (for example: `unsupported_executor`,
-     `prereq_check_error`, `execution_failed`, `cleanup_failed`).
+   - For `adapter_id="atomic"`, the required action-level failure `reason_code` values are
+     enumerated in `032_atomic_red_team_executor_integration.md` ("Failure modes and stage
+     outcomes").
+   - Fixture directory names MAY use coarse failure-class labels, but asserted `reason_code` values
+     MUST match the owning integration specification.
 
 ### Fixture layout (required)
 
@@ -476,6 +533,7 @@ See `100_test_strategy_ci.md` ("Runner and execution") for fixture harness requi
 
 ## Changelog
 
-| Date       | Change                                |
-| ---------- | ------------------------------------- |
-| 2026-02-11 | Introduce execution adapter interface |
+| Date       | Change                                                                |
+| ---------- | --------------------------------------------------------------------- |
+| 2026-02-22 | Align publish-gate + adapter boundary; clarify executor normalization |
+| 2026-02-11 | Introduce execution adapter interface                                 |

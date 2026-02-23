@@ -87,6 +87,9 @@ Notes:
 
 - `tests/fixtures/telemetry/synthetic_marker/` (marker observability; `synthetic_marker_smoke`,
   `egress_policy_canary_smoke`)
+- `tests/fixtures/telemetry/clock_sync/`: simulate orchestrator↔asset clock skew (exceeded +
+  unmeasurable) and verify deterministic `telemetry.clock_sync` failure mapping plus presence/shape
+  of `telemetry_validation.json.clock_sync`.
 - TODO: specify fixture root for raw Windows event XML corpus used by telemetry collection tests
   (see `100_test_strategy_ci.md`, "Telemetry collection").
 
@@ -758,6 +761,16 @@ If you are comfortable restarting or hot-reloading collector configs per run, yo
 `run_id` and `scenario_id` at the collector via an attributes or resource processor, sourcing values
 from environment variables.
 
+v0.1 gating (normative):
+
+- This is a Tier-2 (environment config apply) mechanism: it is permitted only when
+  `runner.environment_config.enabled=true` and `runner.environment_config.mode="apply"`.
+- Any collector restart/hot-reload required to apply the per-run config MUST occur during the
+  `runner.environment_config` substage and MUST complete before the `runner` stage enters the
+  `prepare` lifecycle phase.
+- Mid-run collector reconfiguration via an active control plane is forbidden in v0.1:
+  `control_plane.enabled` MUST be `false`.
+
 Constraints:
 
 - Environment substitution is applied to scalar values at config parse time; dynamic per-event
@@ -801,6 +814,7 @@ State machine integration (required):
 - At minimum, telemetry validation MUST be able to emit the following substages when the
   corresponding checks are enabled:
   - `telemetry.disk.preflight`
+  - `telemetry.clock_sync`
   - `telemetry.agent.liveness`
   - `telemetry.windows_eventlog.raw_mode`
   - `telemetry.network.egress_policy`
@@ -909,6 +923,55 @@ is expected to be present and considered in-scope for the run.
   (`manifest.started_at_utc`/`manifest.ended_at_utc`) plus any configured padding/skew tolerance.
   Implementations MUST record the *effective* bounds actually used.
 
+Time model and synchronization (normative):
+
+This system uses multiple time sources. Implementations MUST treat them as distinct and MUST NOT
+silently substitute one for another:
+
+- **Orchestrator wall time** (`manifest.started_at_utc`, `manifest.ended_at_utc`)
+  - Source: orchestrator host clock.
+  - Used for: manifest bounds and `capture_window` derivation.
+- **Asset event time** (timestamps embedded in telemetry events; normalized OCSF field `time`)
+  - Source: target asset / agent timestamping.
+  - Used for: scoring joins, latency metrics, and any event-time semantics.
+- **Collector ingest time** (when the collector/receiver ingests an event; if present)
+  - Used for: debugging and provenance only.
+  - MUST NOT be used for scoring joins.
+
+Correctness model:
+
+- This pipeline primarily relies on **time-window membership** (capture window + join windows), not
+  strict total ordering.
+- Ordering by timestamps across multiple assets MUST be treated as a partial order; implementations
+  MUST NOT assume a strict total order across assets based on timestamps alone.
+
+Clock discipline policy:
+
+- Orchestrator and lab assets SHOULD run continuous clock synchronization (NTP or chrony).
+- The system tolerates limited skew via explicit tolerances, but large offsets MUST be detected and
+  recorded as first-class provenance.
+- When `telemetry.otel.clock_sync.enabled=true`, telemetry validation MUST measure
+  orchestrator↔asset clock offset for each expected asset at run start (at or before
+  `capture_window.start_time_utc`) and record evidence under
+  `logs/telemetry_validation.json.clock_sync` (see “Recommended additional fields (clock
+  synchronization)”).
+- If any expected asset is unmeasurable, or if any measured absolute offset exceeds
+  `telemetry.otel.clock_sync.max_abs_offset_seconds`, telemetry validation MUST emit substage
+  outcome `telemetry.clock_sync` with deterministic reason_code mapping (ADR-0005). Default behavior
+  is `fail_closed` (configurable).
+
+Offset estimation (recommended, deterministic):
+
+For each expected asset, take NTP midpoint samples (default `N=3`):
+
+- record `t0_ms` (orchestrator send), `t1_ms` (asset time at handling), `t2_ms` (orchestrator
+  receive)
+- compute `midpoint_ms = (t0_ms + t2_ms + 1) // 2`
+- compute `offset_ms = t1_ms - midpoint_ms`
+- choose the sample with minimum round-trip (`t2_ms - t0_ms`); tie-break by first-seen order
+
+Sign convention: positive `offset_ms` means the asset clock is ahead of the orchestrator.
+
 Correlation marker strategy (normative): `capture_window.correlation_marker_strategy` MUST describe
 any correlation marker(s) operators can use to join ground truth ↔ raw/simple ↔ normalized layers
 (for example, the synthetic correlation marker). Matching semantics for correlation markers MUST be
@@ -1011,6 +1074,48 @@ Recommended additional fields (network egress policy enforcement):
   - `probe_observed` (object)
     - `outcome` (one of `blocked | reachable | error`)
     - `error_code` (string, OPTIONAL; ASCII `lower_snake_case` when present)
+
+Recommended additional fields (clock synchronization / time health):
+
+`clock_sync` (object): evidence of orchestrator↔asset clock offset measurement at run start.
+
+- `performed` (bool): whether clock sync validation was executed.
+- `observed` (object):
+  - `expected_assets_count` (int)
+  - `unmeasurable_assets_count` (int)
+  - `exceeded_assets_count` (int)
+  - `max_abs_offset_ms` (int): `telemetry.otel.clock_sync.max_abs_offset_seconds * 1000`
+  - `per_asset` (array of object): MUST include every expected asset exactly once; MUST be sorted by
+    `asset_id` ascending.
+    - `asset_id` (string)
+    - `status` (string enum): `ok | offset_exceeded | unmeasurable | skipped`
+    - `offset_ms` (int; required when status in `ok|offset_exceeded`)
+    - `abs_offset_ms` (int; required when status in `ok|offset_exceeded`)
+    - `round_trip_ms` (int; optional, recommended)
+    - `measured_at_utc` (string, RFC3339 UTC; optional)
+    - `error_code` (string; required when status=`unmeasurable`) — stable token, e.g.
+      `probe_timeout | probe_unavailable | parse_error`
+    - `error_detail` (string; optional)
+    - `samples` (array of object; optional, recommended when measurable):
+      - `t0_ms` (int)
+      - `t1_ms` (int)
+      - `t2_ms` (int)
+      - `round_trip_ms` (int)
+      - `offset_ms` (int)
+      - `selected` (bool)
+- `evidence` (object): parameters/method used to perform the measurement.
+  - `method` (string): e.g., `ntp_midpoint_v1`
+  - `samples_per_asset` (int)
+  - `sample_selection` (string): e.g., `min_round_trip_ms`
+  - `measured_at_utc` (string, RFC3339 UTC)
+
+Determinism requirements (clock sync):
+
+- Offset math MUST use `midpoint_ms = (t0_ms + t2_ms + 1) // 2` and
+  `offset_ms = t1_ms - midpoint_ms`.
+- If multiple samples are taken, `selected=true` MUST be applied to exactly one sample per
+  measurable asset.
+- If multiple samples share the minimum `round_trip_ms`, the first such sample MUST be selected.
 
 Recommended additional fields (agent liveness / dead-on-arrival triage):
 

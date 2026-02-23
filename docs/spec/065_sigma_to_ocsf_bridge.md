@@ -519,8 +519,13 @@ For each selected Sigma rule document, bridge compilation MUST follow this pipel
      - `them`: exclude underscore-prefixed identifiers; expand in bytewise lexical order.
      - `pattern`: glob match; expand in bytewise lexical order.
    - Resolve correlation `rules` references to rule ids in the compilation input set:
-     - Prefer exact match on `id`; otherwise exact match on `title`.
-     - Missing or ambiguous references MUST fail closed as non-executable.
+     - Prefer exact match on Sigma `id`.
+     - Otherwise prefer exact match on Sigma `name` (rule reference token).
+     - Otherwise attempt exact match on Sigma `title` as a compatibility fallback.
+     - Missing or ambiguous references MUST fail closed as non-executable with
+       `reason_code="backend_compile_error"` and a stable error subcode prefix in the explanation:
+       - `PA_BRIDGE_MISSING_RULE_REFERENCE:` when no match exists.
+       - `PA_BRIDGE_AMBIGUOUS_RULE_REFERENCE:` when multiple matches exist.
 1. Apply mapping pack:
    - Apply field alias map + transforms for all referenced Sigma fields.
    - Parse and normalize correlation `timespan` to `timespan_ms`.
@@ -685,7 +690,7 @@ types:
 
 Supported correlation fields (minimum):
 
-- `correlation.rules` (referenced rule names and/or ids)
+- `correlation.rules` (referenced rule `id` values and/or rule `name` values)
 - `correlation.type`
 - `correlation.timespan`
 - `correlation.group-by`
@@ -696,8 +701,8 @@ Supported correlation fields (minimum):
 
 Out of scope in v0.1 (MUST be marked non-executable when encountered):
 
-- Sigma condition-string temporal aggregation semantics (including `count`, `near`, `within`, and
-  pipes) unless expressed as a Sigma correlation rule. These constructs MUST still be parsed into
+- Sigma condition-string temporal aggregation semantics (including `count`, `near`, and pipes)
+  unless expressed as a Sigma correlation rule. These constructs MUST still be parsed into
   `sigma_ast_v1` prior to classification.
 - Field modifiers that require binary transforms (example: `base64`, `utf16`, `windash`) unless the
   mapping pack has already materialized an equivalent normalized value.
@@ -885,6 +890,15 @@ When present, `backend.plan.correlation` MUST conform to the following minimal s
     - `<rule_id>` -> `<sigma_field_name>`
 - `generate`: optional boolean (default false)
 
+Timespan parsing (normative):
+
+- The bridge MUST parse `correlation.timespan` into `timespan_ms` using the duration grammar defined
+  in `060_detection_sigma.md`, "Correlation rule parsing".
+- `timespan_ms` MUST be an integer greater than 0.
+- If parsing fails or overflows a signed 64-bit millisecond count, the rule MUST be marked
+  non-executable with `reason_code=unsupported_value_type` and an explanation beginning with
+  `PA_BRIDGE_INVALID_TIMESPAN:`.
+
 Alias resolution stage (normative):
 
 - Values in `aliases` MUST be Sigma field names (pre-OCSF), not OCSF paths.
@@ -929,7 +943,7 @@ The bridge MUST use the following `reason_code` values for common failure modes:
 - Raw fallback required but disabled or blocked by policy -> raw_fallback_disabled
 - Unsupported modifier -> unsupported_modifier
 - Unsupported operator -> unsupported_operator
-- Unsupported value type -> unsupported_value_type
+- Unsupported value type (including invalid `correlation.timespan`) -> unsupported_value_type
 - Regex rejected by backend policy (example: exceeds regex limits) -> unsupported_regex
 - Correlation semantics encountered but not representable -> unsupported_correlation
 - Aggregation semantics encountered -> unsupported_aggregation

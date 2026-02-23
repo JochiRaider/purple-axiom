@@ -1212,8 +1212,8 @@ Illegal transitions:
 
 The authoritative drift signal for resume/retry decisions is:
 
-- Compare prior run manifest’s `lab.inventory_snapshot_sha256` to the current lab’s inventory
-  snapshot hash.
+- Compare prior run manifest’s `manifest.lab.inventory_snapshot_sha256` to the current lab’s
+  inventory snapshot hash.
 - Inventory snapshot hashing MUST use RFC 8785 JCS canonicalization + SHA-256, consistent with the
   project’s canonical JSON posture.
 
@@ -1306,7 +1306,7 @@ Derive state deterministically:
       request.
   - Actions:
     - atomically write `request_file`
-    - read prior `lab.inventory_snapshot_sha256`
+    - read prior `manifest.lab.inventory_snapshot_sha256`
     - compute current inventory snapshot hash deterministically (using the same snapshot + hashing
       method as the `lab_provider` stage)
     - emit audit event `runs.resume_retry_requested` (write-ahead; `outcome=allowed|denied`)

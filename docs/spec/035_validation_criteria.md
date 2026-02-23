@@ -47,11 +47,12 @@ This section is the stage-local view of:
 
 #### Required inputs
 
-| contract_id               | Where found                           | Required?                                                                                           |
-| ------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `range_config`            | `inputs/range.yaml`                   | required                                                                                            |
-| `ground_truth`            | `ground_truth.jsonl`                  | required                                                                                            |
-| `parquet_schema_snapshot` | `normalized/ocsf_events/_schema.json` | required (criteria evaluation query layer; consumes Parquet dataset at `normalized/ocsf_events/**`) |
+| contract_id               | Where found                                  | Required?                                                                                           |
+| ------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `range_config`            | `inputs/range.yaml`                          | required                                                                                            |
+| `ground_truth`            | `ground_truth.jsonl`                         | required                                                                                            |
+| `cleanup_verification`    | `runner/actions/*/cleanup_verification.json` | optional (present when `plan.cleanup=true` and `runner.atomic.cleanup.verify=true`)                 |
+| `parquet_schema_snapshot` | `normalized/ocsf_events/_schema.json`        | required (criteria evaluation query layer; consumes Parquet dataset at `normalized/ocsf_events/**`) |
 
 Notes:
 
@@ -61,7 +62,6 @@ Notes:
   when the Parquet dataset representation is present.
 - This stage consumes additional **non-contract** inputs in v0.1:
   - the criteria pack source material from configured `validation.criteria_pack.paths`
-  - optional runner artifacts such as `runner/actions/*/cleanup_verification.json`
 
 ### Config keys used
 
@@ -77,11 +77,7 @@ Notes:
 
 ### Isolation test fixture(s)
 
-- `tests/fixtures/criteria/packs/`
-- `tests/fixtures/criteria/eval/`
-- `tests/fixtures/criteria_eval_smoke/`
-- `tests/fixtures/criteria/authoring_compile/`
-- `tests/fixtures/criteria/lint/`
+- `tests/fixtures/criteria/` (see the fixture index for canonical suite-to-path mapping)
 
 See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
 mapping.
@@ -575,10 +571,10 @@ Pack validation before snapshot (normative):
 
 - Before snapshotting, the resolver MUST validate the selected pack directory:
   - Required files exist:
-    - `criteria/manifest.json`
-    - `criteria/criteria.jsonl`
-  - `criteria/manifest.json` MUST validate against the criteria pack manifest schema.
-  - `criteria/criteria.jsonl` MUST validate line-by-line against the criteria entry schema.
+    - `manifest.json`
+    - `criteria.jsonl`
+  - `manifest.json` MUST validate against the criteria pack manifest schema.
+  - `criteria.jsonl` MUST validate line-by-line against the criteria entry schema.
   - The resolver MUST recompute `criteria_sha256`, `manifest_sha256`, and `criteria.pack_sha256` and
     MUST fail closed if any recorded hash differs from the recomputed value.
   - The `criteria_pack_id` and `criteria_pack_version` values recorded inside `manifest.json` MUST
@@ -1705,6 +1701,17 @@ Probe normalization rules are deterministic:
 - Normalize newlines to `\n`.
 - Limit captured `stdout` and `stderr` to `max_output_bytes` (default 8192) and set
   `truncated: true` or `false`.
+
+Redaction posture (normative):
+
+- `runner/actions/<action_id>/cleanup_verification.json` is a contract-backed artifact and MUST
+  follow the structured redaction policy defined in [ADR-0003](../adr/ADR-0003-redaction-policy.md)
+  and [Security and safety](090_security_safety.md).
+- Captured transcript fields within the artifact (for example `stdout`, `stderr`, `args`, and
+  `error`) MUST be redacted using the same rules as other runner transcript artifacts.
+- If a transcript field cannot be made redaction-safe under policy, producers MUST emit
+  `pa.placeholder.v1` placeholders (preserving object shape) rather than omitting fields or writing
+  raw content.
 
 ### process_absent
 

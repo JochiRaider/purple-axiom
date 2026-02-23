@@ -73,6 +73,8 @@ Common keys:
   - `os` (required): `windows | linux | macos | bsd | appliance | other`
   - `role` (optional): `endpoint | server | domain_controller | network | sensor | other`
   - `hostname` (optional)
+  - `provider_asset_ref` (optional): provider-native identifier used for deterministic inventory
+    matching (when applicable).
   - `ip` (optional)
   - `vars` (object, optional): allowlisted, non-secret connection hints. See the
     [lab providers specification](015_lab_providers.md) "Canonical intermediate model".
@@ -500,9 +502,11 @@ Common keys:
 
 Notes:
 
-- Implication: v0.1 does not remotely modify agent collector configs; required invariants (for
-  example Windows `raw: true`) are enforced by pre-provisioned configuration plus telemetry
-  validation canaries.
+- Implication: v0.1 does not use a mid-run control plane to remotely modify agent collector configs;
+  required invariants (for example Windows `raw: true`) are enforced by pre-provisioned
+  configuration plus telemetry validation canaries. Per-run collector configuration
+  placement/restart is permitted only via `runner.environment_config` in apply mode before the
+  runner `prepare` lifecycle phase, and must be enabled + logged.
 - Control-plane functionality is out of scope for v0.1. The v0.1 pipeline MUST NOT require remote
   management credentials and MUST NOT depend on control-plane actions for correctness.
 
@@ -548,6 +552,17 @@ Common keys:
       - Ordered allowlist of metric names that qualify as a heartbeat. If none are observed for an
         expected asset within the startup grace, telemetry validation MUST fail closed with
         `reason_code=agent_heartbeat_missing` (see operability and stage outcome specifications).
+- `clock_sync` (optional object): configure orchestrator↔asset clock offset preflight and “time
+  health” provenance.
+  - `enabled` (optional bool, default: true): when true, telemetry validation performs the clock
+    offset preflight and emits `telemetry.clock_sync`.
+  - `max_abs_offset_seconds` (optional int, default: 1): maximum allowed absolute clock offset
+    between orchestrator and each expected asset.
+    - SHOULD be \<= the strictest scoring skew tolerance (see `070_scoring_metrics.md`).
+  - `fail_mode` (optional string enum, default: `fail_closed`): `fail_closed | warn_and_skip`
+    - `fail_closed`: offset violations/unmeasurable probes are run-fatal telemetry failures.
+    - `warn_and_skip`: emit `telemetry.clock_sync` as failed but allow downstream stages to proceed
+      (run becomes partial).
 - `baseline_profile` (optional)
   - `enabled` (optional, default: false)
     - When `true`, telemetry validation MUST enforce the telemetry baseline profile gate (see

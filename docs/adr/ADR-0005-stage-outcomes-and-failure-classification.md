@@ -529,25 +529,27 @@ Minimum artifacts when enabled: `raw_parquet/**`, `manifest.json`
 
 #### FATAL reason codes
 
-| Reason code                     | Severity | Description                                                                                            |
-| ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `required_source_missing`       | FATAL    | Required telemetry source is not installed or configured (for example Sysmon).                         |
-| `source_not_implemented`        | FATAL    | Source is enabled but not implemented in v0.1 (for example pcap placeholder).                          |
-| `baseline_profile_missing`      | FATAL    | Telemetry baseline profile gate enabled but profile is missing or unreadable.                          |
-| `baseline_profile_invalid`      | FATAL    | Telemetry baseline profile is present but fails contract validation.                                   |
-| `baseline_profile_not_met`      | FATAL    | Telemetry baseline profile requirements not met for one or more assets.                                |
-| `collector_startup_failed`      | FATAL    | Collector cannot start (config parse error, binding failure).                                          |
-| `checkpoint_store_corrupt`      | FATAL    | Checkpoint/offset store corruption prevents reliable ingestion or collector startup.                   |
-| `agent_heartbeat_missing`       | FATAL    | No agent self-telemetry heartbeat observed for one or more expected assets within startup grace.       |
-| `disk_free_space_insufficient`  | FATAL    | Disk preflight indicates insufficient free space for configured run budgets.                           |
-| `disk_metrics_missing`          | FATAL    | Disk preflight metrics could not be computed deterministically.                                        |
-| `resource_budgets_unconfigured` | FATAL    | Resource budget thresholds are required but not configured.                                            |
-| `resource_metrics_missing`      | FATAL    | Required collector self-telemetry measurements are missing.                                            |
-| `eps_target_not_met`            | FATAL    | Sustained EPS target was not met, preventing deterministic budget measurement window selection.        |
-| `egress_canary_unconfigured`    | FATAL    | Egress canary endpoint is required but not configured.                                                 |
-| `egress_probe_unavailable`      | FATAL    | Egress probe could not be executed on the asset.                                                       |
-| `egress_violation`              | FATAL    | Egress probe succeeded despite deny policy.                                                            |
-| `raw_xml_unavailable`           | FATAL^   | Required raw XML (or equivalent raw record) cannot be acquired when strict fail-closed policy applies. |
+| Reason code                     | Severity | Description                                                                                                            |
+| ------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `required_source_missing`       | FATAL    | Required telemetry source is not installed or configured (for example Sysmon).                                         |
+| `source_not_implemented`        | FATAL    | Source is enabled but not implemented in v0.1 (for example pcap placeholder).                                          |
+| `baseline_profile_missing`      | FATAL    | Telemetry baseline profile gate enabled but profile is missing or unreadable.                                          |
+| `baseline_profile_invalid`      | FATAL    | Telemetry baseline profile is present but fails contract validation.                                                   |
+| `baseline_profile_not_met`      | FATAL    | Telemetry baseline profile requirements not met for one or more assets.                                                |
+| `collector_startup_failed`      | FATAL    | Collector cannot start (config parse error, binding failure).                                                          |
+| `checkpoint_store_corrupt`      | FATAL    | Checkpoint/offset store corruption prevents reliable ingestion or collector startup.                                   |
+| `agent_heartbeat_missing`       | FATAL    | No agent self-telemetry heartbeat observed for one or more expected assets within startup grace.                       |
+| `clock_offset_exceeded`         | FATAL    | One or more expected assets have a measured clock offset exceeding `telemetry.otel.clock_sync.max_abs_offset_seconds`. |
+| `clock_offset_unmeasurable`     | FATAL    | Clock offset could not be measured for one or more expected assets (probe unavailable/timeout/unparseable).            |
+| `disk_free_space_insufficient`  | FATAL    | Disk preflight indicates insufficient free space for configured run budgets.                                           |
+| `disk_metrics_missing`          | FATAL    | Disk preflight metrics could not be computed deterministically.                                                        |
+| `resource_budgets_unconfigured` | FATAL    | Resource budget thresholds are required but not configured.                                                            |
+| `resource_metrics_missing`      | FATAL    | Required collector self-telemetry measurements are missing.                                                            |
+| `eps_target_not_met`            | FATAL    | Sustained EPS target was not met, preventing deterministic budget measurement window selection.                        |
+| `egress_canary_unconfigured`    | FATAL    | Egress canary endpoint is required but not configured.                                                                 |
+| `egress_probe_unavailable`      | FATAL    | Egress probe could not be executed on the asset.                                                                       |
+| `egress_violation`              | FATAL    | Egress probe succeeded despite deny policy.                                                                            |
+| `raw_xml_unavailable`           | FATAL^   | Required raw XML (or equivalent raw record) cannot be acquired when strict fail-closed policy applies.                 |
 
 ^ Policy-dependent override:
 
@@ -606,6 +608,26 @@ If this substage fails, the telemetry stage MUST fail closed. The telemetry stag
 `reason_code` for this substage MUST be constrained to:
 
 - `agent_heartbeat_missing` (no self-telemetry heartbeat observed within startup grace)
+
+#### Clock synchronization (substage: `telemetry.clock_sync`)
+
+- This substage measures orchestrator↔asset clock offset at run start and records evidence in
+  `logs/telemetry_validation.json.clock_sync` (see `040_telemetry_pipeline.md`).
+- Default behavior is `fail_closed` (configurable via `telemetry.otel.clock_sync.fail_mode`).
+- If this substage fails and `fail_mode=fail_closed`, telemetry stage MUST fail closed.
+- The telemetry stage MAY use the same reason_code as the substage outcome.
+
+reason_code for this substage MUST be constrained to:
+
+- `clock_offset_exceeded`
+- `clock_offset_unmeasurable`
+
+Deterministic reason selection:
+
+- If any expected asset has a measurable offset with
+  `abs_offset_ms > (telemetry.otel.clock_sync.max_abs_offset_seconds * 1000)`, reason_code MUST be
+  `clock_offset_exceeded`.
+- Else if any expected asset is unmeasurable, reason_code MUST be `clock_offset_unmeasurable`.
 
 #### Disk preflight (substage: `telemetry.disk.preflight`)
 
@@ -716,6 +738,12 @@ run limits). Implementations MAY record substages.
 | Reason code             | Severity  | Description                                                       |
 | ----------------------- | --------- | ----------------------------------------------------------------- |
 | `criteria_query_failed` | NON-FATAL | A specific criteria query failed; mark that criterion as `error`. |
+
+#### SKIPPED reason codes
+
+| Reason code               | Severity  | Description                                                                                 |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `normalized_store_reused` | NON-FATAL | Validation was skipped because a compatible normalized store was reused (replay fast path). |
 
 #### Run limits (substage: `validation.run_limits`)
 

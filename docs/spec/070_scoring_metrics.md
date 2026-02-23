@@ -268,7 +268,9 @@ Unless otherwise specified, the scoring stage MUST compute and emit these denomi
 `scoring/summary.json`:
 
 - `executed_actions_total`: count of action instances whose `lifecycle.execute.phase_outcome` is not
-  `"skipped"` in `ground_truth.jsonl`.
+  `"skipped"` in `ground_truth.jsonl`, excluding action instances that are explicitly out of scope
+  for scoring by criteria gating (criteria result rows with `status="skipped"` and a `reason_code`
+  whose mapping marks `In executed denominator? = No`; see "Reason code to gap category mapping").
 - `executed_techniques_total`: count of distinct `technique_id` values across the executed actions.
 - `detections_total`: detection hits considered by scoring (rows in `detections/detections.jsonl`
   after deterministic dedupe). Only applicable when the detections stage is enabled.
@@ -412,6 +414,18 @@ Join precedence (normative). For each detection hit, candidates MUST be evaluate
      (v0.1),
    - and (when available) the hit’s matched events originate from the action’s target asset. In this
      case the `match_quality` MUST be `"weak_signal"`.
+
+Time model and synchronization assumptions (normative).
+
+Scoring joins compare timestamps from different sources (ground-truth action timestamps vs telemetry
+event-time). These comparisons assume the orchestrator and lab assets are within a bounded clock
+offset.
+
+- This assumption MUST be enforced upstream by telemetry validation (`telemetry.clock_sync`) (see
+  `040_telemetry_pipeline.md`).
+- Implementations MUST NOT silently "fix up" clock drift inside scoring joins.
+- If `telemetry.clock_sync` fails with `fail_mode=fail_closed`, scoring MUST be blocked by upstream
+  failure (see ADR-0005) and MUST NOT interpret latency-based metrics.
 
 Candidate selection and tie-breaks (normative).
 
@@ -735,7 +749,31 @@ gating and score computation.
 
 Input is the `(reason_domain, reason_code)` pair.
 
-- For v0.1, this mapping applies to `reason_domain="bridge_compiled_plan"` only.
+- For v0.1, this mapping applies to:
+  - `reason_domain="criteria_result"` (from `criteria/results.jsonl` rows with `status="skipped"`)
+  - `reason_domain="bridge_compiled_plan"` (from the compiled Sigma plan surface)
+
+#### Criteria result skip reasons (normative)
+
+The scoring stage MUST map `criteria/results.jsonl.reason_code` values (where
+`criteria/results.jsonl.reason_domain="criteria_result"` and `status="skipped"`) as follows:
+
+| `criteria_result.reason_code`     | Gap category             | In executed denominator? |
+| --------------------------------- | ------------------------ | ------------------------ |
+| `criteria_unavailable`            | `criteria_unavailable`   | Yes                      |
+| `criteria_misconfigured`          | `criteria_misconfigured` | Yes                      |
+| `criteria_disabled`               | `null`                   | No                       |
+| `action_not_executed`             | `null`                   | No                       |
+| `action_failed_before_evaluation` | `null`                   | No                       |
+
+Rules (normative):
+
+- If the Gap category is `null`, scoring MUST NOT emit a pipeline-health gap entry for the action,
+  and the action MUST be excluded from `executed_actions_total`.
+- Any `criteria_result.reason_code` not listed in the table MUST be treated as
+  `criteria_misconfigured` for gap classification purposes and SHOULD trigger a warning log.
+
+#### Bridge compiled plan reasons (normative)
 
 The scoring stage MUST map compiled plan `non_executable_reason.reason_code` values to gap
 categories as follows:

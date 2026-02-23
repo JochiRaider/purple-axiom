@@ -48,6 +48,15 @@ and **file-based stage coordination**.
   - Lock primitive (normative): atomic creation of `runs/.locks/<run_id>.lock` (reserved for
     lockfiles; not part of any run bundle).
   - Failure to acquire the run lock MUST be treated as `lock_acquisition_failed` (see ADR-0005).
+  - Stale-lock liveness (normative; manual break-glass, deterministic):
+    - v0.1 MUST NOT use time-based lock expiry/leases.
+    - Implementations that expose a CLI MUST provide a default-off `--force-run-lock` override.
+    - When `--force-run-lock` is set and the primary lock path exists, the orchestrator MUST follow
+      the deterministic "rename to `.lock.stale.<nnnn>` then retry" procedure specified in
+      `020_architecture.md` ("Port: `RunLock`").
+    - When break-glass succeeds and `manifest.json` is writable, the orchestrator MUST record an
+      event under `extensions.orchestrator.run_lock.break_glass_events[]` (see
+      `020_architecture.md`).
 
 Non-goal (v0.1): a required long-running daemon or scheduler control plane.
 

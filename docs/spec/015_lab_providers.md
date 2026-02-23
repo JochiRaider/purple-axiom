@@ -158,13 +158,16 @@ Hashing and encoding (normative):
 
 - The published `lab_inventory_snapshot.json` bytes MUST equal `canonical_json_bytes(snapshot)` as
   defined in the data contracts specification (RFC 8785 / JCS; UTF-8; no BOM; no trailing newline).
-- `lab.inventory_snapshot_sha256` MUST be computed as `sha256(file_bytes)` over the published
-  snapshot bytes and recorded in the run manifest as the authoritative inventory hash for downstream
-  stages.
+- `manifest.lab.inventory_snapshot_sha256` MUST be computed as `sha256(file_bytes)` over the
+  published snapshot bytes. The value MUST be provided to the orchestrator for recording in the run
+  manifest as the authoritative inventory hash for downstream stages.
   - The recorded value MUST use the canonical SHA-256 digest string form defined in
     `025_data_contracts.md`: `sha256:<lowercase_hex>` (regex `^sha256:[0-9a-f]{64}$`).
   - Implementations MUST NOT emit raw hex (no `sha256:` prefix) for this field. Consumers MUST treat
     any value that does not match the regex above as invalid.
+- The snapshot object MUST NOT include volatile run-scoped metadata fields (for example `run_id` or
+  `generated_at_utc`). Implementations MUST NOT wrap/envelope the snapshot with additional fields;
+  the published snapshot bytes are the canonical hash basis.
 
 Contract validation:
 
@@ -229,10 +232,10 @@ Normative requirements:
 Reassignment semantics:
 
 - If an operator reuses an existing `asset_id` to refer to a materially different host profile, this
-  is treated as a range configuration change. The resulting `lab.inventory_snapshot_sha256` SHOULD
-  be expected to change, and downstream regression comparisons that join on `target_asset_id` will
-  no longer be semantically comparable unless explicitly opted into by the operator (future config
-  surface).
+  is treated as a range configuration change. The resulting `manifest.lab.inventory_snapshot_sha256`
+  SHOULD be expected to change, and downstream regression comparisons that join on `target_asset_id`
+  will no longer be semantically comparable unless explicitly opted into by the operator (future
+  config surface).
 
 ## Provider contract
 
@@ -244,9 +247,10 @@ At run start, a provider implementation MUST:
 1. Write the snapshot into a staging location under the run bundle.
 1. Validate the snapshot invariants and any available schema contract as a publish gate.
 1. Atomically publish the snapshot to its final run bundle location.
-1. Compute `lab.inventory_snapshot_sha256` over the published snapshot bytes (recorded as a
+1. Compute `manifest.lab.inventory_snapshot_sha256` over the published snapshot bytes (recorded as a
    `sha256:<lowercase_hex>` digest string).
-1. Record provider identity and the authoritative inventory snapshot reference in the manifest:
+1. Provide provider identity and the authoritative inventory snapshot reference to the orchestrator.
+   The orchestrator MUST record the following fields in `manifest.json`:
    - `manifest.lab.provider` (string): effective provider id (`lab.provider`).
    - `manifest.lab.assets` (string): run-relative POSIX path to the published snapshot
      (`logs/lab_inventory_snapshot.json`).
@@ -311,8 +315,8 @@ Non-fatal connectivity degradations MUST be recorded only as a substage
 Connectivity checks are optional for v0.1. When implemented:
 
 - They MUST execute after the inventory snapshot is published (read-only).
-- They MUST NOT affect `lab.inventory_snapshot_sha256` and MUST NOT modify the published inventory
-  snapshot.
+- They MUST NOT affect `manifest.lab.inventory_snapshot_sha256` and MUST NOT modify the published
+  inventory snapshot.
 - They MAY include an "addressability" canary that warns when a resolved asset is missing a usable
   connection address (runner dependency):
   - An asset is "addressable" when at least one of `ip` or `hostname` is present in the published
@@ -335,8 +339,9 @@ a deterministic `lab_inventory_snapshot.json` into the run bundle.
 
 When API-based providers are enabled in v0.3+, they MUST preserve run reproducibility:
 
-- Providers MUST record a deterministic `inventory_source_ref` in the manifest (for example: API
-  endpoint and query parameters), with all secrets redacted or omitted.
+- The provider stage MUST compute a deterministic `inventory_source_ref` (for example: API endpoint
+  and query parameters), with all secrets redacted or omitted, and provide it to the orchestrator.
+  The orchestrator MUST record it in the manifest.
   - When recorded under the lab manifest namespace, the field SHOULD be
     `manifest.lab.inventory_source_ref`.
 - Credential handling (normative):
@@ -560,7 +565,7 @@ Implementations MUST include fixtures that demonstrate deterministic adapter beh
     proving `assets[].hostname` is populated from `vars.ansible_host` when unset (and
     `provider_asset_ref` preserves the inventory host identifier when unset).
 - A golden `lab_inventory_snapshot.json` produced from those fixtures.
-- A golden `lab.inventory_snapshot_sha256` computed over the published snapshot bytes
+- A golden `manifest.lab.inventory_snapshot_sha256` computed over the published snapshot bytes
   (`canonical_json_bytes(lab_inventory_snapshot.json)`), encoded as `sha256:<lowercase_hex>`.
 
 ## Ludus
@@ -593,7 +598,7 @@ Recommended approach:
     - The `sensitive = true` marker is declared in Terraform configuration, but it is not a
       guarantee that values are redacted in machine-readable output.
 - If a Terraform output wrapper is used, the `json` adapter MUST unwrap the selected output as
-  specified in “Input format: `json`”.
+  specified in "Input format: `json`".
 - Map the selected inventory export to the canonical `lab.assets` model.
 
 ## Vagrant
@@ -629,7 +634,7 @@ Determinism and safety notes (normative where stated):
 
 Reference implementation (optional):
 
-- TODO: provide a small “vagrant inventory exporter” that emits the canonical JSON inventory format
+- TODO: provide a small "vagrant inventory exporter" that emits the canonical JSON inventory format
   (including stable ordering) from a maintained machine map, so teams can stand up a range quickly.
 
 ## Manual

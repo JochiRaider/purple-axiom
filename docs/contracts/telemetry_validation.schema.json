@@ -26,6 +26,9 @@
       "format": "date-time",
       "description": "UTC timestamp when this summary was generated (RFC 3339)."
     },
+    "capture_window": {
+      "$ref": "#/$defs/capture_window"
+    },
     "assets": {
       "type": "array",
       "description": "Per-asset telemetry validation results. Producers SHOULD sort by asset_id (UTF-8 byte order) for determinism.",
@@ -43,6 +46,36 @@
     }
   },
   "$defs": {
+    "capture_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_time_utc",
+        "end_time_utc",
+        "correlation_marker_strategy"
+      ],
+      "properties": {
+        "start_time_utc": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Inclusive lower bound of the telemetry validation window (RFC 3339 UTC)."
+        },
+        "end_time_utc": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Exclusive upper bound of the telemetry validation window (RFC 3339 UTC)."
+        },
+        "correlation_marker_strategy": {
+          "type": "object",
+          "description": "Description of correlation markers used to join layers (MAY be empty).",
+          "additionalProperties": true
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
     "asset_result": {
       "type": "object",
       "additionalProperties": false,
@@ -97,6 +130,9 @@
           "properties": {
             "canary_observed_at": {
               "$ref": "#/$defs/canary_observed_at"
+            },
+            "clock_sync": {
+              "$ref": "#/$defs/clock_sync_evidence"
             },
             "extensions": {
               "type": "object",
@@ -216,6 +252,279 @@
               }
             ]
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "check_id": {
+                "const": "telemetry.clock_sync"
+              }
+            },
+            "required": [
+              "check_id"
+            ]
+          },
+          "then": {
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "failed"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "reason_code",
+                    "evidence"
+                  ],
+                  "properties": {
+                    "reason_code": {
+                      "enum": [
+                        "clock_offset_exceeded",
+                        "clock_offset_unmeasurable"
+                      ]
+                    },
+                    "evidence": {
+                      "required": [
+                        "clock_sync"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "success"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "evidence"
+                  ],
+                  "properties": {
+                    "evidence": {
+                      "required": [
+                        "clock_sync"
+                      ],
+                      "properties": {
+                        "clock_sync": {
+                          "$ref": "#/$defs/clock_sync_measured_evidence"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "failed"
+                    },
+                    "reason_code": {
+                      "const": "clock_offset_exceeded"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "reason_code"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "evidence": {
+                      "properties": {
+                        "clock_sync": {
+                          "$ref": "#/$defs/clock_sync_measured_evidence"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "failed"
+                    },
+                    "reason_code": {
+                      "const": "clock_offset_unmeasurable"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "reason_code"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "evidence": {
+                      "properties": {
+                        "clock_sync": {
+                          "$ref": "#/$defs/clock_sync_unmeasurable_evidence"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clock_sync_sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "t0_ms",
+        "t1_ms",
+        "t2_ms",
+        "round_trip_ms",
+        "offset_ms"
+      ],
+      "properties": {
+        "t0_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Orchestrator send time (milliseconds)."
+        },
+        "t1_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Asset clock reading at request handling (milliseconds)."
+        },
+        "t2_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Orchestrator receive time (milliseconds)."
+        },
+        "round_trip_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Round-trip time for the sample (milliseconds)."
+        },
+        "offset_ms": {
+          "type": "integer",
+          "description": "Clock offset sample (asset - orchestrator_midpoint), in milliseconds."
+        },
+        "selected": {
+          "type": "boolean",
+          "description": "True when this sample was selected as the representative sample for the check."
+        }
+      }
+    },
+    "clock_sync_measured_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_abs_offset_ms",
+        "offset_ms",
+        "abs_offset_ms"
+      ],
+      "properties": {
+        "max_abs_offset_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Configured maximum allowed absolute offset (milliseconds)."
+        },
+        "offset_ms": {
+          "type": "integer",
+          "description": "Measured offset in milliseconds (positive means asset is ahead of orchestrator)."
+        },
+        "abs_offset_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Absolute value of offset_ms, in milliseconds."
+        },
+        "round_trip_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Round-trip time for the selected sample (milliseconds)."
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Stable method identifier (for example, ntp_midpoint_v1)."
+        },
+        "measured_at_utc": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when the representative sample was taken (RFC 3339)."
+        },
+        "samples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/clock_sync_sample"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "clock_sync_unmeasurable_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_abs_offset_ms",
+        "error_code"
+      ],
+      "properties": {
+        "max_abs_offset_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Configured maximum allowed absolute offset (milliseconds)."
+        },
+        "error_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Stable token for probe failure (for example, probe_timeout, probe_unavailable, parse_error)."
+        },
+        "error_detail": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Optional diagnostic detail."
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Stable method identifier (for example, ntp_midpoint_v1)."
+        },
+        "measured_at_utc": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when the probe attempt occurred (RFC 3339)."
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "clock_sync_evidence": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/clock_sync_measured_evidence"
+        },
+        {
+          "$ref": "#/$defs/clock_sync_unmeasurable_evidence"
         }
       ]
     },

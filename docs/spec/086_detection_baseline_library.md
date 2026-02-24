@@ -68,6 +68,8 @@ Pinning requirement (verification hook):
 
 - The repository MUST designate at least one pinned "CI baseline" `(baseline_id, baseline_version)`
   pair to be used by Run CI.
+  - This pinning is a CI harness configuration input (for example for `ci-run`); it is not an
+    orchestrator run configuration key.
 
 ## Relationship to reporting regression baselines
 
@@ -114,12 +116,14 @@ Requirements (v0.2+; normative when used):
 - If compatibility cannot be established (for example, `normalized/mapping_profile_snapshot.json` is
   missing), the orchestrator MUST NOT assume the normalized store is current. It MUST either:
   - execute `normalization` from `raw_parquet/**` (if present), or
-  - fail closed with a deterministic `reason_code` (see `020_architecture.md`).
+  - fail closed with deterministic `reason_code="normalized_store_incompatible"` (see
+    `ADR-0005-stage-outcomes-and-failure-classification.md`).
 
 Observability (normative):
 
 - The run manifest stage outcomes MUST record `normalization` and `validation` as `status="skipped"`
-  with a stable `reason_code` when the fast path is taken.
+  with `reason_code="normalized_store_reused"` when the fast path is taken (see
+  `ADR-0005-stage-outcomes-and-failure-classification.md`).
 
 ## Terminology
 
@@ -186,6 +190,10 @@ A BDP directory MUST have the following structure:
 
 Where `<baseline_root>` is `<workspace_root>/exports/baselines/<baseline_id>/<baseline_version>/`.
 
+Within a BDP, `run/` is an in-package mirror of the source run bundle root. Consumers that interpret
+`run/manifest.json` MUST resolve run-relative paths (for example `normalized/**`) relative to the
+`run/` directory (not the BDP root).
+
 ### Required artifacts
 
 A BDP MUST include:
@@ -221,8 +229,11 @@ small and useful for debugging):
 
 - `normalized/mapping_coverage.json` -> `run/normalized/mapping_coverage.json`
 - `normalized/mapping_profile_snapshot.json` -> `run/normalized/mapping_profile_snapshot.json`
-  - Strongly RECOMMENDED for `replay` fast-path compatibility checks. If absent, consumers MUST
-    treat the normalized store as lacking version-control provenance for short-circuiting.
+  - Strongly RECOMMENDED for `replay` fast-path compatibility checks.
+  - The BDP builder MUST compute `replay_fast_path_eligible` in the BDP manifest as:
+    - `true` iff `run/normalized/mapping_profile_snapshot.json` is present, is not a placeholder,
+      and validates against the `mapping_profile_snapshot` contract.
+    - otherwise `false`.
 - `logs/telemetry_validation.json` -> `run/logs/telemetry_validation.json`
 - `inputs/telemetry_baseline_profile.json` -> `run/inputs/telemetry_baseline_profile.json`
 - `security/redaction_policy_snapshot.json` -> `run/security/redaction_policy_snapshot.json`
@@ -280,6 +291,7 @@ The manifest MUST include, at minimum:
 - `baseline_id`, `baseline_version`
 - `created_at` (UTC RFC3339 with `Z`)
 - `profile` (MUST be `detection_eval_v1`)
+- `replay_fast_path_eligible` (boolean; computed at BDP creation time; see below)
 - `source_run` object:
   - `run_id` (UUID)
   - `run_manifest_sha256` (MUST be `sha256:<lowercase_hex>`; digest of the exact `run/manifest.json`
@@ -291,6 +303,17 @@ The manifest MUST include, at minimum:
 - `integrity` object:
   - `checksums_path` (MUST be `security/checksums.txt`)
   - `package_tree_sha256` (digest of the package file tree basis; see below)
+
+`replay_fast_path_eligible` semantics (normative):
+
+- The value MUST be:
+  - `true` iff `run/normalized/mapping_profile_snapshot.json` is present in the package, is not a
+    placeholder artifact, and validates against the `mapping_profile_snapshot` contract.
+  - otherwise `false`.
+
+This field is a first-class manifest signal for whether a BDP contains sufficient normalization
+provenance to be considered for the orchestrator `replay` normalized-input fast path (subject to the
+orchestrator's compatibility checks on `ocsf_version` and `mapping_profile_sha256`).
 
 The manifest MAY include user-facing metadata such as `description`, `tags`, and `blessing`.
 
@@ -316,6 +339,7 @@ If `summary` is present, it MUST be internally consistent with the package conte
   "baseline_package_uuid": "2d6a9a7a-6ce5-4cb5-b2c8-4c2fb4f0793a",
   "created_at": "2026-01-28T00:00:00Z",
   "profile": "detection_eval_v1",
+  "replay_fast_path_eligible": true,
   "description": "Known-good Windows process telemetry covering T1059.",
   "tags": ["windows", "process", "t1059"],
   "source_run": {
@@ -408,7 +432,7 @@ This state machine is derived from the filesystem (no separate state store requi
 Authoritative paths:
 
 - Published root: `<workspace_root>/exports/baselines/<baseline_id>/<baseline_version>/`
-- Staging root: `<workspace_root>/exports/baselines/<baseline_id>/.staging/<baseline_version>/`
+- Staging root: `<workspace_root>/exports/.staging/baselines/<baseline_id>/<baseline_version>/`
 - Trash root (optional if implemented):
   `<workspace_root>/exports/baselines/.trash/<baseline_id>/<baseline_version>/`
 
@@ -488,7 +512,7 @@ To create a BDP, the builder MUST:
 1. Validate required source artifacts exist and are not placeholders.
 1. Select the normalized events representation per the rules in this spec (fail closed on conflict).
 1. Create a staging directory at:
-   `<workspace_root>/exports/baselines/<baseline_id>/.staging/<baseline_version>/`
+   `<workspace_root>/exports/.staging/baselines/<baseline_id>/<baseline_version>/`
    - The staging directory MUST be empty.
      - If the staging directory exists and is non-empty, creation MUST fail (RECOMMENDED error:
        `baseline_create_in_progress`). Implementations MUST NOT delete or reuse non-empty staging
@@ -496,6 +520,10 @@ To create a BDP, the builder MUST:
    - Creation MUST fail if the final `<baseline_root>` already exists (conflict).
 1. Copy required artifacts into the staging directory under `run/`, preserving relative paths and
    bytes.
+1. Compute `replay_fast_path_eligible` for the package:
+   - `true` iff `run/normalized/mapping_profile_snapshot.json` is present in staging, is not a
+     placeholder artifact, and validates against the `mapping_profile_snapshot` contract.
+   - otherwise `false`.
 1. If signing is enabled, write `security/public_key.ed25519` into the staging directory before
    computing `integrity.package_tree_sha256`.
 1. Compute `integrity.package_tree_sha256` from the staged file tree basis (as defined in
@@ -519,8 +547,10 @@ Implementations MAY support updating the following manifest fields in place:
 Updates MUST:
 
 - preserve immutable identity fields (`baseline_id`, `baseline_version`, `source_run`, `profile`,
-  `artifact_refs`)
+  `artifact_refs`, `replay_fast_path_eligible`)
 - rewrite `baseline_package_manifest.json` as canonical JSON bytes
+- `replay_fast_path_eligible` matches recomputation from package contents (presence +
+  non-placeholder + schema validity of `run/normalized/mapping_profile_snapshot.json`).
 - recompute `security/checksums.txt`
 - update signature if present (or remove signature if signing is not configured)
 - recompute `integrity.package_tree_sha256` only if any file included in the *tree-basis selection*

@@ -52,15 +52,31 @@ This specification does **not** define:
   composition root that can execute one or more action instances and emit deterministic evidence.
 - **Executor variant**: an adapter-internal execution mechanism selector. In v0.1 Atomic execution,
   this is `runner.atomic.executor` (for example `invoke_atomic_red_team`).
-- **Correlation marker**: a deterministic value computed by the runner (per action) and injected
-  into telemetry so detections can be joined back to ground truth (for example
-  `extensions.synthetic_correlation_marker` and `extensions.synthetic_correlation_marker_token`).
+- **Correlation marker**: a deterministic value computed by the runner (per action) and carried
+  through ground truth + telemetry so detections can be joined back to the action (see "Namespace
+  disambiguation" below).
 - **Correlation carrier**: a runner-declared correlation mechanism (capability id) that defines how
   a correlation marker is produced, recorded, and surfaced into telemetry (for example
   `synthetic_correlation_marker`).
 - **Correlation carrier matrix**: an adapter-declared, deterministic mapping that specifies which
   transport surfaces are supported/required for a given correlation carrier, and any constraints
   that force tokenized forms.
+
+Namespace disambiguation (synthetic correlation marker): the synthetic correlation marker spans
+three distinct namespaces: (1) the ground-truth record fields
+`extensions.synthetic_correlation_marker` / `extensions.synthetic_correlation_marker_digest` stored
+in `ground_truth.jsonl` (runner output), (2) the normalized OCSF envelope fields
+`metadata.extensions.purple_axiom.synthetic_correlation_marker` / `_token` stored in the normalized
+event store, and (3) the raw transport carrier surface (event body / Windows EventData / filelog
+line), which is transport-specific and has no fixed field path. This specification uses the ground
+truth + normalized paths only to name the canonical marker values; correlation carrier matrices
+describe the raw transport carrier surface.
+
+| Namespace                | Path                                                                       | Owner                                   |
+| ------------------------ | -------------------------------------------------------------------------- | --------------------------------------- |
+| Ground-truth record      | `extensions.synthetic_correlation_marker` / `_token`                       | `ground_truth.jsonl` (runner output)    |
+| Normalized OCSF envelope | `metadata.extensions.purple_axiom.synthetic_correlation_marker` / `_token` | normalized event store                  |
+| Raw transport carrier    | event body / Windows EventData / filelog line                              | transport-specific; no fixed field path |
 
 ### Executor variant normalization
 
@@ -94,6 +110,9 @@ Adapter provenance entry requirements (normative):
 - The orchestrator MUST record the execution adapter as an adapter provenance binding with:
   - `port_id = "runner-execution-adapter"` (id_slug_v1)
   - `adapter_id = <runner.type>` (id_slug_v1; v0.1: `atomic`)
+- The orchestrator MUST record `capabilities_sha256` for this binding per `020_architecture.md`
+  ("Adapter provenance recording (v0.1)"), computed by the orchestrator host as SHA-256 over RFC
+  8785 (JCS) canonical JSON of the adapter capability descriptor returned by the adapter.
 - The orchestrator MUST fail closed if `runner.type` selects an adapter that is not present in the
   adapter registry.
 
@@ -178,11 +197,13 @@ Determinism requirements (normative):
 ## Correlation carriers
 
 A correlation carrier is a runner-declared mechanism for embedding a correlation marker into
-telemetry.
+telemetry (raw transport carrier surfaces are transport-specific and distinct from the ground-truth
+and normalized OCSF field paths; see "Definitions").
 
 Correlation injection is adapter-specific: different execution adapters (detonator types) use
 different transport surfaces (process arguments, environment variables, HTTP headers, marker events,
-etc.). Purple Axiom MUST make this explicit via a per-adapter correlation carrier matrix.
+etc.). Purple Axiom MUST make this explicit via a per-adapter correlation carrier matrix that
+describes those raw transport surfaces.
 
 ### Correlation carrier matrix (normative)
 
@@ -209,9 +230,13 @@ correlation.
 - `transports[]` entry:
   - `transport_id` (required; `id_slug_v1`): transport surface identifier (see below).
   - `required` (required): boolean.
-  - `value_form` (required): `canonical | token | either`
-    - `canonical`: transport MUST carry `extensions.synthetic_correlation_marker`.
-    - `token`: transport MUST carry `extensions.synthetic_correlation_marker_token`.
+  - `value_form` (required): `canonical | digest | either`
+    - `canonical`: transport MUST carry the canonical marker value (ground truth:
+      `extensions.synthetic_correlation_marker`; normalized OCSF:
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker`).
+    - `token`: transport MUST carry the marker token value (ground truth:
+      `extensions.synthetic_correlation_marker_digest`; normalized OCSF:
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`).
     - `either`: transport MAY carry either form.
   - `constraints` (optional): object describing carrier limits that influence value form selection.
     - `max_chars` (optional): integer (character count; for these marker forms this is equivalent to
@@ -225,16 +250,20 @@ correlation.
   `025_data_contracts.md`.
 - For any transport where `value_form` includes `canonical`, the adapter MUST ensure the canonical
   marker satisfies the transport’s declared constraints (when present). For any transport where
-  `value_form` includes `token`, the adapter MUST ensure the token satisfies the transport’s
+  `value_form` includes `digest`, the adapter MUST ensure the token satisfies the transport’s
   declared constraints (when present).
 - Implementations MUST NOT perform heuristic correlation to compensate for missing required
   transport surfaces.
   - When required transports cannot be attempted, implementations MUST record the failure
     deterministically (for example via the per-action side-effect ledger entry for the emission
     attempt).
-  - When criteria packs are enabled, implementations MUST surface the loss of correlation as a
-    deterministic "missing telemetry" outcome by emitting a `criteria/results.jsonl` row with
-    `status=skipped`, `reason_domain="criteria_result"`, and `reason_code="missing_telemetry"`.
+  - When criteria evaluation is enabled and a matching criteria entry exists for the action, loss of
+    correlation MUST surface via normal criteria evaluation semantics: `criteria_result.status=fail`
+    with `signals[].status=unmatched` (gap category `missing_telemetry`). The runner MUST NOT emit
+    `criteria/results.jsonl` rows.
+  - If the telemetry dataset itself is unavailable (stage-level `input_missing` /
+    `artifact_missing`), the pipeline MUST fail the stage before any `criteria/results.jsonl` is
+    written.
 
 #### Standard transport ids (v1, normative)
 
@@ -273,7 +302,7 @@ If enabled (`runner.atomic.synthetic_correlation_marker.enabled=true`):
 
 - The runner MUST compute and record **both** of the following per action:
   - `extensions.synthetic_correlation_marker` (canonical marker string; see `025_data_contracts.md`)
-  - `extensions.synthetic_correlation_marker_token` (deterministic derived token; see
+  - `extensions.synthetic_correlation_marker_digest` (deterministic derived token; see
     `025_data_contracts.md`)
 - Marker-bearing telemetry emission is adapter-specific and MUST follow the adapter’s declared
   correlation carrier matrix:
@@ -507,6 +536,15 @@ Minimum conformance checks (normative):
      - any adapter-specific ordered arrays (for Atomic execution, see
        `032_atomic_red_team_executor_integration.md` cleanup verification ordering requirements).
 
+1. **Capabilities provenance pinning**
+
+   - The suite MUST assert that the manifest adapter provenance entry for
+     `port_id="runner-execution-adapter"` includes `capabilities_sha256`.
+   - The suite MUST compute RFC 8785 (JCS) canonical JSON of the adapter capability descriptor
+     returned by `capabilities()` and assert that:
+     - `capabilities_sha256 == "sha256:" + sha256_hex(canonical_json_bytes(capabilities))`.
+   - The suite MUST fail if `capabilities_sha256` is missing or does not match the computed value.
+
 1. **Stable reason_code mapping on common failures**
 
    - For each adapter, the suite MUST include fixtures that trigger common failure classes and
@@ -523,6 +561,13 @@ Each adapter MUST provide conformance fixtures under:
 
 - `tests/fixtures/runner/<adapter_id>/`
 
+Notes:
+
+- This fixture root is for execution adapter conformance only. Runner-stage synthetic correlation
+  marker computation fixtures live under `tests/fixtures/runner/synthetic_marker/`, and telemetry
+  ingestion + normalization fixtures live under `tests/fixtures/telemetry/synthetic_marker/` (see
+  `100_test_strategy_ci.md` "Fixture index").
+
 Minimum required fixture categories:
 
 - `determinism/` — repeated-run fixtures that assert stable identity bases (for example stable
@@ -533,7 +578,8 @@ See `100_test_strategy_ci.md` ("Runner and execution") for fixture harness requi
 
 ## Changelog
 
-| Date       | Change                                                                |
-| ---------- | --------------------------------------------------------------------- |
-| 2026-02-22 | Align publish-gate + adapter boundary; clarify executor normalization |
-| 2026-02-11 | Introduce execution adapter interface                                 |
+| Date       | Change                                                                               |
+| ---------- | ------------------------------------------------------------------------------------ |
+| 2026-02-23 | Disambiguate synthetic correlation marker namespaces; pin capabilities in provenance |
+| 2026-02-22 | Align publish-gate + adapter boundary; clarify executor normalization                |
+| 2026-02-11 | Introduce execution adapter interface                                                |

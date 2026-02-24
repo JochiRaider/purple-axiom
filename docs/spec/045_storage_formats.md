@@ -397,6 +397,15 @@ Retention:
   profile and from `security/checksums.txt` (see ADR-0009 and `025_data_contracts.md`).
   Implementations MAY prune `raw_parquet/` after successful normalization, subject to disk budget
   policy.
+- Pruning constraint (normative): implementations MUST NOT prune a `raw_parquet/` dataset directory
+  that is referenced by any persisted artifact in the run bundle via a raw provenance pointer
+  (`raw_ref` or `raw_refs`, see ADR-0002 and `025_data_contracts.md`).
+  - If any normalized event emits `raw_ref.kind="dataset_row_v1"` with `raw_ref.path` under
+    `raw_parquet/`, the referenced dataset MUST be retained for as long as the normalized event
+    store is retained.
+  - If an implementation prunes a referenced dataset, it MUST first rewrite all affected events to
+    remove/replace the dangling pointer (for example by downgrading to identity tier 3 with
+    `raw_ref=null`).
 
 Purpose:
 
@@ -418,7 +427,7 @@ Purpose:
 - `scoring/summary.json`
 - `normalized/mapping_profile_snapshot.json`
 - `normalized/mapping_coverage.json`
-- `bridge/coverage.json` (optional; when detection is enabled)
+- `bridge/coverage.json` (REQUIRED when detection is enabled)
 - `report/report.json`
 - `report/thresholds.json`
 
@@ -476,7 +485,9 @@ from the v0.1 default export profile and from `security/checksums.txt` (see ADR-
 `025_data_contracts.md`).
 
 - `runs/<run_id>/raw_parquet/windows_eventlog/`
-- `runs/<run_id>/raw_parquet/linux_syslog/`
+- `runs/<run_id>/raw_parquet/unix/journald/`
+- `runs/<run_id>/raw_parquet/unix/syslog/`
+- `runs/<run_id>/raw_parquet/unix/audit/`
 - `runs/<run_id>/raw_parquet/osquery/`
 - `runs/<run_id>/raw_parquet/simple_events/` (debug-friendly simple telemetry view; intentionally
   lossy)

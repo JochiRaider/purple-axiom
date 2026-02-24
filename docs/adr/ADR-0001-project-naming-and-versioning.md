@@ -231,8 +231,6 @@ consumers MUST enforce byte-for-byte equality (when both values are present):
 - `manifest.versions.scenario_id` MUST equal `manifest.scenario.scenario_id`.
 - `manifest.versions.scenario_version` MUST equal `manifest.scenario.scenario_version`, when
   `manifest.scenario.scenario_version` is present.
-- `manifest.versions.ocsf_version` MUST equal `manifest.normalization.ocsf_version`, when
-  `manifest.normalization.ocsf_version` is present.
 - When `normalized/mapping_profile_snapshot.json` is present, its `ocsf_version` MUST equal
   `manifest.versions.ocsf_version`.
 - When `bridge/mapping_pack_snapshot.json` is present, its `ocsf_version` MUST equal

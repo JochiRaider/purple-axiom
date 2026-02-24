@@ -2,7 +2,7 @@
 title: Normalization to OCSF
 description: Defines OCSF normalization rules, versioning policy, and required artifacts.
 status: draft
-+category: spec
+category: spec
 tags: [ocsf, normalization, mapping, versioning]
 related:
   - 025_data_contracts.md
@@ -63,13 +63,11 @@ Notes:
 - The canonical normalized store is the Parquet dataset at `normalized/ocsf_events/**` and is
   contract-backed via the required schema snapshot at `normalized/ocsf_events/_schema.json`
   (`contract_id=parquet_schema_snapshot`).
-- `normalized/ocsf_events.jsonl` is a legacy compatibility representation. If an implementation
-  emits JSONL for debugging or interchange, it MUST be treated as **non-contract** and MUST NOT be
-  required by downstream stages (detection/scoring/reporting).
 
 ### Config keys used
 
 - `normalization.*` (OCSF pinning, mapping profiles, dedupe, output format)
+- `scoring.thresholds.min_tier1_field_coverage` (Tier 1 coverage state computation)
 
 ### Default fail mode and outcome reasons
 
@@ -80,9 +78,6 @@ Notes:
   (`normalization`)".
 
 ### Isolation test fixture(s)
-
-- `tests/fixtures/normalization/mapping_unit/`
-- `tests/fixtures/normalization/mapping_pack_conformance/`
 
 See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
 mapping.
@@ -120,10 +115,6 @@ Conformance requirements (v0.1):
 - `manifest.versions.ocsf_version` MUST be the authoritative OCSF version pin for the run.
 - Every run MUST record the effective `ocsf_version` used for normalization in
   `manifest.versions.ocsf_version`.
-- Producers MAY also record `manifest.normalization.ocsf_version` for compatibility, but consumers
-  MUST treat `manifest.versions.ocsf_version` as authoritative.
-  - If both are present, `manifest.normalization.ocsf_version` MUST equal
-    `manifest.versions.ocsf_version` byte-for-byte.
 - `normalized/mapping_profile_snapshot.json.ocsf_version` MUST be present when
   `normalized/mapping_profile_snapshot.json` is emitted and MUST equal
   `manifest.versions.ocsf_version` byte-for-byte.
@@ -171,9 +162,9 @@ Required steps for changing the pinned OCSF version (normative):
   unmapped:
   - if the source record carries:
     - `metadata.extensions.purple_axiom.synthetic_correlation_marker`, and/or
-    - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, (the same values are
+    - `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`, (the same values are
       also recorded in ground truth action records as `extensions.synthetic_correlation_marker` and
-      `extensions.synthetic_correlation_marker_token`; see `025_data_contracts.md`), the normalizer
+      `extensions.synthetic_correlation_marker_digest`; see `025_data_contracts.md`), the normalizer
       MUST preserve them verbatim at the same paths on the emitted envelope
   - the synthetic correlation marker fields MUST NOT be used as part of `metadata.event_id`
     computation
@@ -224,7 +215,7 @@ Terminology note (normative):
 Optional envelope extensions (v0.1):
 
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string)
-- `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (string)
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` (string)
 - `metadata.extensions.purple_axiom.raw_refs` (array of `raw_ref` objects; MAY be present when an
   emitted normalized event is derived from multiple raw records; see
   [ADR-0002](../adr/ADR-0002-event-identity-and-provenance.md))
@@ -258,10 +249,6 @@ be driven by the osquery scheduled query name:
   routing table captured in `normalized/mapping_profile_snapshot.json`.
 - v0.1 routing defaults (mapping profile MAY override explicitly):
   - `process_events` -> Process Activity (`class_uid: 1007`)
-  - `file_events` -> File System Activity (`class_uid: 1001`)
-  - `socket_events` -> Network Activity (`class_uid: 4001`)
-- v0.1 routing defaults (mapping profile MAY override explicitly):
-  - `process_events` -> Process Activity (`class_uid: 1007`)
   - `process_etw_events` -> Process Activity (`class_uid: 1007`)
   - `file_events` -> File System Activity (`class_uid: 1001`)
   - `ntfs_journal_events` -> File System Activity (`class_uid: 1001`)
@@ -276,7 +263,7 @@ Unrouted behavior:
   (analytics-tier `raw_parquet/osquery/**` and, when enabled, evidence-tier `raw/osquery/**`).
 - If an unknown `query_name` row carries either
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` or
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, the normalizer MUST still
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`, the normalizer MUST still
   emit a minimal normalized event record with `class_uid = 0`, preserve whichever marker fields are
   present, and include the required envelope fields per "Required envelope (Purple Axiom contract)".
 
@@ -434,12 +421,22 @@ Purpose:
   - event class routing (`class_uid`)
   - missing core fields (per class)
   - unmapped or dropped events
+  - Tier 1 run coverage quality gate inputs (`tier1_field_coverage_pct`,
+    `tier1_field_coverage_state`)
 
 Requirements (normative):
 
 - MUST validate against `mapping_coverage.schema.json`.
 - MUST reference the mapping profile via `mapping_profile_sha256` so coverage is attributable to
   mapping changes vs telemetry changes.
+- MUST include the Tier 1 run coverage gate surface (computed deterministically):
+  - `tier1_field_coverage_pct` (unitless fraction in `[0.0, 1.0]`, rounded to 4 decimal places; MAY
+    be `null` when indeterminate)
+  - `tier1_field_coverage_state` in `{ ok, below_threshold, indeterminate_no_events }`
+  - Invariant: `tier1_field_coverage_pct` MUST be `null` if and only if
+    `tier1_field_coverage_state = indeterminate_no_events`.
+  - Computation MUST follow the Tier 1 scoping + presence semantics in `055_ocsf_field_tiers.md`.
+  - Threshold comparison MUST use `scoring.thresholds.min_tier1_field_coverage` (default `0.80`).
 - `normalized/mapping_coverage.json` is the canonical evidence artifact for normalization-layer gap
   classification (example: `normalization_gap`) and MUST be suitable for direct inclusion in
   `evidence_refs[].artifact_path` as `normalized/mapping_coverage.json` (run-relative path, POSIX
@@ -457,11 +454,13 @@ Regression comparable normalization metrics (normative):
 
 At minimum, normalization MUST expose the following comparable metrics for regression analysis:
 
-- `tier1_field_coverage_pct` (overall; unitless fraction in `[0.0, 1.0]`), derived from
-  `normalized/mapping_coverage.json` and computed over the in-scope normalized events as defined in
-  the OCSF field tiers spec.
+- `normalized/mapping_coverage.json.tier1_field_coverage_pct` (overall; unitless fraction in
+  `[0.0, 1.0]`; MAY be `null` only when
+  `normalized/mapping_coverage.json.tier1_field_coverage_state = indeterminate_no_events`).
+- `normalized/mapping_coverage.json.tier1_field_coverage_state` (overall) in
+  `{ ok, below_threshold, indeterminate_no_events }`.
 - Per-source `tier1_field_coverage_pct` (same units), keyed by `metadata.source_type` values and
-  derived from `normalized/mapping_coverage.json`.
+  emitted directly in `normalized/mapping_coverage.json`.
 
 These comparable metrics MUST be attributable to a specific mapping profile via
 `mapping_profile_sha256` so mapping drift can be distinguished from telemetry drift
@@ -491,8 +490,9 @@ deterministically.
 - Tier 0 (CI gate): validate normalized events against the Purple Axiom envelope contract
   (`ocsf_event_envelope.schema.json`) and required invariants (stable identity, required fields, and
   deterministic time representation).
-- Tier 1 (CI gate): compute Tier 1 field coverage from `normalized/mapping_coverage.json` per the
-  OCSF field tiers spec and enforce configured regression gates.
+- Tier 1 (CI gate): validate the Tier 1 field coverage surface in `normalized/mapping_coverage.json`
+  (`tier1_field_coverage_pct` and `tier1_field_coverage_state`) per the OCSF field tiers spec and
+  enforce configured regression gates.
 - Tier 2 (deep validation): validate selected classes or sources against pinned OCSF schema
   artifacts.
 - Tier 3 (storage): enforce Parquet schema + partitioning + deterministic ordering for long-term

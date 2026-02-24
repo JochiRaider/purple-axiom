@@ -57,8 +57,6 @@ Notes:
 - Detection evaluation is defined over the normalized store.
   - Detection consumes the Parquet dataset at `normalized/ocsf_events/**` and relies on the
     contract-backed schema snapshot at `normalized/ocsf_events/_schema.json`.
-  - JSONL (`normalized/ocsf_events.jsonl`) is legacy compatibility only and MUST NOT be used when
-    the Parquet dataset representation is present.
 - Rule inputs (Sigma YAML) and mapping packs are pack-like **non-contract** inputs; the stage
   snapshots the effective mapping pack material to `bridge/mapping_pack_snapshot.json`.
 
@@ -135,7 +133,7 @@ Deterministic rule loading requirements (normative):
     - in both cases: separators MUST be normalized to `/`
   - Before parsing/loading, the discovered file list MUST be sorted by the stable key tuple:
     1. `i` ascending
-    1. `ruleset_path` ascending (UTF-8 bytewise lexical ordering, no locale)
+    1. `ruleset_path` ascending (Contract Spine bytewise UTF-8 lexical ordering)
 - Each loaded rule MUST have a non-empty `id`.
 - Rule IDs MUST be unique within the effective loaded ruleset. If duplicate `id` values are
   detected, the detection stage MUST fail closed with stage-level reason code
@@ -161,7 +159,7 @@ The detection engine MUST:
   (case-insensitive).
 - Normalize extracted IDs to uppercase (example: `attack.t1059.001` → `T1059.001`).
 - Populate `technique_ids` in detection instances as a deduplicated array sorted ascending using
-  bytewise UTF-8 lexical ordering (no locale).
+  Contract Spine bytewise UTF-8 lexical ordering.
 
 ### Sub-technique handling
 
@@ -312,8 +310,7 @@ Expansion rules (normative):
   identifiers, in deterministic order.
 - `N of <pattern>` ranges over all search identifiers whose names match `<pattern>` (glob `*`), in
   deterministic order.
-- Deterministic order is ascending bytewise lexical order of the identifier string (UTF-8, no locale
-  collation).
+- Deterministic order is Contract Spine bytewise UTF-8 lexical ordering.
 
 If a pattern expansion is empty, the rule MUST be marked non-executable with
 `reason_code="backend_compile_error"`.
@@ -377,9 +374,11 @@ a `sigma_ast_v1` correlation object.
 Canonical correlation fields (normative):
 
 - `correlation.type` (required; string): correlation type.
-- `correlation.rules` (required; array of strings): referenced rules by `id` or `name` (rule
-  reference token). As a compatibility fallback, the bridge MAY also attempt resolution by `title`
-  when `name` is absent (see `065_sigma_to_ocsf_bridge.md` for deterministic resolution order).
+- `correlation.rules` (required; array of strings): referenced rules by reference token. During
+  bridge compilation, each reference token MUST be resolved deterministically by exact-match lookup
+  in the order `id` → `name` → `title` (compat fallback). If a token cannot be resolved
+  unambiguously, the correlation rule MUST be marked non-executable with
+  `reason_code="backend_compile_error"`.
 - `correlation.timespan` (required; string): duration (parsed to milliseconds by the bridge as
   `timespan_ms`).
 - `correlation.group-by` or `correlation.group_by` (optional; array of strings): group-by keys.
@@ -647,19 +646,19 @@ fallback as declared in the dataset manifest).
   - `first_seen_utc` and `last_seen_utc` MUST be serialized as UTC RFC 3339 strings in the fixed
     form `YYYY-MM-DDTHH:MM:SS.mmmZ` (exactly 3 fractional digits).
   - Timestamp values MUST be derived from matched event-time, not ingest-time.
-- Each detection instance MUST sort `matched_event_ids` using bytewise UTF-8 lexical ordering
-  (case-sensitive, no locale).
-- If present, each detection instance MUST sort `technique_ids` using bytewise UTF-8 lexical
-  ordering (case-sensitive, no locale).
-- The file MUST be ordered deterministically by the following stable key tuple (bytewise UTF-8
-  lexical ordering for all string comparisons):
+- Each detection instance MUST sort `matched_event_ids` using Contract Spine bytewise UTF-8 lexical
+  ordering.
+- If present, each detection instance MUST sort `technique_ids` using Contract Spine bytewise UTF-8
+  lexical ordering.
+- The file MUST be ordered deterministically by the following stable key tuple (Contract Spine
+  bytewise UTF-8 lexical ordering for all string comparisons):
   1. `rule_id` ascending
   1. `first_seen_utc` ascending
   1. `last_seen_utc` ascending
   1. `matched_event_ids` ascending by lexicographic comparison of the (already-sorted) string array
-- Each JSONL line MUST be encoded as UTF-8 and MUST end with a single LF (`\n`).
-- Implementations SHOULD serialize each object without insignificant whitespace and with a
-  deterministic key ordering to maximize byte-level stability across runtimes.
+- Serialization (normative): `detections/detections.jsonl` is a contract-backed JSONL artifact and
+  MUST conform to the Contract Spine JSONL physical format invariants (canonical JSON bytes per
+  line, LF-only newlines, UTF-8 without BOM, no blank lines, and the end-of-file newline rule).
 
 ### Required conformance tests (regression comparability)
 
@@ -717,15 +716,11 @@ metrics.
 
 ### Join semantics
 
-A detection instance is **attributed** to a ground truth action when all of the following hold:
+The scoring stage MUST attribute detections to actions using `pa.attribution.v1` as specified in
+[Scoring metrics](070_scoring_metrics.md) (Detection fidelity, "Attribution algorithm").
 
-1. The detection's `technique_ids` intersect with the action's `technique_id`.
-1. The detection's `first_seen_utc` falls within the configured time window relative to the action's
-   `timestamp_utc`:
-   - Window start: `action.timestamp_utc - detection.join.clock_skew_tolerance_seconds`
-   - Window end: `action.timestamp_utc + scoring.thresholds.max_allowed_latency_seconds`
-1. The detection's matched events originate from the action's `target_asset_id` (when asset
-   attribution is available).
+This document intentionally does not redefine `pa.attribution.v1`; it only defines
+detection-instance field invariants required for deterministic attribution and latency metrics.
 
 Note (v0.1):
 

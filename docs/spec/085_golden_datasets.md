@@ -413,10 +413,10 @@ Marker location (v0.1):
 
 - Normalized OCSF events:
   - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (string)
-  - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (string)
+  - `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` (string)
 - Ground truth (when enabled):
   - `extensions.synthetic_correlation_marker` on each ground truth line
-  - `extensions.synthetic_correlation_marker_token` on each ground truth line
+  - `extensions.synthetic_correlation_marker_digest` on each ground truth line
 
 Therefore dataset build tooling MUST produce two feature-variant dataset releases for each build
 invocation:
@@ -428,7 +428,7 @@ invocation:
 1. **marker-blind** (default for ML)
 
    - Marker fields MUST be removed from all feature artifacts (both the canonical marker string and
-     the derived token).
+     the derived digest).
    - For Parquet feature stores, marker-blind MUST be implemented by rewriting Parquet datasets,
      dropping the marker columns, and (when a `raw_json` column is present) rewriting `raw_json` so
      marker fields are stripped before canonical JSON serialization (see "Normalized OCSF feature
@@ -703,7 +703,7 @@ marker-blind MUST be produced by rewriting the marker-assisted-equivalent Parque
 run and dropping the marker columns:
 
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker`
-- `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`
 
 Requirements (normative):
 
@@ -713,7 +713,7 @@ Requirements (normative):
   - Each `raw_json` value MUST parse as a JSON object (fail closed if parsing fails).
   - The rewrite MUST remove (when present) the following keys from the parsed object:
     - `metadata.extensions.purple_axiom.synthetic_correlation_marker`
-    - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`
+    - `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`
   - The rewritten `raw_json` value MUST equal the UTF-8 string rendering of
     `canonical_json_bytes(marker_stripped_object)` (per `025_data_contracts.md`).
 - The rewrite MUST NOT change `metadata.event_id` values.

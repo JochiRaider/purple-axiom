@@ -291,7 +291,7 @@ Retries:
 
 - If the runner records more than four lifecycle phase records for an action (retry semantics),
   additional records MUST follow the rules in the data contracts spec (additional `execute` and/or
-  `revert` retry records with monotonic `attempt_ordinal`).
+  `revert` retry records with monotonic `attempt_ordinal` (required on **all** phase records)).
 
 Health integration:
 
@@ -324,7 +324,7 @@ Ground truth MUST record (minimum):
   - `reason_domain` (string; required when not `success`; MUST equal `ground_truth`)
 - `extensions.synthetic_correlation_marker` (when synthetic marker emission is enabled and `execute`
   was attempted).
-- `extensions.synthetic_correlation_marker_token` (when synthetic marker emission is enabled and
+- `extensions.synthetic_correlation_marker_digest` (when synthetic marker emission is enabled and
   `execute` was attempted).
 - `evidence_refs[]` (when external evidence artifacts exist) using deterministic, stable artifact
   references.
@@ -563,8 +563,9 @@ references.
 Ground truth MAY include `expected_telemetry_hints` as coarse, non-authoritative hints (lossy
 projection).
 
-When a criteria entry is selected for an action (including auto-selection by the runner), ground
-truth SHOULD include `criteria_ref` as an object:
+When a criteria entry is **pinned** for an action (e.g., via scenario input or operator policy),
+ground truth SHOULD include `criteria_ref` as an object. Otherwise, criteria selection is performed
+by the validation stage and recorded in `criteria/results.jsonl`:
 
 - `criteria_ref.criteria_pack_id`
 - `criteria_ref.criteria_pack_version`
@@ -665,15 +666,16 @@ Fields (per line):
 - `lifecycle` (object):
   - `phases` (array of objects), each:
     - `phase` (`prepare|execute|revert|teardown`)
-    - `attempt_ordinal` (int; optional; present for retries; monotonic for a given phase)
+    - `attempt_ordinal` (int; required; 1-indexed; monotonic for a given phase)
     - `phase_outcome` (`success|failed|skipped`)
     - `reason_domain` (string; required when not `success`; MUST equal `ground_truth`)
     - `reason_code` (string; required when not `success`)
+    - `error` (object; optional; present when `phase_outcome="failed"`; see `025`)
     - `started_at_utc`, `ended_at_utc` (ISO-8601 UTC)
     - `evidence` (object; optional pointers to artifacts under `runner/actions/<action_id>/...`)
 - `extensions` (object; optional):
   - `synthetic_correlation_marker` (string; present when enabled and `execute` was attempted)
-  - `synthetic_correlation_marker_token` (string; present when enabled and `execute` was attempted)
+  - `synthetic_correlation_marker_digest` (string; present when enabled and `execute` was attempted)
   - (other keys reserved)
 
 ### Principal selection (non-secret) (normative)
@@ -787,6 +789,7 @@ Ground truth is emitted as JSONL, one action per line.
     "phases": [
       {
         "phase": "prepare",
+        "attempt_ordinal": 1,
         "phase_outcome": "success",
         "started_at_utc": "2026-01-03T12:00:00Z",
         "ended_at_utc": "2026-01-03T12:00:01Z",
@@ -796,6 +799,7 @@ Ground truth is emitted as JSONL, one action per line.
       },
       {
         "phase": "execute",
+        "attempt_ordinal": 1,
         "phase_outcome": "success",
         "started_at_utc": "2026-01-03T12:00:01Z",
         "ended_at_utc": "2026-01-03T12:00:05Z",
@@ -807,6 +811,7 @@ Ground truth is emitted as JSONL, one action per line.
       },
       {
         "phase": "revert",
+        "attempt_ordinal": 1,
         "phase_outcome": "success",
         "started_at_utc": "2026-01-03T12:00:05Z",
         "ended_at_utc": "2026-01-03T12:00:06Z",
@@ -818,6 +823,7 @@ Ground truth is emitted as JSONL, one action per line.
       },
       {
         "phase": "teardown",
+        "attempt_ordinal": 1,
         "phase_outcome": "success",
         "started_at_utc": "2026-01-03T12:00:06Z",
         "ended_at_utc": "2026-01-03T12:00:07Z",
@@ -829,7 +835,7 @@ Ground truth is emitted as JSONL, one action per line.
   },
   "extensions": {
     "synthetic_correlation_marker": "pa:synth:v1:<uuid>:s1:execute",
-    "synthetic_correlation_marker_token": "<marker_token>"
+    "synthetic_correlation_marker_digest": "<marker_digest>"
   }
 }
 ```

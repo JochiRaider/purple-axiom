@@ -96,9 +96,16 @@ Requirements (normative):
   `bo:<u64>` (byte offset).
 - For `kind="dataset_row_v1"`, `row_locator` MUST be present and MUST uniquely identify the raw
   record within the referenced dataset for the run.
+- Eligibility note (normative): producers MUST NOT emit `kind="file_cursor_v1"` pointing to a
+  placeholder-only artifact (for example, a raw file whose bytes are a single
+  `PA_PLACEHOLDER_V1 ...` line). Placeholder artifacts are defined in `090_security_safety.md`.
 - If evidence-tier raw preservation is enabled and the source supports stable cursors/offsets,
-  producers SHOULD emit `file_cursor_v1` pointing into `raw/`.
+  producers MUST emit `file_cursor_v1` pointing into `raw/`, unless the raw artifact is
+  placeholder-only per the rule above.
 - Otherwise, producers MUST emit `dataset_row_v1` pointing into `raw_parquet/`.
+- If neither a non-placeholder raw artifact nor a raw_parquet dataset row is available, producers
+  MUST downgrade the event to identity tier 3 and MUST omit `raw_ref` (since `raw_ref` is required
+  for identity tiers 1 and 2).
 - When multiple candidate raw records could be considered the origin (for example, replay
   duplicates), producers MUST choose a canonical `raw_ref` deterministically:
   1. smallest `path` (byte-wise lexicographic)
@@ -180,12 +187,12 @@ pipeline-specific values:
 
 - MUST NOT include: `run_id`, `scenario_id`, `collector_version`, `normalizer_version`,
   `metadata.extensions.purple_axiom.synthetic_correlation_marker`,
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`,
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`,
   `metadata.extensions.purple_axiom.ingest_id`, ingest/observed timestamps, file offsets, collector
   hostnames, or any execution metadata.
 
 Rationale: `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
-`metadata.extensions.purple_axiom.synthetic_correlation_marker_token` are intentionally
+`metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` are intentionally
 per-run/per-action correlation metadata. Including either in `identity_basis` would make
 `metadata.event_id` vary across runs and reprocessing, breaking stable joins and deterministic
 deduplication.

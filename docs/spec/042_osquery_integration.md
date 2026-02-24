@@ -462,7 +462,7 @@ Rules:
 - Unknown `query_name` rows MUST NOT produce mapped normalized events (that is, `class_uid > 0`).
   Marker-bearing records MUST NOT be dropped; if a record carries
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, the normalizer MUST still
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`, the normalizer MUST still
   emit a minimal envelope with `class_uid = 0` and preserve whichever marker fields are present.
   When `normalization.raw_preservation.enabled=true`, the normalizer MUST also preserve the source
   payload under `raw.osquery` per `normalization.raw_preservation.policy` (see
@@ -596,7 +596,7 @@ Rules:
 - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (if present) MUST NOT be included
   in identity.
 
-- `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (if present) MUST NOT be
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` (if present) MUST NOT be
   included in identity.
 
 - For OCSF-conformant outputs, `metadata.uid` MUST equal `metadata.event_id` (see
@@ -734,7 +734,7 @@ A v0.1 implementation MUST satisfy:
     recorded as unrouted or unmapped in `normalized/mapping_coverage.json`.
   - Marker-bearing records (those carrying
     `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
-    `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`) MUST NOT be dropped; if
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`) MUST NOT be dropped; if
     unrouted, they MUST still be emitted with `class_uid = 0`.
 - Identity determinism:
   - Re-normalizing the same fixture input produces byte-identical `metadata.event_id` values.

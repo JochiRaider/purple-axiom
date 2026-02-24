@@ -92,14 +92,17 @@ stdout/stderr, and the syslog socket, then forwards a subset to rsyslog. rsyslog
 messages to text files under `/var/log/`.
 
 **Critical constraint**: If the pipeline ingests both journald and rsyslog-written `/var/log/*`
-files on the same host, duplicate events are expected unless explicitly prevented.
+files on the same host (syslog overlap), or ingests both journald audit transport and
+`/var/log/audit/audit.log` on the same host (audit overlap), duplicate events are expected unless
+explicitly prevented.
 
 ### Required policy (v0.1)
 
 Operators must choose one of the following strategies per host:
 
 1. **journald-only (preferred)**: Ingest via the `journald` receiver. Do not tail `/var/log/syslog`
-   or `/var/log/messages` for the same event stream.
+   `/var/log/*` sources (for example `/var/log/syslog`, `/var/log/messages`, or
+   `/var/log/audit/audit.log`) on the same host.
 
 1. **File-only**: Tail `/var/log/*` files via `filelog`. Do not use the `journald` receiver for
    overlapping content.
@@ -149,13 +152,45 @@ Operators must choose one of the following strategies per host:
    the same second. It SHOULD remain disabled unless duplication materially harms the run’s
    usability.
 
-The pipeline must not silently ingest both sources without explicit operator acknowledgment.
+Audit overlap note: if both journald audit transport (`_TRANSPORT=audit`) and audit log file tailing
+(`telemetry.sources.unix.audit_log_files`) are enabled for the same host, overlap is detected. v0.1
+does not define an audit-specific dedupe strategy; operators SHOULD avoid dual ingestion or accept
+degraded data quality with explicit operator acknowledgment.
 
-### Configuration enforcement
+The pipeline MUST NOT silently ingest overlapping Unix sources without explicit operator
+acknowledgment
 
-When `telemetry.sources.unix.journald.enabled=true` and `telemetry.sources.unix.syslog_files`
-includes paths that overlap with journald-forwarded content, the validator should emit a warning and
-must record the overlap in `runs/<run_id>/logs/telemetry_validation.json`.
+When any Unix source under `telemetry.sources.unix.*` is enabled, the validator MUST evaluate
+whether an overlapping configuration is active on the same host. At minimum, overlap MUST be
+considered detected when:
+
+- `telemetry.sources.unix.journald.enabled=true` **and** `telemetry.sources.unix.syslog_files` is
+  non-empty.
+- `telemetry.sources.unix.journald.enabled=true` **and** `telemetry.sources.unix.audit_log_files` is
+  non-empty.
+
+(Network syslog ingestion does not participate in this overlap check.)
+
+The validator MUST emit a `health.json.stages[]` entry with `stage="telemetry.unix.source_overlap"`
+(see ADR-0005) and SHOULD record overlap evidence in `runs/<run_id>/logs/telemetry_validation.json`
+under `unix_source_overlap` (see `040_telemetry_pipeline.md`).
+
+The validator MUST set `operator_acknowledged=true` iff `telemetry.sources.unix.dedupe_strategy` is
+present (non-null).
+
+Severity and `health.json` treatment (normative):
+
+| Condition               | `overlap_detected` | `operator_acknowledged` | Substage `status` | `fail_mode`                           | `reason_code`                        |
+| ----------------------- | ------------------ | ----------------------- | ----------------- | ------------------------------------- | ------------------------------------ |
+| No unix sources enabled | N/A                | N/A                     | substage omitted  | —                                     | —                                    |
+| No overlap              | `false`            | any                     | `success`         | `fail_closed`                         | *(omit)*                             |
+| Overlap, no ack         | `true`             | `false`                 | `failed`          | `fail_closed` (default; configurable) | `unix_source_overlap_unacknowledged` |
+| Overlap, ack'd          | `true`             | `true`                  | `failed`          | `warn_and_skip`                       | `unix_source_overlap_active`         |
+
+The default `fail_mode` for unacknowledged overlap is `fail_closed` and MUST be configurable via
+`telemetry.unix.source_overlap.fail_mode` (see `120_config_reference.md`). The acknowledged overlap
+case MUST always use `warn_and_skip` so that the run records degraded data quality without blocking
+downstream stages.
 
 ## journald ingestion
 
@@ -230,6 +265,9 @@ The collector or downstream normalizer MUST set `metadata.source_type` based on 
 | `audit`              | `linux-auditd`         |
 
 This mapping MUST remain consistent with "Normalization to OCSF" → "Source type assignment".
+
+Note: `linux-journald` is an explicitly supported v0.1 `metadata.source_type` value (supplemental
+tier) for non-audit journal transports.
 
 ### Identity basis (Tier 1)
 
@@ -352,18 +390,21 @@ same timestamp bucket are common. Per ADR-0002, use Tier 2 when a stable cursor 
 {
   "source_type": "linux-syslog",
   "origin.host": "<emitting_host>",
-  "stream.name": "<log_file_name>",
-  "stream.cursor": "<line_index_or_byte_offset>"
+  "stream.name": "<source_file>",
+  "stream.cursor": "li:<line_index>"
 }
 ```
 
 Rules:
 
-- `stream.name` must be a stable identifier for the stored artifact (for example, `syslog`,
-  `messages`, `auth`).
-- `stream.cursor` must be stable under reprocessing (for example, `li:12345` for line index or
-  `bo:98765` for byte offset).
-- Ephemeral collector offsets must not be used unless persisted with the stored artifact.
+- `stream.name` MUST be a stable identifier for the stored artifact and MUST correspond to the
+  staged syslog file name under `raw/syslog/` (for example, `syslog`, `messages`, `auth.log`).
+- `stream.cursor` MUST be stable under reprocessing and MUST be `li:<u64>`, where `<u64>` is the
+  0-based line index within that stored artifact (base-10 ASCII digits).
+- Together, (`stream.name`, `stream.cursor`) form the canonical row locator for syslog provenance.
+- Byte offsets MAY be used for collection checkpointing, but v0.1 uses `line_index` as the canonical
+  row locator because syslog is line-oriented and the `li:<u64>` cursor is human-readable.
+- Ephemeral collector offsets MUST NOT be used unless persisted with the stored artifact.
 
 When neither Tier 1 nor Tier 2 inputs exist, fall back to Tier 3 fingerprinting per ADR-0002. Tier 3
 identity should be treated as lower confidence in coverage reporting.
@@ -478,6 +519,10 @@ receivers:
     include_file_path: true
 ```
 
+**Operator declaration (normative):** When audit log file tailing is enabled under Purple Axiom
+orchestration, the same paths MUST be declared in `telemetry.sources.unix.audit_log_files` so the
+Unix overlap validator can detect and gate dual-ingestion with journald.
+
 **Multi-record correlation requirement**: The `filelog` receiver emits one log record per line. The
 normalizer or an intermediate processor must aggregate lines by their shared
 `msg=audit(<timestamp>:<serial>)` before OCSF mapping. This aggregation is NOT performed by the
@@ -560,37 +605,120 @@ runs/<run_id>/raw/
 ├── journald/
 │   └── journal_export.jsonl      # Exported journal entries (JSONL); each line MUST include __CURSOR and _TRANSPORT
 ├── syslog/
-│   ├── syslog                    # Copied /var/log/syslog (Debian)
-│   ├── messages                  # Copied /var/log/messages (RHEL)
-│   └── auth.log                  # Copied /var/log/auth.log
+│   ├── syslog                    # Staged from /var/log/syslog (Debian; placeholder if withheld)
+│   ├── messages                  # Staged from /var/log/messages (RHEL; placeholder if withheld)
+│   └── auth.log                  # Staged from /var/log/auth.log (placeholder if withheld)
 └── audit/
-    └── audit.log                 # Copied /var/log/audit/audit.log
+    └── audit.log                 # Staged from /var/log/audit/audit.log (placeholder if withheld)
 ```
 
 Notes:
 
 - Staged files are evidence-tier representations for reproducibility and MUST follow the effective
   redaction posture (redacted-safe, withheld, or quarantined) under the project redaction policy.
-- The pipeline may convert staged text to Parquet under `raw_parquet/`.
-- Rotation and truncation during the run window should be handled by staging complete files or by
+
+  - When withheld or quarantined, the standard artifact path MUST contain a placeholder artifact per
+    `090_security_safety.md` rather than silently omitting the file.
+
+- **Unix flat-text withholding (v0.1 default):** Unix flat-text artifacts (`raw/syslog/**`,
+  `raw/audit/**`) are withheld by default in v0.1. In-place redaction is not attempted on flat-text
+  sources due to the absence of a stable field schema. The placeholder MUST use:
+  `PA_PLACEHOLDER_V1 handling=withheld reason_code=unix_text_redaction_unsupported`.
+
+- **Structured JSONL artifacts:** Structured JSONL artifacts (journald export) MAY attempt
+  field-level redaction but MUST fall back to withheld (placeholder) on any post-check match.
+
+- **Raw provenance pointers (`raw_ref` / `raw_refs`):** Raw provenance pointers MUST follow
+  ADR-0002's placeholder-aware selection rule: implementations MUST NOT emit `file_cursor_v1`
+  pointing at a placeholder-only raw file. When `raw/**` is placeholder-only, `raw_ref` MUST use
+  `dataset_row_v1` pointing into `raw_parquet/**`. Consequently, `raw_parquet/**` for a Unix source
+  MUST NOT be pruned if it is the only remaining valid IT1/IT2 provenance anchor. If
+  `raw_parquet/**` is also unavailable, the event MUST downgrade to IT3 with `raw_ref=null`.
+
+- The pipeline MAY convert staged text to Parquet under `raw_parquet/`.
+
+- Rotation and truncation during the run window SHOULD be handled by staging complete files or by
   recording the byte range captured.
 
+### Raw provenance pointers (ADR-0002 instantiation)
+
+ADR-0002 defines the generic `raw_ref` fallback rule:
+
+> If raw preservation is enabled and the source supports stable cursors: emit `file_cursor_v1`
+> pointing into `raw/`. Otherwise: emit `dataset_row_v1` pointing into `raw_parquet/`.
+
+This spec instantiates that rule per Unix ingestion path as follows:
+
+| Ingestion path           | Identity tier                                 | `raw_ref.kind` when `telemetry.raw_preservation.enabled=true`                                                  | `raw_ref.kind` when `telemetry.raw_preservation.enabled=false` (or raw withheld/quarantined/placeholder-only) |
+| ------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| journald (any transport) | IT1                                           | `file_cursor_v1` -> `raw/journald/journal_export.jsonl`, `cursor: li:<line_index>`                             | `dataset_row_v1` -> `raw_parquet/unix/journald/`                                                              |
+| syslog file              | IT2                                           | `file_cursor_v1` -> `raw/syslog/<source_file>`, `cursor: li:<line_index>`                                      | `dataset_row_v1` -> `raw_parquet/unix/syslog/`                                                                |
+| auditd via journald      | IT1 (multi-record group -> single OCSF event) | `file_cursor_v1` -> `raw/journald/journal_export.jsonl`, `cursor: li:<canonical_record_line_index>`            | `dataset_row_v1` -> `raw_parquet/unix/audit/`                                                                 |
+| auditd via file tail     | IT1 (aggregated) / IT2 (per-record)           | `file_cursor_v1` -> `raw/audit/audit.log`, `cursor: bo:<byte_offset>` (or canonical offset for grouped events) | `dataset_row_v1` -> `raw_parquet/unix/audit/`                                                                 |
+
+Additional rules (normative):
+
+- Multi-record audit correlation and `raw_ref` canonicalization: when multiple raw records
+  contribute to a single normalized audit event, the event's `raw_ref` MUST follow ADR-0002
+  canonical selection rule (smallest `path`, then smallest numeric cursor). The full set of
+  contributing records SHOULD be recorded in `raw_refs[]`.
+
+- Placeholder-only artifacts: `file_cursor_v1` MUST NOT target placeholder-only files (see
+  ADR-0002). In v0.1, Unix flat-text artifacts are placeholder-only by default, so the effective
+  provenance pointer is `dataset_row_v1` into `raw_parquet/**` unless an implementation provides a
+  redaction-safe representation of the raw text.
+
+Dataset-row locators (recommended defaults):
+
+- `raw_parquet/unix/journald/`: `{ "journald_cursor": "<__CURSOR>" }`
+- `raw_parquet/unix/syslog/`: `{ "source_file": "<source_file>", "line_index": <u64> }`
+- `raw_parquet/unix/audit/`:
+  `{ "host": "<emitting_host>", "audit_msg_id": "audit(<epoch>.<fractional>:<serial>)" }`
+
 ## Derived raw Parquet (optional but recommended)
+
+Derived raw Parquet is optional as a performance optimization, but it becomes REQUIRED whenever any
+normalized event emits `raw_ref.kind="dataset_row_v1"` (including when
+`telemetry.raw_preservation.enabled=false` or when a `raw/**` artifact is placeholder-only).
+
+When emitted, Unix Parquet datasets MUST be stored under:
+
+- `runs/<run_id>/raw_parquet/unix/journald/`
+- `runs/<run_id>/raw_parquet/unix/syslog/`
+- `runs/<run_id>/raw_parquet/unix/audit/`
+
+Each Parquet dataset directory under `raw_parquet/**` MUST include a schema snapshot file named
+`_schema.json` as specified in `045_storage_formats.md`.
+
+### Journald Parquet schema
+
+When converting journald export to Parquet, include at minimum:
+
+| Column            | Type   | Notes                                       |
+| ----------------- | ------ | ------------------------------------------- |
+| `time`            | int64  | Epoch ms (derived from journal timestamp)   |
+| `host`            | string | Hostname                                    |
+| `journald_cursor` | string | `__CURSOR` (stable unique cursor per entry) |
+| `transport`       | string | `_TRANSPORT` (journal, syslog, audit, etc.) |
+| `message`         | string | `MESSAGE` (nullable)                        |
+| `fields_json`     | string | Original fields as JSON (nullable)          |
 
 ### Syslog Parquet schema
 
 When converting syslog text to Parquet, include at minimum:
 
-| Column     | Type   | Notes                                    |
-| ---------- | ------ | ---------------------------------------- |
-| `time`     | int64  | Epoch ms (derived from syslog timestamp) |
-| `host`     | string | Hostname from syslog header              |
-| `app`      | string | Application name                         |
-| `pid`      | int32  | Process ID (nullable)                    |
-| `facility` | string | Syslog facility (nullable)               |
-| `severity` | string | Syslog severity (nullable)               |
-| `message`  | string | Message body                             |
-| `raw`      | string | Original line (nullable)                 |
+| Column        | Type   | Notes                                    |
+| ------------- | ------ | ---------------------------------------- |
+| `time`        | int64  | Epoch ms (derived from syslog timestamp) |
+| `host`        | string | Hostname from syslog header              |
+| `source_file` | string | Staged file name (for example `syslog`)  |
+| `line_index`  | int64  | 0-based line index within `source_file`  |
+| `app`         | string | Application name                         |
+| `pid`         | int32  | Process ID (nullable)                    |
+| `facility`    | string | Syslog facility (nullable)               |
+| `severity`    | string | Syslog severity (nullable)               |
+| `message`     | string | Message body (nullable)                  |
+| `raw`         | string | Original line (nullable)                 |
 
 ### Audit Parquet schema
 
@@ -710,8 +838,18 @@ CI must assert:
   normalized OCSF event (not multiple fragmented events).
 - **Identity determinism**: Re-normalizing the same fixture produces byte-identical
   `metadata.event_id` values.
-- **Duplication warning**: Enabling both journald and overlapping syslog file ingestion produces a
-  validation warning.
+- **Unix source overlap gate**: When Unix sources are enabled, `logs/health.json` MUST include a
+  `telemetry.unix.source_overlap` substage outcome. If overlap is detected without operator
+  acknowledgment, the substage MUST be failed with `reason_code=unix_source_overlap_unacknowledged`
+  and default `fail_mode=fail_closed`. If overlap is detected with operator acknowledgment, the
+  substage MUST be failed with `reason_code=unix_source_overlap_active` and
+  `fail_mode=warn_and_skip`.
+- **Schema snapshots**: Each emitted `raw_parquet/unix/**` dataset directory MUST include
+  `_schema.json` per `045_storage_formats.md`.
+- **Unix flat-text withholding**: In v0.1, `raw/syslog/**` and `raw/audit/**` MUST be
+  placeholder-only by default with `reason_code=unix_text_redaction_unsupported`, and normalized
+  events MUST use `raw_ref.kind="dataset_row_v1"` pointing into `raw_parquet/**` (not
+  `file_cursor_v1` pointing at a placeholder).
 
 ## Key decisions
 

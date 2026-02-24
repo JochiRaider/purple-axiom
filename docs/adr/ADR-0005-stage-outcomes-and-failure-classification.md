@@ -629,6 +629,28 @@ Deterministic reason selection:
   `clock_offset_exceeded`.
 - Else if any expected asset is unmeasurable, reason_code MUST be `clock_offset_unmeasurable`.
 
+#### Unix source overlap (substage: `telemetry.unix.source_overlap`)
+
+This substage detects silent dual-ingestion configurations for Unix logs that can produce semantic
+duplicates and compromise correlation (for example, ingesting both journald and `/var/log/syslog`,
+or both journald audit transport and `/var/log/audit/audit.log`).
+
+This substage MUST be emitted when any Unix log source under `telemetry.sources.unix.*` is enabled.
+If no Unix sources are enabled, this substage MUST be omitted.
+
+Outcome rules (normative):
+
+- If overlap is not detected, emit `status="success"` and `fail_mode="fail_closed"` (default).
+- If overlap is detected and the operator has not acknowledged the overlap (no dedupe strategy
+  declared), emit `status="failed"`, `fail_mode` from `telemetry.unix.source_overlap.fail_mode`
+  (default `fail_closed`), and `reason_code="unix_source_overlap_unacknowledged"`.
+- If overlap is detected and the operator has acknowledged the overlap (dedupe strategy declared),
+  emit `status="failed"`, `fail_mode="warn_and_skip"`, and
+  `reason_code="unix_source_overlap_active"`.
+
+Evidence for this substage SHOULD be recorded in `logs/telemetry_validation.json` (see
+`040_telemetry_pipeline.md`).
+
 #### Disk preflight (substage: `telemetry.disk.preflight`)
 
 This substage is a fail-closed safety gate that verifies the run host has sufficient free space to
@@ -669,10 +691,11 @@ self-telemetry.
 
 #### NON-FATAL reason codes
 
-| Reason code                      | Severity  | Description                                                   |
-| -------------------------------- | --------- | ------------------------------------------------------------- |
-| `checkpoint_loss`                | NON-FATAL | Checkpoint lost or reset; replay occurred (dedupe mitigates). |
-| `publisher_metadata_unavailable` | NON-FATAL | Windows rendering metadata missing but raw record is present. |
+| Reason code                      | Severity  | Description                                                                          |
+| -------------------------------- | --------- | ------------------------------------------------------------------------------------ |
+| `checkpoint_loss`                | NON-FATAL | Checkpoint lost or reset; replay occurred (dedupe mitigates).                        |
+| `publisher_metadata_unavailable` | NON-FATAL | Windows rendering metadata missing but raw record is present.                        |
+| `unix_source_overlap_active`     | NON-FATAL | Unix source overlap is enabled and acknowledged; data quality is degraded by design. |
 
 ### Normalization stage (`normalization`)
 
@@ -771,6 +794,7 @@ Minimum artifacts when enabled: `detections/detections.jsonl`, `bridge/**`
 | ----------------------------- | -------- | ---------------------------------------------- |
 | `bridge_mapping_pack_invalid` | FATAL    | Bridge mapping pack missing or schema-invalid. |
 | `backend_driver_failed`       | FATAL    | Backend cannot open or mount dataset.          |
+| `sigma_ruleset_load_failed`   | FATAL    | Sigma ruleset discovery/load failed.           |
 
 #### Performance budgets (substage: `detection.performance_budgets`)
 
@@ -789,20 +813,20 @@ This substage is a deterministic quality gate for detection evaluation performan
 
 These are emitted at rule granularity (for example in compiled plans). Stage continues.
 
-| Reason code               | Severity  | Description                                                                       |
-| ------------------------- | --------- | --------------------------------------------------------------------------------- |
-| `unroutable_logsource`    | NON-FATAL | Sigma `logsource` matches no router entry. Rule is non-executable.                |
-| `unmapped_field`          | NON-FATAL | Sigma field has no alias mapping. Rule is non-executable unless fallback enabled. |
-| `raw_fallback_disabled`   | NON-FATAL | Rule requires `raw.*` but fallback is disabled.                                   |
-| `ambiguous_field_alias`   | NON-FATAL | Sigma field alias resolution is ambiguous for the routed scope.                   |
-| `unsupported_modifier`    | NON-FATAL | Sigma modifier cannot be expressed.                                               |
-| `unsupported_operator`    | NON-FATAL | Sigma operator cannot be expressed.                                               |
-| `unsupported_value_type`  | NON-FATAL | Sigma value type cannot be represented for the chosen operator/backend.           |
-| `unsupported_regex`       | NON-FATAL | Sigma regex pattern uses unsupported constructs (RE2-only).                       |
-| `unsupported_correlation` | NON-FATAL | Sigma correlation / multi-event semantics are out of scope.                       |
-| `unsupported_aggregation` | NON-FATAL | Sigma aggregation semantics are out of scope.                                     |
-| `backend_compile_error`   | NON-FATAL | Backend compilation failed.                                                       |
-| `backend_eval_error`      | NON-FATAL | Backend evaluation failed.                                                        |
+| Reason code               | Severity  | Description                                                                                       |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------------- |
+| `unroutable_logsource`    | NON-FATAL | Sigma `logsource` matches no router entry. Rule is non-executable.                                |
+| `unmapped_field`          | NON-FATAL | Sigma field has no alias mapping. Rule is non-executable unless fallback enabled.                 |
+| `raw_fallback_disabled`   | NON-FATAL | Rule requires `raw.*` but fallback is disabled.                                                   |
+| `ambiguous_field_alias`   | NON-FATAL | Sigma field alias resolution is ambiguous for the routed scope.                                   |
+| `unsupported_modifier`    | NON-FATAL | Sigma modifier cannot be expressed.                                                               |
+| `unsupported_operator`    | NON-FATAL | Sigma operator cannot be expressed.                                                               |
+| `unsupported_value_type`  | NON-FATAL | Sigma correlation / multi-event semantics are out of scope.                                       |
+| `unsupported_regex`       | NON-FATAL | Sigma regex pattern uses unsupported constructs or violates regex safety policy (default: PCRE2). |
+| `unsupported_correlation` | NON-FATAL | Sigma correlation / multi-event semantics are out of scope.                                       |
+| `unsupported_aggregation` | NON-FATAL | Sigma aggregation semantics are out of scope.                                                     |
+| `backend_compile_error`   | NON-FATAL | Backend compilation failed.                                                                       |
+| `backend_eval_error`      | NON-FATAL | Backend evaluation failed.                                                                        |
 
 ### Scoring stage (`scoring`)
 

@@ -572,9 +572,9 @@ Additional normative checks:
   - If `runner.atomic.synthetic_correlation_marker.enabled=true`,
     `capture_window.correlation_marker_strategy` MUST describe the synthetic marker join surface
     (ground truth carriers: `extensions.synthetic_correlation_marker` and
-    `extensions.synthetic_correlation_marker_token`; normalized carriers:
+    `extensions.synthetic_correlation_marker_digest`; normalized carriers:
     `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
-    `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`).
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`).
 - When `telemetry.otel.clock_sync.enabled=true`, `runs/<run_id>/logs/telemetry_validation.json` MUST
   include a `clock_sync` object with per-asset results and evidence (see
   `040_telemetry_pipeline.md`).
@@ -586,6 +586,18 @@ Additional normative checks:
     selection:
     - `clock_offset_exceeded` if any measurable asset exceeds the threshold
     - else `clock_offset_unmeasurable` if any expected asset is unmeasurable
+- When any Unix source under `telemetry.sources.unix.*` is enabled, the validator MUST evaluate a
+  Unix source overlap check (see `044_unix_log_ingestion.md` and `040_telemetry_pipeline.md`).
+  - The validator MUST emit a `health.json.stages[]` entry with
+    `stage: "telemetry.unix.source_overlap"`.
+  - If overlap is not detected: `status=success` (substage still emitted so CI can verify it ran).
+  - If overlap is detected and no dedupe strategy is declared (operator not acknowledged):
+    `status=failed`, `reason_code=unix_source_overlap_unacknowledged`, and `fail_mode` taken from
+    `telemetry.unix.source_overlap.fail_mode` (default `fail_closed`).
+  - If overlap is detected and a dedupe strategy is declared (operator acknowledged):
+    `status=failed`, `reason_code=unix_source_overlap_active`, and `fail_mode=warn_and_skip`.
+  - The validator SHOULD record overlap evidence in `runs/<run_id>/logs/telemetry_validation.json`
+    under `unix_source_overlap` (see `040_telemetry_pipeline.md`).
 - The validator MUST emit a `health.json.stages[]` entry with `stage: "telemetry.agent.liveness"`.
   - The validator MUST treat collector self-telemetry as the OS-neutral heartbeat for each asset
     with `telemetry.otel.enabled=true` (see the telemetry pipeline specification).

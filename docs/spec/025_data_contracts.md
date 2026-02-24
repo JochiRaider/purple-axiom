@@ -223,6 +223,9 @@ Registry files (required for implementations):
 
 Normative requirements:
 
+- `docs/contracts/contract_registry.json.registry_version` and
+  `docs/contracts/workspace_contract_registry.json.registry_version` MUST be identical (lockstep).
+  - Verification hook: CI MUST fail if the two registry instances disagree on `registry_version`.
 - Implementations MUST treat `docs/contracts/contract_registry.json` as the single source of truth
   for contract-backed artifacts whose paths are run-relative (relative to a run bundle root).
 - Implementations MUST treat `docs/contracts/workspace_contract_registry.json` as the single source
@@ -334,6 +337,14 @@ Deterministic expansion ordering (normative):
   `artifact_glob` into the run bundle.
   - `orchestrator` is reserved for orchestrator-owned artifacts that are published outside any stage
     boundary (for example pinned inputs and control-plane/audit artifacts).
+    - Ingress YAML snapshotting (v0.1):
+      - Contract-backed ingress YAML artifacts (bindings with `validation_mode="yaml_document"`
+        under `inputs/`) are operator-supplied bytes that are pinned into the run bundle as an
+        **opaque byte copy** (no rewriting or normalization).
+      - The orchestrator MUST validate the bytes per `validation_mode="yaml_document"` before
+        writing them to the contracted `inputs/...` path.
+      - Canonical YAML byte emission is intentionally unspecified in v0.1; this is reception and
+        pass-through only and is performed outside `StagePublishSession`.
 - The orchestrator (or stage wrapper) MUST derive the per-stage `expected_outputs[]` list for
   `PublishGate.finalize(...)` as follows:
   1. Filter `bindings[]` to entries where `stage_owner == stage_id`.
@@ -2227,10 +2238,6 @@ Recommended manifest additions (normative in schema when implemented):
     read `logs/lab_inventory_snapshot.json` and join on `assets[].asset_id`.
 - `manifest.lab.inventory_source_ref` (string, optional): deterministic reference to the upstream
   inventory source, with all secrets redacted or omitted.
-- `manifest.normalization.ocsf_version` (string): pinned OCSF version used by the normalizer for
-  this run.
-  - When `normalized/mapping_profile_snapshot.json` is present,
-    `manifest.normalization.ocsf_version` SHOULD match `mapping_profile_snapshot.ocsf_version`.
 
 Terminology note (normative):
 
@@ -2686,22 +2693,22 @@ Invariants:
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` (vendor namespace; see
   `050_normalization_ocsf.md`).
 
-`extensions.synthetic_correlation_marker_token`:
+`extensions.synthetic_correlation_marker_digest`:
 
 - If synthetic correlation marker is enabled, the runner MUST also record a deterministic derived
-  token on action records. This exists to support transports with length / character constraints.
+  digest on action records. This exists to support transports with length / character constraints.
 - Derivation (normative, v1):
   1. Let `marker_canonical` be the UTF-8 bytes of `extensions.synthetic_correlation_marker`.
   1. Compute `digest = SHA-256(marker_canonical)`.
   1. Compute `b64 = base64url(digest)` using RFC 4648 base64url alphabet and **no padding**.
-  1. Let `marker_token = b64[0:N]` where `N = 22` (fixed).
+  1. Let `marker_digest = b64[0:N]` where `N = 22` (fixed).
 - Format: `^[A-Za-z0-9_-]{22}$`
-- Note: In normalized OCSF events, this token is represented at
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`.
+- Note: In normalized OCSF events, this digest is represented at
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`.
 
 Notes (normative):
 
-- Marker-bearing telemetry MUST carry either the canonical marker string, the token, or both, as
+- Marker-bearing telemetry MUST carry either the canonical marker string, the digest, or both, as
   specified by the selected execution adapter’s correlation carrier matrix
   (`033_execution_adapters.md`).
 - Marker-bearing events emitted for correlation MUST carry the same marker form(s) that the adapter
@@ -2768,7 +2775,8 @@ This artifact is stored at `criteria/results.jsonl`.
 Purpose:
 
 - Records whether expected signals were observed for each executed action.
-- Provides the authoritative source for "missing telemetry" classification when criteria exist.
+- Provides the authoritative source for per-action telemetry presence/absence analysis when criteria
+  exist.
 
 Format:
 
@@ -2783,12 +2791,19 @@ Key semantics:
 - Results reference `action_id` and `action_key` from ground truth.
 - Results include a status (`pass | fail | skipped`) plus evidence references (example: counts of
   matching events, sample event_ids, query plans used).
-- The evaluator MUST emit exactly one result row per selected ground truth action.
-  - If an action cannot be evaluated (missing telemetry, mapping gaps, executor error, and so on),
-    the evaluator MUST emit `status=skipped` and MUST set a stable `reason_domain="criteria_result"`
-    and `reason_code`.
-- The evaluator MUST NOT suppress results silently; skipped actions MUST remain visible in the
-  output.
+- The evaluator MUST emit exactly one result row per selected ground truth action **when criteria
+  evaluation runs**
+  - `status=skipped` is reserved for cases where evaluation did not run for that action (for
+    example: `criteria_unavailable`, `criteria_misconfigured`, `criteria_disabled`,
+    `action_not_executed`, `action_failed_before_evaluation`). Skipped results MUST set a stable
+    `reason_domain="criteria_result"` and `reason_code`.
+  - "Missing telemetry" (expected signals absent for an executed action) MUST surface as
+    `status=fail` with `signals[].status=unmatched` (not `status=skipped`).
+  - Stage-level failures where the telemetry dataset is unavailable (`input_missing`,
+    `artifact_missing`, and similar) MUST be raised **before** any `criteria/results.jsonl` is
+    written.
+- The evaluator MUST NOT suppress results silently; if `criteria/results.jsonl` is produced, skipped
+  actions MUST remain visible in the output.
 
 ### Runner evidence
 
@@ -3153,10 +3168,10 @@ Optional envelope extensions (v0.1):
   - The value MUST NOT be used as part of `metadata.event_id` computation (see the event identity
     ADR for identity-basis exclusions).
 
-- `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (string; optional): stable
-  derived token used to correlate synthetic activity for transports with length / character
+- `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` (string; optional): stable
+  derived digest used to correlate synthetic activity for transports with length / character
   constraints. This is the normalized (OCSF) representation of the ground-truth action field
-  `extensions.synthetic_correlation_marker_token`.
+  `extensions.synthetic_correlation_marker_digest`.
 
   - When present, the value MUST be preserved verbatim from ingestion through normalization.
   - The value MUST NOT be used as part of `metadata.event_id` computation (see the event identity

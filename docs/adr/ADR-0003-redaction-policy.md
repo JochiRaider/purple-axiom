@@ -697,6 +697,9 @@ Placeholder reason codes (normative, `PA_PLACEHOLDER_V1 reason_code=...`):
 - `redaction_policy_error`: redaction was enabled but could not safely be applied (including
   post-check matches)
 - `redaction_disabled`: redaction was disabled for the run (`security.redaction.enabled: false`)
+- `unix_text_redaction_unsupported`: v0.1 does not attempt deterministic in-place redaction for Unix
+  flat-text telemetry artifacts (for example syslog and audit.log); content is withheld and the
+  standard artifact path contains a placeholder.
 
 Quarantine storage (only when `security.redaction.disabled_behavior: quarantine_unredacted`):
 

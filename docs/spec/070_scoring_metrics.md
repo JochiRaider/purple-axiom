@@ -56,9 +56,6 @@ Notes:
 - Scoring consumes the normalized store via the Parquet dataset representation at
   `normalized/ocsf_events/**` (schema snapshot: `normalized/ocsf_events/_schema.json`).
 
-- JSONL (`normalized/ocsf_events.jsonl`) is legacy v0.1.x compatibility only and MUST NOT be
-  required/used when the Parquet dataset representation is present.
-
 - Scoring consumes additional stage outputs (for example `bridge/`,
   `normalized/mapping_profile_snapshot.json`) but those are not required for the minimal contracted
   scoring summary.
@@ -69,6 +66,7 @@ Notes:
 ### Config keys used
 
 - `scoring.*` (gap taxonomy selection, thresholds, weights)
+- `detection.join.clock_skew_tolerance_seconds` (pivot attribution join window tolerance)
 
 ### Default fail mode and outcome reasons
 
@@ -298,7 +296,7 @@ comparison semantics (normative)".
 
 - Fidelity:
 
-  - match_quality tiers (exact, partial, weak-signal)
+  - match_quality tiers (exact, partial, weak_signal)
 
 - Pipeline health:
 
@@ -387,11 +385,11 @@ Join precedence (normative). For each detection hit, candidates MUST be evaluate
 1. Marker join (highest confidence). If:
 
    - the ground-truth action includes `extensions.synthetic_correlation_marker` and/or
-     `extensions.synthetic_correlation_marker_token`, and
+     `extensions.synthetic_correlation_marker_digest`, and
    - at least one matched event (by `matched_event_ids[]`) includes a matching value in the
      corresponding normalized envelope field:
      - `metadata.extensions.purple_axiom.synthetic_correlation_marker`, and/or
-     - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, then the hit MUST be
+     - `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`, then the hit MUST be
        attributed to that action with `match_quality="exact"`.
 
 1. Criteria-window join (secondary). If marker join produces no candidates, and
@@ -408,10 +406,10 @@ Join precedence (normative). For each detection hit, candidates MUST be evaluate
    attributed using a deterministic pivot join:
 
    - the hit `first_seen_utc` MUST be within a fallback window around the action timestamp:
-     `[action.timestamp_utc - skew_tolerance, action.timestamp_utc + max_allowed_latency_seconds]`
+     `[action.timestamp_utc - skew_tolerance_seconds, action.timestamp_utc + max_allowed_latency_seconds]`
      where `max_allowed_latency_seconds` is taken from
-     `scoring.thresholds.max_allowed_latency_seconds`, and `skew_tolerance` is fixed at 1 second
-     (v0.1),
+     `scoring.thresholds.max_allowed_latency_seconds`, and `skew_tolerance_seconds` is taken from
+     `detection.join.clock_skew_tolerance_seconds` (default `1`) (v0.1),
    - and (when available) the hit’s matched events originate from the action’s target asset. In this
      case the `match_quality` MUST be `"weak_signal"`.
 
@@ -450,7 +448,7 @@ Candidate selection and tie-breaks (normative).
 
 Allowed values (v0.1):
 
-- `exact`: marker join succeeded (canonical marker and/or marker token evidence).
+- `exact`: marker join succeeded (canonical marker and/or marker digest evidence).
 - `partial`: criteria-window join succeeded (no marker evidence).
 - `weak_signal`: pivot join was required (no marker and no criteria-window evidence).
 
@@ -778,20 +776,21 @@ Rules (normative):
 The scoring stage MUST map compiled plan `non_executable_reason.reason_code` values to gap
 categories as follows:
 
-| `non_executable_reason.reason_code` (from compiled plan) | Gap Category         | Notes                                                                                           |
-| -------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
-| `unmapped_field`                                         | `bridge_gap_mapping` | Field alias missing in mapping pack                                                             |
-| `unroutable_logsource`                                   | `bridge_gap_mapping` | No router entry for Sigma logsource                                                             |
-| `raw_fallback_disabled`                                  | `bridge_gap_mapping` | Rule needs raw.\* but policy disallows                                                          |
-| `ambiguous_field_alias`                                  | `bridge_gap_mapping` | Multiple conflicting aliases                                                                    |
-| `unsupported_modifier`                                   | `bridge_gap_feature` | Modifier (base64, windash, etc.) not supported                                                  |
-| `unsupported_operator`                                   | `bridge_gap_feature` | Operator semantics not implementable                                                            |
-| `unsupported_value_type`                                 | `bridge_gap_feature` | Value type incompatible with operator                                                           |
-| `unsupported_regex`                                      | `bridge_gap_feature` | Regex pattern or options rejected by policy (RE2-only; PCRE-only constructs are Non-executable) |
-| `unsupported_correlation`                                | `bridge_gap_feature` | Correlation / multi-event semantics out of scope                                                |
-| `unsupported_aggregation`                                | `bridge_gap_feature` | Aggregation semantics out of scope                                                              |
-| `backend_compile_error`                                  | `bridge_gap_other`   | Unexpected compilation failure                                                                  |
-| `backend_eval_error`                                     | `bridge_gap_other`   | Runtime evaluation failure                                                                      |
+| `non_executable_reason.reason_code` (from compiled plan) | Gap Category         | Notes                                                                                             |
+| -------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| `unmapped_field`                                         | `bridge_gap_mapping` | Field alias missing in mapping pack                                                               |
+| `unroutable_logsource`                                   | `bridge_gap_mapping` | No router entry for Sigma logsource                                                               |
+| `raw_fallback_disabled`                                  | `bridge_gap_mapping` | Rule needs raw.\* but policy disallows                                                            |
+| `ambiguous_field_alias`                                  | `bridge_gap_mapping` | Multiple conflicting aliases                                                                      |
+| `unsupported_modifier`                                   | `bridge_gap_feature` | Modifier (base64, windash, etc.) not supported                                                    |
+| `unsupported_operator`                                   | `bridge_gap_feature` | Operator semantics not implementable                                                              |
+| `unsupported_value_type`                                 | `bridge_gap_feature` | Value type incompatible with operator                                                             |
+| `unsupported_regex`                                      | `bridge_gap_feature` | Regex pattern or options rejected by policy (RE2-only; PCRE-only constructs are Non-executable)   |
+| `unsupported_correlation`                                | `bridge_gap_feature` | Correlation / multi-event semantics out of scope                                                  |
+| `unsupported_aggregation`                                | `bridge_gap_feature` | Aggregation semantics out of scope                                                                |
+| `backend_compile_error`                                  | `bridge_gap_other`   | Unexpected compilation failure                                                                    |
+| `backend_eval_error`                                     | `bridge_gap_other`   | Runtime evaluation failure                                                                        |
+| `unsupported_regex`                                      | `bridge_gap_feature` | Regex pattern or options rejected by backend policy (dialect/limits; v0.1 default: PCRE2 bounded) |
 
 Unknown reason codes MUST be classified as `bridge_gap_other` and SHOULD trigger a warning log.
 

@@ -138,8 +138,12 @@ Common invariants (normative, v0.1):
   [ADR-0005: Stage outcomes and failure classification][adr-0005]. When health files are enabled
   (`operability.health.emit_health_files=true`), it MUST also record the same ordered outcomes in
   `logs/health.json`.
-- Any verb that writes contract-backed artifacts MUST follow the publish gate rules in this document
-  (staging + validation + atomic publish).
+- Any verb that writes stage-produced contract-backed artifacts MUST follow the publish gate rules
+  in this document (staging + validation + atomic publish).
+  - Exception (v0.1): build-time ingestion/pinning of operator-supplied inputs under `inputs/` (for
+    example `inputs/range.yaml` and `inputs/plan_draft.yaml`) is reception/pass-through and is
+    performed outside `StagePublishSession`. These pinned inputs MUST still be schema-validated per
+    the active contract registry before being written to their contracted paths.
 - Verbs MUST NOT introduce service-to-service RPC for coordination.
 
 Verb definitions (v0.1):
@@ -156,6 +160,19 @@ Verb definitions (v0.1):
       - `inputs/scenario.yaml` (scenario definition snapshot)
       - `inputs/plan_draft.yaml` (v0.2+; plan draft snapshot when plan compilation/execution is
         enabled)
+    - Ingress YAML snapshotting (normative, v0.1):
+      - For any input snapshot that is contract-backed with `validation_mode="yaml_document"` (for
+        example `inputs/range.yaml` and `inputs/plan_draft.yaml` when present), the orchestrator
+        MUST:
+        - validate the operator-supplied YAML bytes via `pa.yaml_decode.v1` and JSON Schema
+          validation before writing them to `runs/<run_id>/inputs/...` (see
+          `026_contract_spine.md`),
+        - compute `yaml_semantic_sha256_v1` for the bytes and record the digest string in the run
+          manifest field defined for that input, and
+        - write the original bytes into `runs/<run_id>/inputs/...` verbatim (opaque copy; no
+          rewriting or normalization).
+      - Canonical YAML byte emission is intentionally unspecified in v0.1; this is reception and
+        pass-through only.
     - These inputs MUST be treated as read-only by all stages. Implementations MUST NOT mutate these
       snapshots after `build` completes.
   - MUST NOT execute scenario actions or collect telemetry.
@@ -1079,8 +1096,11 @@ Deterministic stage → contract-backed outputs (normative):
   `025_data_contracts.md`).
 - When a publish session begins (`PublishGate.begin_stage(stage_id)`), `stage_id` MUST be a valid
   `stage_owner` value from the active contract registry (pipeline stage ids plus the reserved owner
-  token `orchestrator`). Orchestrator-owned artifacts (bindings with `stage_owner="orchestrator"`)
-  MUST be published via a session opened with `stage_id="orchestrator"`.
+  token `orchestrator`).
+  - Orchestrator-owned artifacts that are published via `PublishGate` MUST use a session opened with
+    `stage_id="orchestrator"`.
+  - Pinned operator input snapshots under `inputs/` are materialized during build-time ingestion and
+    are not written through `StagePublishSession` (see "Build-time input ingestion").
 - The orchestrator (or stage wrapper) MUST construct `expected_outputs[]` by joining the current
   `stage_id` to `bindings[].stage_owner` and mapping concrete artifact paths to `contract_id` via
   `artifact_glob`.
@@ -1691,6 +1711,14 @@ Type names such as `id_slug_v1`, `semver_v1`, and `version_token_v1` refer to
   - When present, canonical JSON MUST use RFC 8785 (JCS) serialization.
   - Implementations SHOULD include `config_sha256` when the adapter's configuration can affect any
     contract-backed output or any regression-comparable metric.
+- `capabilities_sha256` (string; OPTIONAL): `sha256:<hex>` of RFC 8785 (JCS) canonical JSON of the
+  adapter's deterministic, port-scoped capability descriptor as observed by the orchestrator at
+  adapter load time.
+  - This value MUST be computed by the orchestrator host (do not trust adapter-provided values).
+  - Implementations SHOULD include `capabilities_sha256` when the owning port defines a
+    deterministic capability descriptor that can affect selection, feature gates, or any
+    contract-backed output.
+  - Port specifications MAY further require `capabilities_sha256` for specific ports.
 
 Determinism requirements (normative):
 
@@ -1698,6 +1726,7 @@ Determinism requirements (normative):
 - The provenance record MUST NOT include hostnames, machine-specific absolute paths, or timestamps.
 - If `source_kind != "builtin"`, `source_digest` MUST be present and MUST match
   `^sha256:[0-9a-f]{64}$`.
+- If `capabilities_sha256` is present, it MUST match `^sha256:[0-9a-f]{64}$`.
 - If adapter signatures are required by the effective policy snapshot
   (`security.adapters.require_signatures=true`), every non-builtin entry MUST include a `signature`
   object whose `key_id` is in `security.adapters.trusted_key_ids` and whose signature verifies
@@ -1802,7 +1831,10 @@ These invariants apply to the orchestrator, all stages, and all extension adapte
 
 1. **Publish-gate only for contract-backed outputs**
 
-   - Any write to a contract-backed location MUST go through `PublishGate`.
+   - Any write that publishes stage-produced contract-backed outputs MUST go through `PublishGate`.
+     - Exception (v0.1): orchestrator build-time pinning of operator-supplied inputs under
+       `runs/<run_id>/inputs/` is performed outside `StagePublishSession` (see "Build-time input
+       ingestion").
    - Partial promotion is forbidden: if a stage fails fail-closed, it MUST NOT publish its final
      output directory.
 

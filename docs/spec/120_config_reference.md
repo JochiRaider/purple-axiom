@@ -357,11 +357,11 @@ Common keys:
         `032_atomic_red_team_executor_integration.md`) and records marker values in run artifacts.
         - Ground truth action records:
           - `extensions.synthetic_correlation_marker` (see `025_data_contracts.md`).
-          - `extensions.synthetic_correlation_marker_token` (see `025_data_contracts.md`).
+          - `extensions.synthetic_correlation_marker_digest` (see `025_data_contracts.md`).
         - Normalized OCSF events (when marker-bearing telemetry is ingested and normalized):
           - `metadata.extensions.purple_axiom.synthetic_correlation_marker` (see
             `050_normalization_ocsf.md`).
-          - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (see
+          - `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` (see
             `050_normalization_ocsf.md`).
     - `method` (optional, default: `auto`): `auto | windows_eventlog | linux_syslog | filelog`
       - `auto`: implementation selects an OS-appropriate method.
@@ -563,6 +563,14 @@ Common keys:
     - `fail_closed`: offset violations/unmeasurable probes are run-fatal telemetry failures.
     - `warn_and_skip`: emit `telemetry.clock_sync` as failed but allow downstream stages to proceed
       (run becomes partial).
+- `unix` (optional object): Unix-specific telemetry validation controls.
+  - `source_overlap` (optional object): configuration overlap detection for Unix log sources.
+    - `fail_mode` (optional string enum, default: `fail_closed`): `fail_closed | warn_and_skip`
+      - `fail_closed`: unacknowledged overlap is run-fatal (default).
+      - `warn_and_skip`: unacknowledged overlap is recorded but does not block downstream stages.
+    - Note (normative): when overlap is detected and explicitly acknowledged via a declared Unix
+      dedupe strategy, the emitted substage fail_mode MUST be `warn_and_skip` regardless of this
+      setting (the run is degraded but allowed to proceed).
 - `baseline_profile` (optional)
   - `enabled` (optional, default: false)
     - When `true`, telemetry validation MUST enforce the telemetry baseline profile gate (see
@@ -787,6 +795,9 @@ Common keys:
         1. If no candidates parse as SemVer, fail closed.
       - The resolved `criteria_pack_version` MUST be recorded in run provenance (manifest + report).
   - `paths` (optional): one or more search paths (directories) that contain criteria packs
+    - In production/sandboxed environments, these paths are consumed by the orchestrator during
+      run-bundle preparation to materialize `inputs/criteria_pack_source/` for the validation stage
+      (see `035`).
   - `entry_selectors` (optional): constraints to pick the most specific entry when multiple match
     - `os`
     - `roles`
@@ -892,6 +903,12 @@ Common keys:
   - `limits` (optional)
     - `max_rules` (optional)
     - `max_compile_errors` (optional)
+    - `max_predicate_ast_nodes_per_rule` (optional)
+      - Maximum allowed `predicate_ast_op_nodes` per compiled, executable rule.
+      - When set, exceedance MUST be surfaced via the `detection.performance_budgets` substage.
+    - `max_predicate_ast_nodes_total` (optional; RECOMMENDED default: 5000)
+      - Maximum allowed sum of `predicate_ast_op_nodes` across all compiled, executable rules.
+      - When set, exceedance MUST be surfaced via the `detection.performance_budgets` substage.
 - `join` (optional)
   - `clock_skew_tolerance_seconds` (default: 30)
 

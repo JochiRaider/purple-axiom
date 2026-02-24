@@ -168,6 +168,12 @@ This ordering MUST be used for deterministic sorts of:
   - Workspace-root registry: `docs/contracts/workspace_contract_registry.json`
     (workspace-root-relative bindings; relative to `<workspace_root>/`).
 
+- Registry version lockstep (normative; v0.1):
+
+  - `docs/contracts/contract_registry.json.registry_version` and
+    `docs/contracts/workspace_contract_registry.json.registry_version` MUST be identical.
+  - The Contract Spine gate MUST fail closed if they differ (treat as invalid configuration).
+
 - Producers and consumers MUST treat registry selection as an explicit configuration input required
   for contract-backed artifact interpretation. Tooling MUST NOT interpret run-relative bindings as
   workspace-root-relative bindings (or vice versa).
@@ -321,8 +327,15 @@ Normative requirements:
   Unless an artifact contract explicitly states otherwise, all other invariants and constraints
   continue to apply.
   - If an artifact contract has schema-required non-placeholder fields, placeholder instances MUST
-    satisfy those requirements using redacted-safe sentinel values as defined in
-    `090_security_safety.md`.
+    satisfy those requirements using redacted-safe sentinel values. The following sentinel
+    conventions are centrally defined (normative):
+
+    - Required timestamp/datetime fields: `"1970-01-01T00:00:00Z"` (UTC epoch; see
+      `090_security_safety.md`, "Placeholder artifacts").
+    - For all other required field types, each contract schema MUST either: (a) define a
+      schema-valid sentinel value in its `$defs` or documentation, or (b) relax the field to
+      optional for placeholder instances via the `placeholder`-conditioned schema variant. Contract
+      authors MUST NOT leave required-field sentinel behavior undefined.
 - Contract authors SHOULD factor the `pa.placeholder.v1` definition into shared `$defs` to avoid
   drift, but schema factoring choices are implementation-defined.
 
@@ -330,6 +343,8 @@ Verification hook (normative):
 
 - Content CI MUST include a lint rule that fails if any `validation_mode="json_document"` schema is
   missing the `placeholder` property.
+- The Contract Spine gate SHOULD lint that schemas with `placeholder` allowance define or relax all
+  required fields that cannot use the centrally-specified sentinels.
 
 ## Interfaces
 
@@ -863,6 +878,28 @@ Contract Spine rules (normative):
     mode policy (ingress-only; v0.1)”).
   - Stages MUST NOT publish contract-backed outputs using `validation_mode="yaml_document"`.
 
+Ingress YAML snapshotting (normative; v0.1):
+
+- Contract-backed YAML ingress artifacts are operator-supplied inputs that are pinned into the run
+  bundle as an **opaque byte copy** (no rewriting or normalization).
+
+- For each such ingress artifact (for example `inputs/range.yaml` and `inputs/plan_draft.yaml` when
+  present), the orchestrator MUST:
+
+  1. Read the operator-supplied bytes.
+  1. Validate the bytes by applying `pa.yaml_decode.v1` and then JSON Schema validation per the
+     bound contract (`validation_mode="yaml_document"`).
+     - On validation failure, the orchestrator MUST fail closed and MUST NOT write the bytes to the
+       contracted `inputs/...` path.
+  1. Compute `yaml_semantic_sha256_v1(yaml_bytes)` and record the resulting digest string in the
+     manifest field defined for that input.
+  1. Write the original bytes into `runs/<run_id>/inputs/...` verbatim.
+
+- This is reception and pass-through only; there is no Contract Spine YAML emitter in v0.1.
+
+  - Accordingly, ingress YAML snapshotting is performed by the orchestrator via a direct filesystem
+    write outside any `StagePublishSession`.
+
 Non-contract YAML artifacts (clarification):
 
 - This policy does not prohibit `.yaml` files that are **not** contract-backed (for example byte
@@ -1189,6 +1226,9 @@ The Contract Spine gate MUST include tests that cover at minimum:
   - `artifact_glob` validity (`glob_v1`)
   - no ambiguous overlapping bindings
   - schema `contract_version` matches registry `contract_version`
+  - `registry_version` lockstep:
+    - `contract_registry.json.registry_version` MUST equal
+      `workspace_contract_registry.json.registry_version`
   - YAML ingress-only invariants (v0.1):
     - any `yaml_document` binding MUST have `stage_owner == "orchestrator"`
     - any `yaml_document` binding MUST bind under `inputs/`

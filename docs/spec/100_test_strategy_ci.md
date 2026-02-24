@@ -209,9 +209,10 @@ Conventions (normative):
 | Cross-cutting: run results summary (`run_results`)                       | `tests/fixtures/run_results/`                                                                                                                                                                  | `run_results_contract_and_hash`                                                                                                                               |
 | Cross-cutting: detection content bundle (`detection_content_release_v1`) | `tests/fixtures/content_bundles/detection_content_release_v1/`                                                                                                                                 | `content_bundle_offline_validation_smoke`, `run_plus_content_bundle_validation_smoke`                                                                         |
 | `lab_provider`                                                           | `tests/fixtures/lab_providers/`                                                                                                                                                                | `provider_smoke`, `failure_mapping_smoke`                                                                                                                     |
-| `runner`                                                                 | `tests/fixtures/runner/lifecycle/`, `tests/fixtures/runner/state_reconciliation/`, `tests/fixtures/runner/noise_profile/`                                                                      | `lifecycle_smoke`, `invalid_transition_blocked`, `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`, `noise_profile_canonicalization_crlf_lf`       |
+| `runner`                                                                 | See Note                                                                                                                                                                                       | See Note                                                                                                                                                      |
 | `telemetry`                                                              | `tests/fixtures/telemetry/synthetic_marker/`, `tests/fixtures/unix_logs/`, `tests/fixtures/osquery/`, `tests/fixtures/telemetry/egress_policy_canary/`, `tests/fixtures/telemetry/clock_sync/` | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`, `egress_policy_canary_smoke`, `clock_sync_skew_exceeded_smoke`, `clock_sync_unmeasurable_smoke` |
-| `normalization`                                                          | `tests/fixtures/normalization/`                                                                                                                                                                | `tier1_core_common_smoke`, `actor_identity_smoke`                                                                                                             |
+| Normalization: field mapping unit (`normalization`)                      | `tests/fixtures/normalization/mapping_unit/`                                                                                                                                                   | At minimum one case per supported source type × OCSF class (e.g. `win_process_create`, `sysmon_network_connection`)                                           |
+| Normalization: mapping pack conformance (`normalization`)                | `tests/fixtures/normalization/mapping_pack_conformance/`                                                                                                                                       | `ocsf_1_7_0_windows_baseline`, `ocsf_1_7_0_sysmon_baseline`                                                                                                   |
 | `validation` (criteria evaluation)                                       | `tests/fixtures/criteria/`                                                                                                                                                                     | `criteria_time_window_smoke`, `criteria_eval_smoke`, `criteria_authoring_compile_smoke`, `criteria_pack_lint_smoke`                                           |
 | `detection` (Sigma + Bridge)                                             | `tests/fixtures/sigma_rule_tests/<test_id>/`                                                                                                                                                   | `rule_smoke`, `unsupported_feature_rejected`                                                                                                                  |
 | `scoring`                                                                | `tests/fixtures/scoring/`                                                                                                                                                                      | `regression_comparables_smoke`                                                                                                                                |
@@ -220,6 +221,21 @@ Conventions (normative):
 | Content governance: golden datasets                                      | `tests/fixtures/golden_datasets/governance/`                                                                                                                                                   | `valid_minimal_golden`, `missing_required_artifact_fails`                                                                                                     |
 | Dataset exports: dataset release artifacts (workspace validation)        | `tests/fixtures/golden_datasets/releases/`                                                                                                                                                     | `dataset_release_smoke_valid`, `dataset_release_schema_invalid_fails`                                                                                         |
 | CI harness: Content CI                                                   | `tests/fixtures/ci/content_ci_harness/`                                                                                                                                                        | `smoke_pass`, `smoke_fail`                                                                                                                                    |
+
+Note:
+
+- `runner`
+  - Canonical fixture roots: `tests/fixtures/runner/lifecycle/`,
+    `tests/fixtures/runner/state_reconciliation/`, `tests/fixtures/runner/noise_profile/`,
+    `tests/fixtures/runner/synthetic_marker/`, `tests/fixtures/runner/atomic/`,
+    `tests/fixtures/runner/<adapter_id>/`, `tests/fixtures/runner/requirements/`,
+    `tests/fixtures/runner/principal_context/`
+  - Minimum fixture sets (normative): `lifecycle_smoke`, `invalid_transition_blocked`,
+    `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`,
+    `noise_profile_canonicalization_crlf_lf`, `marker_emitted`, `marker_digest_vector`,
+    `atomic_determinism_smoke`, `adapter_conformance_atomic`, `unmet_admin_privilege`, `wrong_os`,
+    `missing_tool`, `multiple_requirements_mixed_order`, `single_principal_known`,
+    `principal_unknown`
 
 ## Unit tests
 
@@ -697,10 +713,16 @@ Atomic runner determinism fixtures under `tests/fixtures/runner/atomic/` validat
 Atomic test to resolved inputs to `$ATOMICS_ROOT` canonicalization produces stable
 `resolved_inputs_sha256` and `action_key`.
 
+The fixture set MUST include at least:
+
+- `atomic_determinism_smoke`:
+  - Input: two identical `engine="atomic"` runs with identical resolved inputs.
+  - Expected: stable `action_key` and stable `parameters.resolved_inputs_sha256` across runs.
+
 Execution adapter conformance suite (verification hook):
 
 - Each execution adapter MUST have a fixture pack under `tests/fixtures/runner/<adapter_id>/`.
-  - v0.1 baseline: `tests/fixtures/runner/atomic/` is required.
+  - v0.1 baseline harness target name: `adapter_conformance_atomic`.
 - A shared harness MUST execute the fixture pack(s) and assert:
   - required runner evidence header fields exist on all contract-backed JSON artifacts under
     `runner/` (`contract_version`, `run_id`, `action_id`, `action_key`, `generated_at_utc`)
@@ -961,28 +983,31 @@ The fixture set MUST include at least:
         entry representing cleanup invocation.
 
 Synthetic correlation marker fixtures under `tests/fixtures/runner/synthetic_marker/` validate
-deterministic marker computation, deterministic marker_token derivation, and attempted emission
+deterministic marker computation, deterministic marker_digest derivation, and attempted emission
 bookkeeping.
 
 The fixture set MUST include at least:
 
 - `marker_emitted`:
+
   - Input: runner config enables synthetic correlation marker emission.
   - Expected:
     - Ground truth includes both:
       - `extensions.synthetic_correlation_marker`, and
-      - `extensions.synthetic_correlation_marker_token`, for the action where `execute` is
+      - `extensions.synthetic_correlation_marker_digest`, for the action where `execute` is
         attempted.
     - The side-effect ledger includes an `execute`-phase entry describing the marker emission
       attempt (success or failure), consistent with runner contracts.
     - The marker values conform to the v1 formats defined in data contracts, and
-      `extensions.synthetic_correlation_marker_token` MUST equal the deterministic derivation from
+      `extensions.synthetic_correlation_marker_digest` MUST equal the deterministic derivation from
       `extensions.synthetic_correlation_marker`.
 
-Deterministic token test vector (required):
+- `marker_digest_vector`:
 
-- For `marker_canonical = "pa:synth:v1:00000000-0000-0000-0000-000000000000:s1:execute"`, the
-  expected `marker_token` MUST equal `-rqyVmMhNi0Dq9suJO8hb8` (N=22; base64url(SHA-256) prefix).
+  - Input:
+    - `marker_canonical = "pa:synth:v1:00000000-0000-0000-0000-000000000000:s1:execute"`
+  - Expected:
+    - `marker_digest == "-rqyVmMhNi0Dq9suJO8hb8"` (N=22; base64url(SHA-256) prefix).
 
 #### State reconciliation fixtures (required)
 
@@ -1177,12 +1202,12 @@ Minimum required fixture cases (normative):
     - the hit is attributed to that action, and
     - `match_quality = "exact"`.
 
-- `attribution_marker_token_only_exact`
+- `attribution_marker_digest_only_exact`
 
-  - Setup: A ground-truth executed action includes `extensions.synthetic_correlation_marker_token`,
+  - Setup: A ground-truth executed action includes `extensions.synthetic_correlation_marker_digest`,
     and at least one matched normalized event includes the same token in
-    `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` (with the canonical marker
-    absent on the matched event).
+    `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` (with the canonical
+    marker absent on the matched event).
   - Expected:
     - the hit is attributed to that action, and
     - `match_quality = "exact"`.
@@ -1781,7 +1806,7 @@ The fixture set MUST include at least:
   - Expected:
     - For all normalized events that carry
       `metadata.extensions.purple_axiom.synthetic_correlation_marker` and/or
-      `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` values observed in
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` values observed in
       ground truth for executed actions, the multiset of `metadata.event_id` values MUST be
       identical between the two runs.
     - Noise-profile metadata fields (when present) MUST NOT participate in `metadata.event_id`

@@ -175,8 +175,8 @@ Each simple-view row MUST include, at minimum:
   (see `ADR-0002-event-identity-and-provenance.md`).
 - `synthetic_correlation_marker` (string; nullable): copy of
   `metadata.extensions.purple_axiom.synthetic_correlation_marker` when present.
-- `synthetic_correlation_marker_token` (string; nullable): copy of
-  `metadata.extensions.purple_axiom.synthetic_correlation_marker_token` when present.
+- `synthetic_correlation_marker_digest` (string; nullable): copy of
+  `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest` when present.
 
 The following fields SHOULD be present when available from the source:
 
@@ -795,7 +795,7 @@ Normative requirements:
 - The raw store MUST preserve any marker evidence field(s) in the captured record (attributes/body
   as emitted). Normalization MUST preserve the marker evidence on the OCSF envelope fields:
   - `metadata.extensions.purple_axiom.synthetic_correlation_marker`, and
-  - `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`, even when the base event
+  - `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`, even when the base event
     is not mapped (see [Normalization](050_normalization_ocsf.md))
 
 This invariant is required for regression comparisons and for classifying `missing_telemetry` when
@@ -815,6 +815,7 @@ State machine integration (required):
   corresponding checks are enabled:
   - `telemetry.disk.preflight`
   - `telemetry.clock_sync`
+  - `telemetry.unix.source_overlap`
   - `telemetry.agent.liveness`
   - `telemetry.windows_eventlog.raw_mode`
   - `telemetry.network.egress_policy`
@@ -840,6 +841,28 @@ operability spec section "Telemetry validation (gating)":
   `reason_code=disk_metrics_missing`.
 - If free space is insufficient for the configured raw-store budget, telemetry validation MUST fail
   closed with `reason_code=disk_free_space_insufficient`.
+
+### Unix source overlap check (required when Unix sources are enabled)
+
+Unix log sources can overlap on a single host (for example, journald forwarding into rsyslog text
+files). Silent dual-ingestion without an explicit dedupe strategy is a data-integrity defect that
+compromises correlation.
+
+When any Unix source under `telemetry.sources.unix.*` is enabled, telemetry validation MUST evaluate
+a Unix source overlap check and MUST emit a dotted substage outcome with
+`stage="telemetry.unix.source_overlap"`.
+
+Outcome rules (normative; see ADR-0005):
+
+- If overlap is not detected, emit `status="success"`.
+- If overlap is detected and the operator has not acknowledged the overlap (no dedupe strategy is
+  declared), emit `status="failed"`, `reason_code=unix_source_overlap_unacknowledged`, and default
+  `fail_mode=fail_closed` (configurable via `telemetry.unix.source_overlap.fail_mode`).
+- If overlap is detected and the operator has acknowledged the overlap (dedupe strategy declared),
+  emit `status="failed"`, `reason_code=unix_source_overlap_active`, and `fail_mode=warn_and_skip`.
+
+Evidence SHOULD be recorded in `runs/<run_id>/logs/telemetry_validation.json` under
+`unix_source_overlap` (see recommended fields in "Telemetry validation output").
 
 ### Telemetry baseline profile gate (required when enabled)
 
@@ -991,9 +1014,10 @@ Minimum required fields for `logs/telemetry_validation.json`:
   - `correlation_marker_strategy` (object; MAY be empty)
     - if `runner.atomic.synthetic_correlation_marker.enabled=true`, implementations MUST record the
       synthetic correlation marker carrier paths (ground truth carriers:
-      `extensions.synthetic_correlation_marker` and `extensions.synthetic_correlation_marker_token`;
-      normalized carriers: `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
-      `metadata.extensions.purple_axiom.synthetic_correlation_marker_token`).
+      `extensions.synthetic_correlation_marker` and
+      `extensions.synthetic_correlation_marker_digest`; normalized carriers:
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker` and
+      `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`).
 - `assets` (array of objects; sorted by `asset_id` ascending)
   - `asset_id` (string)
   - `collector_config_sha256` (string; `sha256:<lowercase_hex>`)
@@ -1116,6 +1140,19 @@ Determinism requirements (clock sync):
 - If multiple samples are taken, `selected=true` MUST be applied to exactly one sample per
   measurable asset.
 - If multiple samples share the minimum `round_trip_ms`, the first such sample MUST be selected.
+
+Recommended additional fields (Unix source overlap):
+
+- `unix_source_overlap` (object, OPTIONAL; REQUIRED when any Unix source under
+  `telemetry.sources.unix.*` is enabled): overlap detection evidence.
+  - `journald_enabled` (bool)
+  - `overlap_detected` (bool)
+  - `operator_acknowledged` (bool)
+  - `dedupe_strategy` (string, OPTIONAL; present when `operator_acknowledged=true`)
+  - `streams` (array of strings; sorted; examples: `journald+syslog_files`,
+    `journald+audit_log_files`)
+  - `syslog_files` (array of strings; sorted; OPTIONAL)
+  - `audit_log_files` (array of strings; sorted; OPTIONAL)
 
 Recommended additional fields (agent liveness / dead-on-arrival triage):
 

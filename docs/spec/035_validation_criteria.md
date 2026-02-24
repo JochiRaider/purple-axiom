@@ -61,7 +61,11 @@ Notes:
 - JSONL (`normalized/ocsf_events.jsonl`) is legacy compatibility only and MUST NOT be required/used
   when the Parquet dataset representation is present.
 - This stage consumes additional **non-contract** inputs in v0.1:
-  - the criteria pack source material from configured `validation.criteria_pack.paths`
+  - criteria pack source material.
+    - preferred: `inputs/criteria_pack_source/` (materialized by the orchestrator before the runner
+      executes)
+    - fallback (development-only): resolve from configured `validation.criteria_pack.paths` search
+      roots
 
 ### Config keys used
 
@@ -520,8 +524,11 @@ Version bumps:
 
 Ownership and responsibility:
 
-- Criteria pack resolution and snapshotting is performed by the **validation stage** (the “criteria
-  evaluator”), which is the first stage that consumes criteria packs.
+- Criteria pack **resolution/materialization** is performed by the **orchestrator** as part of
+  run-bundle preparation (pre-run). The materialized pack version directory is provided to the
+  validation stage as non-contract input at `inputs/criteria_pack_source/`.
+- Criteria pack **snapshotting** (into `criteria/manifest.json` and `criteria/criteria.jsonl`) and
+  criteria evaluation is performed by the **validation stage** (the “criteria evaluator”).
 - The runner MUST NOT resolve criteria packs (the runner only records execution-definition
   provenance used for drift detection).
 
@@ -533,7 +540,19 @@ Determinism requirement:
   - `manifest.versions.criteria_pack_id`
   - `manifest.versions.criteria_pack_version`
 
-Resolution algorithm (normative):
+Resolution algorithm (normative)
+
+The orchestrator MUST execute this algorithm during **run-bundle preparation** (pre-run) to select a
+single immutable pack version directory and materialize it into the run bundle at
+`runs/<run_id>/inputs/criteria_pack_source/` (non-contract input) containing:
+
+- `manifest.json`
+- `criteria.jsonl`
+- optional `criteria_compile_report.json`
+
+The validation stage MUST snapshot from `inputs/criteria_pack_source/` when present. Direct
+filesystem resolution from `validation.criteria_pack.paths[]` is a development-only fallback and
+MUST be disabled in CI/regression.
 
 1. Let `criteria_pack_id = validation.criteria_pack.criteria_pack_id`.
 1. Let `criteria_pack_version = validation.criteria_pack.criteria_pack_version` (may be omitted;
@@ -596,6 +615,11 @@ The **validation stage** MUST snapshot the selected criteria pack into the run b
 remain reproducible even if the repo changes. After publish, the snapshot MUST be treated as
 read-only by all downstream stages.
 
+In production, the selected pack version directory is expected to be **materialized into the run
+bundle** by the orchestrator at `runs/<run_id>/inputs/criteria_pack_source/` (non-contract input).
+The validation stage MUST snapshot from `inputs/criteria_pack_source/` when present and MUST NOT
+perform repository discovery at evaluation time.
+
 Snapshot paths:
 
 - `runs/<run_id>/criteria/manifest.json`
@@ -607,6 +631,9 @@ Normative rule:
 
 - Criteria evaluation MUST use only the run-bundle snapshot (`runs/<run_id>/criteria/**`) and MUST
   NOT read criteria pack files directly from the repository after snapshotting.
+- If required telemetry inputs are missing/unavailable (for example: `ground_truth.json` or the
+  normalized dataset), the validation stage MUST fail before writing `criteria/results.jsonl` (no
+  partial output).
 
 Unless a `runs/<run_id>/` prefix is explicitly included, paths in this document are run-relative.
 
@@ -1101,6 +1128,9 @@ Selector matching (normative):
   satisfaction MUST evaluate to "not satisfied" for entries requiring that dimension.
 - If an entry's `selectors` object contains any key other than `os`, `roles`, or `executor`, that
   entry MUST be treated as not eligible by evaluators that do not recognize the key.
+
+Selection is performed by the validation stage. Runners SHOULD NOT auto-populate `criteria_ref` in
+ground truth; if present, it MUST represent an explicit pin (scenario/operator policy).
 
 Selection algorithm (normative):
 
@@ -1880,7 +1910,8 @@ States:
 
 - `disabled`: validation criteria evaluation is disabled (`validation.enabled=false`).
 - `resolving`: resolver is selecting `(criteria_pack_id, criteria_pack_version)` from configured
-  inputs.
+  inputs and/or verifying an orchestrator-materialized pack source at
+  `inputs/criteria_pack_source/`.
 - `validating`: resolver is validating schema + hashes for the selected pack directory.
 - `snapshotted`: `runs/<run_id>/criteria/{manifest.json,criteria.jsonl}` published successfully.
 - `ready`: snapshot exists and is the sole input used for criteria evaluation.

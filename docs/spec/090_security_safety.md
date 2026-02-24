@@ -411,6 +411,10 @@ Schema-aware placeholder pattern (normative):
     elsewhere in the object; any required non-placeholder fields MUST use safe sentinel values only.
     - For schema-required timestamp fields (for example `generated_at_utc`), implementations MUST
       use the fixed sentinel value `1970-01-01T00:00:00Z`.
+    - For all other schema-required non-placeholder fields, each contract schema MUST either:
+      - define a redacted-safe, schema-valid sentinel value (RECOMMENDED: via shared `$defs`), or
+      - relax the field to optional for placeholder instances via a `placeholder`-conditioned schema
+        variant. Contract authors MUST NOT leave required-field sentinel behavior undefined.
 
 - For text artifacts (`*.txt`):
 

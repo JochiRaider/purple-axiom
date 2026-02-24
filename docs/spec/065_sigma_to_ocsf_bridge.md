@@ -172,6 +172,10 @@ Determinism:
 - Mapping pack authors SHOULD order filters deterministically (RECOMMENDED: sort by `path`, then
   `op`, then canonical JSON of `value`).
 
+Terminology note: `metadata.source_type` is an **event producer** identifier (event_source_type). It
+MUST NOT be confused with `identity_basis.source_type` (identity_source_type), which is used only
+for deterministic `metadata.event_id` computation.
+
 Example (router table route entry):
 
 Note: `metadata.source_type` values MUST use mapping-pack `event_source_type` tokens (see ADR-0002)
@@ -424,7 +428,8 @@ The bridge MUST classify Sigma features into one of:
     - The backend MUST produce match results at window granularity (multi-event).
     - Each match group MUST correspond to exactly one `(timespan_bucket_start, group_by_key)` pair.
     - The evaluator MUST emit one detection instance per satisfied group with:
-      - `matched_event_ids = [<event_id>, ...]` (see determinism requirements for ordering)
+      - `matched_event_ids = [<event_id>, ...]` (sorted and deterministically truncated; see
+        "Deterministic match sets")
       - `first_seen_utc = min(time)` over contributing events
       - `last_seen_utc = max(time)` over contributing events
 
@@ -483,6 +488,7 @@ For `native_pcre2`, `backend.settings` MUST include at minimum:
 
 - `threads` (integer)
 - `timezone` (string; MUST equal `UTC`)
+- `max_matched_event_ids` (integer)
 - `regex_dialect` (string; MUST equal `pcre2`)
 - `regex_engine_version` (string)
 - `regex_match_limit` (integer)
@@ -575,10 +581,13 @@ Backend module hooks (logical interface):
 
 1. Deterministic match sets:
 
-   - Any emitted list of matched `metadata.event_id` MUST be sorted deterministically prior to
-     writing `detections/detections.jsonl`.
-   - For correlation detections, each `matched_event_ids` array MUST be sorted by (`event_time` asc,
-     then `event_id` asc).
+   - For every emitted detection instance, each `matched_event_ids` array MUST be sorted using
+     Contract Spine bytewise UTF-8 lexical ordering.
+   - For correlation detections, if `matched_event_ids` exceeds
+     `detection.sigma.bridge.backend_options.max_matched_event_ids`, the evaluator MUST truncate the
+     array deterministically after sorting (retain the first *N* ids).
+   - The evaluator MUST apply the sorting (and any truncation) prior to writing
+     `detections/detections.jsonl`.
 
 1. Deterministic compilation inputs:
 
@@ -690,7 +699,8 @@ types:
 
 Supported correlation fields (minimum):
 
-- `correlation.rules` (referenced rule `id` values and/or rule `name` values)
+- `correlation.rules` (referenced rule `id` values and/or rule `name` values; `title` allowed as a
+  compatibility fallback)
 - `correlation.type`
 - `correlation.timespan`
 - `correlation.group-by`
@@ -698,6 +708,13 @@ Supported correlation fields (minimum):
 - `correlation.field` (required for `value_count`)
 - `correlation.aliases` (optional; correlation field unification)
 - `correlation.generate` (optional)
+
+Deterministic correlation rule reference resolution (normative):
+
+- When resolving each `correlation.rules[]` token to a base rule, the compiler MUST apply an exact
+  match lookup in the deterministic priority order `id` → `name` → `title`.
+- If a token matches multiple rules at the same priority tier, or matches no rules, the correlation
+  rule MUST be marked non-executable with `reason_code=backend_compile_error`.
 
 Out of scope in v0.1 (MUST be marked non-executable when encountered):
 
@@ -849,7 +866,7 @@ Checks (normative; apply to `executable=true` plans):
        5,000): maximum allowed sum of `predicate_ast_op_nodes` across all compiled, executable
        rules.
 
-     Exceedance SHOULD be surfaced via the detection performance budget gate
+     Exceedance SHOULD be surfaced via the detection performance budget substage
      (`detection.performance_budgets`) as defined in `110_operability.md`.
 
 Verification hook (normative):
@@ -940,6 +957,7 @@ The bridge MUST use the following `reason_code` values for common failure modes:
 
 - Unknown logsource -> unroutable_logsource
 - Unmapped field without raw fallback -> unmapped_field
+- Ambiguous field alias resolution -> ambiguous_field_alias
 - Raw fallback required but disabled or blocked by policy -> raw_fallback_disabled
 - Unsupported modifier -> unsupported_modifier
 - Unsupported operator -> unsupported_operator
@@ -1007,6 +1025,7 @@ These artifacts MUST conform to the data contracts specification, including cano
     - `total_rules`
     - `routed_rules`
     - `executable_rules`
+    - `non_executable_rules`
     - `matched_rules`
     - `match_events_total`
     - `fallback_used_rules`
@@ -1016,6 +1035,8 @@ These artifacts MUST conform to the data contracts specification, including cano
 
   - Determinism:
 
+    - `non_executable_rules` MUST equal `total_rules - executable_rules`.
+    - `non_executable_rules` MUST equal the sum of values in `non_executable_reason_counts`.
     - `top_unmapped_fields` MUST be sorted by (`count` desc, then `field` asc).
     - `top_unroutable_logsources` MUST be sorted by (`count` desc, then `logsource` asc).
 

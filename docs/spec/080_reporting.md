@@ -81,7 +81,6 @@ Notes:
 ### Isolation test fixture(s)
 
 - `tests/fixtures/reporting/defense_outcomes/`
-- `tests/fixtures/reporting/defense_outcomes/`
 - `tests/fixtures/reporting/regression_compare/`
 - `tests/fixtures/reporting/thresholds/`
 - `tests/fixtures/reporting/report_render/`
@@ -188,22 +187,23 @@ Notes:
 - Some artifacts are "optional but promoted": they may be absent depending on config and disk
   budgets, but if present they are included in default exports.
 
-| Path                                                                       | Source stage  | Purpose                                                            |
-| -------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
-| `runner/`                                                                  | runner        | Per-action transcripts and cleanup evidence                        |
-| `runner/principal_context.json`                                            | runner        | Redaction-safe principal context summary                           |
-| `inputs/baseline_run_ref.json`                                             | reporting     | Resolved regression baseline reference (when enabled)              |
-| `inputs/baseline/manifest.json`                                            | reporting     | Baseline manifest snapshot (when enabled)                          |
-| `logs/cache_provenance.json`                                               | orchestrator  | Cache hit/miss provenance (when enabled)                           |
-| `plan/expanded_graph.json`                                                 | runner        | Compiled plan graph (v0.2+)                                        |
-| `plan/expansion_manifest.json`                                             | runner        | Matrix expansion manifest (v0.2+)                                  |
-| `normalized/ocsf_events/` (includes `normalized/ocsf_events/_schema.json`) | normalization | Full normalized event store (Parquet dataset; canonical)           |
-| `bridge/mapping_pack_snapshot.json`                                        | detection     | Bridge inputs snapshot for reproducibility                         |
-| `bridge/compiled_plans/`                                                   | detection     | Per-rule compilation outputs                                       |
-| `normalized/mapping_profile_snapshot.json`                                 | normalization | Mapping profile snapshot for drift detection                       |
-| `security/checksums.txt`                                                   | signing       | SHA-256 checksums for long-term artifacts                          |
-| `security/signature.ed25519`                                               | signing       | Ed25519 signature over checksums                                   |
-| `report/junit.xml`                                                         | reporting     | CI-native JUnit test report (one testcase per action or scenario). |
+| Path                                                                       | Source stage  | Purpose                                                                                        |
+| -------------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------- |
+| `runner/`                                                                  | runner        | Per-action transcripts and cleanup evidence                                                    |
+| `runner/principal_context.json`                                            | runner        | Redaction-safe principal context summary                                                       |
+| `run_results.json`                                                         | orchestrator  | Compact, stable CI verdict and key metric snapshot (preferred CI verdict surface when present) |
+| `inputs/baseline_run_ref.json`                                             | reporting     | Resolved regression baseline reference (when enabled)                                          |
+| `inputs/baseline/manifest.json`                                            | reporting     | Baseline manifest snapshot (when enabled)                                                      |
+| `logs/cache_provenance.json`                                               | orchestrator  | Cache hit/miss provenance (when enabled)                                                       |
+| `plan/expanded_graph.json`                                                 | runner        | Compiled plan graph (v0.2+)                                                                    |
+| `plan/expansion_manifest.json`                                             | runner        | Matrix expansion manifest (v0.2+)                                                              |
+| `normalized/ocsf_events/` (includes `normalized/ocsf_events/_schema.json`) | normalization | Full normalized event store (Parquet dataset; canonical)                                       |
+| `bridge/mapping_pack_snapshot.json`                                        | detection     | Bridge inputs snapshot for reproducibility                                                     |
+| `bridge/compiled_plans/`                                                   | detection     | Per-rule compilation outputs                                                                   |
+| `normalized/mapping_profile_snapshot.json`                                 | normalization | Mapping profile snapshot for drift detection                                                   |
+| `security/checksums.txt`                                                   | signing       | SHA-256 checksums for long-term artifacts                                                      |
+| `security/signature.ed25519`                                               | signing       | Ed25519 signature over checksums                                                               |
+| `report/junit.xml`                                                         | reporting     | CI-native JUnit test report (one testcase per action or scenario).                             |
 
 ## Required reporting outputs (v0.1)
 
@@ -416,26 +416,30 @@ These artifacts are produced by upstream stages and referenced in the report:
 
 The report MUST prominently display run status and the reasons for any degradation. Run status is
 derived from stage outcomes per
-[ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md), plus any configured
-quality gates evaluated by the reporting stage (thresholds and regression).
+[ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md). Reporting also evaluates
+configured quality gates (thresholds and regression) and surfaces their results in the reporting
+artifacts; pipeline implementations MUST keep `manifest.status`, `report/thresholds.json`,
+`report/report.json`, and (when present) `run_results.json` mutually consistent.
 
 Stage outcomes are read from `manifest.json` (authoritative); `logs/health.json` is an optional
 mirror when enabled.
 
 Normative coupling:
 
-- `report/thresholds.json.status_recommendation` is the authoritative CI-facing status.
+- `report/thresholds.json.status_recommendation` is the authoritative computed verdict.
+- When `run_results.json` is present and schema-valid, CI MUST prefer `run_results.json.status`,
+  which MUST equal `report/thresholds.json.status_recommendation`.
 - `report/report.json.status` MUST equal `report/thresholds.json.status_recommendation`.
 - `report/report.json.status_reasons[]` MUST include the stable degradation reason codes that
   explain why the final status is not `success`.
 
 ### Status definitions
 
-| Status    | Meaning                                                                        | Exit code |
-| --------- | ------------------------------------------------------------------------------ | --------- |
-| `success` | All stages completed; all quality gates passed                                 | `0`       |
-| `partial` | Artifacts usable but one or more quality gates failed or were indeterminate    | `10`      |
-| `failed`  | Run not mechanically usable; required artifacts missing or stage failed closed | `20`      |
+| Status    | Meaning                                                                        | Exit code (standalone stage CLI) |
+| --------- | ------------------------------------------------------------------------------ | -------------------------------- |
+| `success` | All stages completed; all quality gates passed                                 | `0`                              |
+| `partial` | Artifacts usable but one or more quality gates failed or were indeterminate    | `10`                             |
+| `failed`  | Run not mechanically usable; required artifacts missing or stage failed closed | `20`                             |
 
 ### Status degradation reasons
 
@@ -493,8 +497,10 @@ CI-facing and report-facing outputs.
 
 Notes:
 
-- CI reads `report/thresholds.json.status_recommendation` as the primary verdict input when present
-  (see `105_ci_operational_readiness.md`).
+- `report/thresholds.json.status_recommendation` is the authoritative computed verdict.
+- CI MUST prefer `run_results.json.status` when present; it MUST mirror
+  `report/thresholds.json.status_recommendation` (see `105_ci_operational_readiness.md` "Evidence
+  precedence").
 - For bridge gap budgets, the shared reason code `gap_rate_exceeded` is disambiguated by the failing
   `gate_id` plus its `threshold` and `actual` values in `report/thresholds.json.gates[]`.
 
@@ -610,13 +616,13 @@ Required content (when marker emission is enabled):
 - Marker status: `enabled | disabled`.
 - The marker values used for the run:
   - canonical marker string (`extensions.synthetic_correlation_marker`)
-  - deterministic derived token (`extensions.synthetic_correlation_marker_token`)
+  - deterministic derived token (`extensions.synthetic_correlation_marker_digest`)
 - Per-action marker observability table (stable ordering, required):
   - Sort rows by `action_id` ascending.
   - Columns:
     - `action_id` (and action name when available)
     - `marker_canonical`
-    - `marker_token`
+    - `marker_digest`
     - `observed` (`yes | no`) (yes when either canonical marker or token is observed in normalized
       telemetry for the action)
     - `observed_form` (`canonical | token | both | none`)
@@ -680,9 +686,16 @@ JSON equivalent (required):
 
 The report MUST include:
 
-- Percentile distribution: p50, p90, p95, max (in milliseconds)
-- Histogram or distribution visualization (HTML only)
-- Techniques with latency exceeding threshold (flagged)
+- Percentile distribution: p50, p90, p95, max — read from `scoring/summary.json` fields
+  `detection_latency_p50_seconds`, `detection_latency_p90_seconds`, `detection_latency_p95_seconds`,
+  `detection_latency_max_seconds` (unit: seconds; `_seconds` suffix normative per Conventions).
+- Machine-readable output (`report/report.json`) MUST emit latency percentiles in seconds with
+  `_seconds`-suffixed field names. Implementations MUST NOT convert to milliseconds in
+  machine-readable artifacts.
+- Human-readable rendering (HTML only) MAY display values converted to milliseconds for operator
+  ergonomics, but MUST label the unit explicitly (e.g., `p95: 842 ms`).
+- Histogram or distribution visualization (HTML only).
+- Techniques with latency exceeding `scoring.thresholds.max_allowed_latency_seconds` (flagged).
 
 ### Detection fidelity
 
@@ -691,7 +704,7 @@ The report MUST include:
 - Fidelity tier counts from `scoring/summary.json`:
   - `exact`: detection matched expected event with high confidence
   - `partial`: detection matched with reduced confidence (time window, field subset)
-  - `weak`: detection present but match quality uncertain
+  - `weak_signal`: detection present but match quality uncertain
 - Fidelity breakdown by technique (when available)
 
 ### Gap analysis
@@ -864,7 +877,7 @@ Breakdown tables:
 - By `logsource.category`: routed vs unrouted counts
 - Top unrouted categories (limit 20)
 - Top unmapped Sigma fields (limit 20) with occurrence counts
-- Non-executable reason distribution (from `non_executable_reasons`)
+- Non-executable reason distribution (from `non_executable_reason_counts`)
 
 ### Criteria evaluation
 
@@ -1143,7 +1156,9 @@ Baseline field derivation (normative):
   - `inputs/baseline_run_ref.json` MUST exist.
   - `inputs/baseline_run_ref.json.baseline_manifest_sha256` MUST be present.
   - Reporting MUST compute `sha256(file_bytes)` of `inputs/baseline/manifest.json` and MUST verify
-    it `baseline.manifest_ref` MUST equal that `baseline_manifest_sha256` value.
+    it equals `inputs/baseline_run_ref.json.baseline_manifest_sha256`. On mismatch,
+    `comparability.status` MUST be `indeterminate` with
+    `comparability.reason_code="baseline_incompatible"` (see failure handling below).
   - On mismatch, `comparability.status` MUST be `indeterminate` with
     `comparability.reason_code="baseline_incompatible"`, `deltas[]` MUST be empty, and the reporting
     stage MUST emit `reporting.regression_compare` with `reason_code=baseline_incompatible`
@@ -1497,6 +1512,7 @@ The `report/report.json` output MUST conform to the following structure:
   "status_reasons": ["<reason_code>"],
   "status_reason_details": [
     {
+      "reason_domain": "report.schema",
       "reason_code": "<reason_code>",
       "measurement_layer": "telemetry | normalization | detection | scoring",
       "evidence_refs": [
@@ -1586,9 +1602,11 @@ The `report/report.json` output MUST conform to the following structure:
     },
     "comparability": {
       "status": "comparable | warning | indeterminate",
+      "reason_domain": "<string|null>",
       "reason_code": "<string|null>",
       "policy": {
-        "allow_mapping_pack_version_drift": false
+        "allow_mapping_pack_version_drift": false,
+        "allow_noise_profile_mismatch": false
       },
       "evidence_refs": [
         {
@@ -1729,10 +1747,29 @@ Verification hooks:
 
 ## CI integration
 
-### Exit codes
+### Exit code authority (normative)
 
-The reporting stage MUST set exit codes aligned with
-[ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md):
+Exit code authority is split by invocation mode, not by stage.
+
+Mode 1 — Orchestrated pipeline (normal operation):
+
+- The orchestrator process is the sole exit code authority.
+- The orchestrator MUST derive the process exit code from `manifest.status` after all stage outcomes
+  are recorded.
+- The reporting stage implementation MUST NOT influence the process exit code independently; it MUST
+  emit its outcome to the orchestrator via the orchestrator-owned `OutcomeSink` like every other
+  stage.
+
+Mode 2 — Standalone stage CLI (direct invocation for debugging/CI scripting):
+
+- When the reporting stage CLI is invoked directly outside the orchestrator (for example:
+  `pa-report evaluate --run-id <id>`), it MAY emit a process exit code using the same `0|10|20`
+  semantics.
+- In this mode, the reporting stage CLI MUST derive the exit code from
+  `report/thresholds.json.status_recommendation`.
+- This is a convenience contract for standalone use; it is not a pipeline-level authority.
+
+Standalone exit codes (Mode 2):
 
 | Exit code | Meaning                                                 |
 | --------- | ------------------------------------------------------- |
@@ -1743,13 +1780,31 @@ The reporting stage MUST set exit codes aligned with
 ### CI workflow integration
 
 ```yaml
-# Example GitHub Actions step
-- name: Evaluate thresholds
+# Example GitHub Actions step (run from the run root: runs/<run_id>/)
+- name: Evaluate run verdict
   run: |
-    STATUS=$(jq -r '.status_recommendation' report/thresholds.json)
+    set -euo pipefail
+
+    # CI verdict source precedence (see 105_ci_operational_readiness.md "Evidence precedence"):
+    #   1) run_results.json.status
+    #   2) report/thresholds.json.status_recommendation
+    #   3) manifest.json.status
+    if [ -f run_results.json ]; then
+      STATUS=$(jq -r '.status' run_results.json)
+    elif [ -f report/thresholds.json ]; then
+      STATUS=$(jq -r '.status_recommendation' report/thresholds.json)
+    elif [ -f manifest.json ]; then
+      STATUS=$(jq -r '.status' manifest.json)
+    else
+      STATUS="failed"
+    fi
+
     if [ "$STATUS" = "failed" ]; then exit 20; fi
     if [ "$STATUS" = "partial" ]; then exit 10; fi
-    exit 0
+    if [ "$STATUS" = "success" ]; then exit 0; fi
+
+    echo "Unknown status: $STATUS" >&2
+    exit 20
 ```
 
 ## References

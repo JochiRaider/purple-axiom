@@ -252,7 +252,8 @@ The registry instance MUST include, at minimum:
     `runner/actions/*/executor.json`)
   - `contract_id` (must exist in `contracts[]`)
   - `validation_mode` (authoritative parse/validation dispatch key; used by contract validation)
-    - Allowed values (v0.1): `json_document`, `jsonl_lines`, `yaml_document`, `parquet_dataset_v1`
+    - Allowed values (v0.1): `json_document`, `jsonl_lines`, `yaml_document`, `text_document_v1`,
+      `parquet_dataset_v1`
   - `stage_owner` (owning stage ID, or `orchestrator`, for deterministic stage → contract-backed
     output discovery)
     - Allowed values (v0.1): `lab_provider`, `runner`, `telemetry`, `normalization`, `validation`,
@@ -383,6 +384,9 @@ Deterministic expansion ordering (normative):
     its schema.
     - YAML documents MUST be decoded into a JSON-compatible in-memory representation (object/array
       and scalar types) prior to JSON Schema validation.
+  - `text_document_v1`: parse as a UTF-8 text document and validate it using a contract-specific
+    deterministic validator.
+    - Text documents MUST be UTF-8 (no BOM) and MUST use LF (`\n`) newlines.
   - `parquet_dataset_v1`: Validate a Parquet dataset directory anchored by a required `_schema.json`
     snapshot.
     - The binding's `artifact_glob` MUST point to the dataset’s `_schema.json` file (for example
@@ -767,6 +771,7 @@ The following list is for navigation only. The authoritative mapping is
 - `docs/contracts/detection_instance.schema.json`
 - `docs/contracts/summary.schema.json`
 - `docs/contracts/report.schema.json`
+- `docs/contracts/run_timeline.schema.json`
 - `docs/contracts/range_config.schema.json`
 - `docs/contracts/redaction_profile_set.schema.json`
 - `docs/contracts/telemetry_baseline_profile.schema.json`
@@ -1170,7 +1175,7 @@ stage_enablement_matrix_v1:
       - contract_id: runner_executor_evidence
         required_if: { path: runner.atomic.capture_executor_metadata }
       - contract_id: cleanup_verification
-        required_if: { path: runner.atomic.cleanup.verify }
+        required_if: { all_of: [{ path: plan.cleanup }, { path: runner.atomic.cleanup.verify }] }
       - contract_id: state_reconciliation_report
         required_if: { path: runner.atomic.state_reconciliation.enabled }
 
@@ -1233,6 +1238,8 @@ stage_enablement_matrix_v1:
     conditional_required_contracts:
       - contract_id: report.schema
         required_if: { path: reporting.emit_json }
+      - contract_id: run_timeline.schema
+        required_if: { path: reporting.emit_json }      
       - contract_id: baseline_run_ref
         required_if: { path: reporting.regression.enabled }
 
@@ -1293,7 +1300,7 @@ stage_enablement_matrix_v2:
       - contract_id: runner_executor_evidence
         required_if: { path: runner.atomic.capture_executor_metadata }
       - contract_id: cleanup_verification
-        required_if: { path: runner.atomic.cleanup.verify }
+        required_if: { all_of: [{ path: plan.cleanup }, { path: runner.atomic.cleanup.verify }] }
       - contract_id: state_reconciliation_report
         required_if: { path: runner.atomic.state_reconciliation.enabled }
 
@@ -1356,6 +1363,8 @@ stage_enablement_matrix_v2:
     conditional_required_contracts:
       - contract_id: report.schema
         required_if: { path: reporting.emit_json }
+      - contract_id: run_timeline.schema
+        required_if: { path: reporting.emit_json }        
       - contract_id: baseline_run_ref
         required_if: { path: reporting.regression.enabled }
 
@@ -2254,8 +2263,8 @@ under `manifest.versions`:
 
 - `manifest.versions.contracts` (object): map of `contract_id -> contract_version` for the set of
   contract-backed artifacts that are published in the run bundle.
-- `manifest.versions.datasets` (object): map of `schema_id -> schema_version` for each Parquet
-  dataset published with an `_schema.json` schema snapshot in the run bundle.
+- `manifest.versions.datasets` (object): map of `schema_id -> dataset_schema_version` for each
+  Parquet dataset published with an `_schema.json` schema snapshot in the run bundle.
 
 For non-diffable runs, producers SHOULD record the same maps when feasible.
 
@@ -2720,18 +2729,41 @@ Notes (normative):
 
 ### Expected telemetry hints and criteria references
 
-- `criteria_ref` SHOULD be present when a criteria entry is selected for the action.
+- `criteria_ref` MAY be present as a **plan-time pin** (pack id and version + entry id).
+  - When present, it enables deterministic joins between ground truth and `criteria/results.jsonl`.
 - `expected_telemetry_hints` MAY be present as coarse hints, but evaluation MUST prefer criteria
   evaluation when available.
 
-Population rules:
+Population rules (normative):
 
-- If a criteria entry is selected for the action, the runner MUST populate:
-  - `criteria_ref` (pack id and version + entry id)
-  - `expected_telemetry_hints` as a lossy projection of the selected criteria entry (for example:
-    expected OCSF class_uids and preferred sources).
-- If no criteria entry is selected, the runner MAY populate `expected_telemetry_hints` from a
-  separate telemetry hints pack or from lab instrumentation defaults.
+- If `criteria_ref` is provided by inputs at plan-compilation time (scenario input or operator
+  policy), the runner MUST transcribe it onto the corresponding ground truth action record without
+  modification (other than canonical JSON serialization).
+- The runner MUST NOT perform criteria pack resolution or criteria entry selection.
+- If `criteria_ref` is not provided, the runner MUST omit it. In that case, criteria selection is
+  performed by the validation criteria evaluator and recorded in
+  `criteria/results.jsonl.criteria_ref`.
+- `expected_telemetry_hints` MAY be provided by inputs (for example a telemetry hints pack) and, if
+  present, the runner MUST transcribe it. If it is not provided, the runner MAY populate it from lab
+  instrumentation defaults.
+
+Cleanup verification plan injection (normative):
+
+- To prevent the runner from reading criteria packs at runtime, cleanup verification check
+  definitions authored in criteria packs MUST be injected into the per-action plan and transcribed
+  into ground truth under `extensions.cleanup_verification_plan` (object) when all of the following
+  are true:
+  - `plan.cleanup=true`
+  - `runner.atomic.cleanup.verify=true`
+  - `criteria_ref.criteria_entry_id` is present for the action
+- `extensions.cleanup_verification_plan` MUST have this shape:
+  - `criteria_ref` (object): `{ criteria_pack_id, criteria_pack_version, criteria_entry_id }`
+  - `checks[]` (array): cleanup verification check definitions (same per-check definition schema as
+    `criteria_entry.cleanup_verification.checks[]` in `035_validation_criteria.md`)
+- `checks[]` MUST be ordered by `check_id` ascending (UTF-8 byte order).
+- When `extensions.cleanup_verification_plan` is present, the runner MUST execute cleanup
+  verification checks from this injected check list and MUST write
+  `runner/actions/<action_id>/cleanup_verification.json`.
 
 Cleanup:
 
@@ -3745,6 +3777,7 @@ Strict artifacts (manifest, ground truth, detections, summary) are intentionally
   - `extensions.sigma`
   - `extensions.runner`
   - `extensions.orchestrator`
+  - `extensions.cleanup_verification_plan`
 - Each namespace value SHOULD be an object; new fields SHOULD be added within a namespace object
   rather than as top-level scalars.
 - Top-level fields outside `extensions` MUST NOT be introduced unless explicitly defined by this
@@ -3783,6 +3816,9 @@ Normative requirements:
 - `targets` (if present) MUST be a subset of `runner.environment_config.targets`.
 - The object MUST be stable across repeated runs with identical inputs (deterministic ordering, no
   timestamps).
+
+Note: the `manifest.extensions.runner` namespace is also used for execution-definition provenance
+(see "Runner namespace: execution-definition provenance (v0.1)" below).
 
 #### Noise profile snapshot and hashing (normative)
 

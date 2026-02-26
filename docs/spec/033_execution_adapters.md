@@ -66,17 +66,17 @@ Namespace disambiguation (synthetic correlation marker): the synthetic correlati
 three distinct namespaces: (1) the ground-truth record fields
 `extensions.synthetic_correlation_marker` / `extensions.synthetic_correlation_marker_digest` stored
 in `ground_truth.jsonl` (runner output), (2) the normalized OCSF envelope fields
-`metadata.extensions.purple_axiom.synthetic_correlation_marker` / `_token` stored in the normalized
+`metadata.extensions.purple_axiom.synthetic_correlation_marker` / `_digest` stored in the normalized
 event store, and (3) the raw transport carrier surface (event body / Windows EventData / filelog
 line), which is transport-specific and has no fixed field path. This specification uses the ground
 truth + normalized paths only to name the canonical marker values; correlation carrier matrices
 describe the raw transport carrier surface.
 
-| Namespace                | Path                                                                       | Owner                                   |
-| ------------------------ | -------------------------------------------------------------------------- | --------------------------------------- |
-| Ground-truth record      | `extensions.synthetic_correlation_marker` / `_token`                       | `ground_truth.jsonl` (runner output)    |
-| Normalized OCSF envelope | `metadata.extensions.purple_axiom.synthetic_correlation_marker` / `_token` | normalized event store                  |
-| Raw transport carrier    | event body / Windows EventData / filelog line                              | transport-specific; no fixed field path |
+| Namespace                | Path                                                                        | Owner                                   |
+| ------------------------ | --------------------------------------------------------------------------- | --------------------------------------- |
+| Ground-truth record      | `extensions.synthetic_correlation_marker` / `_digest`                       | `ground_truth.jsonl` (runner output)    |
+| Normalized OCSF envelope | `metadata.extensions.purple_axiom.synthetic_correlation_marker` / `_digest` | normalized event store                  |
+| Raw transport carrier    | event body / Windows EventData / filelog line                               | transport-specific; no fixed field path |
 
 ### Executor variant normalization
 

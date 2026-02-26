@@ -284,9 +284,9 @@ default.
 Tier semantics (normative):
 
 - Tier-1 (pre-provisioned config) is the REQUIRED baseline for v0.1 runs.
-- Tier-2 (environment config apply) is permitted only when `runner.environment_config.enabled=true`
-  and `runner.environment_config.mode="apply"`, and MUST be recorded as the additive substage
-  `runner.environment_config` with deterministic operability evidence under `runs/<run_id>/logs/`.
+- Tier-2 (environment config apply) is permitted only when `runner.environment_config.mode="apply"`,
+  and MUST be recorded as the additive substage `runner.environment_config` with deterministic
+  operability evidence under `runs/<run_id>/logs/`.
 - Tier-3 (control-plane RPC) refers to a long-lived management channel used to mutate collector
   configuration or runtime behavior outside the runner action lifecycle. It does not forbid remote
   execution used by the `runner` stage to execute scenario actions.
@@ -299,11 +299,12 @@ The run bundle (`runs/<run_id>/`) is the authoritative coordination substrate:
   root.
 - The manifest (`runs/<run_id>/manifest.json`) MUST remain the authoritative index of what exists
   and which versions/config hashes were used.
-- When environment configuration is enabled, the orchestrator MUST record the configuration boundary
-  as additive substage `runner.environment_config` in the stage outcome surface (`manifest.json`,
-  and `logs/health.json` when enabled) and MUST ensure structured operability evidence is emitted
-  under `runs/<run_id>/logs/` (log classification is file-level per ADR-0009; schema and filenames
-  are implementation-defined here; see the [operability specification][operability-spec]).
+- When `runner.environment_config.mode != "off"`, the orchestrator MUST record the configuration
+  boundary as additive substage `runner.environment_config` in the stage outcome surface
+  (`manifest.json`, and `logs/health.json` when enabled) and MUST ensure structured operability
+  evidence is emitted under `runs/<run_id>/logs/` (log classification is file-level per ADR-0009;
+  schema and filenames are implementation-defined here; see the
+  [operability specification][operability-spec]).
 
 Regression comparison (when enabled) reads baseline reference artifacts under
 `runs/<run_id>/inputs/` and emits deltas under `runs/<run_id>/report/**`.
@@ -482,6 +483,9 @@ Per-action evidence location (normative):
 - `replay` MUST populate (or reuse) `normalized/` and MUST populate the output surfaces for each
   enabled downstream stage (`criteria/`, `detections/`, `scoring/`, `report/`), and update
   `manifest.json`.
+- `simulate` and `replay` SHOULD publish `run_results.json` (contract-backed; orchestrator-owned)
+  after `reporting` completes (and after `signing` when enabled), per the derivation rules in the
+  [data contracts specification][data-contracts].
 - `export` MUST write export bundles under the reserved run export namespace
   `<workspace_root>/exports/<run_id>/<export_id>/` (outside the run bundle) and MUST treat
   `runs/<run_id>/` as read-only input (it MUST NOT create, modify, or delete run-bundle artifacts).
@@ -896,7 +900,7 @@ Note: Telemetry collection MAY run concurrently with `runner` (collectors are ty
 before `runner` begins and stopped after it completes). The `telemetry` stage boundary refers to the
 post-run harvest/validation/publish step that materializes `raw_parquet/**` for downstream stages.
 
-When environment configuration is enabled, the orchestrator MUST record an additive `runner`
+When `runner.environment_config.mode != "off"`, the orchestrator MUST record an additive `runner`
 substage `runner.environment_config` after `lab_provider` completes and before any action enters the
 runner `prepare` lifecycle phase. This substage MUST be observable via stage outcomes in
 `manifest.json` and, when `operability.health.emit_health_files=true`, via `logs/health.json`.
@@ -1083,8 +1087,17 @@ Where:
 - `missing_required_outputs: list[str]` (run-relative, sorted; see finalize semantics)
 
 `required` MUST be explicitly set by the stage wrapper for every `ExpectedOutput` entry based on the
-stage enablement / required outputs matrix in `025_data_contracts.md` (see “Stage enablement and
-required contract outputs (v0.1)”). Implementations MUST NOT rely on the default.
+stage enablement / required outputs matrix in `025_data_contracts.md` (see "Stage enablement and
+required contract outputs (v0.1)"). Implementations MUST NOT rely on the default.
+
+`required` MUST be explicitly set by the stage wrapper for every `ExpectedOutput` entry.
+
+- For **contract-backed** outputs (`contract_id != null`), `required` MUST be derived from the stage
+  enablement / required contract outputs matrix in `025_data_contracts.md` (see “Stage enablement
+  and required contract outputs (v0.1)”). Implementations MUST NOT rely on the default.
+- For **non-contract** outputs (`contract_id == null`), requiredness MUST be defined by the owning
+  stage specification. The stage enablement matrix MUST NOT be used to infer requiredness for
+  non-contract outputs.
 
 Deterministic stage → contract-backed outputs (normative):
 
@@ -1565,6 +1578,7 @@ When applying `publish_ops[]`, the host MUST consult the contract registry bindi
 
 - If `validation_mode="json_document"`, only `op="write_json"` is permitted.
 - If `validation_mode="jsonl_lines"`, only `op="write_jsonl"` is permitted.
+- If `validation_mode="text_document_v1"`, only `op="write_bytes_base64"` is permitted.
 - If a server attempts to use `write_bytes_base64` for a contract-backed JSON or JSONL artifact, the
   host MUST fail closed.
 - If `validation_mode="yaml_document"`, the host MUST fail closed (contract-backed YAML outputs are

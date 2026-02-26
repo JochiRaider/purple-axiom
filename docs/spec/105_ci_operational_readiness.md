@@ -201,6 +201,26 @@ Unless otherwise stated, paths in this document are workspace-rooted under
 `cd` into `runs/<run_id>/` and treat the remaining paths as run-relative so long as the resolved
 paths are equivalent.
 
+#### CI reporting mode (required)
+
+For any run bundle produced by the Run CI lane (`ci-run`), the effective run configuration MUST set:
+
+- `reporting.emit_json=true`
+
+As a consequence, CI MUST treat the following reporting artifacts as REQUIRED for CI runs and MUST
+enforce them as a coupled set:
+
+- `runs/<run_id>/report/thresholds.json`
+- `runs/<run_id>/report/report.json`
+- `runs/<run_id>/report/run_timeline.md`
+
+`runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json` MUST be schema-valid.
+`runs/<run_id>/report/run_timeline.md` MUST be contract-valid per `run_timeline.schema`
+(timeline-conformant as defined in `080_reporting.md`).
+
+If `runs/<run_id>/report/junit.xml` is present, it MUST NOT be treated as a substitute for the
+coupled set above.
+
 #### Evidence precedence
 
 For a given `run_id`, CI MUST determine the verdict source in the following order. Any fail-closed
@@ -225,15 +245,17 @@ signals) MUST override the selected verdict source and force the CI verdict to `
 
 Reporting output coupling (fail closed):
 
-- If any of the following report artifacts are present:
+- For CI runs (see "CI reporting mode" above), CI MUST require the full coupled reporting set:
   - `runs/<run_id>/report/thresholds.json`
   - `runs/<run_id>/report/report.json`
-  - `runs/<run_id>/report/run_timeline.md` then CI MUST require all three to be present.
-- If `runs/<run_id>/report/junit.xml` is present, CI MUST also require the three artifacts above to
-  be present (JUnit is not a substitute for the contracted JSON decision surface).
+  - `runs/<run_id>/report/run_timeline.md`
+- If `runs/<run_id>/report/junit.xml` is present, CI MUST also require the coupled set above to be
+  present (JUnit is not a substitute for the contracted JSON decision surface).
 - `runs/<run_id>/report/thresholds.json` and `runs/<run_id>/report/report.json` MUST be
   schema-valid.
-- Any mismatch MUST be treated as a fail-closed pipeline contract violation.
+- `runs/<run_id>/report/run_timeline.md` MUST be contract-valid per `run_timeline.schema`.
+- Any missing/invalid artifact or any mismatch MUST be treated as a fail-closed pipeline contract
+  violation.
 
 If the run bundle root `runs/<run_id>/` does not exist (for example, failure before run directory
 creation), CI MUST treat the run as `failed`. When the orchestrator process exit code is available
@@ -253,8 +275,8 @@ When the following artifacts are present, CI MUST fail closed if their status si
 - When `runs/<run_id>/run_results.json` and `runs/<run_id>/manifest.json` are present,
   `runs/<run_id>/run_results.json.run_id` MUST equal `manifest.run_id` and
   `runs/<run_id>/run_results.json.status` MUST equal `manifest.status`.
-- When `runs/<run_id>/report/run_timeline.md` is present, it MUST be timeline-conformant per
-  `080_reporting.md` (including UTF-8 encoding, LF newlines, required columns, and stable ordering).
+- When `runs/<run_id>/report/run_timeline.md` is present, it MUST be contract-valid per
+  `run_timeline.schema` (timeline-conformant as defined in `080_reporting.md`).
 - When `runs/<run_id>/manifest.json` and `runs/<run_id>/report/report.json` are present,
   `manifest.run_id` from `runs/<run_id>/manifest.json` MUST equal
   `runs/<run_id>/report/report.json.run_id`.

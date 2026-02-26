@@ -338,6 +338,14 @@
       "format": "json"
     },
     {
+      "contract_id": "run_timeline.schema",
+      "schema_path": "docs/contracts/run_timeline.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Deterministic run timeline artifact (report/run_timeline.md).",
+      "artifact_kind": "run_artifact",
+      "format": "markdown"
+    },
+    {
       "contract_id": "requirements_evaluation",
       "schema_path": "docs/contracts/requirements_evaluation.schema.json",
       "contract_version": "0.1.0",
@@ -470,6 +478,7 @@
     { "artifact_glob": "raw/netflow/manifest.json", "contract_id": "netflow_manifest", "stage_owner": "telemetry", "validation_mode": "json_document" },
     { "artifact_glob": "raw/pcap/manifest.json", "contract_id": "pcap_manifest", "stage_owner": "telemetry", "validation_mode": "json_document" },
     { "artifact_glob": "report/report.json", "contract_id": "report.schema", "stage_owner": "reporting", "validation_mode": "json_document" },
+    { "artifact_glob": "report/run_timeline.md", "contract_id": "run_timeline.schema", "stage_owner": "reporting", "validation_mode": "text_document_v1" },
     { "artifact_glob": "report/thresholds.json", "contract_id": "thresholds.schema", "stage_owner": "reporting", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/cleanup_verification.json", "contract_id": "cleanup_verification", "stage_owner": "runner", "validation_mode": "json_document" },
     { "artifact_glob": "runner/actions/*/executor.json", "contract_id": "runner_executor_evidence", "stage_owner": "runner", "validation_mode": "json_document" },

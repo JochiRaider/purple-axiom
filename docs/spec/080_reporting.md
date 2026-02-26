@@ -38,12 +38,13 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id         | path/glob                       | Required?                                           |
-| ------------------- | ------------------------------- | --------------------------------------------------- |
-| `report.schema`     | `report/report.json`            | required (when `reporting.emit_json=true`)          |
-| `thresholds.schema` | `report/thresholds.json`        | required                                            |
-| `baseline_run_ref`  | `inputs/baseline_run_ref.json`  | required (when `reporting.regression.enabled=true`) |
-| `manifest`          | `inputs/baseline/manifest.json` | optional (when `reporting.regression.enabled=true`) |
+| contract_id           | path/glob                       | Required?                                           |
+| --------------------- | ------------------------------- | --------------------------------------------------- |
+| `report.schema`       | `report/report.json`            | required (when `reporting.emit_json=true`)          |
+| `thresholds.schema`   | `report/thresholds.json`        | required                                            |
+| `run_timeline.schema` | `report/run_timeline.md`        | required (when `reporting.emit_json=true`)          |
+| `baseline_run_ref`    | `inputs/baseline_run_ref.json`  | required (when `reporting.regression.enabled=true`) |
+| `manifest`            | `inputs/baseline/manifest.json` | optional (when `reporting.regression.enabled=true`) |
 
 #### Required inputs
 
@@ -57,9 +58,9 @@ Notes:
 
 - Reporting emits additional non-contract outputs in v0.1:
   - `report/report.html` when `reporting.emit_html=true`
-  - `report/run_timeline.md` (required for reportable runs; deterministic operator-facing artifact;
-    see "Run timeline artifact")
 - `report/thresholds.json` is contract-backed (`thresholds.schema`) and MUST validate at the
+  reporting publish gate.
+- `report/run_timeline.md` is contract-backed (`run_timeline.schema`) and MUST validate at the
   reporting publish gate.
 - When `reporting.regression.enabled=true`, reporting also consumes a baseline reference (see
   `120_config_reference.md`, `reporting.regression.*`) and materializes deterministic baseline
@@ -229,8 +230,8 @@ Notes:
   reportable runs and MUST validate at the reporting publish gate.
 - If an implementation supports `reporting.emit_json`, it MUST be `true` for any run intended to be
   reportable.
-- `report/run_timeline.md` is a required deterministic operator-facing artifact for v0.1 reportable
-  runs.
+- `report/run_timeline.md` is a contract-backed required deterministic operator-facing artifact
+  (`run_timeline.schema`) for v0.1 reportable runs and MUST validate at the reporting publish gate.
 
 The reporting stage MUST NOT modify upstream artifacts. It reads from `scoring/summary.json`,
 `bridge/coverage.json`, `normalized/mapping_coverage.json`, and other inputs, then emits derived

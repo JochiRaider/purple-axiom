@@ -764,7 +764,7 @@ from environment variables.
 v0.1 gating (normative):
 
 - This is a Tier-2 (environment config apply) mechanism: it is permitted only when
-  `runner.environment_config.enabled=true` and `runner.environment_config.mode="apply"`.
+  `runner.environment_config.mode="apply"`.
 - Any collector restart/hot-reload required to apply the per-run config MUST occur during the
   `runner.environment_config` substage and MUST complete before the `runner` stage enters the
   `prepare` lifecycle phase.

@@ -306,6 +306,30 @@ Rationale (non-normative):
 - YAML is accepted for operator/orchestrator-provided inputs, but deterministic interstage seams
   remain JSON/JSONL/Parquet to avoid cross-language YAML emission drift.
 
+### Text validation mode policy (stage-owned; v0.1)
+
+`validation_mode="text_document_v1"` validates a deterministic UTF-8 text artifact.
+
+Registry invariants (normative):
+
+- Any binding with `validation_mode="text_document_v1"` MUST have `stage_owner != "orchestrator"` in
+  v0.1.
+- In v0.1, `validation_mode="text_document_v1"` is reserved for reporting outputs under `report/`
+  (currently: `report/run_timeline.md`). Expanding the use of this mode MUST be done via an explicit
+  spec update (do not silently broaden).
+
+Validation requirements (normative):
+
+- The artifact MUST be UTF-8 (no BOM) and MUST use LF (`\n`) newlines.
+- Additional structure and semantic validation MUST be contract-specific.
+  - For `contract_id="run_timeline.schema"`, validation MUST enforce the run timeline requirements
+    in `080_reporting.md` ("Run timeline artifact").
+
+Fail-closed enforcement (normative):
+
+- `ContractRegistry.load(...)` MUST fail closed if any binding violates the invariants above.
+- The Contract Spine gate MUST fail closed if any binding violates the invariants above.
+
 ### Contract version constant
 
 Each schema MUST include a `contract_version` constant (SemVer string, expressed via JSON Schema
@@ -493,6 +517,7 @@ Output-root guardrail (normative):
   - v0.1 required:
     - `extra_roots("telemetry")` MUST include `raw_parquet/`.
     - `extra_roots("telemetry")` MUST include `raw/` when raw preservation is enabled.
+    - `extra_roots("signing")` MUST include `security/`.
 
 - Path containment check (normative):
 
@@ -532,6 +557,10 @@ Deterministic stage → contract-backed outputs (normative):
 
 - Stages MAY append additional non-contract outputs by including `ExpectedOutput` entries with
   `contract_id=null`, but only for paths that do not match any registry binding.
+
+Matrix-driven requiredness applies only to contract-backed outputs (`contract_id != null`).
+Requiredness for non-contract outputs (`contract_id == null`) is defined by the owning stage
+specification.
 
 Ownership invariant (normative):
 

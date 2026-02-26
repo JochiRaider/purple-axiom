@@ -760,6 +760,7 @@ The scoring stage MUST map `criteria/results.jsonl.reason_code` values (where
 | --------------------------------- | ------------------------ | ------------------------ |
 | `criteria_unavailable`            | `criteria_unavailable`   | Yes                      |
 | `criteria_misconfigured`          | `criteria_misconfigured` | Yes                      |
+| `missing_telemetry`               | `missing_telemetry`      | Yes                      |
 | `criteria_disabled`               | `null`                   | No                       |
 | `action_not_executed`             | `null`                   | No                       |
 | `action_failed_before_evaluation` | `null`                   | No                       |

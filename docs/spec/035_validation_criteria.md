@@ -560,19 +560,25 @@ MUST be disabled in CI/regression.
 1. Let `paths[] = validation.criteria_pack.paths[]` (search order is authoritative; earlier entries
    win ties when content is identical).
 
+`paths[]` interpretation (normative):
+
+- Each element in `paths[]` is a **pack root** directory. Its direct children MUST be
+  `<criteria_pack_id>/` directories.
+  - In the in-repo layout, the canonical pack root is `criteria/packs/`.
+
 Case A — pinned version provided:
 
 - If `criteria_pack_version` is provided:
   - The resolver MUST locate exactly `criteria/packs/<criteria_pack_id>/<criteria_pack_version>/`
-    under the first search path where it exists.
-  - If the directory does not exist in any search path, the resolver MUST fail closed for
-    CI/regression runs.
+    under the first pack root in `paths[]` where it exists.
+- If the directory does not exist in any pack root, the resolver MUST fail closed for CI/regression
+  runs.
 
 Case B — version omitted (non-recommended):
 
 - If `criteria_pack_version` is omitted:
-  1. Enumerate candidate versions under each search path in `paths[]` for
-     `criteria/packs/<criteria_pack_id>/`.
+  1. Enumerate candidate versions under each pack root in `paths[]` for
+     `<pack_root>/<criteria_pack_id>/`.
   1. Parse candidate directory names as SemVer and select the highest precedence version.
   1. The resolved `(criteria_pack_id, criteria_pack_version)` MUST be recorded in run provenance
      (manifest and report).
@@ -584,7 +590,7 @@ Duplicate `(id, version)` handling (normative):
   - matching `criteria.pack_sha256` (and, for debugging, matching `criteria_sha256` and
     `manifest_sha256`) in their manifests.
 - When duplicates are proven identical, the resolver MUST select the candidate from the earliest
-  matching search path in `paths[]` order.
+  matching pack root in `paths[]` order.
 
 Pack validation before snapshot (normative):
 
@@ -952,7 +958,7 @@ Expected `source_tree_sha256` for this basis (using `canonical_json_bytes` as de
 #### Runner provenance (run time)
 
 The runner MUST record execution-definition provenance for each engine used by the run in the run
-manifest under `extensions.runner.execution_definitions.upstreams[]`:
+manifest under `manifest.extensions.runner.execution_definitions.upstreams[]`:
 
 - `engine`: must match the pack manifest's upstream engine
 - `source_ref`: exact git SHA/tag/version or artifact digest used
@@ -1004,7 +1010,8 @@ engine** present in ground truth:
 1. For each engine `E` present in `ground_truth.jsonl` actions:
    1. Read the pack manifest provenance entry for engine `E` (from the criteria pack manifest
       snapshot file `criteria/manifest.json`, field `upstreams[]`)
-   1. Read the runner-recorded provenance for engine `E` (from the run manifest runner extensions).
+   1. Read the runner-recorded provenance for engine `E` (from
+      `manifest.extensions.runner.execution_definitions.upstreams[]`).
    1. Compare `(E, source_ref, source_tree_sha256)`:
       - If all match: `criteria_drift_status[E] = "none"`.
       - If `source_ref` differs or `source_tree_sha256` differs:
@@ -1449,6 +1456,18 @@ that cleanup reverted key side-effects.
   - `runner/actions/<action_id>/cleanup_verification.json`
 - Criteria results MUST reference this artifact by `cleanup.results_ref`.
 
+Runtime source of cleanup checks (normative):
+
+- The criteria pack is the **authoring** source of cleanup verification check definitions
+  (`criteria_entry.cleanup_verification.checks[]`).
+- The runner MUST NOT read criteria pack files (repo pack roots or `criteria/**` snapshots) to
+  discover check definitions at runtime.
+- When `criteria_ref.criteria_entry_id` is pinned for an action and the pinned entry declares
+  `cleanup_verification.enabled=true`, the plan compiler MUST inject the corresponding
+  `cleanup_verification.checks[]` into the action plan. The runner MUST execute checks only from
+  this injected plan and MUST transcribe it onto the ground-truth action record under
+  `extensions.cleanup_verification_plan` (see `025_data_contracts.md`).
+
 Aggregation mapping into criteria results (normative):
 
 - If `runner/actions/<action_id>/cleanup_verification.json` exists:
@@ -1575,6 +1594,8 @@ Minimum fields for `criteria/results.jsonl` (v0.1; one JSON object per action):
   - recommended additional values (non-breaking; strongly encouraged for reporting/scoring
     fidelity):
     - `criteria_disabled` (criteria evaluation disabled by config/policy for this run or action)
+    - `missing_telemetry` (criteria evaluation skipped because required telemetry inputs were not
+      available to the evaluator)
     - `action_not_executed` (runner did not attempt execute; criteria evaluation not applicable)
     - `action_failed_before_evaluation` (runner attempted execute but failed before a valid
       evaluation anchor/window could be established)
@@ -1622,6 +1643,7 @@ Failure classification and reason codes (normative):
     - `schema_invalid`
     - `drift_detected`
     - `drift_unknown`
+    - `unsupported_selector`
     - `criteria_ref_invalid`
 - When criteria drift is detected or treated as detected (fail-closed), the evaluator MUST set
   `reason_code = "criteria_misconfigured"` and MUST record drift details under

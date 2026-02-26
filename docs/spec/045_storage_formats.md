@@ -111,7 +111,7 @@ machines (ADR-0007).
 ### Workspace-global export staging directories (reserved; v0.1+ normative)
 
 Export/packaging commands that publish multi-file **export products** under
-`<workspace_root>/exports/` (for example dataset releases and baseline packages) SHOULD use a
+`<workspace_root>/exports/` (for example dataset releases and baseline packages) MUST use a
 crash-safe staging-then-rename pattern analogous to the run-bundle publish gate.
 
 Reserved staging root:
@@ -119,6 +119,8 @@ Reserved staging root:
 - `<workspace_root>/exports/.staging/`
   - Producers SHOULD namespace staging by export kind (for example:
     `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`).
+  - Producers MUST NOT create per-product staging directories under the final export namespaces (for
+    example `exports/datasets/.staging/**` or `exports/baselines/.staging/**`).
 
 Final output locations are product-specific reserved namespaces under `exports/` (see
 `020_architecture.md`). For dataset releases (see `085_golden_datasets.md`), the authoritative final
@@ -293,7 +295,11 @@ Cross-reference (non-normative): ADR-0009 defines export and signing behavior fo
 
 Location:
 
-- `runs/<run_id>/raw/evidence/` (recommended convention)
+- Tier 1 evidence root: `runs/<run_id>/raw/`
+  - `raw/evidence/` is a reserved subtree for blob-style evidence (for example sidecar payload
+    overflow blobs) referenced from analytics-tier datasets.
+  - Other Tier 1 evidence MAY be stored under additional deterministic subtrees under `raw/` (for
+    example `raw/osquery/`, `raw/tools/<tool_id>/`).
 
 Additional evidence location (runner artifacts):
 
@@ -646,7 +652,7 @@ This section defines how Parquet-backed datasets evolve over time as:
 - **Physical schema**: the column names and types stored in each Parquet file’s metadata.
 - **Logical schema**: the query-facing expectation for a dataset (required columns plus optional
   columns).
-- **Schema version**: a SemVer identifier for a dataset’s logical schema (not the Parquet format
+- **Dataset schema version**: a SemVer identifier for a dataset’s logical schema (not the Parquet
   version).
 
 #### Writer requirements (normative)
@@ -705,10 +711,11 @@ Minimum fields (normative):
 
 - `contract_version` (string; required). MUST equal the contract version for
   `parquet_schema_snapshot`.
+- `schema_version` (string; required). MUST be `pa:parquet_schema_snapshot:v1`.
 - `schema_id` (string; required). A stable identifier for the dataset schema surface. For normalized
   OCSF events, this SHOULD be `pa.parquet.normalized.ocsf_events`.
-- `schema_version` (string; required). Semantic version for the schema snapshot itself (changes when
-  columns are added/removed/changed).
+- `dataset_schema_version` (string; required). Semantic version for the dataset's logical schema
+  (changes when columns are added/removed/changed).
 - `columns` (array; required). A list of columns in the dataset, each item including:
   - `name` (string; required). Canonical column name.
   - `physical_type` (string; required). Arrow/Parquet physical type (example: `string`, `int64`,
@@ -762,6 +769,16 @@ Mapping requirements (normative):
   schema versions (see "Type stability (no type drift)").
 - Timestamp fields MUST NOT be represented as strings in Parquet in any schema version.
 
+Raw origin pointer mapping (normative):
+
+- `metadata.extensions.purple_axiom.raw_ref`:
+  - JSON/JSONL: object or null (see ADR-0002).
+  - Parquet: `physical_type=string`, `logical_type=string` (nullable).
+    - When non-null, the value MUST be the canonical JSON (RFC 8785 / JCS) serialization of
+      `raw_ref_norm` as defined in ADR-0002.
+    - When `metadata.identity_tier` is `1` or `2`, `raw_ref` MUST be non-null.
+    - When `metadata.identity_tier` is `3`, `raw_ref` MUST be null.
+
 Specific timestamp rules (normative):
 
 - `time`:
@@ -798,6 +815,9 @@ Provenance (required):
 - `metadata.event_id` (string)
 - `metadata.identity_tier` (int32)
   - Allowed values: `1 | 2 | 3` (see ADR-0002).
+- `metadata.extensions.purple_axiom.raw_ref` (string, nullable)
+  - For identity tiers 1 and 2: MUST be non-null.
+  - For identity tier 3: MUST be null.
 - `metadata.run_id` (string, UUID)
   - `metadata.run_id` MUST validate as an RFC 4122 UUID (canonical hyphenated form).
 - `metadata.scenario_id` (string)

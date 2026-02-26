@@ -358,8 +358,8 @@ For diffable runs (normative):
 - When a run publishes contract-backed artifacts, the manifest MUST record the `contract_version`
   values for the contracts relevant to the run.
 - When a run publishes Parquet datasets with required `_schema.json` snapshots, the manifest MUST
-  record the dataset `schema_id` and `schema_version` values to support fast compatibility checks
-  without scanning the filesystem.
+  record the dataset `schema_id` and dataset schema version values to support fast compatibility
+  checks without scanning the filesystem.
 
 For non-diffable runs (guidance):
 
@@ -368,7 +368,7 @@ For non-diffable runs (guidance):
 Manifest shapes (normative when the corresponding map is present):
 
 - `versions.contracts` MUST be an object keyed by contract name to `contract_version`.
-- `versions.datasets` MUST be an object keyed by `schema_id` to `schema_version`.
+- `versions.datasets` MUST be an object keyed by `schema_id` to dataset schema version.
 
 ### Historical run bundle compatibility promise
 
@@ -393,7 +393,7 @@ Support window (normative):
 - A consumer release MUST be able to parse and contract-validate diffable run bundles whose:
   - `manifest.versions.pipeline_version` compatibility major is within the supported window, and
   - `manifest.versions.contracts_version` compatibility major is within the supported window, and
-  - for each entry in `manifest.versions.datasets` (when present), the dataset `schema_version`
+  - for each entry in `manifest.versions.datasets` (when present), the dataset schema version
     compatibility major is within the supported window for that `schema_id`.
 
 Behavior on mismatch (normative):

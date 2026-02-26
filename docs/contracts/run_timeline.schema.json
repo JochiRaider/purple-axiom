@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run_timeline.schema.json",
+  "title": "Run timeline artifact (report/run_timeline.md)",
+  "description": "Contract schema metadata for the deterministic run timeline artifact at report/run_timeline.md. Validation is performed using validation_mode=text_document_v1; see 080_reporting.md (Run timeline artifact).",
+  "$comment": "This schema is intentionally minimal because the contracted artifact is a UTF-8 LF Markdown document, not a JSON document. Contract tooling MUST validate report/run_timeline.md using the text_document_v1 validator (format and deterministic structure rules live in 080_reporting.md). The contract_version constant exists to satisfy registry invariants and to allow manifest.versions.contracts recording.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0"
+    }
+  },
+  "required": ["contract_version"],
+  "additionalProperties": true,
+  "$defs": {
+    "required_structure_v1": {
+      "$comment": "Machine-readable copy of the required structure, intended for validator implementations. This definition is not used by JSON Schema engines directly.",
+      "type": "object",
+      "properties": {
+        "top_level_heading": {
+          "const": "# Run timeline"
+        },
+        "sections_in_order": {
+          "const": ["Run summary", "Action timeline"]
+        },
+        "run_summary_keys": {
+          "const": [
+            "run_id",
+            "scenario_id",
+            "scenario_name",
+            "status",
+            "started_at_utc",
+            "ended_at_utc"
+          ]
+        },
+        "action_timeline_columns": {
+          "const": [
+            "order",
+            "action_id",
+            "action_key",
+            "technique_id",
+            "target_asset_id",
+            "start_utc",
+            "end_utc",
+            "duration_ms",
+            "prepare",
+            "execute",
+            "revert",
+            "teardown",
+            "evidence"
+          ]
+        },
+        "evidence_link_order": {
+          "const": [
+            "requirements_evaluation_ref",
+            "executor_ref",
+            "stdout_ref",
+            "stderr_ref",
+            "terminal_recording_ref",
+            "cleanup_stdout_ref",
+            "cleanup_stderr_ref",
+            "cleanup_verification_ref",
+            "state_reconciliation_report_ref"
+          ]
+        }
+      },
+      "required": [
+        "top_level_heading",
+        "sections_in_order",
+        "run_summary_keys",
+        "action_timeline_columns",
+        "evidence_link_order"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

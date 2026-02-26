@@ -7,7 +7,7 @@ tags: [ocsf, normalization, validation, scoring]
 related:
   - 050_normalization_ocsf.md
   - 070_scoring_metrics.md
-  - ../adr/ADR-0002-event-identity-and-provenance.md
+  - ADR-0002-event-identity-and-provenance.md
 ---
 
 # OCSF field tiers: core vs extended

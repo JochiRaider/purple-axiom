@@ -88,6 +88,9 @@ Purple Axiom uses the following tiers for implementation planning and validation
 
 Every emitted normalized event MUST include the following fields.
 
+Storage encoding rules (JSON vs Parquet representations, timestamp precision, and provenance pointer
+encoding) are defined in `045_storage_formats.md`.
+
 ### Required top-level fields
 
 | Field       | Requirement | Notes                                                                                                                                                                       |
@@ -98,22 +101,23 @@ Every emitted normalized event MUST include the following fields.
 
 ### Required metadata fields
 
-| Field                                      | Requirement | Notes                                                                                                                                                                                                                                        |
-| ------------------------------------------ | ----------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `metadata.uid`                             |        MUST | OCSF unique event identifier. MUST equal `metadata.event_id`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                                                                     |
-| `metadata.event_id`                        |        MUST | Purple Axiom deterministic event identifier (idempotency key). MUST equal `metadata.uid` in OCSF outputs. Format: `pa:eid:v1:<32 lowercase hex>`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md). |
-| `metadata.run_id`                          |        MUST | Run identifier (ties to manifest, ground truth, detections). MUST be an RFC 4122 UUID string in canonical hyphenated form, lowercase hex. See [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md).         |
-| `metadata.scenario_id`                     |        MUST | Scenario identifier (ties to ground truth). MUST conform to `id_slug_v1`. See [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md).                                                                         |
-| `metadata.collector_version`               |        MUST | Collector build/version.                                                                                                                                                                                                                     |
-| `metadata.normalizer_version`              |        MUST | Normalizer build/version.                                                                                                                                                                                                                    |
-| `metadata.source_type`                     |        MUST | Source discriminator (example: `windows-security`, `windows-sysmon`, `osquery`, `linux-auditd`).                                                                                                                                             |
-| `metadata.source_event_id`                 |        MUST | Source-native upstream ID when present; else `null`. MUST be a string when non-null. For `metadata.identity_tier = 3`, this MUST be `null`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).       |
-| `metadata.identity_tier`                   |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). This is distinct from the FT0/FT1/FT2/FT3/FT-R field tier model. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).           |
-| `metadata.extensions.purple_axiom.raw_ref` |        MUST | Stable raw provenance pointer for telemetry-derived events (required for identity tiers 1 and 2; MUST be `null` for identity tier 3). See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).             |
+| Field                                      | Requirement | Notes                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------ | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metadata.uid`                             |        MUST | OCSF unique event identifier. MUST equal `metadata.event_id`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                                                                                                                                                  |
+| `metadata.event_id`                        |        MUST | Purple Axiom deterministic event identifier (idempotency key). MUST equal `metadata.uid` in OCSF outputs. Format: `pa:eid:v1:<32 lowercase hex>`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                                                              |
+| `metadata.run_id`                          |        MUST | Run identifier (ties to manifest, ground truth, detections). MUST be an RFC 4122 UUID string in canonical hyphenated form, lowercase hex. See [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md).                                                                                      |
+| `metadata.scenario_id`                     |        MUST | Scenario identifier (ties to ground truth). MUST conform to `id_slug_v1`. See [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md).                                                                                                                                                      |
+| `metadata.collector_version`               |        MUST | Collector build/version.                                                                                                                                                                                                                                                                                                  |
+| `metadata.normalizer_version`              |        MUST | Normalizer build/version.                                                                                                                                                                                                                                                                                                 |
+| `metadata.source_type`                     |        MUST | Source discriminator (**event_source_type**; mapping-pack discriminator). MUST conform to `id_slug_v1` and SHOULD be stable across releases (example: `windows-security`, `windows-sysmon`, `osquery`, `linux-auditd`). See ADR-0002 for the distinction between `metadata.source_type` and `identity_basis.source_type`. |
+| `metadata.source_event_id`                 |        MUST | Source-native upstream ID when present; else `null`. MUST be a string when non-null. For `metadata.identity_tier = 3`, this MUST be `null`. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                                                                    |
+| `metadata.identity_tier`                   |        MUST | Identity tier used to compute `metadata.event_id` (`1` \| `2` \| `3`). This is distinct from the FT0/FT1/FT2/FT3/FT-R field tier model. See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                                                                        |
+| `metadata.extensions.purple_axiom.raw_ref` |        MUST | Stable raw provenance pointer for telemetry-derived events (required for identity tiers 1 and 2; MUST be `null` for identity tier 3). See [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md).                                                                                          |
 
 #### Provisional network telemetry source types (v0.1)
 
-Spec 010 reserves pcap and NetFlow ingestion as placeholder contracts, but operators MAY enable
+The [telemetry pipeline](040_telemetry_pipeline.md) and [storage formats](045_storage_formats.md)
+specs reserve pcap and NetFlow ingestion as placeholder sources/namespaces, but operators MAY enable
 custom network sources. When doing so, normalized Network Activity events MUST still satisfy the
 Tier 0 envelope requirements, including deterministic `metadata.event_id` and `metadata.uid`.
 
@@ -156,10 +160,22 @@ The Tier 1 coverage computation MUST operate over the set of **in-scope normaliz
    `normalized/ocsf_events/`).
 1. Exclude events that fail OCSF schema validation (invalid events are not counted in the coverage
    denominator).
-1. If an execution window can be derived from the executed actions (ground truth timeline), then the
-   in-scope set SHOULD be restricted to events whose event timestamp falls within:
-   - `[min(action.start_time) - padding, max(action.end_time) + padding]`
-   - `padding` default: 30 seconds
+1. If an execution window can be derived from `ground_truth.jsonl`, then the in-scope set SHOULD be
+   restricted to events whose `time` falls within:
+   - `[window_start_ms - padding_ms, window_end_ms + padding_ms]`
+   - `padding_ms` default: `30_000` (30 seconds)
+   - `window_start_ms` and `window_end_ms` MUST be derived deterministically from
+     `ground_truth.jsonl` as follows:
+     - Consider all ground truth phase records where:
+       - `phase = "execute"`, and
+       - `phase_outcome != "skipped"`.
+     - Parse each record's `started_at_utc` and `ended_at_utc` (RFC3339 UTC) into epoch
+       milliseconds.
+       - Epoch millisecond conversion MUST truncate any fractional milliseconds (round toward zero).
+     - `window_start_ms` = minimum parsed `started_at_utc` across the considered execute phases.
+     - `window_end_ms` = maximum parsed `ended_at_utc` across the considered execute phases.
+     - If the considered execute-phase set is empty, an execution window MUST be treated as
+       non-derivable.
 1. If an execution window cannot be derived, all normalized OCSF events for the run are in-scope.
 
 This scoping rule ensures the metric reflects executed techniques rather than ambient background
@@ -179,8 +195,12 @@ For each Tier 1 field (or field group) and each in-scope event:
 
 #### Tier 1 field set (F)
 
-The Tier 1 run coverage metric is computed over a fixed, ordered Tier 1 field set `F`. `F` MUST
-match the Tier 1 matrix column set in the [Mapping coverage matrix](../mappings/coverage_matrix.md).
+The Tier 1 run coverage metric is computed over a fixed, ordered Tier 1 field set `F`. `F` MUST be
+treated as the **source of truth** for Tier 1 coverage and mapping coverage.
+
+The [Mapping coverage matrix](../mappings/coverage_matrix.md) Tier 1 column set MUST equal `F` in
+the same order. Any change to `F` MUST be made in this document first, then propagated to the
+coverage matrix and any CI fixtures that depend on the Tier 1 column set.
 
 `F` (ordered):
 
@@ -287,6 +307,13 @@ Purple Axiom treats a small set of pivots as core common because they unlock mos
 For v0.1, Purple Axiom defines a source-type-specific checklist for Tier 1 (core common) and the
 Tier 2 families used by the v0.1 MVP normalizer. The authoritative checklist is defined in the
 [Mapping coverage matrix](../mappings/coverage_matrix.md).
+
+Normative coupling:
+
+- The coverage matrix Tier 1 column set MUST equal the Tier 1 field set `F` defined in this
+  document, in the same order.
+- The coverage matrix MUST include columns sufficient to express conformance for the enabled event
+  families defined in this document (v0.1 baseline), and MUST NOT silently redefine that baseline.
 
 The matrix:
 
@@ -496,7 +523,8 @@ representation) and (2) the expected normalized OCSF event. The test suite MUST 
 - When a combined principal string is parsed, the original combined string is preserved in
   `actor.user.display_name`.
 
-Suggested fixture location: `tests/fixtures/normalization/actor_identity/` (new).
+Isolation test fixture(s): `tests/fixtures/normalization/actor_identity/` (see the Fixture index in
+`100_test_strategy_ci.md`).
 
 ### Process and execution activity
 
@@ -622,6 +650,15 @@ Raw retention ensures:
   - `raw.event` (selected normalized-safe raw fields)
   - `raw.payload` (optional raw payload snapshot, redaction-safe)
 
+Per-source namespaces (allowed; v0.1):
+
+- To avoid cross-source key collisions and preserve source-native field naming, mappings MAY place
+  source-specific raw fields under `raw.namespaces.<event_source_type>`, where `<event_source_type>`
+  SHOULD equal `metadata.source_type`.
+- `raw.namespaces` values MUST be JSON objects. Namespace keys MUST conform to `id_slug_v1`.
+- When `raw.namespaces.<event_source_type>` is present, mappings SHOULD NOT also duplicate the same
+  keys under `raw.event`.
+
 ### Guidance
 
 - Prefer keeping raw values in their original types when safe.
@@ -685,9 +722,18 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
     "scenario_id": "atomic-t1059",
     "collector_version": "collector@0.1.0",
     "normalizer_version": "normalizer@0.1.0",
-    "source_type": "sysmon",
+    "source_type": "windows-sysmon",
     "source_event_id": "record:123456",
-    "identity_tier": 1
+    "identity_tier": 1,
+    "extensions": {
+      "purple_axiom": {
+        "raw_ref": {
+          "kind": "dataset_row_v1",
+          "path": "raw_parquet/windows_eventlog/",
+          "row_locator": { "record_id": "123456" }
+        }
+      }
+    }
   },
   "raw": {
     "provider": "Microsoft-Windows-Sysmon",
@@ -711,11 +757,20 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
     "scenario_id": "atomic-t1059",
     "collector_version": "collector@0.1.0",
     "normalizer_version": "normalizer@0.1.0",
-    "source_type": "sysmon",
+    "source_type": "windows-sysmon",
     "source_event_id": "record:123456",
     "identity_tier": 1,
     "ingest_time_utc": "2026-01-04T17:00:01Z",
-    "pipeline": "profile.sysmon.v1"
+    "pipeline": "profile.windows-sysmon.v1",
+    "extensions": {
+      "purple_axiom": {
+        "raw_ref": {
+          "kind": "dataset_row_v1",
+          "path": "raw_parquet/windows_eventlog/",
+          "row_locator": { "record_id": "123456" }
+        }
+      }
+    }
   },
   "device": {
     "hostname": "host-01",
@@ -758,13 +813,16 @@ The normalizer SHOULD emit mapping coverage metrics that support incremental imp
 
 - [OCSF normalization specification](050_normalization_ocsf.md)
 - [Scoring metrics](070_scoring_metrics.md)
+- [Telemetry pipeline](040_telemetry_pipeline.md)
+- [Storage formats](045_storage_formats.md)
 - [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md)
 - [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md)
 - [Mapping coverage matrix](../mappings/coverage_matrix.md)
 
 ## Changelog
 
-| Date       | Change                                                                  |
-| ---------- | ----------------------------------------------------------------------- |
-| 2026-01-24 | update                                                                  |
-| 2026-01-12 | Migrated to repository Markdown style guide (structure and formatting). |
+| Date       | Change                                                                     |
+| ---------- | -------------------------------------------------------------------------- |
+| 2026-02-26 | Add cross-reference to storage encoding rules in `045_storage_formats.md`. |
+| 2026-01-24 | update                                                                     |
+| 2026-01-12 | Migrated to repository Markdown style guide (structure and formatting).    |

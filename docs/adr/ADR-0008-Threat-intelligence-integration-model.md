@@ -480,9 +480,14 @@ Note: This ADR does not add ADR-0005 reason codes. The reason code registry upda
 
 ### State machine integration (representational; non-normative)
 
-This section is an illustrative lifecycle view only. It does not define or constrain runtime stage
-behavior; conformance is defined by the normative artifact contracts, publish semantics, and stage
-outcome semantics in the preceding sections.
+This section is an illustrative lifecycle view only. It is representational and does not define
+requirements. It does not define or constrain runtime stage behavior; conformance is defined by the
+normative artifact contracts, publish semantics, and stage outcome semantics in the preceding
+sections.
+
+This representation is intentionally incomplete with respect to ADR-0005 `reason_code` integration:
+until the follow-up registry update lands, this section does not attempt to map TI failures to
+specific `reason_code` tokens.
 
 Lifecycle authority references (per ADR-0007 representational requirements):
 
@@ -494,6 +499,12 @@ Lifecycle authority references (per ADR-0007 representational requirements):
   publish).
 
 #### State machine: Threat Intel availability within a run (representational)
+
+> **Completeness / follow-ups**
+>
+> **INCOMPLETE:** Reason-code taxonomy integration is pending the ADR-0005 follow-up. This
+> representation intentionally does not map TI failure conditions or `ti_failed` transitions to
+> specific stage outcome `reason_code` tokens yet.
 
 States (closed set):
 
@@ -531,18 +542,19 @@ Transitions:
 
 Observable signals (informative mapping):
 
-- `ti_available` MUST correspond to the presence of:
+- `ti_available` is represented by the presence of:
   - `inputs/threat_intel/manifest.json`
   - `inputs/threat_intel/indicators.jsonl` and to the run provenance pins
     (`manifest.versions.threat_intel_pack_id` and `manifest.versions.threat_intel_pack_version`).
-- `ti_failed` MUST correspond to an owning-stage failure recorded per ADR-0005.
+- `ti_failed` maps to an owning-stage failure recorded per ADR-0005.
 
 Optional substage outcome mapping (non-normative):
 
-- Implementations MAY emit additive substages under the owning stage to surface TI lifecycle steps
+- Implementations can emit additive substages under the owning stage to surface TI lifecycle steps
   (example: `<owning_stage>.threat_intel_resolve`, `<owning_stage>.threat_intel_validate`,
   `<owning_stage>.threat_intel_snapshot`).
-- If emitted, substages MUST follow ADR-0005 ordering rules and reason-code registry rules.
+- If emitted, these substages are typically recorded in a way that aligns with ADR-0005 ordering
+  rules and reason-code registry rules.
 
 ## Consequences
 

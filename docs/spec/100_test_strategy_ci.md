@@ -191,51 +191,250 @@ and referenced consistently.
 
 Conventions (normative):
 
-- A *fixture root* is a directory under `tests/fixtures/` that contains one or more *fixture cases*.
-- A *fixture case* is a leaf directory that contains:
+- A *fixture root* is a directory under `tests/fixtures/` that contains one or more *fixture cases*
+  (default), or an explicitly listed single-file vector fixture.
+- For directory-based roots, a *fixture case* is a leaf directory that contains:
   - `inputs/` (minimum required inputs for the stage/feature under test), and
   - `expected/` (golden outputs or assertion maps used by test harnesses).
 - Fixture cases MUST be named deterministically (no timestamps, no machine-specific paths).
+- Placeholder path segments of the form `<...>` (for example `<test_id>`, `<adapter_id>`) MUST be
+  replaced by deterministic identifiers (no timestamps, no machine-specific paths).
 - Unless stated otherwise by a contract, fixture suites MUST compare JSON artifacts using the
   contract-defined canonical JSON rules (not text diffs).
 
-| Stage / area                                                             | Canonical fixture roots                                                                                                                                                                        | Minimum fixture sets (normative)                                                                                                                              |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cross-cutting: glob matching (`glob_v1`)                                 | `tests/fixtures/glob_v1/vectors.json`                                                                                                                                                          | `glob_v1_vectors` (vectors file present and exercised)                                                                                                        |
-| Cross-cutting: event identity (`event_id.v1`)                            | `tests/fixtures/event_id/v1/`                                                                                                                                                                  | `tier1_smoke`, `tier2_smoke`, `tier3_collision`, `source_type_distinct`                                                                                       |
-| Cross-cutting: redaction (`pa.redaction.v1`)                             | `tests/fixtures/redaction/v1/`                                                                                                                                                                 | `allowlist_smoke`, `denylist_smoke`, `stable_hashes`                                                                                                          |
-| Cross-cutting: integration credentials (`pa.integration_credentials.v1`) | `tests/fixtures/integration_credentials/v1/`                                                                                                                                                   | `logs_redaction_smoke`, `artifact_absence_smoke`, `missing_fails_closed`, `invalid_fails_closed`, `leak_detected_fails_closed`                                |
-| Cross-cutting: run lock (`pa.run_lock.v1`)                               | `tests/fixtures/run_lock/v1/`                                                                                                                                                                  | `run_lock_exclusive_single_writer`, `run_lock_break_glass_requires_explicit_force`                                                                            |
-| Cross-cutting: run results summary (`run_results`)                       | `tests/fixtures/run_results/`                                                                                                                                                                  | `run_results_contract_and_hash`                                                                                                                               |
-| Cross-cutting: detection content bundle (`detection_content_release_v1`) | `tests/fixtures/content_bundles/detection_content_release_v1/`                                                                                                                                 | `content_bundle_offline_validation_smoke`, `run_plus_content_bundle_validation_smoke`                                                                         |
-| `lab_provider`                                                           | `tests/fixtures/lab_providers/`                                                                                                                                                                | `provider_smoke`, `failure_mapping_smoke`                                                                                                                     |
-| `runner`                                                                 | See Note                                                                                                                                                                                       | See Note                                                                                                                                                      |
-| `telemetry`                                                              | `tests/fixtures/telemetry/synthetic_marker/`, `tests/fixtures/unix_logs/`, `tests/fixtures/osquery/`, `tests/fixtures/telemetry/egress_policy_canary/`, `tests/fixtures/telemetry/clock_sync/` | `synthetic_marker_smoke`, `unix_logs_smoke`, `osquery_smoke`, `egress_policy_canary_smoke`, `clock_sync_skew_exceeded_smoke`, `clock_sync_unmeasurable_smoke` |
-| Normalization: field mapping unit (`normalization`)                      | `tests/fixtures/normalization/mapping_unit/`                                                                                                                                                   | At minimum one case per supported source type × OCSF class (e.g. `win_process_create`, `sysmon_network_connection`)                                           |
-| Normalization: mapping pack conformance (`normalization`)                | `tests/fixtures/normalization/mapping_pack_conformance/`                                                                                                                                       | `ocsf_1_7_0_windows_baseline`, `ocsf_1_7_0_sysmon_baseline`                                                                                                   |
-| `validation` (criteria evaluation)                                       | `tests/fixtures/criteria/`                                                                                                                                                                     | `criteria_time_window_smoke`, `criteria_eval_smoke`, `criteria_authoring_compile_smoke`, `criteria_pack_lint_smoke`                                           |
-| `detection` (Sigma + Bridge)                                             | `tests/fixtures/sigma_rule_tests/<test_id>/`                                                                                                                                                   | `rule_smoke`, `unsupported_feature_rejected`                                                                                                                  |
-| `scoring`                                                                | `tests/fixtures/scoring/`                                                                                                                                                                      | `regression_comparables_smoke`                                                                                                                                |
-| `reporting`                                                              | `tests/fixtures/reporting/defense_outcomes/`, `tests/fixtures/reporting/thresholds/`, `tests/fixtures/reporting/regression_compare/`, `tests/fixtures/reporting/report_render/`                | `defense_outcomes_attribution_v1`, `thresholds_contract_and_ordering`, `regression_compare_smoke`, `report_render_smoke`                                      |
-| `signing` (when enabled)                                                 | `tests/fixtures/signing/`                                                                                                                                                                      | `checksums_smoke`, `tamper_detected`                                                                                                                          |
-| Content governance: golden datasets                                      | `tests/fixtures/golden_datasets/governance/`                                                                                                                                                   | `valid_minimal_golden`, `missing_required_artifact_fails`                                                                                                     |
-| Dataset exports: dataset release artifacts (workspace validation)        | `tests/fixtures/golden_datasets/releases/`                                                                                                                                                     | `dataset_release_smoke_valid`, `dataset_release_schema_invalid_fails`                                                                                         |
-| CI harness: Content CI                                                   | `tests/fixtures/ci/content_ci_harness/`                                                                                                                                                        | `smoke_pass`, `smoke_fail`                                                                                                                                    |
+Index entry format (normative):
 
-Note:
+- Each entry below MUST specify:
+  - Canonical fixture roots: one or more paths under `tests/fixtures/` (directories unless
+    explicitly labeled as a vector file).
+  - Minimum fixture sets (normative): required fixture-case names under the corresponding root, or
+    an explicit minimum rule when a simple list is not appropriate.
 
-- `runner`
-  - Canonical fixture roots: `tests/fixtures/runner/lifecycle/`,
-    `tests/fixtures/runner/state_reconciliation/`, `tests/fixtures/runner/noise_profile/`,
-    `tests/fixtures/runner/synthetic_marker/`, `tests/fixtures/runner/atomic/`,
-    `tests/fixtures/runner/<adapter_id>/`, `tests/fixtures/runner/requirements/`,
-    `tests/fixtures/runner/principal_context/`
-  - Minimum fixture sets (normative): `lifecycle_smoke`, `invalid_transition_blocked`,
-    `state_reconciliation_smoke`, `noise_profile_snapshot_smoke`,
-    `noise_profile_canonicalization_crlf_lf`, `marker_emitted`, `marker_digest_vector`,
-    `atomic_determinism_smoke`, `adapter_conformance_atomic`, `unmet_admin_privilege`, `wrong_os`,
-    `missing_tool`, `multiple_requirements_mixed_order`, `single_principal_known`,
-    `principal_unknown`
+### Cross-cutting components
+
+- **Cross-cutting: glob matching (`glob_v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/glob_v1/vectors.json` (vector file)
+  - Minimum fixture sets (normative):
+    - `glob_v1_vectors` (vectors file present and exercised)
+
+- **Cross-cutting: event identity (`event_id.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/event_id/v1/`
+  - Minimum fixture sets (normative):
+    - `tier1_smoke`
+    - `tier2_smoke`
+    - `tier3_collision`
+    - `source_type_distinct`
+
+- **Cross-cutting: redaction (`pa.redaction.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/redaction/v1/`
+  - Minimum fixture sets (normative):
+    - `allowlist_smoke`
+    - `denylist_smoke`
+    - `stable_hashes`
+
+- **Cross-cutting: integration credentials (`pa.integration_credentials.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/integration_credentials/v1/`
+  - Minimum fixture sets (normative):
+    - `logs_redaction_smoke`
+    - `artifact_absence_smoke`
+    - `missing_fails_closed`
+    - `invalid_fails_closed`
+    - `leak_detected_fails_closed`
+
+- **Cross-cutting: run lock (`pa.run_lock.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/run_lock/v1/`
+  - Minimum fixture sets (normative):
+    - `run_lock_exclusive_single_writer`
+    - `run_lock_break_glass_requires_explicit_force`
+
+- **Cross-cutting: run results summary (`run_results`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/run_results/`
+  - Minimum fixture sets (normative):
+    - `run_results_contract_and_hash`
+
+- **Cross-cutting: detection content bundle (`detection_content_release_v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/content_bundles/detection_content_release_v1/`
+  - Minimum fixture sets (normative):
+    - `content_bundle_offline_validation_smoke`
+    - `run_plus_content_bundle_validation_smoke`
+
+### Pipeline stages
+
+- **`lab_provider`**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/lab_providers/`
+  - Minimum fixture sets (normative):
+    - `provider_smoke`
+    - `failure_mapping_smoke`
+
+- **`runner`**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/runner/lifecycle/`
+    - `tests/fixtures/runner/state_reconciliation/`
+    - `tests/fixtures/runner/noise_profile/`
+    - `tests/fixtures/runner/synthetic_marker/`
+    - `tests/fixtures/runner/atomic/`
+    - `tests/fixtures/runner/<adapter_id>/`
+    - `tests/fixtures/runner/requirements/`
+    - `tests/fixtures/runner/principal_context/`
+  - Minimum fixture sets (normative):
+    - `lifecycle_smoke`
+    - `invalid_transition_blocked`
+    - `state_reconciliation_smoke`
+    - `noise_profile_snapshot_smoke`
+    - `noise_profile_canonicalization_crlf_lf`
+    - `marker_emitted`
+    - `marker_digest_vector`
+    - `atomic_determinism_smoke`
+    - `adapter_conformance_atomic`
+    - `unmet_admin_privilege`
+    - `wrong_os`
+    - `missing_tool`
+    - `multiple_requirements_mixed_order`
+    - `single_principal_known`
+    - `principal_unknown`
+
+- **`telemetry`**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/telemetry/synthetic_marker/`
+    - `tests/fixtures/unix_logs/`
+    - `tests/fixtures/osquery/`
+    - `tests/fixtures/telemetry/egress_policy_canary/`
+    - `tests/fixtures/telemetry/clock_sync/`
+    - `tests/fixtures/telemetry/checkpointing/`
+  - Minimum fixture sets (normative):
+    - `synthetic_marker_smoke`
+    - `unix_logs_smoke`
+    - `osquery_smoke`
+    - `egress_policy_canary_smoke`
+    - `clock_sync_skew_exceeded_smoke`
+    - `clock_sync_unmeasurable_smoke`
+    - `checkpoint_store_missing_smoke`
+    - `checkpoint_store_unwritable_smoke`
+    - `checkpoint_store_corrupt_fail_closed_smoke`
+    - `checkpoint_store_corrupt_recreate_fresh_smoke`
+    - `checkpoint_loss_replay_smoke`
+
+- **Normalization: field mapping unit (`normalization`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/normalization/mapping_unit/`
+  - Minimum fixture sets (normative):
+    - At minimum one case per supported source type × OCSF class (e.g. `win_process_create`,
+      `sysmon_network_connection`).
+
+- **Normalization: actor identity canonicalization (`normalization`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/normalization/actor_identity/`
+  - Minimum fixture sets (normative):
+    - `windows_eventlog_actor_identity_smoke`
+    - `osquery_actor_identity_smoke`
+    - `unix_actor_identity_smoke`
+
+- **Normalization: mapping pack conformance (`normalization`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/normalization/mapping_pack_conformance/`
+  - Minimum fixture sets (normative):
+    - `ocsf_1_7_0_windows_baseline`
+    - `ocsf_1_7_0_sysmon_baseline`
+
+- **`validation` (criteria evaluation)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/criteria/`
+  - Minimum fixture sets (normative):
+    - `criteria_time_window_smoke`
+    - `criteria_eval_smoke`
+    - `criteria_authoring_compile_smoke`
+    - `criteria_pack_lint_smoke`
+
+- **`detection` (Sigma + Bridge)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/sigma_rule_tests/<test_id>/`
+  - Minimum fixture sets (normative):
+    - `rule_smoke`
+    - `unsupported_feature_rejected`
+
+- **`scoring`**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/scoring/`
+  - Minimum fixture sets (normative):
+    - `regression_comparables_smoke`
+
+- **`reporting`**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/reporting/defense_outcomes/`
+    - `tests/fixtures/reporting/thresholds/`
+    - `tests/fixtures/reporting/regression_compare/`
+    - `tests/fixtures/reporting/report_render/`
+  - Minimum fixture sets (normative):
+    - `defense_outcomes_attribution_v1`
+    - `thresholds_contract_and_ordering`
+    - `regression_compare_smoke`
+    - `report_render_smoke`
+
+- **`signing` (when enabled)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/signing/`
+  - Minimum fixture sets (normative):
+    - `checksums_smoke`
+    - `tamper_detected`
+
+### Content governance and CI harnesses
+
+- **Content governance: golden datasets**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/golden_datasets/governance/`
+  - Minimum fixture sets (normative):
+    - `valid_minimal_golden`
+    - `missing_required_artifact_fails`
+
+- **Dataset exports: dataset release artifacts (workspace validation)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/golden_datasets/releases/`
+  - Minimum fixture sets (normative):
+    - `dataset_release_smoke_valid`
+    - `dataset_release_schema_invalid_fails`
+
+- **CI harness: Content CI**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/ci/content_ci_harness/`
+  - Minimum fixture sets (normative):
+    - `smoke_pass`
+    - `smoke_fail`
+
+- **CI harness: CI verdict decision surface**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/ci/verdict_surface/`
+  - Minimum fixture sets (normative):
+    - See `105_ci_operational_readiness.md` "Conformance fixture matrix (v0.1)".
 
 ## Unit tests
 

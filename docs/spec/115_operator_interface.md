@@ -1126,85 +1126,190 @@ the audit log).
 
 ### State machine: Cancellation request lifecycle (normative)
 
-**Name:** `oi.cancel.request_lifecycle` **Scope:** per `(run_id)` **Authority:** Operator Interface
-spec (v0.2) **Objective:** Make cancellation durable, idempotent, and observable while preserving
-run-bundle decision surfaces.
+#### Purpose
 
-#### States (closed set)
+- **What it represents**: A durable operator-issued cancellation request for a run, including
+  escalation from `graceful` to `force`, with state derived from contracted control artifacts and
+  run terminal status.
+- **Scope**: `run` (per `run_id`)
+- **Machine ID**: `oi-cancel-request-lifecycle`
+- **Version**: `0.2.0`
+- **Display name (non-authoritative)**: `oi.cancel.request_lifecycle` (legacy identifier; MUST NOT
+  be used as the Machine ID)
 
-- `no_request`
-- `requested_graceful`
-- `requested_force`
-- `terminal_observed`
+#### Lifecycle authority references
 
-#### Inputs / triggers
+- `115_operator_interface.md`:
+  - `## Cancellation, resume, retry` (control artifacts + `cancel.json` contract)
+  - `## Operator API (HTTP)` (API conventions + standard error envelope)
+  - `## Audit logging (v0.2 normative)` (`audit_event` schema + `runs.cancel_*` audit actions)
+- ADR-0007 (state machine template and requirements)
+- ADR-0001 (identifier format: `id_slug_v1`)
 
-- `cancel_request(mode, scope, target)` from UI/API
-- `run_terminal` (observed via orchestrator completion: manifest written, run lock released;
-  `logs/health.json` MAY be written when enabled)
-- `run_missing` (run_id does not exist or manifest invalid)
+If this state machine definition conflicts with other linked lifecycle authority, this state machine
+is authoritative for Operator Interface cancellation behavior in v0.2.
 
-#### State derivation (observability)
+#### Entities and identifiers
 
-- `no_request` iff `control/cancel.json` does not exist
-- `requested_graceful` iff `control/cancel.json` exists and `mode=graceful`
-- `requested_force` iff `control/cancel.json` exists and `mode=force`
-- `terminal_observed` iff run is terminal AND `control/cancel.json` exists
+- **Machine instance key**: `run_id` (UUID; canonical lowercase hyphenated form)
+- **Correlation identifiers**:
+  - `runs/<run_id>/control/cancel.json.request_id` (UUID; durable cancellation correlation id)
+  - `logs/ui_audit.jsonl[].target.request_id` (UUID; Operator API request correlation id)
 
-#### Transitions (normative)
+#### Authoritative state representation
 
-- `no_request -> requested_graceful` on `cancel_request(graceful, …)`
-  - Guard: if the run is already terminal, the request MUST be denied (do not write `cancel.json`)
-  - Actions:
-    - atomically write `control/cancel.json`
-    - emit write-ahead audit event `runs.cancel_requested`
-    - send OS signal to verb process (best-effort)
-- `no_request -> requested_force` on `cancel_request(force, …)`
-  - Guard: if the run is already terminal, the request MUST be denied (do not write `cancel.json`)
-  - Actions as above, mode=force
-- `requested_graceful -> requested_force` on `cancel_request(force, …)`
-  - Guard: the existing request MAY be escalated; downgrade is forbidden
-  - Actions:
-    - update `control/cancel.json` atomically with mode=force and set `escalated_at` /
-      `escalated_by` (preserve `request_id`, `requested_at`, and `requested_by`)
-    - emit audit event `runs.cancel_escalated`
-    - send stronger OS signal (best-effort)
-- `requested_- -> terminal_observed` on `run_terminal`
-- `* -> *` on `cancel_request(*, …)` when `run_terminal` is already true
-  - Actions:
-    - MUST respond as denied (HTTP 409 in the Operator API)
-    - emit audit event `runs.cancel_requested` with `outcome=denied` and
-      `reason_code=run_already_terminal`
-    - MUST NOT write or modify `control/cancel.json`
-- `* -> *` on `run_missing` (observed during cancel request handling)
-  - Actions:
-    - MUST respond as denied (HTTP 404 in the Operator API)
-    - emit audit event `runs.cancel_requested` with `outcome=denied` and `reason_code=run_not_found`
-    - MUST NOT write or modify `control/cancel.json`
+- **Source of truth**:
+  - `runs/<run_id>/control/cancel.json` (presence + `mode`)
+  - Run terminal status derived from `runs/<run_id>/manifest.json` (and
+    `runs/<run_id>/logs/health.json` when present)
+- **Derivation rule** (deterministic precedence):
+  1. If `control/cancel.json` does not exist → `no_request`
+  1. Else if the run is terminal → `terminal_observed`
+  1. Else if `cancel.json.mode="graceful"` → `requested_graceful`
+  1. Else if `cancel.json.mode="force"` → `requested_force`
+  1. Else (invalid/unknown mode) → illegal state representation (fail closed; see Illegal
+     transitions)
+- **Persistence requirement**:
+  - MUST persist: yes
+  - MUST be persisted in: `runs/<run_id>/control/cancel.json` (write-to-temp + atomic rename)
 
-Illegal transitions:
+#### Events / triggers
 
-- `requested_force -> requested_graceful` MUST NOT occur.
+- `event.cancel_request_graceful`: A `POST /api/runs/{run_id}/cancel` request with
+  `mode="graceful"`.
+- `event.cancel_request_force`: A `POST /api/runs/{run_id}/cancel` request with `mode="force"`.
+- `event.run_terminal_observed`: The run becomes terminal (verb exits, manifest written, run lock
+  released).
 
-#### Required observability outputs
+Event requirements (normative):
 
-- `control/cancel.json` exists after any cancel request.
-- `logs/ui_audit.jsonl` contains:
-  - `runs.cancel_requested` (and possibly `runs.cancel_escalated`) before the system attempts to
-    stop the run.
-- Cancellation MUST be observable via:
-  - presence of `control/cancel.json`
-  - terminal status of the run derived from `manifest.json` (and `logs/health.json` when present)
+- Events MUST be named with ASCII `lower_snake_case` after the `event.` prefix.
+- For a given `run_id`, the Operator Interface control plane MUST process events serially.
 
-#### Conformance tests (minimum)
+#### States
 
-1. Happy path: start run → cancel graceful → run terminates → `terminal_observed` derived.
-1. Escalation: cancel graceful → cancel force → verify mode escalation and single durable cancel
-   artifact.
-1. Idempotency: submit same cancel request twice → no duplicated side effects beyond audit entries;
-   cancel.json remains valid.
-1. Determinism: repeat fixture twice → artifacts identical except timestamps/UUIDs (or deterministic
-   IDs in test mode).
+State requirements (normative):
+
+- States MUST be named as ASCII `lower_snake_case`.
+- States MUST be stable within the declared version.
+- Terminal states MUST be explicitly identified.
+
+| State                | Kind           | Description                                   | Invariants                                          | Observable signals                                                |
+| -------------------- | -------------- | --------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------- |
+| `no_request`         | `initial`      | No cancellation has been requested.           | `control/cancel.json` does not exist.               | Absence of `control/cancel.json`.                                 |
+| `requested_graceful` | `intermediate` | Graceful cancellation requested and durable.  | `cancel.json.mode="graceful"` and run not terminal. | `control/cancel.json` validates; `mode="graceful"`.               |
+| `requested_force`    | `intermediate` | Force cancellation requested and durable.     | `cancel.json.mode="force"` and run not terminal.    | `control/cancel.json` validates; `mode="force"`.                  |
+| `terminal_observed`  | `terminal`     | Run is terminal and cancellation is recorded. | Run terminal AND `control/cancel.json` exists.      | Run terminal in `manifest.json` AND `control/cancel.json` exists. |
+
+#### Transition rules
+
+Transition requirements (normative):
+
+- Each transition MUST specify: from_state, event, guard conditions, to_state, actions, failure
+  mapping, and observable evidence.
+- Guards MUST be explicit and deterministic.
+
+| From state           | Event                           | Guard (deterministic)           | To state             | Actions (entry/exit)                                                                                                                                                                                                              | Outcome mapping                                                                                                                                                                                                                                                                                                | Observable transition evidence                                                                                                                |
+| -------------------- | ------------------------------- | ------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `no_request`         | `event.cancel_request_graceful` | run exists AND run not terminal | `requested_graceful` | Atomically write `control/cancel.json` (mode=graceful); emit write-ahead audit event `runs.cancel_requested`; MAY send OS signal best-effort                                                                                      | Success: Operator API accepts the request. Guard fail (run missing): deny (HTTP 404, `reason_code=run_not_found`), emit audit event with `outcome=denied`, do not write. Guard fail (run terminal): deny (HTTP 409, `reason_code=run_already_terminal`), emit audit event with `outcome=denied`, do not write. | `control/cancel.json` exists and validates; `logs/ui_audit.jsonl` contains `runs.cancel_requested`.                                           |
+| `no_request`         | `event.cancel_request_force`    | run exists AND run not terminal | `requested_force`    | Atomically write `control/cancel.json` (mode=force); emit write-ahead audit event `runs.cancel_requested`; MAY send OS signal best-effort                                                                                         | Same as above (404/409 on guard failure).                                                                                                                                                                                                                                                                      | `control/cancel.json` exists and validates; `logs/ui_audit.jsonl` contains `runs.cancel_requested`.                                           |
+| `requested_graceful` | `event.cancel_request_force`    | run not terminal                | `requested_force`    | Atomically update `control/cancel.json` (mode=force; set `escalated_at`/`escalated_by`; preserve `request_id`, `requested_at`, `requested_by`); emit audit event `runs.cancel_escalated`; MAY send stronger OS signal best-effort | Success: Operator API accepts escalation. Guard fail (run terminal): deny (HTTP 409, `reason_code=run_already_terminal`), emit denied audit event, do not modify.                                                                                                                                              | `control/cancel.json.mode="force"` and escalation fields present; `logs/ui_audit.jsonl` contains `runs.cancel_escalated`.                     |
+| `requested_graceful` | `event.cancel_request_graceful` | run not terminal                | `requested_graceful` | Idempotent replay: MUST NOT change durable fields in `control/cancel.json`; MAY re-emit `runs.cancel_requested`; MAY re-signal OS best-effort                                                                                     | Success: Operator API accepts replay (no state change). Guard fail (run terminal): deny (HTTP 409, `reason_code=run_already_terminal`), emit denied audit event, no modification.                                                                                                                              | `control/cancel.json` unchanged (aside from explicitly non-deterministic fields, if any); audit row appended.                                 |
+| `requested_force`    | `event.cancel_request_force`    | run not terminal                | `requested_force`    | Idempotent replay: MUST NOT change durable fields in `control/cancel.json`; MAY re-emit `runs.cancel_requested`; MAY re-signal OS best-effort                                                                                     | Success: Operator API accepts replay (no state change). Guard fail (run terminal): deny (HTTP 409, `reason_code=run_already_terminal`), emit denied audit event, no modification.                                                                                                                              | `control/cancel.json` unchanged; audit row appended.                                                                                          |
+| `requested_force`    | `event.cancel_request_graceful` | always (downgrade attempt)      | `requested_force`    | MUST NOT modify `control/cancel.json`; MUST emit audit event `runs.cancel_requested` with `outcome=denied` and `reason_code=cancel_downgrade_forbidden`                                                                           | Operator API MUST deny (HTTP 409, `reason_code=cancel_downgrade_forbidden`). Response and evidence MUST be deterministic across repeated identical downgrade attempts.                                                                                                                                         | `control/cancel.json` unchanged; `logs/ui_audit.jsonl` contains denied `runs.cancel_requested` with `reason_code=cancel_downgrade_forbidden`. |
+| `requested_graceful` | `event.run_terminal_observed`   | run becomes terminal            | `terminal_observed`  | No additional actions required (state derived from artifacts).                                                                                                                                                                    | Not an Operator API surface; used for derivation/observation.                                                                                                                                                                                                                                                  | `manifest.json` indicates terminal and `control/cancel.json` exists.                                                                          |
+| `requested_force`    | `event.run_terminal_observed`   | run becomes terminal            | `terminal_observed`  | No additional actions required (state derived from artifacts).                                                                                                                                                                    | Not an Operator API surface; used for derivation/observation.                                                                                                                                                                                                                                                  | `manifest.json` indicates terminal and `control/cancel.json` exists.                                                                          |
+
+#### Entry actions and exit actions
+
+- **Entry actions**:
+
+  - `requested_graceful`:
+    - write `control/cancel.json` atomically (mode=graceful)
+    - emit write-ahead `runs.cancel_requested` audit row
+    - MAY send OS cancellation signal (best-effort; non-authoritative)
+  - `requested_force`:
+    - write/update `control/cancel.json` atomically (mode=force; include escalation fields when
+      applicable)
+    - emit `runs.cancel_requested` (initial force) and/or `runs.cancel_escalated` (escalation) audit
+      row
+    - MAY send OS cancellation signal (best-effort; non-authoritative)
+
+- **Exit actions**: none.
+
+Requirements (normative):
+
+- Artifact writes that define or advance state MUST be atomic or fail closed.
+- Entry/exit actions MUST be idempotent with respect to the authoritative state representation.
+
+#### Illegal transitions
+
+- **Policy**: `fail_closed`
+- **Classification**: Operator API 4xx with the standard error envelope
+  (`reason_domain=operator_interface`)
+- **Observable evidence**: denied `audit_event` row in `logs/ui_audit.jsonl` plus an unchanged
+  authoritative state representation (`control/cancel.json`)
+
+Requirements (normative):
+
+- Illegal transitions MUST NOT silently mutate state.
+- Illegal transitions MUST be observable.
+
+Any `(state, event)` combination not listed in Transition rules is illegal and MUST be handled per
+this fail-closed policy.
+
+This machine defines the following explicit illegal transition:
+
+- Downgrade prevention: `requested_force` on `event.cancel_request_graceful` is illegal and MUST be
+  rejected deterministically (see Transition rules).
+
+In addition, the following are illegal:
+
+- Any unrecognized `event.*` token.
+- Any schema-invalid or unreadable `control/cancel.json` (fail closed; treat as illegal state
+  representation and surface an operator-visible error).
+
+#### Observability
+
+- **Required artifacts**:
+  - `runs/<run_id>/control/cancel.json`
+  - `runs/<run_id>/manifest.json`
+- **Structured logs**:
+  - `logs/ui_audit.jsonl` (`audit_event` rows; includes `runs.cancel_requested` and
+    `runs.cancel_escalated`)
+- **Human-readable logs**:
+  - `runs/<run_id>/logs/run.log` (diagnostic; not conformance-critical)
+
+Requirements (normative):
+
+- Observability signals MUST be deterministic for equivalent inputs.
+
+#### Conformance tests
+
+Minimum conformance suite (normative):
+
+1. **Happy path**: `no_request` → graceful cancel request accepted → run terminates →
+   `terminal_observed` derived.
+1. **Escalation**: `requested_graceful` → force cancel request accepted → `requested_force` derived
+   and escalation fields present.
+1. **Illegal transition handling**: attempt a forbidden downgrade and verify deterministic rejection
+   and evidence.
+1. **Idempotency**: repeat a cancel request and verify no duplicated durable side effects and stable
+   state derivation.
+1. **Determinism**: run the same fixture twice and assert identical state-related artifacts
+   (excluding explicitly non-deterministic fields permitted by contract).
+
+Conformance test matrix (normative minimum):
+
+| Test ID     | Initial state                                      | Event sequence                                                            | Expected final state | Required evidence                                                                                                         |
+| ----------- | -------------------------------------------------- | ------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `cancel-01` | `no_request`                                       | `event.cancel_request_graceful` then `event.run_terminal_observed`        | `terminal_observed`  | `control/cancel.json` (mode=graceful) exists; audit has `runs.cancel_requested` before termination.                       |
+| `cancel-02` | `requested_graceful`                               | `event.cancel_request_force`                                              | `requested_force`    | `control/cancel.json.mode="force"` and escalation fields set; audit has `runs.cancel_escalated`.                          |
+| `cancel-03` | `requested_graceful`                               | `event.cancel_request_graceful` (replay)                                  | `requested_graceful` | `control/cancel.json` unchanged; additional audit row emitted.                                                            |
+| `cancel-04` | `requested_force`                                  | `event.cancel_request_graceful` (downgrade)                               | `requested_force`    | Operator API rejects with HTTP 409 `cancel_downgrade_forbidden`; denied audit row; `control/cancel.json` unchanged.       |
+| `cancel-05` | `terminal_observed` or terminal run with no cancel | `event.cancel_request_force`                                              | unchanged            | Operator API rejects with HTTP 409 `run_already_terminal`; denied audit row; MUST NOT write/modify `control/cancel.json`. |
+| `cancel-06` | n/a (missing run)                                  | `event.cancel_request_graceful`                                           | n/a                  | Operator API rejects with HTTP 404 `run_not_found`; denied audit row; MUST NOT write `control/cancel.json`.               |
+| `cancel-07` | any                                                | derive from artifacts where run terminal AND `control/cancel.json` exists | `terminal_observed`  | State derivation precedence is deterministic (terminal overrides requested mode).                                         |
 
 ### Resume and retry (v0.2 normative)
 
@@ -1261,23 +1366,40 @@ Node status MUST be derived from ground truth `outcome`, not by mutating plan ar
 
 ### State machine: Resume/retry decision lifecycle (normative)
 
-**Name:** `oi.resume_retry.decision_lifecycle` **Scope:** per `(run_id, decision_type)`
-**Authority:** Operator Interface spec (v0.2)
+#### Purpose
 
-#### States (closed set)
+- **What it represents**: A durable operator-issued request to resume or retry a run plus a durable
+  decision output, gated by deterministic drift evaluation.
+- **Scope**: `run` (per `(run_id, decision_type)`)
+- **Machine ID**: `oi-resume-retry-decision-lifecycle`
+- **Version**: `0.2.0`
+- **Display name (non-authoritative)**: `oi.resume_retry.decision_lifecycle` (legacy identifier;
+  MUST NOT be used as the Machine ID)
 
-- `idle`
-- `evaluating_drift`
-- `decided_same_run`
-- `decided_continuation_run`
-- `decided_denied`
+#### Lifecycle authority references
 
-#### Inputs / triggers (closed set)
+- `115_operator_interface.md`:
+  - `## Cancellation, resume, retry` (control artifacts + request file contract)
+  - `### Resume and retry (v0.2 normative)` (drift gate definition)
+  - `## Operator API (HTTP)` (API conventions + standard error envelope)
+  - `## Audit logging (v0.2 normative)` (`audit_event` schema + `runs.resume_retry_requested` audit
+    action)
+- ADR-0007 (state machine template and requirements)
+- ADR-0001 (identifier format: `id_slug_v1`)
 
-- `resume_request(scope, target, override_drift)` from UI/API
-- `retry_request(scope, target, override_drift)` from UI/API
+If this state machine definition conflicts with other linked lifecycle authority, this state machine
+is authoritative for Operator Interface resume/retry behavior in v0.2.
 
-#### State derivation (observability; normative)
+#### Entities and identifiers
+
+- **Machine instance key**: `(run_id, decision_type)`
+  - `run_id`: UUID (canonical lowercase hyphenated form)
+  - `decision_type`: `resume | retry`
+- **Correlation identifiers**:
+  - `request_file.request_id` (UUID; latest request correlation id)
+  - `logs/ui_audit.jsonl[].target.request_id` (UUID; Operator API request correlation id)
+
+#### Authoritative state representation
 
 Let `request_file` be:
 
@@ -1287,53 +1409,149 @@ Let `request_file` be:
 Let `decision_file` be:
 
 - `control/resume_decision.json` when `decision_type="resume"`
+
 - `control/retry_decision.json` when `decision_type="retry"`
 
-Derive state deterministically:
+- **Source of truth**: `request_file` + `decision_file` (presence + validated JSON content)
 
-- `idle` iff `request_file` does not exist
-- `evaluating_drift` iff `request_file` exists AND `decision_file` does not exist
-- `decided_same_run` iff `decision_file` exists AND `decision.decision="same_run"`
-- `decided_continuation_run` iff `decision_file` exists AND `decision.decision="continuation_run"`
-- `decided_denied` iff `decision_file` exists AND `decision.decision="denied"`
+- **Derivation rule** (deterministic precedence):
 
-#### Transitions (normative)
+  1. If `request_file` does not exist → `idle`
+  1. Else if `decision_file` does not exist → `evaluating_drift`
+  1. Else if `decision_file` is present and validates:
+     - `decision.decision="same_run"` → `decided_same_run`
+     - `decision.decision="continuation_run"` → `decided_continuation_run`
+     - `decision.decision="denied"` → `decided_denied`
+  1. Else (schema invalid/unreadable) → illegal state representation (fail closed; see Illegal
+     transitions)
 
-- `idle -> evaluating_drift` on `resume_request` or `retry_request`
-  - Guards:
-    - The run MUST exist (`runs/<run_id>/manifest.json` validates), else deny the request.
-    - The run MUST NOT be actively running (run lock present or active verb process), else deny the
-      request.
-  - Actions:
-    - atomically write `request_file`
-    - read prior `manifest.lab.inventory_snapshot_sha256`
-    - compute current inventory snapshot hash deterministically (using the same snapshot + hashing
-      method as the `lab_provider` stage)
-    - emit audit event `runs.resume_retry_requested` (write-ahead; `outcome=allowed|denied`)
-- `evaluating_drift -> decided_same_run` when drift policy allows same-run continuation
-  - Output:
+- **Persistence requirement**:
+
+  - MUST persist: yes
+  - MUST be persisted in: `request_file` and `decision_file` (write-to-temp + atomic rename)
+
+#### Events / triggers
+
+- `event.resume_requested`: A `POST /api/runs/{run_id}/resume` request.
+- `event.retry_requested`: A `POST /api/runs/{run_id}/retry` request.
+- `event.drift_evaluated`: Drift evaluation completed for the latest request and a decision is ready
+  to be written to `decision_file`.
+
+Event requirements (normative):
+
+- Events MUST be named with ASCII `lower_snake_case` after the `event.` prefix.
+- For a given `(run_id, decision_type)`, the Operator Interface control plane MUST process events
+  serially.
+
+#### States
+
+State requirements (normative):
+
+- States MUST be named as ASCII `lower_snake_case`.
+- States MUST be stable within the declared version.
+
+Terminal states:
+
+- None. Any decided state MAY transition back to `evaluating_drift` when a new request is accepted
+  (latest request is authoritative).
+
+| State                      | Kind           | Description                                      | Invariants                                                         | Observable signals                                         |
+| -------------------------- | -------------- | ------------------------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `idle`                     | `initial`      | No request is present.                           | `request_file` does not exist.                                     | Absence of `request_file`.                                 |
+| `evaluating_drift`         | `intermediate` | Request is present and drift is being evaluated. | `request_file` exists AND `decision_file` does not exist.          | Presence of `request_file` and absence of `decision_file`. |
+| `decided_same_run`         | `intermediate` | Decision written: continue in same run.          | `decision_file` exists AND `decision.decision="same_run"`.         | `decision_file` validates; `decision="same_run"`.          |
+| `decided_continuation_run` | `intermediate` | Decision written: create a new continuation run. | `decision_file` exists AND `decision.decision="continuation_run"`. | `decision_file` validates; `decision="continuation_run"`.  |
+| `decided_denied`           | `intermediate` | Decision written: request denied by policy.      | `decision_file` exists AND `decision.decision="denied"`.           | `decision_file` validates; `decision="denied"`.            |
+
+#### Transition rules
+
+| From state                                                         | Event                                              | Guard (deterministic)                                            | To state                                                           | Actions (entry/exit)                                                                                                                                                                                                     | Outcome mapping                                                                                                                                                                                                                                                                              | Observable transition evidence                                                                               |
+| ------------------------------------------------------------------ | -------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `idle`                                                             | `event.resume_requested` / `event.retry_requested` | decision_type matches endpoint AND run exists AND run not active | `evaluating_drift`                                                 | Atomically write/overwrite `request_file`; MUST delete `decision_file` if it exists; compute drift deterministically; emit write-ahead audit event `runs.resume_retry_requested` (`outcome=allowed` or `outcome=denied`) | Success: Operator API accepts request and evaluation begins. Guard fail (run missing/invalid): deny (HTTP 404, `reason_code=run_not_found`), emit denied audit event, do not write. Guard fail (run active): deny (HTTP 409, `reason_code=run_busy`), emit denied audit event, do not write. | `request_file` exists; `decision_file` absent; audit row emitted.                                            |
+| `evaluating_drift`                                                 | `event.resume_requested` / `event.retry_requested` | decision_type matches endpoint AND run exists AND run not active | `evaluating_drift`                                                 | Superseding request: atomically overwrite `request_file`; MUST ensure `decision_file` is absent; emit `runs.resume_retry_requested` audit row; restart evaluation against latest request (implementation-defined)        | Success: latest request becomes authoritative. Guard failures map as above.                                                                                                                                                                                                                  | `request_file` content changes (or remains identical for replay); `decision_file` absent; audit row emitted. |
+| `decided_same_run` / `decided_continuation_run` / `decided_denied` | `event.resume_requested` / `event.retry_requested` | decision_type matches endpoint AND run exists AND run not active | `evaluating_drift`                                                 | New request: atomically overwrite `request_file`; MUST delete `decision_file` (invalidate prior decision); emit `runs.resume_retry_requested` audit row; begin new evaluation                                            | Success: latest request becomes authoritative and prior decision is invalidated deterministically. Guard failures map as above.                                                                                                                                                              | `decision_file` removed; `request_file` overwritten; audit row emitted.                                      |
+| `evaluating_drift`                                                 | `event.drift_evaluated`                            | `request_file` exists AND `decision_file` absent                 | `decided_same_run` / `decided_continuation_run` / `decided_denied` | Atomically write `decision_file` for the current request                                                                                                                                                                 | Not an Operator API surface; decision output MUST be produced deterministically from drift gate inputs and configured policy.                                                                                                                                                                | `decision_file` exists and validates; derived decided state matches `decision.decision`.                     |
+
+#### Entry actions and exit actions
+
+- **Entry actions**:
+
+  - `evaluating_drift`:
+    - write/overwrite `request_file` atomically
+    - MUST delete `decision_file` if it exists (invalidate stale decisions deterministically)
+    - compute current inventory snapshot hash deterministically (same snapshot + hashing method as
+      `lab_provider`)
+    - emit write-ahead audit event `runs.resume_retry_requested` (`outcome=allowed` or
+      `outcome=denied`)
+  - `decided_*`:
     - write `decision_file` atomically
-- `evaluating_drift -> decided_continuation_run` when drift policy requires a new run
-  - Output includes new run_id and baseline reference.
-  - write `decision_file` atomically
-- `evaluating_drift -> decided_denied` when policy denies the request
-  - Output includes reason_code.
-  - write `decision_file` atomically
 
-#### Illegal transition handling (normative)
+- **Exit actions**: none.
 
-- `decided_* -> evaluating_drift` MUST NOT occur without a new request overwriting `request_file`.
-- If `decision_file` exists but is invalid/unreadable, the UI MUST fail closed for resume/retry UI
-  actions and MUST surface the condition to the operator as an error (do not guess state).
+Requirements (normative):
 
-#### Required conformance tests (minimum)
+- Artifact writes that define or advance state MUST be atomic or fail closed.
+- Entry/exit actions MUST be idempotent with respect to the authoritative state representation.
 
-1. No drift: decision is `same_run` when policy allows; both request and decision artifacts exist.
-1. Drift detected: decision is `continuation_run` (or `denied`, depending on configured policy).
-1. Override path: drift detected + operator override enabled → allowed decision + audit event.
-1. Busy guard: when run is active (lock/process), request is denied with deterministic reason_code.
-1. Determinism: repeat drift fixture twice → decision output identical aside from timestamps/UUIDs
-   (or deterministic IDs in test mode).
+#### Illegal transitions
+
+- **Policy**: `fail_closed`
+- **Classification**:
+  - Operator API 4xx with the standard error envelope (`reason_domain=operator_interface`) when the
+    illegal transition is requested via `POST /resume` or `POST /retry`.
+  - Operator UI MUST fail closed (surface operator-visible error) when the illegal transition is
+    observed via artifact inspection.
+- **Observable evidence**:
+  - denied `audit_event` row in `logs/ui_audit.jsonl` (for Operator API-originated illegals)
+  - unchanged authoritative artifacts (`request_file` / `decision_file`) for API-originated illegals
+
+Any `(state, event)` combination not listed in Transition rules is illegal and MUST fail closed.
+
+This machine treats the following as illegal (non-exhaustive; all MUST fail closed):
+
+- Any unrecognized `event.*` token.
+- Any schema-invalid or unreadable `request_file` or `decision_file`.
+- Any attempt to write a decision when `request_file` is absent (illegal state representation).
+
+#### Observability
+
+- **Required artifacts**:
+  - `request_file` (`control/resume_request.json` or `control/retry_request.json`)
+  - `decision_file` (`control/resume_decision.json` or `control/retry_decision.json`)
+  - `runs/<run_id>/manifest.json` (source for prior `inventory_snapshot_sha256`)
+- **Structured logs**:
+  - `logs/ui_audit.jsonl` (`audit_event` rows; includes `runs.resume_retry_requested`)
+- **Human-readable logs**:
+  - `runs/<run_id>/logs/run.log` (diagnostic; not conformance-critical)
+
+Requirements (normative):
+
+- Observability signals MUST be deterministic for equivalent inputs.
+
+#### Conformance tests
+
+Minimum conformance suite (normative):
+
+1. **Happy path**: request accepted → drift evaluated → decision written (one fixture each for
+   `same_run`, `continuation_run`, and `denied` depending on policy configuration).
+1. **Illegal transition handling**: attempt an invalid request sequence and verify fail-closed
+   policy and evidence.
+1. **Idempotency**: replay the same request and verify stable artifacts and decision outputs (aside
+   from additional audit rows).
+1. **Determinism**: repeat drift fixture twice → decision output identical aside from explicitly
+   non-deterministic fields permitted by contract.
+
+Conformance test matrix (normative minimum):
+
+| Test ID | decision_type       | Initial state | Event sequence                                                         | Expected final state                           | Required evidence                                                                                             |
+| ------- | ------------------- | ------------- | ---------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `rr-01` | `resume`            | `idle`        | `event.resume_requested` then `event.drift_evaluated` (no drift)       | `decided_same_run`                             | request and decision artifacts exist; audit row `runs.resume_retry_requested` emitted with `outcome=allowed`. |
+| `rr-02` | `resume`            | `idle`        | `event.resume_requested` then `event.drift_evaluated` (drift detected) | `decided_continuation_run` or `decided_denied` | decision matches configured policy; decision artifact validates.                                              |
+| `rr-03` | `retry`             | `idle`        | `event.retry_requested` then `event.drift_evaluated` (override path)   | decided (policy-specific)                      | audit row reflects override intent; decision artifact present.                                                |
+| `rr-04` | `resume` or `retry` | `idle`        | request event while run active                                         | unchanged (`idle`)                             | Operator API rejects with HTTP 409 `run_busy`; denied audit row; MUST NOT write `request_file`.               |
+| `rr-05` | `resume` or `retry` | `idle`        | request event for missing run                                          | unchanged (`idle`)                             | Operator API rejects with HTTP 404 `run_not_found`; denied audit row; MUST NOT write `request_file`.          |
+| `rr-06` | `resume` or `retry` | `decided_*`   | new request event                                                      | `evaluating_drift`                             | prior `decision_file` removed; new `request_file` written; evaluation restarts deterministically.             |
+| `rr-07` | `resume` or `retry` | any           | corrupt/unreadable `decision_file` observed                            | n/a (fail closed)                              | UI/API surfaces operator-visible error; no guessed state; authoritative artifacts unchanged.                  |
 
 ## Configuration surface (v0.2)
 

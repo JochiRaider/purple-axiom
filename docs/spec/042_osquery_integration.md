@@ -326,7 +326,7 @@ Payload truncation and sidecars (normative):
 
 Sidecar addressing (normative):
 
-- Sidecar objects MUST follow `045_storage_formats.md` “Sidecar blob store” conventions.
+- Sidecar objects MUST follow `045_storage_formats.md` "Sidecar blob store" conventions.
 - The per-record directory key for osquery raw Parquet sidecars is `record_id_dir`, derived from
   `raw_line_sha256` by stripping the `sha256:` prefix (result: 64 lowercase hex characters).
 - `field_path` MUST equal the base column name (`columns_json`, `snapshot_json`, `raw_json`,

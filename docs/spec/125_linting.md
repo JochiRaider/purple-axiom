@@ -538,10 +538,10 @@ Sigma parsing and resolution requirements (normative):
 
 - The linter MUST classify each rule as an event rule (`SigmaRule`) or a correlation rule
   (`SigmaCorrelationRule`) and MUST parse it using the canonical parsing model defined in
-  `060_detection_sigma.md` (TODO: add a stable section anchor, e.g. "Parsing model").
+  `060_detection_sigma.md`, "Parsing model".
 
-- The linter MUST parse to the canonical AST form (`sigma_ast_v1`) (TODO: defined in
-  `060_detection_sigma.md`) for:
+- The linter MUST parse to the canonical AST form (`sigma_ast_v1`) defined in
+  `060_detection_sigma.md`, "Parsing model", for:
 
   - `SigmaRule.detection.condition` (including `x of`, pipe aggregation, and `near`).
   - `SigmaCorrelationRule.correlation` (including correlation type normalization and required-field
@@ -550,9 +550,11 @@ Sigma parsing and resolution requirements (normative):
 - The linter MUST perform deterministic reference resolution checks:
 
   - `ref` identifiers MUST exist in the rule’s `detection` selector identifier set.
+  - `x of them` expansions MUST exclude underscore-prefixed identifiers.
   - `x of <pattern>` expansions MUST be deterministic and MUST NOT be empty.
-  - Correlation `rules` references MUST resolve within the lint input set (or configured pack
-    scope). Missing or ambiguous references MUST be reported.
+  - Correlation `rules` references MUST resolve deterministically within the lint input set (or
+    configured pack scope) using the exact-match priority order `id` → `name` → `title`
+    (compatibility fallback). Missing or ambiguous references MUST be reported.
 
 - If a backend profile is selected (for example via resolved config
   `detection.sigma.bridge.backend`), the linter MUST run backend-profile validation against the
@@ -633,6 +635,14 @@ Implementations MUST provide tests that assert:
   - ambiguous operator usage,
   - canonical ordering violations, and
   - missing required columns/fields in authoring inputs.
+- Sigma rule linting fixtures cover:
+  - boolean precedence and parentheses for `detection.condition`,
+  - `x of` expansion semantics (including `them` underscore exclusion and deterministic ordering),
+  - pipe aggregation and `near` parsing (parse succeeds even when backend-profile validation
+    rejects),
+  - correlation rule parsing (supported types + type normalization),
+  - correlation rule reference resolution (missing and ambiguous reference cases), and
+  - backend-profile linting mode (`--backend <backend_id>`) capability gating behavior.
 - Machine report schema conformance:
   - `lint.json` validates against the lint report schema.
   - golden fixtures ignore no fields because the report MUST avoid volatile metadata by design.

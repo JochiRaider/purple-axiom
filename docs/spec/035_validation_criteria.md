@@ -1967,7 +1967,10 @@ Transitions:
 - `selected` → `skipped` when selection/evaluation is blocked deterministically.
 - `evaluated_pass | evaluated_fail | skipped` → `recorded` when the output row is emitted.
 
-### State machine: Cleanup verification consumption (per action)
+### State set (representational): Cleanup verification consumption (per action)
+
+This is a representational state set only; it is not a full state machine definition (no triggers or
+transitions specified).
 
 States:
 

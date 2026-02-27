@@ -181,11 +181,20 @@ Rules without valid ATT&CK tags:
 ## Rule lifecycle
 
 - The `rules/` directory is versioned and tagged.
-- Each rule MUST declare:
-  - `title`, `id`, `status`
-  - `logsource` (used for routing via the Sigma-to-OCSF Bridge)
-  - `detection` selectors and conditions
-  - `tags` (include ATT&CK technique tags when available)
+
+Event rules (`SigmaRule`) MUST declare:
+
+- `title`, `id`, `status`
+- `logsource` (used for routing via the Sigma-to-OCSF Bridge)
+- `detection` selectors and conditions
+- `tags` (include ATT&CK technique tags when available)
+
+Correlation meta rules (`SigmaCorrelationRule`) MUST declare:
+
+- `title`, `id`, `status`
+- `logsource` (used for routing via the Sigma-to-OCSF Bridge)
+- `correlation` (correlation rule definition; see "Correlation rule parsing")
+- `tags` (include ATT&CK technique tags when available)
 
 ## Parsing model
 
@@ -496,7 +505,8 @@ Representational stage lifecycle (v0.1):
 
 - `pending` → `running` → `published` (success path)
 - `pending` → `running` → `failed` (fatal stage failure)
-- `pending` → `skipped` (stage disabled)
+- `pending` → `skipped` (enabled but blocked by upstream fail-closed gating;
+  `reason_code="blocked_by_upstream_failure"`)
 
 Representational per-rule lifecycle (v0.1; within the stage):
 
@@ -507,8 +517,8 @@ Representational per-rule lifecycle (v0.1; within the stage):
 
 Observable anchors (run bundle):
 
-- Stage outcome: `manifest.json` / `logs/health.json` entry for stage `detection` (status +
-  reason_code).
+- Stage outcome (when enabled): `manifest.json` / `logs/health.json` entry for stage `detection`
+  (status + reason_code).
 - Publish gate artifacts when enabled: `detections/detections.jsonl` and `bridge/**`.
 - Per-rule compiled plan files: `bridge/compiled_plans/<rule_id>.plan.json` (executable flag and
   `non_executable_reason`).
@@ -897,10 +907,11 @@ The `timeframe` modifier is **out of scope for v0.1**.
 
 ## Changelog
 
-| Date       | Change            |
-| ---------- | ----------------- |
-| 2026-01-22 | update            |
-| 2026-01-12 | Formatting update |
+| Date       | Change                                           |
+| ---------- | ------------------------------------------------ |
+| 2026-02-27 | Representational machine: disabled stages absent |
+| 2026-01-22 | update                                           |
+| 2026-01-12 | Formatting update                                |
 
 [adr-0005]: ../adr/ADR-0005-stage-outcomes-and-failure-classification.md
 [adr-0007]: ../adr/ADR-0007-state-machines.md

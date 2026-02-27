@@ -1006,6 +1006,283 @@ Additional provenance (when present):
 - Range config sha (from `manifest.inputs.range_yaml_sha256`; `sha256:<lowercase_hex>` form when
   present)
 
+### State machine: Regression compare lifecycle (normative, ADR-0007)
+
+#### Purpose
+
+- **What it represents**: The reporting stage's regression compare lifecycle from baseline reference
+  materialization (`inputs/baseline_run_ref.json`, optional `inputs/baseline/manifest.json`) through
+  emission of the CI-facing regression surface (`report/report.json.regression`) and the
+  `reporting.regression_compare` health substage outcome.
+- **Scope**: Single run (`run_id`), single regression compare execution (v0.1).
+- **Machine ID**: `reporting-regression-compare` (id_slug_v1)
+- **Version**: `0.1.0`
+
+This state machine is **reporting-owned** and **fixture-backed** in v0.1. CI treats the regression
+compare as a lifecycle, and this machine defines the deterministic contract for that lifecycle.
+
+#### Lifecycle authority references
+
+- Data contracts spec:
+  - Baseline reference materialization + immutability + failure mapping (`025_data_contracts.md`,
+    "Regression baseline reference inputs (normative)").
+- Storage formats spec:
+  - Reserved baseline reference paths under `inputs/` (`045_storage_formats.md`).
+- Stage outcomes + failure classification:
+  - `reporting.regression_compare` substage reason codes and deterministic selection precedence
+    (ADR-0005).
+- This document:
+  - Regression JSON surface (`report/report.json.regression`) presence rules and indeterminate form,
+    including baseline snapshot hash verification and comparability policy.
+- Test strategy and CI:
+  - Regression compare scenario matrix treated as state-machine conformance
+    (`100_test_strategy_ci.md`, "State machine integration notes (v0.1)").
+
+If this state machine conflicts with the linked lifecycle authority, the linked lifecycle authority
+is authoritative.
+
+#### Entities and identifiers
+
+- **Machine instance key**: `run_id`
+
+v0.1 constraint (normative):
+
+- There is at most one regression compare execution per run.
+- Future multi-compare support (multiple baselines per run, segmented compares, etc.) is RESERVED
+  and MUST introduce an explicit `regression_compare_instance_id` surfaced in contracted artifacts.
+
+Correlation to contracted artifacts (normative):
+
+- Baseline reference inputs (owned by reporting; immutable once published):
+  - `inputs/baseline_run_ref.json` (pointer form; REQUIRED when regression is enabled)
+  - `inputs/baseline/manifest.json` (snapshot form; OPTIONAL but RECOMMENDED when readable)
+- Regression surface (authoritative machine-readable surface):
+  - `report/report.json.regression` (REQUIRED when regression is enabled and the report JSON is
+    emitted)
+- Outcome surface (authoritative lifecycle outcome):
+  - `manifest.stage_outcomes[]` and `logs/health.json.stages[]` substage entry with
+    `stage="reporting.regression_compare"` (REQUIRED when regression compare is enabled; ADR-0005).
+
+Correlation invariants (normative):
+
+- If `inputs/baseline_run_ref.json.baseline_run_id` is present, then
+  `report/report.json.regression.baseline.run_id` MUST equal it (even when the baseline is
+  unreadable).
+- When `report/report.json.regression.comparability.status="indeterminate"`, the report’s
+  `comparability.reason_code` MUST equal the emitted `reporting.regression_compare` substage
+  `reason_code` (ADR-0005).
+- `inputs/baseline_run_ref.json` MUST be referenced in
+  `report/report.json.regression.comparability.evidence_refs[]`.
+
+#### Events / triggers (closed set)
+
+Event tokens are stable strings and MUST be treated as a closed set for v0.1.
+
+The following triggers correspond to the regression compare fixture matrix:
+
+| Event token                        | Trigger condition (deterministic)                                                                     |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `event.baseline_present_identical` | Baseline resolved + comparable; compare completed; all computed deltas are zero (after rounding).     |
+| `event.intentional_change`         | Baseline resolved + comparable; compare completed; at least one computed delta is non-zero.           |
+| `event.baseline_missing`           | Baseline reference cannot be resolved OR baseline run bundle/artifacts are unreadable.                |
+| `event.baseline_incompatible`      | Baseline and candidate are not comparable (required artifacts missing or schema/pin incompatibility). |
+| `event.compare_failed`             | Baseline resolved + comparable, but delta computation fails due to an unexpected runtime error.       |
+
+Additional lifecycle triggers (v0.1):
+
+| Event token                 | Trigger condition (deterministic)                     |
+| --------------------------- | ----------------------------------------------------- |
+| `event.regression_disabled` | `reporting.regression.enabled=false`                  |
+| `event.compare_requested`   | `reporting.regression.enabled=true` (compare invoked) |
+
+Deterministic event derivation and precedence (normative):
+
+When regression compare is enabled, implementations MUST derive exactly one terminal result event
+using this precedence (highest to lowest), aligned to ADR-0005 deterministic selection:
+
+1. `event.baseline_missing`
+1. `event.baseline_incompatible`
+1. `event.compare_failed`
+1. `event.baseline_present_identical` / `event.intentional_change` (mutually exclusive)
+
+`event.baseline_present_identical` vs `event.intentional_change` selection MUST be deterministic:
+
+- If every `deltas[]` entry with `status="computed"` has `delta=0` after applying the contract’s
+  rounding rules (see `070_scoring_metrics.md`), select `event.baseline_present_identical`.
+- Otherwise, select `event.intentional_change`.
+
+#### States (closed set)
+
+Run-level states (closed set for v0.1):
+
+| State                                 | Kind     | Meaning (v0.1)                                                                  |
+| ------------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `not_applicable`                      | terminal | Regression compare is disabled; no compare was performed.                       |
+| `compare_requested`                   | initial  | Regression compare enabled and requested; baseline reference must be validated. |
+| `compared_comparable`                 | terminal | Compare completed with `comparability.status="comparable"` and deltas computed. |
+| `compared_warning`                    | terminal | Compare completed with `comparability.status="warning"` and deltas computed.    |
+| `indeterminate_baseline_missing`      | terminal | Baseline missing/unreadable; compare not performed.                             |
+| `indeterminate_baseline_incompatible` | terminal | Baseline/candidate not comparable; compare not performed.                       |
+| `indeterminate_compare_failed`        | terminal | Unexpected error computing deltas; compare indeterminate.                       |
+
+#### Events and transitions
+
+| From state          | Event                              | Guard (deterministic)                                                                    | To state                                   |
+| ------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `not_applicable`    | `event.regression_disabled`        | `reporting.regression.enabled=false`                                                     | `not_applicable`                           |
+| `not_applicable`    | `event.compare_requested`          | `reporting.regression.enabled=true`                                                      | `compare_requested`                        |
+| `compare_requested` | `event.baseline_missing`           | Baseline cannot be resolved OR baseline run is unreadable.                               | `indeterminate_baseline_missing`           |
+| `compare_requested` | `event.baseline_incompatible`      | Baseline/candidate artifacts missing OR schema/pin incompatibility OR snapshot mismatch. | `indeterminate_baseline_incompatible`      |
+| `compare_requested` | `event.compare_failed`             | Baseline resolved + comparable, but delta computation throws/aborts unexpectedly.        | `indeterminate_compare_failed`             |
+| `compare_requested` | `event.baseline_present_identical` | Baseline resolved + comparable; compare completed; computed deltas are all zero.         | `compared_comparable` / `compared_warning` |
+| `compare_requested` | `event.intentional_change`         | Baseline resolved + comparable; compare completed; at least one computed delta non-zero. | `compared_comparable` / `compared_warning` |
+
+Comparable vs warning mapping (normative):
+
+- When a transition targets `compared_comparable` / `compared_warning`, the implementation MUST set
+  the terminal state according to `report/report.json.regression.comparability.status`:
+  - `comparability.status="comparable"` → `compared_comparable`
+  - `comparability.status="warning"` → `compared_warning`
+
+Transition output mapping (normative):
+
+For each terminal state when regression compare is enabled, the reporting implementation MUST emit:
+
+1. Baseline reference inputs per `025_data_contracts.md` (pointer form REQUIRED; snapshot form
+   best-effort).
+1. A `reporting.regression_compare` health substage outcome (ADR-0005).
+1. When the report JSON is emitted, a `report/report.json.regression` object consistent with the
+   substage outcome.
+
+The mapping below is normative:
+
+| Terminal state                             | `reporting.regression_compare` substage outcome (ADR-0005)   | `report/report.json.regression.comparability`                             | `deltas[]` requirement                                        |
+| ------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `compared_comparable` / `compared_warning` | `status="success"` (MUST omit `reason_code`)                 | `status="comparable"` or `status="warning"` (MUST NOT be `indeterminate`) | MUST be present; MAY contain indeterminate per-metric entries |
+| `indeterminate_baseline_missing`           | `status="failed"`, `reason_code="baseline_missing"`          | `status="indeterminate"`, `reason_code="baseline_missing"`                | MUST be `[]`                                                  |
+| `indeterminate_baseline_incompatible`      | `status="failed"`, `reason_code="baseline_incompatible"`     | `status="indeterminate"`, `reason_code="baseline_incompatible"`           | MUST be `[]`                                                  |
+| `indeterminate_compare_failed`             | `status="failed"`, `reason_code="regression_compare_failed"` | `status="indeterminate"`, `reason_code="regression_compare_failed"`       | MUST be `[]`                                                  |
+| `not_applicable`                           | Substage outcome MUST be absent                              | Regression object MUST be absent                                          | N/A                                                           |
+
+#### Illegal transitions (normative)
+
+The regression compare machine is expected to run as a one-shot compare per run. Implementations
+MUST detect and refuse illegal transition attempts deterministically.
+
+Illegal transitions include (non-exhaustive):
+
+- Emitting any terminal result (`event.*`) when `reporting.regression.enabled=false`.
+- Attempting to compute deltas before baseline reference inputs have been validated successfully:
+  - `inputs/baseline_run_ref.json` must be readable + schema-valid, and
+  - if `inputs/baseline/manifest.json` exists, it must satisfy the snapshot hash invariants.
+- Attempting to change baseline selection after baseline reference inputs have been materialized:
+  - A pre-existing `inputs/baseline_run_ref.json` that conflicts with the configured baseline
+    selection (see `025_data_contracts.md`) is an illegal transition request and MUST fail closed.
+- Re-running regression compare after any `indeterminate_*` terminal state without an explicit reset
+  of the run bundle (v0.1 has no reset semantics for published outputs).
+
+Refusal behavior (normative):
+
+- Implementations MUST NOT rewrite any existing `inputs/baseline_run_ref.json` or
+  `inputs/baseline/manifest.json` bytes.
+- If the illegal transition corresponds to a baseline reference immutability violation (for example,
+  a conflicting pre-existing `inputs/baseline_run_ref.json`), the implementation MUST:
+  - record `reporting.regression_compare` as `status="failed"` with
+    `reason_code="baseline_incompatible"`, and
+  - when the report JSON is emitted, emit `report/report.json.regression` in indeterminate form with
+    `comparability.reason_code="baseline_incompatible"` and `deltas[]=[]`.
+- Otherwise (illegal event ordering, re-run-after-terminal-failure attempt, etc.), the
+  implementation MUST:
+  - record `reporting.regression_compare` as `status="failed"` with
+    `reason_code="regression_compare_failed"`, and
+  - when the report JSON is emitted, emit `report/report.json.regression` in indeterminate form with
+    `comparability.reason_code="regression_compare_failed"` and `deltas[]=[]`.
+
+#### Inconsistent artifact state handling (normative)
+
+Inconsistent artifact states MUST be handled deterministically and SHOULD fail closed.
+
+The following cases are explicitly defined:
+
+- Baseline ref exists but points to an unreadable baseline run bundle or baseline manifest:
+  - Treat as `event.baseline_missing` → `indeterminate_baseline_missing`.
+- Baseline snapshot exists but hash mismatch is detected:
+  - If `inputs/baseline/manifest.json` exists and
+    `sha256(file_bytes(inputs/baseline/manifest.json)) != inputs/baseline_run_ref.json.baseline_manifest_sha256`,
+    treat as `event.baseline_incompatible` → `indeterminate_baseline_incompatible` (do not attempt
+    compare).
+- Partially written regression results:
+  - If regression compare is enabled and the report JSON is emitted, the run bundle MUST NOT be
+    considered valid unless `report/report.json` contains a contract-valid `regression` object that
+    satisfies the "Presence rules" and "Required fields" in the Regression JSON contract below.
+  - If a partially written or schema-invalid regression surface is detected during publish, the
+    reporting stage MUST fail closed with `reason_code="report_write_failed"` (ADR-0005).
+
+#### Observability (normative)
+
+Implementations MUST make the machine state and terminal outcome observable using only contracted
+artifacts (no new artifacts required for v0.1).
+
+Required observability signals when regression compare is enabled:
+
+- `inputs/baseline_run_ref.json` MUST be present (even when baseline is missing/unreadable).
+- `logs/health.json` MUST include a `reporting.regression_compare` substage entry with the status
+  and reason code mapping above (ADR-0005).
+- When the report JSON is emitted:
+  - `report/report.json.regression.comparability.status` MUST be one of
+    `comparable | warning | indeterminate`.
+  - If `comparability.status="indeterminate"`, `comparability.reason_code` MUST be one of
+    `baseline_missing | baseline_incompatible | regression_compare_failed`.
+  - `comparability.evidence_refs[]` MUST include evidence pointers to:
+    - `manifest.json` (current run)
+    - `inputs/baseline_run_ref.json`
+    - `inputs/baseline/manifest.json` when present
+
+#### Conformance tests (normative)
+
+CI MUST treat the regression compare machine as a conformance-tested lifecycle (ADR-0007). The
+canonical fixture root is:
+
+- `tests/fixtures/reporting/regression_compare/`
+
+Minimum required conformance cases (fixture-backed; normative):
+
+- Baseline present/identical:
+  - Expected: terminal state `compared_*` and health substage `status="success"`; regression surface
+    present and comparable.
+- Baseline intentional change:
+  - Expected: terminal state `compared_*` and health substage `status="success"`; regression surface
+    present and comparable; at least one computed delta is non-zero.
+- Baseline missing:
+  - Expected: terminal state `indeterminate_baseline_missing`; health substage failed with
+    `reason_code="baseline_missing"`; regression surface indeterminate with empty `deltas[]`.
+- Baseline incompatible:
+  - Expected: terminal state `indeterminate_baseline_incompatible`; health substage failed with
+    `reason_code="baseline_incompatible"`.
+  - MUST include, at minimum, a noise-profile incompatibility case driven by
+    `manifest.extensions.runner.environment_noise_profile.*` mismatch.
+- Compare failure:
+  - Expected: terminal state `indeterminate_compare_failed`; health substage failed with
+    `reason_code="regression_compare_failed"`; regression surface indeterminate with empty
+    `deltas[]`.
+
+Additional required conformance coverage (normative):
+
+- Illegal transitions:
+  - A conformance test MUST cover detection/refusal of an illegal transition request (for example: a
+    pre-existing `inputs/baseline_run_ref.json` that conflicts with configured baseline selection,
+    or a re-run-after-terminal-failure attempt) and MUST assert deterministic mapping to a terminal
+    failure state and reason code.
+- Idempotency:
+  - A conformance test MUST assert that re-running regression compare with identical inputs is
+    idempotent:
+    - baseline reference artifacts are not rewritten, and
+    - the regression surface fields and ordering are byte-identical across runs.
+- Determinism:
+  - A conformance test MUST assert deterministic precedence when multiple failure conditions could
+    apply (baseline missing > baseline incompatible > compare failed), and MUST assert that the
+    selected terminal state and emitted `reason_code` are stable.
+
 ## Regression analysis
 
 Regression analysis is controlled by configuration (`reporting.regression.enabled`; see
@@ -1159,7 +1436,8 @@ Baseline field derivation (normative):
   - Reporting MUST compute `sha256(file_bytes)` of `inputs/baseline/manifest.json` and MUST verify
     it equals `inputs/baseline_run_ref.json.baseline_manifest_sha256`. On mismatch,
     `comparability.status` MUST be `indeterminate` with
-    `comparability.reason_code="baseline_incompatible"` (see failure handling below).
+    `comparability.reason_code="baseline_incompatible"` (see "State machine: Regression compare
+    lifecycle").
   - On mismatch, `comparability.status` MUST be `indeterminate` with
     `comparability.reason_code="baseline_incompatible"`, `deltas[]` MUST be empty, and the reporting
     stage MUST emit `reporting.regression_compare` with `reason_code=baseline_incompatible`

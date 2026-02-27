@@ -764,8 +764,11 @@ For `native_pcre2`, `backend.id` MUST equal `"native_pcre2"`.
 
 - `scope` (object)
   - `class_uids` (array of integers; derived from routing)
-- `predicate` (object; event-rule predicate AST)
-- `correlation` (object; optional; present only for correlation rules)
+- Exactly one of the following MUST be present:
+  - `predicate` (object; event-rule predicate AST). Required for `SigmaRule`; MUST be omitted for
+    `SigmaCorrelationRule`.
+  - `correlation` (object; correlation plan object). Required for `SigmaCorrelationRule`; MUST be
+    omitted for `SigmaRule`.
 
 Predicate AST (normative, minimal):
 
@@ -1130,13 +1133,8 @@ Observable anchors (run bundle):
 
 ## MVP scope recommendation
 
-Start with the event families that cover the majority of safe adversary emulation scenarios:
-
-- process execution
-- network connections
-- DNS queries
-- authentication/logon
-- file writes (selectively)
+Start with the **v0.1 baseline enabled event families** defined in the
+[OCSF field tiers spec](055_ocsf_field_tiers.md) (see "Enabled event families (v0.1 baseline)").
 
 Expand iteratively, using bridge coverage metrics to guide where mapping work has the highest
 scoring impact.

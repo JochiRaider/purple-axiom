@@ -425,9 +425,62 @@ Tree-basis selection (normative):
 - **Machine ID**: `baseline-package-lifecycle` (id_slug_v1)
 - **Version**: `1.0.0`
 
+This state machine definition is **normative**: conforming implementations MUST derive lifecycle
+state and MUST enforce lifecycle transitions exactly as specified in this section.
+
+#### Lifecycle authority references
+
+This state machine is an overlay on authoritative lifecycle semantics defined elsewhere. When
+sources conflict, the referenced lifecycle authority is authoritative unless this section explicitly
+overrides it:
+
+- Baseline package addressing and identity:
+  [Storage location and addressing](#storage-location-and-addressing) and
+  [Identifiers](#identifiers)
+- Package shape and schema: [Baseline Detection Package format](#baseline-detection-package-format)
+  and [Baseline package manifest contract](#baseline-package-manifest-contract)
+- Integrity policy: [Integrity and signing](#integrity-and-signing) and
+  [Data contracts and reader semantics](025_data_contracts.md)
+- Library manager behaviors: [Listing](#listing), [Creation](#creation),
+  [Metadata updates](#metadata-updates), [Deletion](#deletion), and
+  [Download / export](#download--export)
+- CI/validation consumers: [CI usage (v0.1 subset)](#ci-usage-v01-subset),
+  [Verification hooks](#verification-hooks), and [Test strategy CI](100_test_strategy_ci.md)
+
+Note: This machine is intended to meet the ADR-0007 state machine contract bar (closed event set,
+deterministic reconciliation, explicit illegal-transition policy, and fixture-driven conformance
+tests).
+
+#### Entities and identifiers
+
+- **Machine instance key (correlation key)**: `(baseline_id, baseline_version)`.
+  - `baseline_id` MUST be `id_slug_v1`; `baseline_version` MUST be `semver_v1` (SemVer 2.0.0). See
+    [Identifiers](#identifiers).
+  - The instance key is encoded in the published-root path segments and MUST exactly match the two
+    fields in `baseline_package_manifest.json`.
+- **Content identity** (immutability support):
+  - `integrity.package_tree_sha256` is the stable content identity for the "tree basis" (excludes
+    `baseline_package_manifest.json`) and is expected to remain stable across metadata-only updates.
+- **Auxiliary identifiers** (non-authoritative, optional):
+  - `baseline_package_uuid` (UI convenience)
+  - `source_run.run_id` and `source_run.run_manifest_sha256` (provenance join)
+
+Path mapping (authoritative):
+
+- Published root: `<workspace_root>/exports/baselines/<baseline_id>/<baseline_version>/`
+- Staging root: `<workspace_root>/exports/.staging/baselines/<baseline_id>/<baseline_version>/`
+- Trash root (optional if implemented):
+  `<workspace_root>/exports/baselines/.trash/<baseline_id>/<baseline_version>/`
+
 #### Authoritative state representation
 
 This state machine is derived from the filesystem (no separate state store required).
+
+Persistence requirement (normative):
+
+- MUST persist: `no`
+- Implementations MAY maintain an equivalent cache/index, but it MUST be rebuildable by a
+  deterministic scan of the authoritative paths below.
 
 Authoritative paths:
 
@@ -440,21 +493,89 @@ Derivation rule (normative, ordered):
 
 1. If the published root exists:
    - If `baseline_package_manifest.json` exists, parses, and passes manifest/path consistency checks
-     (see [Listing](#listing)), state is `published`.
+     (see [Listing](#listing)), AND required integrity material is present (at minimum:
+     `security/checksums.txt`), AND the manifest-referenced required artifact paths exist, state is
+     `published`.
    - Else, state is `invalid`.
 1. Else if the staging root exists, state is `staging`.
 1. Else if the trash root exists (when implemented), state is `trashed`.
 1. Else, state is `absent`.
 
+Note: If both published root and staging root exist, the published-root branch above takes
+precedence; the staging root is treated as stale scratch and MUST NOT affect listing.
+
+#### Inconsistent artifact state handling
+
+Implementations MUST apply the following reconciliation rules deterministically when on-disk
+artifacts are partial or contradictory.
+
+Published-root inconsistencies (normative):
+
+- If `baseline_package_manifest.json` is missing, unreadable, schema-invalid, or fails manifest/path
+  consistency checks, derived state MUST be `invalid`.
+- If `security/checksums.txt` is missing or unreadable, derived state MUST be `invalid`.
+- If any manifest-referenced required artifact path is missing (for example `ground_truth_path`,
+  `ocsf_events_path`, or `_schema.json` when `ocsf_events_representation=parquet_dataset`), derived
+  state MUST be `invalid`.
+- If signing artifacts are partially present:
+  - If `security/signature.ed25519` is present but `security/checksums.txt` is missing/unreadable,
+    derived state MUST be `invalid`.
+  - If `security/signature.ed25519` is present but `security/public_key.ed25519` is absent, the
+    package MAY still be treated as `published` (public key may be provided out-of-band). If an
+    implementation requires `security/public_key.ed25519` by policy, it MUST treat this as `invalid`
+    and fail closed for listing and export (RECOMMENDED error: `baseline_package_unsafe`).
+
+Stale or contradictory roots (normative):
+
+- If both published root and staging root exist, state derivation MUST ignore the staging root and
+  MUST derive state exclusively from the published root (`published` or `invalid`).
+  - The staging root MUST NOT be reused or deleted automatically.
+- If the staging root exists and published root does not, derived state MUST be `staging` regardless
+  of which intermediate creation step was reached.
+- If the trash root exists concurrently with a published root, the published root takes precedence
+  for state derivation, but this condition SHOULD be surfaced as `artifact_representation_conflict`
+  during create/delete operations.
+
+Multiple candidate manifests (normative):
+
+- Only the canonical BDP-root `baseline_package_manifest.json` path is authoritative for discovery
+  and state derivation. Other manifest-like filenames MUST be ignored for state derivation and MUST
+  NOT affect listing eligibility.
+
+#### Events / triggers vocabulary
+
+Closed event set for this machine (normative):
+
+- `event.create_requested`: A caller requests creation of a BDP for the instance key from a given
+  source run bundle (see [Creation](#creation)).
+- `event.publish_succeeded`: The create operation has completed staging and is ready to atomically
+  publish (rename staging root to published root).
+- `event.create_failed`: The create operation failed while in `staging` and MUST NOT partially
+  publish. The staging root MAY be left for inspection.
+- `event.metadata_update_requested`: A caller requests a metadata-only update to an existing
+  published BDP (see [Metadata updates](#metadata-updates)).
+- `event.delete_requested`: A caller requests deletion (or trash) of a published/invalid BDP (see
+  [Deletion](#deletion)).
+
+Event ordering / precedence (normative):
+
+- If multiple *request* events are presented for the same instance within a single reconciliation
+  pass, implementations MUST process at most one event and MUST apply the following precedence:
+  `event.delete_requested` > `event.metadata_update_requested` > `event.create_requested`.
+- After applying any event that mutates the filesystem, implementations MUST re-derive state from
+  the filesystem before processing any subsequent event for the same instance key.
+- `event.publish_succeeded` and `event.create_failed` are internal outcomes of a single create
+  attempt and MUST NOT be synthesized by passive filesystem reconciliation.
+
 #### States
 
-| State       | Kind                | Description                                                                | Invariants (normative)                                                           | Observable signals                                        |
-| ----------- | ------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `absent`    | initial             | No staged or published BDP exists for the key.                             | Neither published root nor staging root exists.                                  | Listing excludes.                                         |
-| `staging`   | intermediate        | Creation is in progress or an earlier create attempt left staged contents. | Published root does not exist; staging root exists.                              | Create returns `baseline_create_in_progress` on conflict. |
-| `published` | intermediate        | A complete, readable BDP exists and is eligible for listing and download.  | Published root exists and contains a manifest that is valid and path-consistent. | Listed by OI.                                             |
-| `invalid`   | intermediate        | A directory exists at the published root but is not a valid BDP.           | Published root exists but manifest is missing/unreadable/invalid/inconsistent.   | SHOULD surface as `baseline_manifest_invalid`.            |
-| `trashed`   | terminal (optional) | A deleted BDP retained in an internal trash location.                      | Trash root exists and published root does not exist.                             | Not listed.                                               |
+| State       | Kind                | Description                                                                | Invariants (normative)                                                                                                          | Observable signals                                        |
+| ----------- | ------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `absent`    | initial             | No staged or published BDP exists for the key.                             | Neither published root nor staging root exists.                                                                                 | Listing excludes.                                         |
+| `staging`   | intermediate        | Creation is in progress or an earlier create attempt left staged contents. | Published root does not exist; staging root exists.                                                                             | Create returns `baseline_create_in_progress` on conflict. |
+| `published` | intermediate        | A complete, readable BDP exists and is eligible for listing and download.  | Published root exists and contains a manifest that is valid, path-consistent, and has required integrity material present.      | Listed by OI.                                             |
+| `invalid`   | intermediate        | A directory exists at the published root but is not a valid BDP.           | Published root exists but required package material is missing/unreadable/invalid (manifest, checksums, or required artifacts). | SHOULD surface as `baseline_manifest_invalid`.            |
+| `trashed`   | terminal (optional) | A deleted BDP retained in an internal trash location.                      | Trash root exists and published root does not exist.                                                                            | Not listed.                                               |
 
 Notes:
 
@@ -472,6 +593,138 @@ Notes:
 | `published` | `event.metadata_update_requested` | Update touches only mutable metadata fields.                                              | `published`           | Atomically rewrite manifest/checksums/signature per [Metadata updates](#metadata-updates).                | `baseline_manifest_invalid`, `baseline_package_unsafe`                                                           |
 | `published` | `event.delete_requested`          | None.                                                                                     | `absent` or `trashed` | Atomically remove published root or atomically move it to trash (no partial listing state).               | `baseline_not_found`                                                                                             |
 | `invalid`   | `event.delete_requested`          | None.                                                                                     | `absent` or `trashed` | Same as delete above; delete is the primary remediation for invalid BDP roots.                            | `baseline_not_found`                                                                                             |
+
+#### Entry actions and exit actions
+
+This machine’s conformance-critical side effects are the filesystem mutations described in the
+linked authority sections ([Creation](#creation), [Metadata updates](#metadata-updates),
+[Deletion](#deletion), [Download / export](#download--export)).
+
+Entry action summaries (normative):
+
+- Enter `staging` (via `event.create_requested`): create/verify an empty staging directory; copy
+  required artifacts; compute integrity; write manifest/checksums/(optional) signature.
+- Enter `published` (via `event.publish_succeeded`): publish atomically by renaming the staging
+  directory to the published root.
+- Remain `published` (via `event.metadata_update_requested`): atomically rewrite
+  `baseline_package_manifest.json`, `security/checksums.txt`, and (if present)
+  `security/signature.ed25519`.
+- Enter `absent` or `trashed` (via `event.delete_requested`): atomically remove the published root
+  or atomically move it to trash.
+
+Exit action summaries (normative):
+
+- No additional required exit actions beyond the atomic filesystem operations above.
+
+#### Illegal transitions
+
+Policy (normative):
+
+- Type: `fail_closed`
+- Behavior: reject the event, do not mutate any on-disk artifacts, and surface a deterministic error
+  to the caller.
+
+Requirements (normative):
+
+- For any `(state,event)` pair not present in the [Transition rules](#transition-rules-normative)
+  table, the implementation MUST treat the event as an illegal transition and MUST fail closed.
+- For any guard failure in the transition table, the implementation MUST fail closed (no coercion).
+- Forbidden regression: an implementation MUST NOT attempt to transition from `published` to
+  `staging` for the same `(baseline_id, baseline_version)` key. Rebuilds MUST use a new
+  `baseline_version`.
+
+Outcome classification and observability (normative):
+
+- If invoked through the Operator Interface, illegal transitions and guard failures MUST:
+  - return an error response using the stable error codes in
+    [Error guidance](#error-guidance-non-exhaustive), and
+  - emit an `audit_event` row to `logs/ui_audit.jsonl` for the attempted action (success or failure)
+    per [Operator Interface integration](#operator-interface-integration).
+- If invoked outside the Operator Interface, illegal transitions and guard failures MUST surface a
+  deterministic error (exception / error code) and MUST NOT mutate artifacts.
+
+Recommended `(state,event)` failure mappings (non-exhaustive):
+
+- `published` + `event.create_requested` -> `baseline_already_exists`
+- `invalid` + `event.create_requested` -> `baseline_already_exists` (delete is primary remediation)
+- `staging` + `event.create_requested` -> `baseline_create_in_progress`
+- `absent` + `event.delete_requested` -> `baseline_not_found`
+- `staging` + `event.delete_requested` -> `artifact_representation_conflict` (no cancel event in
+  v1.0.0)
+- `invalid` + `event.metadata_update_requested` -> `baseline_manifest_invalid`
+
+#### Observability
+
+Authoritative state representation (normative):
+
+- The authoritative state is the derived state from
+  [Authoritative state representation](#authoritative-state-representation).
+- Implementations MUST NOT introduce a separate authoritative "state file" for this machine in
+  v1.0.0.
+
+State evidence surfaces (normative):
+
+- `published`: published root exists and satisfies the derivation rule (manifest + checksums +
+  required referenced artifacts).
+- `invalid`: published root exists but fails the derivation rule.
+- `staging`: staging root exists and published root does not.
+- `trashed`: trash root exists and published root does not.
+- `absent`: none of the above roots exist.
+
+Transition evidence surfaces (normative):
+
+- `absent` -> `staging`: existence of the staging root directory.
+- `staging` -> `published`: atomic rename results in published root existing and staging root
+  absent.
+- `published` -> `published` (metadata update): `baseline_package_manifest.json` and
+  `security/checksums.txt` bytes change, while `integrity.package_tree_sha256` SHOULD remain
+  unchanged.
+- `published`/`invalid` -> `absent`/`trashed`: published root absent, and (when trash is
+  implemented) trash root present.
+
+Failure evidence surfaces (normative):
+
+- Invalid packages MUST be observable as `invalid` via the derivation rule and MUST be excluded from
+  normal listings (see [States](#states)).
+- Illegal transitions and guard failures MUST be observable via:
+  - the API error response (when using the Operator Interface), and
+  - the emitted `audit_event` row (see
+    [Operator Interface integration](#operator-interface-integration)).
+
+#### Conformance tests
+
+Fixture-driven conformance tests are REQUIRED for any implementation that claims conformance with
+this state machine.
+
+Fixture root (normative):
+
+- RECOMMENDED canonical fixture root: `tests/fixtures/baselines/lifecycle/`
+
+Minimum fixture suite (normative):
+
+1. **Happy path end-to-end**: `build -> validate -> publish`
+   - Create a BDP from a minimal, valid source run bundle fixture.
+   - Assert derived state transitions: `absent` -> `staging` -> `published`.
+   - Assert published-root invariants: manifest schema-valid + path-consistent, checksums present
+     and correct, `integrity.package_tree_sha256` matches recomputation.
+1. **Idempotent re-runs**
+   - Re-run `event.create_requested` for the same instance key and assert failure with
+     `baseline_already_exists` and no on-disk mutation.
+   - Re-run `event.metadata_update_requested` with no effective changes and assert byte-for-byte
+     identical outputs (no-op is allowed).
+1. **Crash / partial publish recovery**
+   - Simulate a crash leaving a non-empty staging root with partial outputs.
+   - Assert derived state is `staging` and subsequent create requests fail with
+     `baseline_create_in_progress` (no silent cleanup).
+1. **Illegal transitions**
+   - Exercise at least: unknown `(state,event)` pair, guard failure, and forbidden regression.
+   - Assert fail-closed behavior (no mutation) and stable error code surfaced.
+1. **Determinism**
+   - Listing determinism: stable ordering by `baseline_id` ascending and `baseline_version`
+     descending (SemVer precedence with required tie-break).
+   - Hash determinism: repeated creation from identical inputs produces identical
+     `security/checksums.txt` and identical `integrity.package_tree_sha256`.
+   - Export determinism: two exports of the same `<baseline_root>` are byte-for-byte identical.
 
 ### Listing
 
@@ -672,6 +925,10 @@ A conforming implementation SHOULD include automated checks that:
   non-regular file type is present anywhere under the staged package tree.
 - Two downloads/exports of the same `<baseline_root>` produce deterministic archives (byte-for-byte
   identical).
+- A fixture-driven conformance suite exists (RECOMMENDED root:
+  `tests/fixtures/baselines/lifecycle/`) and covers: happy path build/publish, idempotent re-runs,
+  crash recovery (staging left behind), illegal transitions, and determinism (stable ordering and
+  stable hashes). See [Conformance tests](#conformance-tests).
 
 A minimal fixture should include a small completed run bundle with:
 
@@ -690,9 +947,13 @@ A minimal fixture should include a small completed run bundle with:
 - [Project naming and versioning ADR](../adr/ADR-0001-project-naming-and-versioning.md)
 - [Event identity and provenance ADR](../adr/ADR-0002-event-identity-and-provenance.md)
 - [Mapping coverage matrix](../mappings/coverage_matrix.md)
+- [State machines ADR](../adr/ADR-0007-state-machines.md)
+- [Storage formats](045_storage_formats.md)
+- [Test strategy CI](100_test_strategy_ci.md)
 
 ## Changelog
 
-| Date       | Change    |
-| ---------- | --------- |
-| 2026-01-28 | Init spec |
+| Date       | Change                |
+| ---------- | --------------------- |
+| 2026-02-26 | State machines update |
+| 2026-01-28 | Init spec             |

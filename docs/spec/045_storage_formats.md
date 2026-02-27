@@ -771,13 +771,107 @@ Mapping requirements (normative):
 
 Raw origin pointer mapping (normative):
 
-- `metadata.extensions.purple_axiom.raw_ref`:
-  - JSON/JSONL: object or null (see ADR-0002).
-  - Parquet: `physical_type=string`, `logical_type=string` (nullable).
-    - When non-null, the value MUST be the canonical JSON (RFC 8785 / JCS) serialization of
-      `raw_ref_norm` as defined in ADR-0002.
-    - When `metadata.identity_tier` is `1` or `2`, `raw_ref` MUST be non-null.
-    - When `metadata.identity_tier` is `3`, `raw_ref` MUST be null.
+JSON/JSONL representation:
+
+- `metadata.extensions.purple_axiom.raw_ref`: object or null (see ADR-0002).
+
+Parquet representation (normalized OCSF store; v0.1+ normative):
+
+The Parquet dataset MUST represent `raw_ref` as a column group (not as a single JCS-serialized JSON
+string column):
+
+| Column                                                 | Type               | Notes                                                                                  |
+| ------------------------------------------------------ | ------------------ | -------------------------------------------------------------------------------------- |
+| `metadata.extensions.purple_axiom.raw_ref.kind`        | `string`, nullable | `file_cursor_v1` or `dataset_row_v1`                                                   |
+| `metadata.extensions.purple_axiom.raw_ref.path`        | `string`, nullable | run-relative POSIX path                                                                |
+| `metadata.extensions.purple_axiom.raw_ref.cursor`      | `string`, nullable | `li:<u64>` or `bo:<u64>`                                                               |
+| `metadata.extensions.purple_axiom.raw_ref.row_locator` | `string`, nullable | JCS-serialized map (intentionally kept as string due to schema variability)            |
+| `metadata.extensions.purple_axiom.raw_ref_sha256`      | `string`, nullable | materialized `sha256:<lowercase_hex>` digest over `canonical_json_bytes(raw_ref_norm)` |
+
+Column semantics (normative):
+
+- When `metadata.identity_tier` is `1` or `2`:
+  - `metadata.extensions.purple_axiom.raw_ref.kind` and
+    `metadata.extensions.purple_axiom.raw_ref.path` MUST be non-null.
+  - `metadata.extensions.purple_axiom.raw_ref_sha256` MUST be non-null.
+  - If `metadata.extensions.purple_axiom.raw_ref.kind = "file_cursor_v1"`:
+    - `metadata.extensions.purple_axiom.raw_ref.cursor` MUST be non-null.
+    - `metadata.extensions.purple_axiom.raw_ref.row_locator` MUST be null.
+  - If `metadata.extensions.purple_axiom.raw_ref.kind = "dataset_row_v1"`:
+    - `metadata.extensions.purple_axiom.raw_ref.row_locator` MUST be non-null.
+    - `metadata.extensions.purple_axiom.raw_ref.cursor` MUST be null.
+- When `metadata.identity_tier` is `3`, all `raw_ref*` columns above MUST be null.
+
+`raw_ref.row_locator` encoding (normative):
+
+- When present, `metadata.extensions.purple_axiom.raw_ref.row_locator` MUST equal the canonical JSON
+  (RFC 8785 / JCS) serialization of the `row_locator` object (UTF-8; no trailing newline).
+
+`raw_ref_sha256` computation (normative; Parquet-local provenance):
+
+- When present, `metadata.extensions.purple_axiom.raw_ref_sha256` MUST equal
+  `sha256:<lowercase_hex>` computed over `canonical_json_bytes(raw_ref_norm)` as defined in
+  ADR-0002.
+- This digest is a Parquet-local convenience field and is not required to be emitted in JSON/JSONL
+  event envelopes.
+
+Parquet -> JSONL export mapping (export-only; v0.1+ normative):
+
+When producing a JSONL compatibility view of the normalized Parquet event store (for example as part
+of an explicit export product under `<workspace_root>/exports/**`), implementations MUST treat the
+Parquet dataset as authoritative and MUST apply the mapping rules below.
+
+Direction (normative):
+
+- If `runs/<run_id>/normalized/ocsf_events/` exists, exporters MUST transcode Parquet -> JSONL.
+- Exporters MUST NOT treat a JSONL copy as a source of truth that can diverge from Parquet.
+- Legacy exception: for v0.1.x runs where only `normalized/ocsf_events.jsonl` exists, exporters MAY
+  emit directly from the legacy JSONL source.
+
+Row ordering (normative):
+
+- Exporters MUST emit rows in deterministic order: `time` ascending, then `metadata.event_id`
+  ascending (bytewise UTF-8), regardless of Parquet file enumeration order.
+
+Row shape (normative):
+
+- Exported rows MUST conform to the `ocsf_event_envelope` contract.
+- Column names in Parquet are dotted field paths. Exporters MUST reconstruct nested JSON objects by
+  splitting on `.` and creating intermediate objects as needed.
+- Exporters MUST apply any required type conversions defined in this section (for example
+  timestamps).
+
+Raw provenance reconstruction (normative):
+
+- `metadata.extensions.purple_axiom.raw_ref` MUST be reconstructed from the Parquet `raw_ref` column
+  group above:
+  - If `metadata.extensions.purple_axiom.raw_ref.kind` is null, the exported `raw_ref` MUST be
+    `null`.
+  - Otherwise, `raw_ref` MUST be an object with:
+    - `kind` (string; required)
+    - `path` (string; required)
+    - `cursor` (string; optional; present only when non-null)
+    - `row_locator` (object; optional; present only when non-null)
+      - The exporter MUST parse the JCS string in
+        `metadata.extensions.purple_axiom.raw_ref.row_locator` as JSON (fail closed if parsing
+        fails).
+- Exporters SHOULD NOT emit `metadata.extensions.purple_axiom.raw_ref_sha256` unless an explicit
+  export option enables derived fields.
+
+Timestamp reconstruction (normative):
+
+- `metadata.ingest_time_utc`:
+  - Parquet input: `int64` milliseconds since epoch (UTC) with `logical_type=timestamp_ms_utc`.
+  - JSON/JSONL output: RFC3339 UTC string with millisecond precision.
+  - Canonical rendering rule:
+    - If the millisecond component is `0`, render without fractional seconds
+      (`YYYY-MM-DDTHH:MM:SSZ`).
+    - Otherwise, render with exactly 3 fractional digits (`YYYY-MM-DDTHH:MM:SS.mmmZ`).
+
+JSONL serialization (normative):
+
+- Exported JSONL bytes MUST follow the canonical JSONL serialization rules in
+  `025_data_contracts.md` (RFC 8785 JCS per line; LF line endings; trailing LF when non-empty).
 
 Specific timestamp rules (normative):
 
@@ -785,11 +879,16 @@ Specific timestamp rules (normative):
   - JSON/JSONL: integer milliseconds since epoch (UTC).
   - Parquet: `physical_type=int64`, `logical_type=int64` (ms since epoch).
 - `metadata.ingest_time_utc` (when present):
+  - Precision policy (normative): `metadata.ingest_time_utc` is millisecond-precision. If an
+    upstream timestamp contains more than 3 fractional digits, writers MUST truncate (not round) to
+    milliseconds before emitting either JSON/JSONL or Parquet representations.
   - JSON/JSONL: RFC3339 timestamp string in UTC (example: `2026-01-08T14:30:00Z`).
   - Parquet: `physical_type=int64`, `logical_type=timestamp_ms_utc`.
   - Parquet writers MUST parse the RFC3339 value deterministically and MUST store the equivalent UTC
-    millisecond timestamp. Writers MUST reject non-UTC values (fail closed) rather than silently
-    storing ambiguous local times.
+    millisecond timestamp.
+    - Example truncation: `2026-01-08T14:30:00.123456Z` -> treat as `2026-01-08T14:30:00.123Z`.
+  - Writers MUST reject non-UTC values (fail closed) rather than silently storing ambiguous local
+    times.
   - `metadata.ingest_time_utc` MUST NOT be stored as `physical_type=string` in Parquet in any schema
     version.
 
@@ -801,8 +900,6 @@ envelope.
 Minimum required columns:
 
 - `time` (int64, ms since epoch)
-- `time_dt` (string, ISO-8601/RFC3339 UTC, e.g. `2026-01-08T14:30:00Z`)
-  - `time_dt` MUST be a deterministic rendering of `time` (no locale; UTC only).
 - `class_uid` (int32)
 - `category_uid` (int32, nullable)
 - `type_uid` (int32, nullable)
@@ -815,9 +912,15 @@ Provenance (required):
 - `metadata.event_id` (string)
 - `metadata.identity_tier` (int32)
   - Allowed values: `1 | 2 | 3` (see ADR-0002).
-- `metadata.extensions.purple_axiom.raw_ref` (string, nullable)
-  - For identity tiers 1 and 2: MUST be non-null.
-  - For identity tier 3: MUST be null.
+- Raw origin pointer (required; see ADR-0002):
+  - `metadata.extensions.purple_axiom.raw_ref.kind` (string, nullable)
+  - `metadata.extensions.purple_axiom.raw_ref.path` (string, nullable)
+  - `metadata.extensions.purple_axiom.raw_ref.cursor` (string, nullable)
+  - `metadata.extensions.purple_axiom.raw_ref.row_locator` (string, nullable; JCS string)
+  - `metadata.extensions.purple_axiom.raw_ref_sha256` (string, nullable; `sha256:<lowercase_hex>`)
+  - For identity tiers 1 and 2:
+    - `raw_ref.kind`, `raw_ref.path`, and `raw_ref_sha256` MUST be non-null.
+  - For identity tier 3: all `raw_ref*` fields above MUST be null.
 - `metadata.run_id` (string, UUID)
   - `metadata.run_id` MUST validate as an RFC 4122 UUID (canonical hyphenated form).
 - `metadata.scenario_id` (string)
@@ -1039,7 +1142,8 @@ high-fidelity Windows artifacts when needed.
 
 ## Changelog
 
-| Date       | Change                                                                                  |
-| ---------- | --------------------------------------------------------------------------------------- |
-| 2026-01-24 | Clarify `logs/` export classification (deterministic evidence vs volatile diagnostics). |
-| 2026-01-21 | update                                                                                  |
+| Date       | Change                                                                                                                                 |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-26 | Define Parquet->JSONL export mapping, truncate `metadata.ingest_time_utc` to milliseconds, adopt structured Parquet `raw_ref` columns. |
+| 2026-01-24 | Clarify `logs/` export classification (deterministic evidence vs volatile diagnostics).                                                |
+| 2026-01-21 | update                                                                                                                                 |

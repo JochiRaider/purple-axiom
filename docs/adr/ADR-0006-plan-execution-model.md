@@ -216,8 +216,11 @@ referenced below.
 
 #### State machine: Plan node lifecycle (representational)
 
-- **Machine ID (proposed):** `plan_node_lifecycle`
+- **Lifecycle identifier (representational):** `plan-node-lifecycle`
 - **Version (seed):** `0.2.0`
+
+Note: This identifier is illustrative only. Normative state machine identifiers are constrained by
+`id_slug_v1` (see ADR-0001).
 
 **States (closed set):**
 
@@ -314,6 +317,12 @@ For daemon or UI implementations:
 - v0.2 introduces the `matrix` compiler; existing atomic plans remain valid.
 - v0.3+ adds edge support for sequencing.
 
+### Verification hook (planned)
+
+- Add a documentation lint rule: any field labeled `Machine ID` must use an `id_slug_v1`-conforming
+  value (see ADR-0001).
+  - Example `rule_id`: `lint-doc-machine-id-id-slug-v1`.
+
 ## References
 
 - [Scenario model spec](../spec/030_scenarios.md)
@@ -329,8 +338,9 @@ For daemon or UI implementations:
 
 ## Changelog
 
-| Date      | Change                                                                    |
-| --------- | ------------------------------------------------------------------------- |
-| 1/28/2026 | update                                                                    |
-| 1/19/2026 | Align ADR with v0.2 plan artifacts, determinism ordering, and safety caps |
-| 1/13/2026 | Initial draft                                                             |
+| Date      | Change                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------- |
+| 2/27/2026 | Clarify representational plan node lifecycle identifier; add planned Machine ID lint hook |
+| 1/28/2026 | update                                                                                    |
+| 1/19/2026 | Align ADR with v0.2 plan artifacts, determinism ordering, and safety caps                 |
+| 1/13/2026 | Initial draft                                                                             |

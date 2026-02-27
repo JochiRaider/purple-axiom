@@ -158,6 +158,8 @@ Required steps for changing the pinned OCSF version (normative):
     - values placed under `raw` MUST be redaction-safe for standard long-term artifact locations
     - `unmapped` MAY be used for derived fields that could not be mapped after routing, but `raw` is
       the canonical location for retaining the source payload
+    - per-source raw namespaces MAY be used under `raw.namespaces.<event_source_type>` to avoid
+      cross-source key collisions (see Tier R rules in `055_ocsf_field_tiers.md`)
 - Preserve synthetic correlation markers in the normalized envelope even when the base event is
   unmapped:
   - if the source record carries:

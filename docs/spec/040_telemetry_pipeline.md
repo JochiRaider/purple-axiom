@@ -90,6 +90,8 @@ Notes:
 - `tests/fixtures/telemetry/clock_sync/`: simulate orchestrator↔asset clock skew (exceeded +
   unmeasurable) and verify deterministic `telemetry.clock_sync` failure mapping plus presence/shape
   of `telemetry_validation.json.clock_sync`.
+- `tests/fixtures/telemetry/checkpointing/`: checkpoint store integrity + loss/replay conformance
+  for the checkpointing state machine (`telemetry-checkpointing-replay`).
 - TODO: specify fixture root for raw Windows event XML corpus used by telemetry collection tests
   (see `100_test_strategy_ci.md`, "Telemetry collection").
 
@@ -637,6 +639,9 @@ Normative requirements:
 At-least-once delivery implies duplicates and replay. This is expected and MUST be handled without
 breaking determinism goals.
 
+Checkpoint store integrity and replay classification MUST conform to the normative state machine
+defined in this section (“Telemetry checkpointing and replay lifecycle”).
+
 ### Definitions
 
 - **Checkpoint store (checkpoint database)**: database-like on-disk state managed by the collector's
@@ -731,18 +736,245 @@ Normative requirements:
 - Telemetry validation MUST emit a dotted substage outcome with
   `stage="telemetry.checkpointing.storage_integrity"`.
   - Missing checkpoint store MUST fail closed with `reason_code=checkpoint_store_corrupt` and MUST
-    record `checkpoint_store.error_code=checkpoint_store_missing` in
+    record `assets[].checkpoint_store.error_code=checkpoint_store_missing` in
     `runs/<run_id>/logs/telemetry_validation.json`.
   - Unwritable checkpoint store MUST fail closed with `reason_code=checkpoint_store_corrupt` and
-    MUST record `checkpoint_store.error_code=checkpoint_store_unwritable` in
+    MUST record `assets[].checkpoint_store.error_code=checkpoint_store_unwritable` in
     `runs/<run_id>/logs/telemetry_validation.json`.
   - Corrupt checkpoint store that prevents reliable startup MUST fail closed with
     `reason_code=checkpoint_store_corrupt` and MUST record
-    `checkpoint_store.error_code=checkpoint_store_corrupt` in
+    `assets[].checkpoint_store.error_code=checkpoint_store_corrupt` in
     `runs/<run_id>/logs/telemetry_validation.json`.
 - Collector configs SHOULD set `fsync: true` for checkpoint stores when supported. If `fsync: false`
   is used, operators MUST treat checkpoint corruption as a credible risk and MUST document the
   performance tradeoff.
+
+### State machine: Telemetry checkpointing and replay lifecycle
+
+#### Purpose
+
+- **What it represents**: A normative reliability/safety lifecycle for the collector checkpoint
+  store used to resume telemetry ingestion across restarts (file offsets, bookmarks) and for
+  resulting replay behavior (duplicate emission) as observed by the pipeline.
+- **Scope**: `telemetry` stage, per asset.
+- **Machine ID**: `telemetry-checkpointing-replay` (see ADR-0001)
+- **Version**: `0.1.0`
+
+#### Lifecycle authority references
+
+To avoid duplication, this state machine reuses lifecycle semantics defined elsewhere in this spec
+and in the stage outcome taxonomy.
+
+- Telemetry checkpointing requirements: this spec § “Checkpointing and replay semantics (required)”.
+- OTel `file_storage` corruption recovery policy: this spec § “OTel file_storage corruption recovery
+  policy (required)”.
+- Failure mapping and reason codes: ADR-0005 “Telemetry stage (`telemetry`)”.
+- Log classification and export posture for checkpoint snapshots: ADR-0009.
+- Required counters and health surfaces: `110_operability.md` (telemetry + dedupe counters).
+
+If this state machine definition conflicts with the linked lifecycle authority, the linked lifecycle
+authority is authoritative unless this spec explicitly states it is overriding those semantics.
+
+#### Entities and identifiers
+
+- **Machine instance key**: `(run_id, asset_id)`.
+  - `run_id`: from `manifest.json`.
+  - `asset_id`: an entry in `logs/telemetry_validation.json.assets[]`.
+- **Correlation identifiers**:
+  - `logs/telemetry_validation.json.assets[].collector_config_sha256`.
+  - `logs/telemetry_validation.json.assets[].checkpoint_store_fingerprint_sha256`.
+  - `logs/health.json.stages[]` entry with `stage="telemetry.checkpointing.storage_integrity"`.
+
+Scope rule (normative): v0.1 assumes **one authoritative checkpoint store per asset**. If an
+implementation detects multiple active checkpoint stores for the same `(run_id, asset_id)` during
+the validation window and cannot deterministically map them to disjoint receiver instances, it MUST
+fail closed by classifying the checkpoint store state as corrupt (see `store_corrupt_fatal`).
+
+#### Authoritative state representation
+
+This machine is designed to avoid introducing a new persisted “state store”. State MUST be derivable
+from existing checkpoint artifacts and contracted run artifacts.
+
+- **Source of truth** (deterministic artifacts):
+  - `runs/<run_id>/logs/telemetry_validation.json` (contract id: `telemetry_validation`)
+  - `runs/<run_id>/logs/health.json` (substage: `telemetry.checkpointing.storage_integrity`)
+  - Warning surfaces:
+    - `runs/<run_id>/logs/warnings.jsonl` (optional structured warning stream), and/or
+    - `runs/<run_id>/logs/run.log` (required human-readable operator log)
+- **Derivation rule** (deterministic):
+  - Implementations MUST derive the final machine state for each `(run_id, asset_id)` at the end of
+    telemetry validation using the following precedence:
+    1. If `assets[].checkpoint_store.error_code` is present for the asset, derive a terminal
+       `store_*_fatal` state according to its value.
+       - Precedence when multiple integrity signals are present: `checkpoint_store_corrupt` >
+         `checkpoint_store_unwritable` > `checkpoint_store_missing`.
+    1. Else (integrity succeeded), if any checkpoint loss signal is present (see below), derive
+       terminal `validated_checkpoint_loss_warning`.
+    1. Else derive terminal `validated_ok`.
+  - **Checkpoint loss signals** (OR):
+    - `assets[].checkpoint_loss_test.checkpoint_loss_observed=true`, OR
+    - `assets[].checkpoint_loss_test.replay_observed=true`, OR
+    - `assets[].checkpoint_corruption_test.recreate_observed=true` (when present).
+  - **Run-level health mapping** (required, deterministic):
+    - `health.json` MUST include a substage outcome
+      `stage="telemetry.checkpointing.storage_integrity"`.
+    - The substage MUST be `status="failed"` iff **any** asset instance derives a `store_*_fatal`
+      terminal state. Otherwise the substage MUST be `status="success"`.
+- **Persistence requirement**:
+  - MUST persist: no (no new state store is required).
+  - The machine state MUST be derivable from the above artifacts. Implementations MUST NOT introduce
+    a new persisted store solely to track this machine unless checkpoint artifacts are proven
+    insufficient for authoritative, deterministic derivation.
+
+#### Events / triggers
+
+The validator presents a closed set of events to this machine.
+
+- `event.validation_started`: begin checkpointing validation for an `(run_id, asset_id)` instance.
+- `event.checkpoint_store_ok`: checkpoint store is present, readable, and writable; fingerprint
+  computed.
+- `event.checkpoint_store_missing`: required checkpoint store directory is missing.
+- `event.checkpoint_store_unwritable`: checkpoint store directory exists but is not
+  writable/lockable.
+- `event.checkpoint_store_corrupt`: checkpoint store exists but cannot be opened/parsed reliably or
+  contains inconsistent artifacts.
+- `event.checkpoint_loss_detected`: checkpoint loss/reset/recreate was observed for the asset.
+- `event.replay_detected`: replay duplication was observed during the validation window.
+- `event.validation_completed`: end checkpointing validation for the asset.
+
+Event ordering (normative): if multiple events are emitted for the same machine instance, the
+implementation MUST process them in this deterministic order:
+
+1. `event.validation_started`
+1. One of: `event.checkpoint_store_corrupt` / `event.checkpoint_store_unwritable` /
+   `event.checkpoint_store_missing` / `event.checkpoint_store_ok` (precedence order: corrupt >
+   unwritable > missing > ok)
+1. `event.checkpoint_loss_detected` and `event.replay_detected` (either order; both are treated as
+   checkpoint loss signals)
+1. `event.validation_completed`
+
+#### States
+
+| State                               | Kind           | Description                                                                 | Invariants                                                                                                | Observable signals                                                                                       |
+| ----------------------------------- | -------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `unchecked`                         | `initial`      | No checkpoint validation has been performed for the asset.                  | No checkpointing fields are required to be populated yet.                                                 | N/A                                                                                                      |
+| `checking_store`                    | `intermediate` | Validation has started and the checkpoint store is being classified.        | A corresponding `assets[]` entry for `asset_id` exists in `telemetry_validation.json`.                    | `telemetry_validation.assets[].asset_id` present                                                         |
+| `store_healthy`                     | `intermediate` | Checkpoint store is usable for durable cursoring/offset tracking.           | Asset has `checkpoint_store_fingerprint_sha256` and MUST NOT have `assets[].checkpoint_store.error_code`. | `checkpoint_store_fingerprint_sha256` present                                                            |
+| `store_missing_fatal`               | `terminal`     | Required checkpoint store is missing; reliable resume is impossible.        | Telemetry stage MUST fail closed with `reason_code=checkpoint_store_corrupt` (ADR-0005).                  | `assets[].checkpoint_store.error_code=checkpoint_store_missing`                                          |
+| `store_unwritable_fatal`            | `terminal`     | Checkpoint store exists but cannot be written; durable cursoring is unsafe. | Telemetry stage MUST fail closed with `reason_code=checkpoint_store_corrupt` (ADR-0005).                  | `assets[].checkpoint_store.error_code=checkpoint_store_unwritable`                                       |
+| `store_corrupt_fatal`               | `terminal`     | Checkpoint store is corrupt/inconsistent and cannot be trusted.             | Telemetry stage MUST fail closed with `reason_code=checkpoint_store_corrupt` (ADR-0005).                  | `assets[].checkpoint_store.error_code=checkpoint_store_corrupt`                                          |
+| `validated_ok`                      | `terminal`     | Store integrity passed and no checkpoint loss/replay was observed.          | No warning entry with `reason_code=checkpoint_loss` is required.                                          | `assets[].checkpoint_loss_test.checkpoint_loss_observed=false` and `replay_observed=false`               |
+| `validated_checkpoint_loss_warning` | `terminal`     | Store integrity passed but checkpoint loss/reset/recreate/replay occurred.  | Telemetry stage MUST emit a NON-FATAL warning entry with `reason_code=checkpoint_loss` (ADR-0005).        | `checkpoint_loss_observed=true` OR `replay_observed=true` (plus optional `checkpoint_corruption_test.*`) |
+
+Terminal states: `store_missing_fatal`, `store_unwritable_fatal`, `store_corrupt_fatal`,
+`validated_ok`, `validated_checkpoint_loss_warning`.
+
+#### Transition rules
+
+| From state       | Event                               | Guard (deterministic)                                                             | To state                            | Actions (entry/exit)                                                                                                                     | Outcome mapping                                                                           | Observable transition evidence                                    |
+| ---------------- | ----------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `unchecked`      | `event.validation_started`          | Always                                                                            | `checking_store`                    | Initialize/ensure the per-asset entry in `logs/telemetry_validation.json.assets[]`.                                                      | No stage outcome yet.                                                                     | `telemetry_validation.json` asset entry exists                    |
+| `checking_store` | `event.checkpoint_store_missing`    | Checkpoint store directory does not exist when required                           | `store_missing_fatal`               | Record `assets[].checkpoint_store.error_code=checkpoint_store_missing`.                                                                  | Telemetry stage fails closed with `reason_code=checkpoint_store_corrupt` (ADR-0005).      | `telemetry_validation.json` error_code present                    |
+| `checking_store` | `event.checkpoint_store_unwritable` | Directory exists but write/lock test fails deterministically                      | `store_unwritable_fatal`            | Record `assets[].checkpoint_store.error_code=checkpoint_store_unwritable`.                                                               | Telemetry stage fails closed with `reason_code=checkpoint_store_corrupt` (ADR-0005).      | Same as above                                                     |
+| `checking_store` | `event.checkpoint_store_corrupt`    | Store open/parse fails, fingerprint cannot be computed, or artifacts inconsistent | `store_corrupt_fatal`               | Record `assets[].checkpoint_store.error_code=checkpoint_store_corrupt`.                                                                  | Telemetry stage fails closed with `reason_code=checkpoint_store_corrupt` (ADR-0005).      | Same as above                                                     |
+| `checking_store` | `event.checkpoint_store_ok`         | Fingerprint computed and no integrity failures                                    | `store_healthy`                     | Record `checkpoint_store_fingerprint_sha256`; MAY record `assets[].checkpoint_store.*` diagnostics.                                      | Instance continues; run-level substage computed from all instances (see derivation rule). | Fingerprint present; error_code absent                            |
+| `store_healthy`  | `event.checkpoint_loss_detected`    | Any checkpoint loss signal observed (see derivation rule)                         | `validated_checkpoint_loss_warning` | Record `assets[].checkpoint_loss_test.*`; emit warning entry `reason_code=checkpoint_loss`; increment `telemetry_checkpoint_loss_total`. | Stage completes as success; warning-only `reason_code=checkpoint_loss` (ADR-0005).        | `warnings.jsonl` (or run.log) entry + telemetry_validation fields |
+| `store_healthy`  | `event.replay_detected`             | Replay duplication observed                                                       | `validated_checkpoint_loss_warning` | Same as above.                                                                                                                           | Same as above.                                                                            | Same as above                                                     |
+| `store_healthy`  | `event.validation_completed`        | No checkpoint loss signals observed                                               | `validated_ok`                      | Record `assets[].checkpoint_loss_test` with `checkpoint_loss_observed=false` and `replay_observed=false`.                                | Stage completes as success; no checkpoint-loss warning required.                          | `telemetry_validation.json` checkpoint_loss_test fields           |
+
+#### Entry actions and exit actions
+
+- **Entry actions**:
+  - `checking_store`:
+    - Ensure `logs/telemetry_validation.json.assets[]` contains exactly one entry for the asset.
+  - `store_healthy`:
+    - Compute and record `checkpoint_store_fingerprint_sha256` deterministically (see “Checkpoint
+      store fingerprinting”).
+  - `validated_checkpoint_loss_warning`:
+    - Write a warning-only entry with `reason_code=checkpoint_loss` to `logs/warnings.jsonl` and/or
+      `logs/run.log` (ADR-0005).
+- **Exit actions**: none required.
+
+#### Illegal transitions
+
+- **Policy**: `fail_closed`.
+- **Classification**:
+  - If an implementation attempts an unrecognized `(state, event)` transition or violates a guard,
+    it MUST record `assets[].checkpoint_store.error_code=checkpoint_store_corrupt` for the affected
+    asset and MUST cause the run-level checkpointing substage to fail with
+    `reason_code=checkpoint_store_corrupt` (ADR-0005).
+- **Observable evidence**:
+  - `logs/health.json` includes the failed checkpointing substage.
+  - `assets[].checkpoint_store.inconsistent_signals=true` (recommended field; see “Recommended
+    additional fields (checkpointing diagnostics)”).
+
+#### Inconsistent artifact handling
+
+The checkpoint store is treated as an opaque, database-like artifact. However, the validator MUST
+handle inconsistent or ambiguous on-disk situations deterministically.
+
+- **Multiple candidate stores**:
+  - If multiple checkpoint store directories are discovered for the same `(run_id, asset_id)` and
+    the implementation cannot deterministically select one using only the effective collector config
+    and stable ordering, it MUST treat the situation as corruption and transition to
+    `store_corrupt_fatal`.
+- **Partial reads / I/O errors**:
+  - If fingerprint computation encounters an I/O error while reading any regular file under the
+    checkpoint directory, the validator MUST classify the store as corrupt (`store_corrupt_fatal`).
+- **Schema/backend mismatches**:
+  - If the checkpoint backend changes in a way that prevents reliable opening/reading of the
+    existing store (schema mismatch, incompatible file format), the validator MUST classify the
+    store as corrupt (`store_corrupt_fatal`) unless an explicit recovery policy allows recreation.
+- **Stale checkpoints**:
+  - Reusing a checkpoint store across multiple runs is expected. A checkpoint store MUST NOT be
+    classified as corrupt solely because it predates `capture_window.start_time_utc`.
+
+#### Observability
+
+Required, deterministic observability for this machine:
+
+- **Required artifacts**:
+  - `runs/<run_id>/logs/telemetry_validation.json` (contract `telemetry_validation`)
+  - `runs/<run_id>/logs/health.json` (substage: `telemetry.checkpointing.storage_integrity`)
+  - Warning surfaces per ADR-0005: `runs/<run_id>/logs/warnings.jsonl` (optional) and/or
+    `runs/<run_id>/logs/run.log` (required)
+  - `runs/<run_id>/logs/counters.json` counters (see `110_operability.md`):
+    - `telemetry_checkpoints_written_total`
+    - `telemetry_checkpoint_loss_total`
+    - `telemetry_checkpoint_corruption_total`
+- **Determinism requirements**:
+  - For equivalent inputs (collector config + checkpoint directory bytes + validation window), the
+    derived machine state and all required structured artifacts above MUST be byte-identical,
+    excluding only fields explicitly permitted to vary by their contracts (for example timestamps,
+    if any).
+
+#### Conformance tests
+
+Fixture root: `tests/fixtures/telemetry/checkpointing/` (see `100_test_strategy_ci.md`).
+
+Minimum conformance suite (normative):
+
+1. **Happy path**: durable checkpointing enabled, checkpoint store healthy, restart performed, no
+   checkpoint loss observed → terminal state `validated_ok`.
+1. **Missing store**: checkpoint store directory missing when required → terminal state
+   `store_missing_fatal`; `assets[].checkpoint_store.error_code=checkpoint_store_missing`.
+1. **Unwritable store**: permission/lock failure → terminal state `store_unwritable_fatal`;
+   `assets[].checkpoint_store.error_code=checkpoint_store_unwritable`.
+1. **Corrupt store (fail-closed)**: corrupt the checkpoint store with policy `fail_closed` →
+   terminal state `store_corrupt_fatal`;
+   `assets[].checkpoint_store.error_code=checkpoint_store_corrupt`.
+1. **Corrupt store (recreate-fresh allowed)**: corrupt the store with policy `recreate_fresh`, then
+   restart → terminal state `validated_checkpoint_loss_warning`;
+   `assets[].checkpoint_corruption_test.recreate_observed=true`; warning entry
+   `reason_code=checkpoint_loss`.
+1. **Checkpoint reset requested**: simulate an operator-requested reset (or manual deletion) and
+   restart → terminal state `validated_checkpoint_loss_warning`; warning entry
+   `reason_code=checkpoint_loss`.
+1. **Illegal transition handling**: introduce inconsistent signals (e.g., multiple candidate stores)
+   and verify deterministic precedence + fail-closed behavior with
+   `assets[].checkpoint_store.inconsistent_signals=true`.
+1. **Idempotency + determinism**: run the same fixture twice; assert byte-identical
+   `telemetry_validation.json`, `health.json`, and any warning entries (subject to contract rules).
 
 ## Injecting run and scenario identifiers
 
@@ -1185,14 +1417,17 @@ Recommended additional fields (telemetry baseline profile gate):
 
 Recommended additional fields (checkpointing diagnostics):
 
-- `checkpoint_store` (object, OPTIONAL)
+- `assets[].checkpoint_store` (object, OPTIONAL)
   - `backend` (string; example: `file_storage`)
   - `directory` (string; stable path)
   - `error_code` (string, OPTIONAL; REQUIRED when `telemetry.checkpointing.storage_integrity` fails;
     one of `checkpoint_store_missing | checkpoint_store_unwritable | checkpoint_store_corrupt`)
   - `recreate_enabled` (bool)
   - `fsync_enabled` (bool, when detectable)
-- `checkpoint_corruption_test` (object, OPTIONAL)
+  - `inconsistent_signals` (bool, OPTIONAL)
+    - Set `true` when the validator observes conflicting checkpoint integrity signals (for example
+      multiple candidate stores) and is failing closed.
+- `assets[].checkpoint_corruption_test` (object, OPTIONAL)
   - `performed` (bool)
   - `collector_failed_to_start` (bool)
   - `recreate_observed` (bool)

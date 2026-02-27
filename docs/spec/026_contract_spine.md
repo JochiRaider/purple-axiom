@@ -490,7 +490,7 @@ Publish-gate staging layout (normative):
 Output-root guardrail (normative):
 
 - A publish session owner (`stage_id`) MUST NOT write or promote any run-bundle output outside its
-  declared output roots (see `020_architecture.md`, “Stage IO boundaries”) and any stage-specific
+  declared output roots (see `020_architecture.md`, "Stage IO boundaries") and any stage-specific
   output-root extensions documented by the owning stage spec.
 
 - For enforcement, the publish gate MUST compute a deterministic allowlist of run-relative roots:

@@ -289,8 +289,8 @@ If a plugin fails before producing a valid findings document, the runner MUST st
 artifact for the gate with a single `fatal` finding using:
 
 - `category="internal"`
-- `reason_code="validator_internal_error"` (exit 10) or `reason_code="validator_plugin_incompatible"`
-  (exit 11)
+- `reason_code="validator_internal_error"` (exit 10) or
+  `reason_code="validator_plugin_incompatible"` (exit 11)
 - `rule_id="validator.plugin_runner"`
 - `subject.kind="validator_plugin"` and `subject.stable_id="<plugin_id>"`
 

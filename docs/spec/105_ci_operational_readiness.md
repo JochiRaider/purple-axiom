@@ -134,11 +134,54 @@ Content CI MUST validate, at minimum:
    validation policy").
 1. Detection Content Release (detection content bundle) build + offline validation (see
    `025_data_contracts.md`, "Detection content bundle distribution and validation").
+1. Fixture registry + negative baseline allowlist validation + canonicalization (YAML → canonical
+   JSON) (see `086_detection_baseline_library.md`, "Fixture registry and allowlisting (v0.1 CI)").
 1. Contract/schema validation for any content-like artifacts under test (examples: criteria packs,
    detection content bundle manifests, BDP manifests).
 1. Static semantic checks (P0.2 and P0.3) (see `100_test_strategy_ci.md`, "Static semantic checks").
 1. Rule-level unit tests when fixtures are present (see `100_test_strategy_ci.md`, "Sigma rule unit
    tests").
+
+#### `content.fixtures.validate` gate (fixture registry canonicalization)
+
+When fixture inputs are present, Content CI MUST execute a fixture validation and canonicalization
+gate.
+
+Inputs (v0.1; repo-local):
+
+- `fixtures/fixture_registry.v1.yaml` (required when fixtures are used in CI)
+- `fixtures/baseline_allowlist.v1.yaml` (optional)
+
+Outputs (workspace-root; normative):
+
+- `artifacts/fixtures/fixture_registry.v1.json` (contract-backed; canonical JSON)
+- `artifacts/fixtures/baseline_allowlist.v1.json` (contract-backed; canonical JSON) when the YAML
+  allowlist is present, otherwise the file MUST be omitted (treated as empty allowlist).
+- `artifacts/findings/content.fixtures.validate.findings.v1.json`
+
+Fail-closed policy (normative):
+
+- YAML decode failures or schema validation failures MUST produce an `error` finding and MUST fail
+  the gate.
+- Missing fixture provenance or license metadata MUST produce an `error` finding and MUST fail the
+  gate.
+- Canonical JSON nondeterminism (byte mismatch across repeated canonicalization) MUST produce an
+  `error` finding with `reason_code="fixture_registry_nondeterministic"` and MUST fail the gate.
+
+#### `content.bundle.integrity` gate (offline bundle validation)
+
+Content CI MUST build at least one Detection Content Release (detection content bundle) and MUST
+validate it offline.
+
+Gate ID (v0.1): `content.bundle.integrity`
+
+Required outputs:
+
+- `artifacts/findings/content.bundle.integrity.findings.v1.json`
+
+The findings artifact for this gate SHOULD use the integrity reason codes already defined by
+`025_data_contracts.md` (for example: `checksums_parse_error`, `checksum_mismatch`,
+`signature_invalid`) when reporting failures.
 
 Verification hook (normative): Content CI MUST fail a pull request that breaks compilation or static
 validation without spinning up a lab provider.
@@ -163,7 +206,57 @@ When BDP replay is used, Run CI MUST:
 - Enforce configured detection performance budgets using deterministic metrics in
   `runs/<run_id>/logs/counters.json` and the `detection.performance_budgets` stage outcome (see
   `110_operability.md` and `ADR-0005-stage-outcomes-and-failure-classification.md`).
-- Compare outputs to a golden expected output (hash- or diff-based), failing closed on mismatch.
+- Execute `run.goodlog` and `run.regression` fixture gates, failing closed on any expectation
+  mismatch or any non-allowlisted match (see `086_detection_baseline_library.md`, "Fixture registry
+  and allowlisting (v0.1 CI)").
+
+#### `run.goodlog` gate (negative baseline)
+
+Objective: detect false positives by asserting that benign fixtures produce zero non-allowlisted
+matches.
+
+Inputs (normative):
+
+- `artifacts/fixtures/fixture_registry.v1.json`
+- `artifacts/fixtures/baseline_allowlist.v1.json` (when present; otherwise treated as empty)
+- A pinned backend profile / evaluator backend (implementation-defined)
+- Fixture datasets referenced by the fixture registry
+
+Behavior (normative):
+
+- The gate MUST select fixtures with `purpose="benign"`.
+- For each selected fixture, the gate MUST evaluate all enabled detections.
+- Any emitted detection instance MUST be treated as a gate failure unless it matches an allowlist
+  entry scoped to `(fixture_id, detection_id)` with a matching `match_fingerprint` (see
+  `086_detection_baseline_library.md`).
+- If zero benign fixtures are declared, the gate MUST fail closed with at least one `error` finding.
+
+Outputs (normative):
+
+- `artifacts/findings/run.goodlog.findings.v1.json`
+
+#### `run.regression` gate (fixture expected outcomes)
+
+Objective: assert that detections produce the expected results on malicious or mixed fixtures.
+
+Inputs (normative):
+
+- `artifacts/fixtures/fixture_registry.v1.json`
+- A pinned backend profile / evaluator backend (implementation-defined)
+- Fixture datasets referenced by the fixture registry
+
+Behavior (normative):
+
+- The gate MUST select fixtures with `purpose` of `malicious` or `mixed`.
+- For each selected fixture, the gate MUST evaluate enabled detections and MUST verify every
+  declared `expected_outcomes[]` entry for that fixture.
+- Any failed assertion MUST emit an `error` finding and MUST fail the gate.
+- If zero regression fixtures are declared, the gate MUST fail closed with at least one `error`
+  finding.
+
+Outputs (normative):
+
+- `artifacts/findings/run.regression.findings.v1.json`
 
 If Run CI is configured to qualify multiple batch evaluator backends (for example, `native_pcre2`
 and a second backend that claims `pa_eval_v1` support), Run CI MUST also execute the evaluator
@@ -505,6 +598,9 @@ debugging of gate failures:
 - `runs/<run_id>/logs/cache_provenance.json` (when present)
 - `runs/<run_id>/logs/contract_validation/` (when present)
 - `artifacts/evaluator_conformance/**/report.json` (when determinism gate is enabled)
+- `artifacts/findings/**` (required gate evidence)
+- `artifacts/fixtures/**` (when fixture gates are enabled)
+- `artifacts/connectors/**` (when connector gates are enabled)
 
 Clarification (normative): CI artifact retention is a CI debugging mechanism. It MUST NOT be treated
 as a substitute for the `export` verb, the default export profile, or signing/checksum scope. Export

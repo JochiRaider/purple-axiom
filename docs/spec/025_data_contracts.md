@@ -705,6 +705,12 @@ CI verification hook (normative):
 - Content CI MUST build at least one detection content bundle for the repository’s pinned detection
   content (ruleset + mapping pack) and MUST validate it via the offline validation mode above.
 
+When executed as a CI gate, offline bundle validation MUST emit a contract-backed findings artifact
+(see `105_ci_operational_readiness.md`):
+
+- Gate ID (v0.1): `content.bundle.integrity`
+- Findings artifact path: `artifacts/findings/content.bundle.integrity.findings.v1.json`
+
 #### Run validation using a content bundle (normative)
 
 When validating a run in a mode that requires detection content provenance, consumers MUST be able

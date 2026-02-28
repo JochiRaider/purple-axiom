@@ -59,10 +59,15 @@ Run CI requirements (normative; v0.1):
   - the BDP manifest (`baseline_package_manifest.json`) against the contract, and
   - integrity material (`security/checksums.txt`; signature when present) before using BDP contents
     for evaluation.
-- Run CI MUST run detection evaluation deterministically over the BDP normalized event store and
-  MUST compare outputs to a golden expected output (hash- or diff-based), failing closed on
-  mismatch.
-  - The exact golden output surface is owned by the CI harness (see `100_test_strategy_ci.md`).
+- Run CI MUST run detection evaluation deterministically over pinned fixture datasets (including at
+  least one pinned BDP) and MUST enforce fixture-scoped expectations, failing closed on any
+  mismatch:
+  - `run.goodlog`: evaluate all enabled detections against fixtures declared `purpose=benign` and
+    require zero non-allowlisted matches.
+  - `run.regression`: evaluate detections against fixtures declared `purpose=malicious|mixed` and
+    assert each fixture's declared `expected_outcomes[]`.
+- Run CI MAY additionally compare full output artifacts to golden hashes/diffs, but this is OPTIONAL
+  when fixture `expected_outcomes[]` coverage is sufficient.
 
 Pinning requirement (verification hook):
 
@@ -70,6 +75,99 @@ Pinning requirement (verification hook):
   pair to be used by Run CI.
   - This pinning is a CI harness configuration input (for example for `ci-run`); it is not an
     orchestrator run configuration key.
+
+## Fixture registry and allowlisting (v0.1 CI)
+
+In addition to pinning at least one BDP for CI, v0.1 CI commonly needs a curated set of fixture
+datasets for:
+
+- **Good-log** validation (benign data; any match is suspicious).
+- **Regression** validation (malicious or mixed data; expected matches are asserted).
+
+To avoid ad hoc fixture selection and to prevent YAML seam drift across implementations, the project
+defines a fixture registry authoring file and a deterministic canonical JSON materialization.
+
+### Fixture registry authoring input (YAML)
+
+- Path (repo-local): `fixtures/fixture_registry.v1.yaml`
+- The YAML file is an authoring convenience only. It MUST NOT be treated as canonical.
+- Tooling MUST parse this YAML deterministically:
+  - Exactly one YAML document.
+  - YAML 1.2 "JSON schema" data model.
+  - Duplicate keys are forbidden (fail closed).
+  - Anchors, aliases, and merge keys are forbidden (fail closed).
+
+### Fixture registry canonical materialization (JSON)
+
+- Path (workspace-root): `artifacts/fixtures/fixture_registry.v1.json`
+- Contract: `fixture_registry` (workspace contract registry binding).
+- Producers MUST emit canonical JSON bytes (RFC 8785 / JCS) with UTF-8 encoding and no BOM.
+
+Deterministic ordering (normative):
+
+- `fixtures[]` MUST be sorted ascending by:
+  1. `fixture_id`
+  1. `fixture_version`
+- Within each fixture:
+  - `formats[]` MUST be sorted ascending (UTF-8 byte order, no locale).
+  - `paths[]` MUST be sorted ascending (UTF-8 byte order, no locale) when present.
+  - `expected_outcomes[]` MUST be sorted ascending by `detection_id`.
+  - `expected_outcomes[].assertions[]` MUST be sorted ascending by:
+    1. `kind`
+    1. `field` (missing sorts as empty string)
+    1. `value` (missing sorts as `0`)
+    1. `min` (missing sorts as `0`)
+    1. `max` (missing sorts as `0`)
+- Duplicate entries at any array level MUST be removed after sorting (keep the first entry after
+  sort).
+
+### Expected outcomes model (used by `run.regression`)
+
+Each fixture MUST declare `expected_outcomes[]` entries used by `run.regression`.
+
+- `detection_id` MUST equal the stable detection identifier.
+  - For Sigma-based detections, `detection_id` MUST equal the Sigma `id` / Purple Axiom `rule_id`.
+
+Assertions (closed set):
+
+- `match_count_exact`: assert an exact integer match count for the detection over the fixture.
+- `match_count_range`: assert an inclusive `[min,max]` match count range.
+- `field_present`: assert at least one match where the named field exists in the emitted detection
+  instance (useful when counts vary).
+- `no_matches`: assert zero matches for the detection over the fixture.
+
+### Negative baseline allowlist authoring input (YAML)
+
+- Path (repo-local): `fixtures/baseline_allowlist.v1.yaml`
+- The YAML file is an authoring convenience only. It MUST NOT be treated as canonical.
+- Tooling MUST apply the same deterministic YAML constraints as the fixture registry YAML.
+
+### Negative baseline allowlist canonical materialization (JSON)
+
+- Path (workspace-root): `artifacts/fixtures/baseline_allowlist.v1.json`
+- Contract: `baseline_allowlist` (workspace contract registry binding).
+- Producers MUST emit canonical JSON bytes (RFC 8785 / JCS) with UTF-8 encoding and no BOM.
+
+Allowlist matching key (normative):
+
+- Each allowlist entry MUST be scoped to a fixture via `fixture_id`.
+- Each allowlist entry MUST be scoped to a detection via `detection_id`.
+- Each allowlist entry MUST identify a specific match instance via `match_fingerprint` (SHA-256
+  hex).
+
+`match_fingerprint` MUST be computed over the canonical projection:
+
+```json
+{
+  "rule_id": "<rule_id>",
+  "first_seen_utc": "<first_seen_utc>",
+  "last_seen_utc": "<last_seen_utc>",
+  "matched_event_ids": ["<event_id>", "..."]
+}
+```
+
+Where the projection values are sourced from `detections/detections.jsonl` detection instances and
+`matched_event_ids[]` is treated as already deterministically ordered by the detection stage.
 
 ## Relationship to reporting regression baselines
 

@@ -64,7 +64,22 @@
       "purpose": "Canonical, machine-readable findings artifact for each CI gate (workspace-root).",
       "artifact_kind": "other",
       "format": "json"
-    }
+    },
+    {
+      "contract_id": "fixture_registry",
+      "schema_path": "docs/contracts/fixture_registry.schema.json",
+      "contract_version": "0.1.0"
+    },
+    {
+      "contract_id": "baseline_allowlist",
+      "schema_path": "docs/contracts/baseline_allowlist.schema.json",
+      "contract_version": "0.1.0"
+    },
+    {
+      "contract_id": "connector_result",
+      "schema_path": "docs/contracts/connector_result.schema.json",
+      "contract_version": "0.1.0"
+     }
   ],
   "bindings": [
     {
@@ -112,6 +127,24 @@
     {
       "artifact_glob": "artifacts/findings/*.findings.v1.json",
       "contract_id": "ci_gate_findings",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "artifacts/fixtures/fixture_registry.v1.json",
+      "contract_id": "fixture_registry",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "artifacts/fixtures/baseline_allowlist.v1.json",
+      "contract_id": "baseline_allowlist",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "artifacts/connectors/*.connector_result.v1.json",
+      "contract_id": "connector_result",
       "stage_owner": "orchestrator",
       "validation_mode": "json_document"
     }

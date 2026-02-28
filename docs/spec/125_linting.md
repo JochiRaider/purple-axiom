@@ -540,6 +540,59 @@ Minimum rule requirements:
 - Safe YAML parsing per `pa.yaml_decode.v1`.
 - Schema validation against the canonical config schema (range config schema).
 - Prohibit direct secret material; enforce secrets-by-reference conventions.
+- If `security.redaction.policy_ref` is present, the linter MUST resolve and lint the referenced
+  file as target kind `redaction-policy`.
+  - Missing or unreadable policy files MUST emit an `error` finding with
+    `rule_id="lint-range-config-redaction-policy-ref-invalid"`.
+  - The referenced file MUST be linted even when `security.redaction.enabled=false`; policy shape
+    and JSONPath validity are authoring-time safety constraints.
+
+### Target kind `redaction-policy`
+
+Intended for redaction policy files referenced by `security.redaction.policy_ref` (see ADR-0003:
+Redaction policy).
+
+Minimum rule requirements:
+
+- Parse the policy file as JSON or YAML.
+  - JSON parse failures and YAML decode failures MUST be represented as findings per "Parse and tool
+    errors" (RECOMMENDED `rule_id="lint-core-parse-error"`).
+  - If YAML is supported for policy inputs, it MUST be decoded using `pa.yaml_decode.v1` and then
+    treated as a JSON-shaped value for all subsequent checks.
+- Basic shape checks (normative):
+  - If `policy_format` is present, it MUST equal `pa.redaction_policy.v1`.
+  - If `structured.enabled` is present, it MUST be a boolean.
+  - If `structured.target_paths` is present, it MUST be an array of strings.
+
+JSONPath validation (normative):
+
+- Rule ID: `lint-redaction-policy-invalid-jsonpath`
+
+- For each entry `structured.target_paths[i]`, the linter MUST invoke the JSONPath parser module
+  `pa.jsonpath.v1` (input kind `utf8_text`).
+
+- Any parser-module error for an entry MUST emit an `error` finding with:
+
+  - `instance_path` set to `/structured/target_paths/<i>` (JSON Pointer)
+  - `rule_id="lint-redaction-policy-invalid-jsonpath"`
+  - `severity="error"`
+
+- The finding `message` MUST include the parser module's stable message prefix (see
+  `026_contract_spine.md`, "Parser modules").
+
+- The finding `details` SHOULD include a redaction-safe structured payload containing:
+
+  - `module_token`, `module_id`, `module_version`
+  - `error_code`
+  - `byte_offset` and optional `line`/`column` when present
+
+Parser module error mapping (normative):
+
+- The linter MUST treat the parser module as the single authority for dialect enforcement (no
+  bespoke JSONPath parsing in the linter).
+- If a parser module returns multiple errors for a single `structured.target_paths[i]` entry, the
+  linter MUST deterministically select the first error in the module-provided `errors[]` order for
+  the finding message and primary `details` fields.
 
 ### Target kind `scenario`
 

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purpleaxiom.dev/schemas/baseline_allowlist.schema.json",
+  "title": "baseline_allowlist",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_version",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "pa:baseline-allowlist:v1"
+    },
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "detection_id",
+        "match_fingerprint"
+      ],
+      "properties": {
+        "fixture_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "detection_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match_fingerprint": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "comment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

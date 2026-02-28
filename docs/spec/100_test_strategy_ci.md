@@ -109,6 +109,8 @@ Content CI MUST be runnable without a lab provider and MUST include, at minimum:
 - Unit tests that do not require a lab provider (this section).
 - Detection Content Release (detection content bundle) build + offline validation (see
   `025_data_contracts.md`, "Detection content bundle distribution and validation").
+- Fixture registry + negative baseline allowlist validation + canonicalization (YAML → canonical
+  JSON) (see `086_detection_baseline_library.md`, "Fixture registry and allowlisting (v0.1 CI)").
 
 Content CI MUST fail closed when compilation or validation cannot be completed deterministically.
 
@@ -146,11 +148,16 @@ Content CI harness fixture suite (normative):
 
   - `content.lint`
   - `content.sigma.semantic`
+  - `content.fixtures.validate`
+  - `content.bundle.integrity`
 
 ### Run CI gate set (normative)
 
 Run CI MUST include, at minimum:
 
+- `run.goodlog` (negative baseline): evaluate benign fixtures and fail on any non-allowlisted match.
+- `run.regression` (fixture expected outcomes): evaluate regression fixtures and assert all declared
+  `expected_outcomes[]`.
 - The evaluator conformance harness executed against at least one pinned Baseline Detection Package
   (BDP) or equivalent pinned event fixture set (see "Evaluator conformance harness").
 - At least one end-to-end "golden run" bundle executed in a minimal lab profile when a lab provider
@@ -240,6 +247,15 @@ Index entry format (normative):
     - `tests/fixtures/glob_v1/vectors.json` (vector file)
   - Minimum fixture sets (normative):
     - `glob_v1_vectors` (vectors file present and exercised)
+
+- **Cross-cutting: parser modules**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/parser_modules/jsonpath_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/placeholder_v1/vectors.json` (vector file)
+  - Minimum fixture sets (normative):
+    - `jsonpath_v1_vectors` (vectors file present and exercised)
+    - `placeholder_v1_vectors` (vectors file present and exercised)
 
 - **Cross-cutting: event identity (`event_id.v1`)**
 
@@ -589,6 +605,186 @@ Fixture set (normative):
     - The reference reader SDK (`pa.reader.v1`) and reference publisher SDK (`pa.publisher.v1`) test
       suites MUST include this fixture and MUST fail if any case does not match.
     - Any other first-party implementation of `glob_v1` MUST also include this fixture in CI.
+
+### Parser modules
+
+Parser modules are cross-cutting parsers for mini-languages (for example YAML ingress decode,
+restricted JSONPath, placeholder lines). The generic parser-module contract is defined in
+`026_contract_spine.md`, "Parser modules".
+
+This section defines a shared vector-file schema and required fixture sets for parser modules. These
+vectors act as semantic locks across implementations, analogous to `glob_v1`.
+
+#### Vector file schema
+
+Fixture vector files for parser modules MUST use the shared schema version `pa.parser_vectors.v1`
+and MUST be emitted as RFC 8785 canonical JSON bytes (JCS), UTF-8, with no BOM.
+
+Top-level fields (normative):
+
+- `parser_vectors_version` (string; MUST equal `pa.parser_vectors.v1`)
+- `module_token` (string; example `pa.jsonpath.v1`)
+- `module_id` (string; example `jsonpath`)
+- `module_version` (string; example `v1`)
+- `cases[]` (array)
+
+Each `cases[]` entry (normative):
+
+- `case_id` (string; stable identifier, `id_slug_v1`)
+- `input_kind` (`bytes | utf8_text`)
+- `input`:
+  - when `input_kind="utf8_text"`: `input.utf8` (string)
+  - when `input_kind="bytes"`: `input.base64` (string; standard base64; no newlines)
+- `expect_ok` (boolean)
+
+If `expect_ok=true` (normative):
+
+- `expected_ast` (JSON value; MUST be JSON-native types only)
+- `expected_rendered` (string; OPTIONAL)
+
+If `expect_ok=false` (normative):
+
+- `expected_errors[]` (array) with each error containing:
+  - `error_code` (string; lower_snake_case)
+  - `message_prefix` (string; MUST match the parser error message prefix exactly)
+  - `location.byte_offset` (integer; 0-indexed)
+  - `location.line` (integer; OPTIONAL; 1-indexed)
+  - `location.column` (integer; OPTIONAL; 1-indexed)
+
+Determinism and comparison rules (normative):
+
+- The CI harness MUST load each vectors file and execute all cases.
+- For `expected_ast`, the harness MUST compare by canonical JSON bytes
+  (`canonical_json_bytes(expected_ast)`), not by text diff.
+- If `expected_rendered` is present, the harness MUST compare it byte-for-byte.
+- If `expected_errors[]` is present, the harness MUST compare:
+  - error list ordering byte-for-byte (the list order is normative), and
+  - `error_code`, `message_prefix`, and `location.*` fields exactly.
+
+#### JSONPath vectors
+
+Fixture set (normative):
+
+- `jsonpath_v1_vectors` (semantic lock)
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/jsonpath_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token` MUST be `pa.jsonpath.v1`.
+- `module_id` MUST be `jsonpath`.
+- `module_version` MUST be `v1`.
+
+Dialect (normative):
+
+- The parser MUST enforce the restricted JSONPath subset used by the redaction policy
+  (`structured.target_paths[]`) as defined in ADR-0003.
+
+AST contract for `expected_ast` (normative):
+
+- `expected_ast` MUST be a JSON object with:
+
+  - `segments` (array)
+
+- Each `segments[]` entry MUST be exactly one of:
+
+  - Member segment:
+
+    - `{"kind":"member","name":"<identifier>"}`
+
+  - Array index segment:
+
+    - `{"kind":"index","index":<non_negative_integer>}`
+
+  - Wildcard array index segment:
+
+    - `{"kind":"wildcard_index"}`
+
+- Root `$` is implicit:
+
+  - The JSONPath string `$` MUST yield `{"segments":[]}`.
+
+Rendered form (normative when present):
+
+- `expected_rendered` MUST be the canonical JSONPath string form:
+  - begins with `$`,
+  - member selection uses `.name` with no quoting,
+  - array selection uses `[<index>]` (base-10; no leading zeros unless index is `0`) or `[*]`,
+  - no whitespace.
+
+Minimum case set (normative):
+
+- The vectors file MUST include, at minimum, valid cases for:
+
+  - `$`
+  - `$.process.cmd_line`
+  - `$.events[0].name`
+  - `$.events[*].name`
+
+- The vectors file MUST include, at minimum, invalid cases that fail closed for:
+
+  - missing root `$` (example `.a`)
+  - recursive descent (`..`)
+  - filters (`?()`)
+  - unions (`[,]`)
+  - quoted member selection (example `$['a']`)
+  - negative or non-integer indexes
+  - leading `+` or leading zeros in indexes (example `[+1]`, `[01]`)
+
+#### Placeholder line vectors
+
+Fixture set (normative):
+
+- `placeholder_v1_vectors` (semantic lock)
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/placeholder_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token` MUST be `pa.placeholder.v1`.
+- `module_id` MUST be `placeholder`.
+- `module_version` MUST be `v1`.
+
+Grammar (normative):
+
+- The parser MUST implement the placeholder text line format defined in `090_security_safety.md`,
+  "Placeholder text line format (normative, `pa.placeholder.v1`)".
+
+AST contract for `expected_ast` (normative):
+
+- `expected_ast` MUST be a JSON object containing:
+  - `placeholder_version` (string; MUST equal `pa.placeholder.v1`)
+  - `handling` (string; `withheld | quarantined | absent`)
+  - `reason_code` (string; `lower_snake_case`)
+  - `sha256` (string; OPTIONAL; MUST be `sha256:<64 lowercase hex>` when present)
+
+Rendered form (normative when present):
+
+- `expected_rendered` MUST be the canonical line string:
+  - starts with `PA_PLACEHOLDER_V1`,
+  - uses single spaces as separators,
+  - uses the fixed key order: `handling`, `reason_code`, then optional `sha256`,
+  - omits `sha256` entirely when not present,
+  - has no leading or trailing whitespace.
+
+Minimum case set (normative):
+
+- The vectors file MUST include, at minimum, valid cases for:
+
+  - `handling=withheld` with required `reason_code`
+  - `handling=quarantined` with required `reason_code` and `sha256=sha256:<64hex>`
+  - `handling=absent` with required `reason_code` and no `sha256`
+
+- The vectors file MUST include, at minimum, invalid cases that fail closed for:
+
+  - unknown handling token
+  - missing `reason_code`
+  - `sha256` present when `handling=absent`
+  - malformed `sha256` value (wrong prefix or wrong hex length, or non-lowercase hex)
 
 ### Redaction
 

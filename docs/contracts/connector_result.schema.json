@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purpleaxiom.dev/schemas/connector_result.schema.json",
+  "title": "connector_result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_version",
+    "connector",
+    "operation",
+    "target",
+    "inputs",
+    "outputs",
+    "findings_artifact_path"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "pa:connector-result:v1"
+    },
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector_id",
+        "connector_version"
+      ],
+      "properties": {
+        "connector_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connector_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "preflight",
+        "export",
+        "remote_validate"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_id"
+      ],
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "source_path"
+      ],
+      "properties": {
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "detection_content_bundle",
+            "compiled_plan",
+            "sigma_ruleset",
+            "run_bundle"
+          ]
+        },
+        "source_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/output"
+      }
+    },
+    "findings_artifact_path": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

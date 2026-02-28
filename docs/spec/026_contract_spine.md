@@ -997,6 +997,167 @@ Notes:
 - Raw YAML bytes MAY still be preserved in the run bundle for auditability. The semantic hash is the
   deterministic basis for comparisons/trending that should ignore YAML formatting differences.
 
+## Parser modules
+
+This section defines a cross-cutting "parser module" seam for any mini-language used by Purple Axiom
+specs (examples: YAML ingress decode, `glob_v1`, restricted JSONPath, placeholder lines, Sigma
+conditions). The parser module contract exists to prevent drift across implementations by locking:
+
+- module identity and versioning
+- deterministic parse inputs
+- canonical AST encoding
+- stable errors and location reporting
+- explicit, fail-closed safety limits
+- fixture-backed conformance via vector files (see `100_test_strategy_ci.md`)
+
+### Parser module definition
+
+A **parser module** is a deterministic function that consumes an input and returns either:
+
+- an `ok` result containing a canonical AST and optional canonical rendered form, or
+- an `error` result containing one or more parse errors.
+
+Parser modules MUST be pure with respect to their inputs:
+
+- They MUST NOT depend on locale, environment variables, wall-clock time, filesystem iteration
+  order, or network I/O.
+- They MUST NOT attempt heuristic recovery. If an input is ambiguous or uses unsupported syntax, the
+  module MUST fail closed.
+
+### Module identity and versioning
+
+Each parser module MUST declare:
+
+- `module_id`: stable identifier for the language/grammar family.
+  - MUST conform to `id_slug_v1` (see ADR-0001).
+- `module_version`: stable version token for the grammar, AST contract, and error vocabulary.
+  - MUST be of the form `v<digits>` (example: `v1`).
+- `module_token`: canonical combined identifier used by specs, fixtures, and lint output.
+  - MUST be `pa.<module_id>.<module_version>` (example: `pa.jsonpath.v1`).
+
+Compatibility for legacy tokens (v0.1; normative):
+
+- Existing tokens that do not follow the `pa.<module_id>.<module_version>` form MUST NOT be renamed
+  in-place in v0.1.
+- Such tokens MUST be treated as **legacy module token aliases** with a defined mapping to
+  (`module_id`, `module_version`) for the purposes of this contract.
+  - Example mappings:
+    - `glob_v1` -> `module_id="glob"`, `module_version="v1"`
+    - `sigma_ast_v1` -> `module_id="sigma_ast"`, `module_version="v1"`
+
+### Inputs
+
+Each parser module MUST declare:
+
+- `input_kind`: `bytes` or `utf8_text`.
+
+If `input_kind="utf8_text"` (normative):
+
+- Input MUST be interpreted as UTF-8 bytes.
+  - Implementations MAY accept a UTF-8 BOM but MUST strip it before parsing.
+  - Invalid UTF-8 MUST fail closed.
+
+Newline normalization (normative):
+
+- A module MUST declare whether it normalizes newlines prior to parsing.
+- If it normalizes newlines, the canonical transformation MUST be:
+  - `\r\n` -> `\n`
+  - `\r` -> `\n`
+
+Max input size (normative):
+
+- A module MUST declare and enforce an explicit max input size:
+  - `max_input_bytes` for `bytes`, or
+  - `max_input_chars` for `utf8_text`.
+- If the limit is exceeded, parsing MUST fail closed.
+
+### Outputs
+
+On success, a parser module MUST return:
+
+- `ast`: a "small AST" that is representable using only JSON-native types.
+- `rendered` (optional): a canonical rendered form (string) when meaningful for the module.
+
+AST encoding (normative):
+
+- `ast` MUST be serializable to deterministic bytes using `canonical_json_bytes(ast)` (RFC 8785 /
+  JCS; see "Canonical JSON").
+- If a module would otherwise emit non-JSON-native values (NaN/Inf, non-string map keys, etc.), it
+  MUST fail closed.
+
+Rendered form (normative when present):
+
+- If `rendered` is present, it MUST be a canonical string form for the module's grammar.
+- Idempotence: parsing `rendered` MUST yield an AST that is byte-identical (under canonical JSON
+  bytes) to the original AST.
+
+### Errors
+
+When parsing fails, a parser module MUST return one or more errors.
+
+Error shape (normative minimum):
+
+- `error_code`: stable machine-readable token (`lower_snake_case`).
+- `message`: human-readable message.
+  - `message` MUST begin with a stable prefix of the form: `PA_<MODULE>_<CODE>:`
+    - `<MODULE>` is `module_id` uppercased with `-` converted to `_`.
+    - `<CODE>` is `error_code` uppercased.
+- `location`:
+  - `byte_offset`: REQUIRED, 0-indexed
+  - `line`: OPTIONAL, 1-indexed
+  - `column`: OPTIONAL, 1-indexed
+- `details`: OPTIONAL JSON value; MUST be redaction-safe.
+
+Error location basis (normative):
+
+- `byte_offset` MUST be measured in UTF-8 bytes of the canonical parse input after any
+  module-defined preprocessing (BOM stripping and newline normalization, if declared).
+
+Deterministic multi-error ordering (normative):
+
+- If more than one error is returned, errors MUST be sorted by the tuple:
+
+  1. `location.byte_offset`
+  1. `error_code`
+  1. `message`
+
+  using UTF-8 bytewise lexical ordering (no locale).
+
+### Security posture and explicit limits
+
+Parser modules MUST be fail closed.
+
+- No heuristic recovery.
+- No dynamic evaluation (no script execution, no network fetch, no filesystem dereference).
+- Each module MUST enforce explicit hard limits suitable for its grammar, including where
+  applicable:
+  - max recursion depth
+  - max AST nodes
+  - max nesting depth
+  - max expansion iterations
+
+If any enforced limit would be exceeded, parsing MUST fail closed with a deterministic `error_code`.
+
+### M0 module inventory
+
+The following parser modules are treated as parser modules for v0.1 M0:
+
+- `pa.yaml_decode.v1`: YAML ingress decode to a JSON-shaped value (defined above).
+- `pa.jsonpath.v1`: restricted JSONPath subset used by `structured.target_paths[]` in the redaction
+  policy (defined in ADR-0003; vectors in `100_test_strategy_ci.md`).
+- `pa.placeholder.v1`: placeholder text line format (`PA_PLACEHOLDER_V1 ...`) (defined in
+  `090_security_safety.md`; vectors in `100_test_strategy_ci.md`).
+
+The following existing tokens are legacy aliases mapped into this contract (no renaming in v0.1):
+
+- `glob_v1`
+- `sigma_ast_v1`
+
+Tooling integration (normative):
+
+- Lint tooling and CI harnesses MUST invoke the module implementations governed by this contract
+  (not ad hoc parsing) when validating authoring-time inputs and vector fixtures.
+
 ## Artifact Reader
 
 This section defines the consumer-facing Contract Spine surface. It is aligned with `pa.reader.v1`

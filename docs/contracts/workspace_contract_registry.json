@@ -56,16 +56,65 @@
       "purpose": "Manifest for a Baseline Detection Package stored under exports/baselines/<baseline_id>/<baseline_version>/baseline_package_manifest.json.",
       "artifact_kind": "other",
       "format": "json"
+    },
+    {
+      "contract_id": "ci_gate_findings",
+      "schema_path": "docs/contracts/ci_gate_findings.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Canonical, machine-readable findings artifact for each CI gate (workspace-root).",
+      "artifact_kind": "other",
+      "format": "json"
     }
   ],
   "bindings": [
-    { "artifact_glob": "logs/ui_audit.jsonl", "contract_id": "audit_event", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
-    { "artifact_glob": "state/run_registry.json", "contract_id": "run_registry", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/*/*/export_manifest.json", "contract_id": "export_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/datasets/*/*/dataset_manifest.json", "contract_id": "dataset_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/datasets/*/*/splits/split_config.json", "contract_id": "dataset_splits_config", "stage_owner": "orchestrator", "validation_mode": "json_document" },
-    { "artifact_glob": "exports/datasets/*/*/splits/split_assignments.jsonl", "contract_id": "dataset_split_assignment", "stage_owner": "orchestrator", "validation_mode": "jsonl_lines" },
-    { "artifact_glob": "exports/baselines/*/*/baseline_package_manifest.json", "contract_id": "baseline_detection_package_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document" }
+    {
+      "artifact_glob": "logs/ui_audit.jsonl",
+      "contract_id": "audit_event",
+      "stage_owner": "orchestrator",
+      "validation_mode": "jsonl_lines"
+    },
+    {
+      "artifact_glob": "state/run_registry.json",
+      "contract_id": "run_registry",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "exports/*/*/export_manifest.json",
+      "contract_id": "export_manifest",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "exports/datasets/*/*/dataset_manifest.json",
+      "contract_id": "dataset_manifest",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "exports/datasets/*/*/splits/split_config.json",
+      "contract_id": "dataset_splits_config",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "exports/datasets/*/*/splits/split_assignments.jsonl",
+      "contract_id": "dataset_split_assignment",
+      "stage_owner": "orchestrator",
+      "validation_mode": "jsonl_lines"
+    },
+    {
+      "artifact_glob": "exports/baselines/*/*/baseline_package_manifest.json",
+      "contract_id": "baseline_detection_package_manifest",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    },
+    {
+      "artifact_glob": "artifacts/findings/*.findings.v1.json",
+      "contract_id": "ci_gate_findings",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document"
+    }
   ],
   "notes": [
     "This file is the authoritative mapping for contract-backed workspace-root artifacts.",

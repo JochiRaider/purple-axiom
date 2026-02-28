@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purpleaxiom.dev/schemas/validator_plugin_request.schema.json",
+  "title": "validator_plugin_request",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract_version",
+    "gate",
+    "inputs",
+    "subject"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "pa:validator-plugin-request:v1"
+    },
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "gate": {
+      "type": "object",
+      "required": [
+        "gate_id",
+        "lane",
+        "required"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$"
+        },
+        "lane": {
+          "type": "string",
+          "enum": [
+            "content_ci",
+            "run_ci",
+            "release_ci"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "target_backend": {
+          "type": "string"
+        },
+        "target_backend_version": {
+          "type": "string"
+        }
+      }
+    },
+    "backend_profile": {
+      "type": "object",
+      "required": [
+        "backend_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "backend_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_version": {
+          "type": "string"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{2,63}$"
+          }
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sigma_rule_path": {
+          "type": "string"
+        },
+        "sigma_ast_path": {
+          "type": "string"
+        },
+        "bridge_ir_path": {
+          "type": "string"
+        },
+        "compiled_plan_path": {
+          "type": "string"
+        },
+        "bundle_manifest_path": {
+          "type": "string"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "stable_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_\\.-]{0,63}$"
+        },
+        "stable_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string"
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

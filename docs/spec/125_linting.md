@@ -425,6 +425,90 @@ The lint engine MUST represent parse failures and tool failures without crashing
   - `summary.status="tool_error"`
   - and MUST exit with code `20`
 
+### Content CI gate findings emission (`content.lint`)
+
+When linting is executed as part of Content CI (`ci-content`), CI MUST also emit a contract-backed
+gate findings artifact for the `content.lint` gate:
+
+- `artifacts/findings/content.lint.findings.v1.json` (contract: `ci_gate_findings`)
+
+This artifact is **additive**. The `lint.json` report remains the primary lint report contract for
+both human and machine consumption; the gate findings artifact is the canonical CI surface.
+
+#### Deterministic mapping from `lint.json` → `ci_gate_findings` (normative)
+
+Given a `lint.json` report:
+
+1. The findings artifact top-level fields MUST be set as:
+
+   - `gate.gate_id = "content.lint"`
+   - `gate.lane = "content_ci"`
+   - `gate.required = true`
+   - `tool` MUST be copied from `lint.json.tool`
+
+1. `findings[]` mapping rules:
+
+   - When `lint.json.summary.status == "tool_error"`:
+
+     - The findings artifact MUST contain exactly one finding with:
+       - `severity = "fatal"`
+       - `category = "internal"`
+       - `reason_code = "lint_tool_error"`
+       - `rule_id = "lint.tool_error"`
+       - `subject.kind = "lint_report"`
+       - `subject.stable_id = "lint.json"`
+       - `location.file_path = "lint.json"`
+       - `message` MUST be a stable, non-volatile explanation (for example
+         `"Lint failed due to an internal tool error; see CI logs for details."`).
+
+   - Otherwise, for each element `f` of `lint.json.findings[]`, emit exactly one corresponding
+     finding `g` in the gate findings artifact:
+
+     - `g.severity` MUST map as:
+
+       - `error` → `error`
+       - `warning` → `warn`
+       - `info` → `info`
+
+     - `g.category` MUST be:
+
+       - `syntax` when `f.rule_id == "lint-core-parse-error"` or `f.rule_id` ends with
+         `"-schema-invalid"`
+       - otherwise `semantic`
+
+     - `g.reason_code` MUST be:
+
+       - `lint_parse_error` when `f.rule_id == "lint-core-parse-error"`
+       - `lint_schema_invalid` when `f.rule_id` ends with `"-schema-invalid"`
+       - otherwise `lint_rule_violation`
+
+     - `g.rule_id` MUST be copied from `f.rule_id`.
+
+     - `g.message` MUST be copied from `f.message`.
+
+     - `g.subject.kind` MUST be `"workspace_file"`.
+
+     - `g.subject.stable_id` MUST equal `f.file` when present; otherwise it MUST equal
+       `"(unknown)"`.
+
+     - `g.location.file_path` MUST equal `f.file` when present.
+
+     - `g.evidence.details` SHOULD copy `f.details` when present.
+
+     - `g.help_uri` MAY be set when `f.help` is a valid absolute URI; otherwise it MUST be omitted.
+
+     - `g.fingerprint` MUST be computed per the `ci_gate_findings` fingerprint algorithm.
+
+1. Deterministic ordering:
+
+   - Producers MUST apply the `ci_gate_findings` ordering and de-duplication rules before emitting
+     the artifact.
+
+1. Canonical bytes:
+
+   - The findings artifact MUST be RFC 8785 canonical JSON bytes (JCS), encoded as UTF-8 with no BOM
+     and no trailing newline.
+
 ## Human output contract
 
 Human output MUST be:

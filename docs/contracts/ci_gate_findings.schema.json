@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purpleaxiom.dev/schemas/ci_gate_findings.schema.json",
+  "title": "ci_gate_findings",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract_version",
+    "gate",
+    "tool",
+    "ordering",
+    "findings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "pa:ci-gate-findings:v1"
+    },
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "gate": {
+      "type": "object",
+      "required": [
+        "gate_id",
+        "lane",
+        "required"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$"
+        },
+        "lane": {
+          "type": "string",
+          "enum": [
+            "content_ci",
+            "run_ci",
+            "release_ci"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "target_backend": {
+          "type": "string"
+        },
+        "target_backend_version": {
+          "type": "string"
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build": {
+          "type": "string"
+        }
+      }
+    },
+    "ordering": {
+      "type": "object",
+      "required": [
+        "canonical_json",
+        "findings_sort_key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "canonical_json": {
+          "const": true
+        },
+        "findings_sort_key": {
+          "const": [
+            "severity_rank",
+            "reason_code",
+            "subject.kind",
+            "subject.stable_id",
+            "rule_id",
+            "location.file_path",
+            "location.span.start_line",
+            "location.span.start_col",
+            "fingerprint"
+          ]
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": [
+        "severity",
+        "category",
+        "reason_code",
+        "rule_id",
+        "message",
+        "subject",
+        "fingerprint"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": [
+            "fatal",
+            "error",
+            "warn",
+            "info"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "syntax",
+            "semantic",
+            "capability",
+            "performance",
+            "provenance",
+            "integrity",
+            "compatibility",
+            "fixture",
+            "packaging",
+            "connector",
+            "internal"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[a-z0-9_\\.]+$"
+        },
+        "rule_id": {
+          "description": "Stable ID of the validator check (not the detection rule).",
+          "type": "string",
+          "pattern": "^[a-z0-9_\\.-]+$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "help_uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "fix": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "auto_patch"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "patch": {
+              "description": "Optional unified diff for auto_patch kind.",
+              "type": "string"
+            }
+          }
+        },
+        "subject": {
+          "type": "object",
+          "required": [
+            "kind",
+            "stable_id"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_\\.-]{0,63}$"
+            },
+            "stable_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "display_name": {
+              "type": "string"
+            }
+          }
+        },
+        "location": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "file_path": {
+              "type": "string"
+            },
+            "span": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "start_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "start_col": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end_col": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "observed": {
+              "type": "string"
+            },
+            "expected": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object"
+            }
+          }
+        },
+        "fingerprint": {
+          "description": "Stable content-derived fingerprint for dedupe and deterministic output.",
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

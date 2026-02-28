@@ -359,6 +359,89 @@ CI MUST enforce the required gate categories already defined by the test strateg
 
 This table is a consolidation view; details remain in the underlying specs.
 
+### CI gate findings artifacts (required)
+
+CI gates MUST have a single, canonical machine-readable output surface for CI evaluation and
+annotations.
+
+#### Artifact path and contract
+
+- Path (workspace-root): `artifacts/findings/<gate_id>.findings.v1.json`
+- Contract: `ci_gate_findings` (workspace contract registry binding)
+
+CI MUST treat findings artifacts as **required evidence** for any enforced REQUIRED gate:
+
+- Each enforced gate MUST emit exactly one findings artifact at the path above, even when
+  `findings=[]` (pass case).
+- Missing findings artifacts for any REQUIRED gate MUST fail CI (fail closed).
+- Findings artifacts MUST be contract-valid JSON. Schema-invalid artifacts MUST fail CI (fail
+  closed).
+
+#### Gate pass/fail semantics (normative)
+
+Given a findings artifact that declares `gate.required=true`:
+
+- The gate MUST be treated as **failed** when any finding has `severity` of `error` or `fatal`.
+- The gate MUST be treated as **passed** when there are zero `error`/`fatal` findings (warnings and
+  infos MAY be present).
+- CI policy MAY escalate warnings to errors, but any escalation MUST be explicit and deterministic
+  (out of scope for v0.1).
+
+#### Deterministic ordering and fingerprinting (normative)
+
+Findings artifacts are required to be deterministic to enable stable CI verdicts and stable
+annotation surfaces.
+
+Canonical bytes:
+
+- Findings JSON MUST be emitted as canonical JSON bytes (RFC 8785 / `canonical_json_bytes` as
+  defined by `026_contract_spine.md`).
+
+Findings ordering:
+
+- Before writing the artifact, producers MUST sort the `findings[]` array ascending by:
+
+  1. `severity_rank` (`fatal=0`, `error=1`, `warn=2`, `info=3`)
+  1. `reason_code` (UTF-8 byte order, no locale)
+  1. `subject.kind`
+  1. `subject.stable_id`
+  1. `rule_id`
+  1. `location.file_path` (missing sorts as empty string)
+  1. `location.span.start_line` (missing sorts as `0`)
+  1. `location.span.start_col` (missing sorts as `0`)
+  1. `fingerprint`
+
+- After sorting, producers MUST de-duplicate the `findings[]` array by `fingerprint` (keep the first
+  entry after sort for each distinct fingerprint).
+
+Fingerprint algorithm:
+
+- Each finding MUST include `fingerprint` computed as:
+
+```text
+message_normalized =
+  trim(message) with all runs of whitespace collapsed to a single ASCII space
+
+fingerprint = SHA256_HEX(
+  severity + "\n" +
+  category + "\n" +
+  reason_code + "\n" +
+  rule_id + "\n" +
+  subject.kind + "\n" +
+  subject.stable_id + "\n" +
+  (location.file_path || "") + "\n" +
+  (location.span.start_line || 0) + ":" + (location.span.start_col || 0) + "\n" +
+  message_normalized
+)
+```
+
+#### Baseline gate IDs (v0.1)
+
+To keep the CI surface stable across implementations, the following gate IDs are reserved for v0.1:
+
+- `content.lint` (Content CI linting)
+- `content.sigma.semantic` (Content CI Sigma semantic validators)
+
 ### Publish-gate enforcement
 
 CI MUST verify publish-gate requirements by checking that:

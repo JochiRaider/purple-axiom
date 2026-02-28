@@ -147,6 +147,155 @@ Reserved (v0.2+; requires config schema + reference update before use):
 When selection constraints are applied, the run manifest MUST record the effective selection inputs,
 and excluded rules MUST NOT appear in coverage metrics.
 
+## Content CI Sigma semantic validators (`content.sigma.semantic`)
+
+In addition to parsing and bridge compilation, Content CI MUST run a baseline set of **offline**
+semantic validators over every loaded Sigma rule. The goal is to catch authoring hazards and
+high-risk patterns early, with deterministic outputs that can be used for CI annotations.
+
+### Gate output surface (normative)
+
+The `content.sigma.semantic` gate MUST emit exactly one findings artifact:
+
+- `artifacts/findings/content.sigma.semantic.findings.v1.json` (contract: `ci_gate_findings`)
+
+The gate MUST be treated as **failed** when any finding has `severity` of `error` or `fatal`.
+
+### Baseline validator set (v0.1, normative)
+
+Each validator MUST:
+
+- Use the `ci_gate_findings.findings[].rule_id` field as its stable check identifier.
+- Emit deterministic findings (stable ordering + stable fingerprints).
+
+Required baseline validators:
+
+- `sigma.control_characters` (default severity: `error`, reason_code: `sigma_semantic_invalid`)
+
+  - Condition: any Sigma scalar string value (including selector values and condition literals) that
+    contains a Unicode codepoint in `U+0000..U+001F` or `U+007F` MUST emit an `error`.
+  - Rationale: these are usually unintended escape sequences that change matching semantics across
+    engines.
+
+- `sigma.invalid_modifier_combinations` (default severity: `error`, reason_code:
+  `sigma_semantic_invalid`)
+
+  - Condition: any field expression of the form `Field|mod1|mod2|...` MUST emit an `error` when:
+    - any modifier token is repeated within the same field expression (example:
+      `CommandLine|contains|contains`), or
+    - the expression contains an empty modifier segment (example: `Field||contains`).
+  - Note: backend support for otherwise-valid modifiers is handled by bridge compilation and
+    executability classification; this validator is strictly about structurally-invalid modifier
+    chains.
+
+- `sigma.wildcards_instead_of_modifiers` (default severity: `warn`, reason_code:
+  `sigma_compilation_risk`)
+
+  - Condition: for selector values that use leading/trailing `*` wildcards **without** any other `*`
+    or `?` wildcard in the value, the validator SHOULD recommend a modifier-based equivalent:
+
+    - `"*<s>"` → recommend `|endswith: "<s>"`
+    - `"<s>*"` → recommend `|startswith: "<s>"`
+    - `"*<s>*"` → recommend `|contains: "<s>"`
+
+  - The validator SHOULD emit a `fix` object with `kind="manual"` and a stable suggested rewrite
+    summary.
+
+Optional baseline validators (v0.1 MAY; reserved rule_ids):
+
+- `sigma.regex_cost_risk` (default severity: `warn`, reason_code: `sigma_regex_cost_risk`)
+- `sigma.broad_query_risk` (default severity: `warn`, reason_code: `sigma_broad_query_risk`)
+
+If optional validators are enabled, they MUST use deterministic, explicitly specified thresholds and
+MUST NOT depend on environment-specific timing.
+
+### Isolation test fixtures (normative)
+
+Baseline semantic validators MUST be covered by deterministic fixtures.
+
+Canonical fixture root:
+
+- `tests/fixtures/validators/sigma_semantic/<case_id>/`
+
+Each fixture case directory MUST include:
+
+- `inputs/rule.yml` (a single Sigma rule)
+- `expected/findings.json` (a `ci_gate_findings` JSON document; canonical JSON bytes)
+
+Minimum fixture sets (v0.1):
+
+- `control_characters_error`
+- `invalid_modifier_combinations_error`
+- `wildcards_instead_of_modifiers_warn`
+
+## Validator plugin contract (v0.1)
+
+Validators MAY be implemented in-process or as external plugins. When implemented as plugins, they
+MUST adhere to a language-agnostic, deterministic invocation contract so that CI can execute an
+arbitrary validator set without embedding language runtimes.
+
+### Manifest (static descriptor)
+
+A validator plugin MUST provide a manifest document that declares its identity, compatibility, and
+determinism guarantees.
+
+Schema:
+
+- `docs/contracts/validator_plugin_manifest.schema.json` (schema_version:
+  `pa:validator-plugin-manifest:v1`)
+
+Minimum required manifest fields (normative):
+
+- `plugin_id`: stable identifier (id_slug)
+- `plugin_version`: semver
+- `implements`: MUST be `pa:validator-plugin-contract:v1`
+- `implements_contract_version`: semver range string (MUST include `0.1.0`)
+- `capabilities[]`: sorted list of capability flags (id_slug)
+- `supported_inputs[]`: sorted list of supported input kinds (see request schema)
+- `offline_only`: when true, the plugin MUST NOT perform network I/O
+- `determinism`:
+  - `stable_output`: MUST be true
+  - `emits_contract`: MUST be `ci_gate_findings`
+
+### Invocation (deterministic CLI contract)
+
+Validator plugins MUST support a deterministic, stream-based invocation mode:
+
+- Request: JSON on STDIN (schema `pa:validator-plugin-request:v1`)
+- Response: a `ci_gate_findings` JSON document on STDOUT
+- STDERR: MAY be used for human logs, but MUST NOT be required to determine CI pass/fail.
+
+Exit codes (normative):
+
+- `0`: executed successfully and produced **no** `error`/`fatal` findings
+- `3`: executed successfully and produced at least one `error`/`fatal` finding
+- `10`: internal plugin error (CI MUST fail closed)
+- `11`: incompatible request (unsupported input kind, incompatible contract version, etc; CI MUST
+  fail closed)
+
+### Plugin runner responsibilities (normative)
+
+When CI executes validators via plugins, the runner (the `ci-content` orchestrator) MUST:
+
+- Validate the plugin manifest against `validator_plugin_manifest.schema.json` before execution.
+- Validate the plugin response against `ci_gate_findings` before writing it to
+  `artifacts/findings/<gate_id>.findings.v1.json`.
+- Fail closed when:
+  - the plugin exits with `10` or `11`
+  - the plugin emits invalid JSON
+  - the plugin emits schema-invalid findings
+
+If a plugin fails before producing a valid findings document, the runner MUST still emit a findings
+artifact for the gate with a single `fatal` finding using:
+
+- `category="internal"`
+- `reason_code="validator_internal_error"` (exit 10) or `reason_code="validator_plugin_incompatible"`
+  (exit 11)
+- `rule_id="validator.plugin_runner"`
+- `subject.kind="validator_plugin"` and `subject.stable_id="<plugin_id>"`
+
+This requirement ensures that every gate has a canonical findings artifact even when tooling fails.
+
 ## ATT&CK technique mapping
 
 ### Tag extraction

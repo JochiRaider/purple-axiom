@@ -119,14 +119,33 @@ Content CI harness fixture suite (normative):
 
 - CI MUST include at least one end-to-end fixture suite that executes the `ci-content` entrypoint
   against deterministic fixture workspaces without a lab provider.
+
 - The fixture suite MUST assert expected exit codes deterministically for both a passing and a
   failing case.
+
 - Canonical fixture root: `tests/fixtures/ci/content_ci_harness/` (see "Fixture index").
+
 - Each fixture case under `tests/fixtures/ci/content_ci_harness/<case>/` MUST include:
+
   - `inputs/workspace/` as the workspace root to run `ci-content` against, and
   - `expected/expected_exit_code.txt` containing `0` or `20` (ASCII, trailing newline optional).
+
 - The fixture runner MUST invoke `ci-content` with the working directory set to `inputs/workspace/`
   for the case.
+
+- `ci-content` MUST emit a contract-backed findings artifact for every gate it enforces:
+
+  - Path (workspace-root): `artifacts/findings/<gate_id>.findings.v1.json`
+  - Contract: `ci_gate_findings` (workspace contract registry binding)
+  - The file MUST be emitted even when there are zero findings (`findings=[]`).
+  - Missing or schema-invalid findings artifacts for any REQUIRED gate MUST fail Content CI (fail
+    closed).
+
+- The Content CI harness fixture suite MUST, at minimum, assert the presence and contract validity
+  of findings artifacts for these REQUIRED Content CI gates:
+
+  - `content.lint`
+  - `content.sigma.semantic`
 
 ### Run CI gate set (normative)
 
@@ -158,6 +177,9 @@ Minimum checks (normative):
 
 - Sigma authoring invariants: enforce deterministic rule discovery, unique `id`, and required rule
   metadata per `060_detection_sigma.md`.
+- CI gate findings determinism: all emitted `ci_gate_findings` artifacts MUST be canonical JSON
+  bytes, MUST be sorted/deduplicated per the findings ordering rules, and MUST have stable
+  fingerprints (see `105_ci_operational_readiness.md`, "CI gate findings artifacts").
 - Router determinism: for each Sigma rule `logsource`, routing via the selected mapping pack MUST
   yield a single deterministic route; ambiguous routing MUST fail closed.
 - Mapping pack referential integrity: mapping pack references (classes, aliases, transforms) MUST
@@ -256,6 +278,33 @@ Index entry format (normative):
   - Minimum fixture sets (normative):
     - `run_lock_exclusive_single_writer`
     - `run_lock_break_glass_requires_explicit_force`
+
+- **Cross-cutting: orchestrator run lifecycle (`orchestrator-run-lifecycle`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/orchestrator/run_lifecycle/`
+  - Minimum fixture sets (normative):
+    - `happy_path_success`
+    - `lock_denied_no_mutation`
+    - `completed_failed_fail_closed`
+    - `completed_partial_warn_and_skip`
+    - `reconcile_outputs_without_outcome_success`
+    - `reconcile_outputs_without_outcome_validation_fail`
+    - `illegal_execute_without_lock`
+    - `idempotent_reconcile_twice`
+
+- **Cross-cutting: stage execution lifecycle (`stage-execution-lifecycle`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/orchestrator/stage_execution_lifecycle/`
+  - Minimum fixture sets (normative):
+    - `happy_path_succeeded`
+    - `failed_fail_closed_outputs_absent`
+    - `failed_warn_and_skip_outputs_published`
+    - `skipped_outputs_absent`
+    - `illegal_begin_with_terminal_outcome`
+    - `reconcile_outputs_without_outcome_success`
+    - `reconcile_outputs_without_outcome_validation_fail`
 
 - **Cross-cutting: run results summary (`run_results`)**
 
@@ -375,6 +424,15 @@ Index entry format (normative):
     - `rule_smoke`
     - `unsupported_feature_rejected`
 
+- **`validators` (Sigma semantic validators)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/validators/sigma_semantic/<case_id>/`
+  - Minimum fixture sets (normative):
+    - `control_characters_error`
+    - `invalid_modifier_combinations_error`
+    - `wildcards_instead_of_modifiers_warn`
+
 - **`scoring`**
 
   - Canonical fixture roots:
@@ -428,6 +486,15 @@ Index entry format (normative):
   - Minimum fixture sets (normative):
     - `smoke_pass`
     - `smoke_fail`
+
+- **CI harness: gate findings artifacts (`ci_gate_findings`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/ci/gate_findings/`
+  - Minimum fixture sets (normative):
+    - `sorted_empty_ok`
+    - `unsorted_rejected`
+    - `duplicate_deduped`
 
 - **CI harness: CI verdict decision surface**
 
@@ -2237,6 +2304,15 @@ The recommended CI workflow proceeds through six stages:
 This spec’s fixtures act as conformance tests for lifecycle/state machines whose authoritative
 definitions live outside this document:
 
+- Orchestrator run lifecycle state machine:
+  - Authority: architecture run lifecycle definition + ADR-0004 reconciliation + ADR-0005 outcomes.
+  - Conformance fixtures: `tests/fixtures/orchestrator/run_lifecycle/` and
+    `tests/fixtures/run_lock/v1/`.
+- Stage execution lifecycle state machine:
+  - Authority: architecture stage execution lifecycle definition + Contract Spine publish-gate
+    semantics + ADR-0005 outcomes.
+  - Conformance fixtures: `tests/fixtures/orchestrator/stage_execution_lifecycle/` (plus
+    publish-gate and stage-isolation fixture suites).
 - Runner action lifecycle state machine:
   - Authority: scenario model + runner/executor integration + runner lifecycle guard semantics.
   - Conformance fixtures: `tests/fixtures/runner/lifecycle/`, requirements gating, unsafe rerun

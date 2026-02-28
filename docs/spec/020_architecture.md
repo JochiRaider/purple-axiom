@@ -905,44 +905,435 @@ substage `runner.environment_config` after `lab_provider` completes and before a
 runner `prepare` lifecycle phase. This substage MUST be observable via stage outcomes in
 `manifest.json` and, when `operability.health.emit_health_files=true`, via `logs/health.json`.
 
-## Lifecycle state machine integrations (v0.1; guidance)
+## Lifecycle state machine integrations (v0.1; normative)
 
-This architecture describes lifecycles that are naturally stateful (run execution, per-stage
-publish, per-action execution). Implementations SHOULD model these lifecycles as explicit
-finite-state machines (FSMs) when doing so improves determinism, resume safety, and testability.
+This architecture relies on lifecycle semantics that are naturally stateful (run execution,
+per-stage publication, and per-action execution). Where these semantics are conformance-critical,
+they are defined as explicit finite-state machines (FSMs) using the required template from
+[ADR-0007: State machines for lifecycle semantics][adr-0007].
 
-Reference: [ADR-0007: State machines for lifecycle semantics][adr-0007] defines the required FSM
-template and conformance expectations when a spec introduces normative lifecycle machines.
+This document defines the two cross-cutting insertion points called out by ADR-0007 as needing
+contract-grade lifecycle modeling:
 
-Recommended integration points (non-normative in v0.1):
+1. **Orchestrator run lifecycle** (scope: run)
+1. **Stage execution lifecycle** (scope: stage)
 
-1. **Orchestrator run lifecycle**
+Other lifecycle machines (for example runner action lifecycle and telemetry checkpointing/replay)
+are defined in their owning specifications and are referenced here only for context.
 
-   - Authority: [ADR-0004] and [ADR-0005].
-   - Canonical artifact anchors: run lock (`runs/.locks/<run_id>.lock`), `manifest.json`, and
-     `logs/health.json` (when enabled).
+### State machine: Orchestrator run lifecycle
 
-1. **Stage publish gate lifecycle**
+#### Purpose
 
-   - Authority: [ADR-0004] and the publish gate rules in this document.
-   - Canonical artifact anchors: `runs/<run_id>/.staging/<stage_id>/`, the stage’s published output
-     paths, and the recorded stage outcome.
+- **What it represents**: The orchestrator-owned lifecycle for producing or resuming a single run
+  bundle identified by `run_id`. It constrains: (1) single-writer lock acquisition, (2) run bundle
+  initialization, (3) deterministic reconciliation of prior partial artifacts, (4) canonical stage
+  execution order, and (5) finalization to a terminal `manifest.status`.
+- **Scope**: run
+- **Machine ID**: `orchestrator-run-lifecycle` (see ADR-0001 `id_slug_v1`)
+- **Version**: `0.1.0`
 
-1. **Runner action lifecycle**
+#### Lifecycle authority references
 
-   - Authority: [scenario model][scenarios-spec] (prepare → execute → revert → teardown) and runner
-     integration specs.
-   - Canonical artifact anchors: `ground_truth.jsonl` plus per-action runner evidence under
-     `runner/actions/<action_id>/` (especially `side_effect_ledger.json`).
+This state machine overlays and reuses lifecycle semantics defined elsewhere:
 
-1. **Telemetry reliability and validation canaries**
+- [ADR-0004: Deployment architecture and inter-component communication][adr-0004] (run lock
+  acquisition, reconciliation pass, stage completion semantics)
+- [ADR-0005: Stage outcomes and failure classification][adr-0005] (stage outcome requirements and
+  run-status derivation)
+- `025_data_contracts.md` (stage enablement, required outputs matrix, cross-artifact invariants)
+- This document:
+  - "Stage execution order" (canonical pipeline ordering)
+  - "Port: `RunLock`" and "Port: `PublishGate`" (single-writer + publication mechanics)
 
-   - Authority: [telemetry pipeline specification][telemetry-spec] and [ADR-0005] (outcome
-     recording).
-   - Canonical artifact anchors: `logs/telemetry_validation.json` and `raw_parquet/**`.
+If this state machine definition conflicts with the linked lifecycle authority, the linked lifecycle
+authority is authoritative unless this document explicitly states it is overriding those semantics.
 
-If a future revision of this document introduces a conformance-critical state machine definition, it
-MUST use the template and conformance test requirements in [ADR-0007].
+#### Entities and identifiers
+
+- **Machine instance key**: `run_id`
+- **Correlation identifiers**:
+  - Run lock path: `runs/.locks/<run_id>.lock`
+  - Run bundle root: `runs/<run_id>/`
+  - Manifest path: `runs/<run_id>/manifest.json`
+  - Health path (optional): `runs/<run_id>/logs/health.json`
+
+#### Authoritative state representation
+
+- **Source of truth**:
+  - The run manifest (`runs/<run_id>/manifest.json`) for in-bundle state derivation, and
+  - the run lock path (`runs/.locks/<run_id>.lock`) for acquisition/refusal observability.
+- **Derivation rule** (deterministic):
+  - If `runs/<run_id>/manifest.json` exists and is valid per the `manifest` contract:
+    - if `manifest.status == "success"`, state is `completed_success`
+    - else if `manifest.status == "partial"`, state is `completed_partial`
+    - else if `manifest.status == "failed"`, state is `completed_failed`
+    - else (status absent), state is `in_progress`
+  - Else if `runs/.locks/<run_id>.lock` exists, state is `locked_no_manifest`
+  - Else state is `not_started`
+  - `lock_denied` is an invocation-terminal state that is derived from the attempted lock
+    acquisition result (`RunLock.acquire(run_id) == false`) and is not persisted in the run bundle.
+- **Persistence requirement**:
+  - MUST persist: yes (terminal state)
+  - MUST be persisted in: `runs/<run_id>/manifest.json` as `manifest.status` (per
+    `025_data_contracts.md`), with atomic replace semantics.
+
+#### Events / triggers
+
+- `event.acquire_run_lock`: Attempt to acquire the run lock using `RunLock.acquire(run_id)`.
+- `event.force_acquire_run_lock`: Attempt to acquire the run lock with break-glass enabled
+  (`--force-run-lock=true`).
+- `event.initialize_run_bundle`: Ensure `runs/<run_id>/` exists and a contract-valid initial
+  `manifest.json` skeleton has been written.
+- `event.reconcile_run_bundle`: Perform the deterministic reconciliation pass defined in ADR-0004.
+- `event.execute_enabled_stages`: Execute enabled pipeline stages in canonical order, driving the
+  per-stage machine defined below for each enabled stage.
+- `event.finalize_run`: Compute and persist the terminal `manifest.status`, enforce post-run
+  invariants (including publish-scratch hygiene), and release the run lock (best-effort).
+
+Event requirements (normative):
+
+- Events MUST be named with ASCII `lower_snake_case` after the `event.` prefix.
+- When `event.execute_enabled_stages` drives multiple per-stage executions, stage order MUST be the
+  canonical relative order defined in "Stage execution order" and filtered by the stage enablement
+  matrix in `025_data_contracts.md`.
+
+#### States
+
+Closed set (v0.1):
+
+State requirements (normative):
+
+- States MUST be named as ASCII `lower_snake_case`.
+- States MUST be stable within the declared version.
+- Terminal states MUST be explicitly identified.
+
+| State                | Kind           | Description                                                                    | Invariants (normative)                                                                                        | Observable signals                                 |
+| -------------------- | -------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `not_started`        | `initial`      | No active or completed run bundle is present for this `run_id`.                | `runs/<run_id>/manifest.json` absent. `runs/.locks/<run_id>.lock` absent.                                     | Run bundle absent.                                 |
+| `lock_denied`        | `terminal`     | Invocation could not acquire the run lock and therefore performed no work.     | `RunLock.acquire(run_id)==false` and `--force-run-lock==false`. `runs/<run_id>/` MUST NOT be created/mutated. | Run bundle absent; lockfile present.               |
+| `locked_no_manifest` | `intermediate` | Run lock exists but the run manifest is absent (pre-init or crashed pre-init). | `runs/.locks/<run_id>.lock` present. `runs/<run_id>/manifest.json` absent.                                    | Lockfile present; run bundle absent or incomplete. |
+| `in_progress`        | `intermediate` | A run bundle exists and is being produced or resumed; terminal status absent.  | `runs/<run_id>/manifest.json` present and contract-valid. `manifest.status` absent.                           | Manifest present; `manifest.status` absent.        |
+| `completed_success`  | `terminal`     | Run bundle is complete with `manifest.status="success"`.                       | `manifest.status=="success"`. Lock SHOULD be released (lockfile absent unless crash).                         | `manifest.status="success"`.                       |
+| `completed_partial`  | `terminal`     | Run bundle is complete with `manifest.status="partial"`.                       | `manifest.status=="partial"`. Lock SHOULD be released (lockfile absent unless crash).                         | `manifest.status="partial"`.                       |
+| `completed_failed`   | `terminal`     | Run bundle is complete with `manifest.status="failed"`.                        | `manifest.status=="failed"`. Lock SHOULD be released (lockfile absent unless crash).                          | `manifest.status="failed"`.                        |
+
+#### Transition rules
+
+Guards MUST be explicit and deterministic.
+
+| From state           | Event                          | Guard (deterministic)                                                        | To state                                                       | Actions (entry/exit)                                                                                                                                                                                                                                                                                     | Outcome mapping                                                                                       | Observable transition evidence                                                                              |
+| -------------------- | ------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `not_started`        | `event.acquire_run_lock`       | `RunLock.acquire(run_id)==true`                                              | `locked_no_manifest`                                           | Atomically create `runs/.locks/<run_id>.lock` (or equivalent exclusive mechanism).                                                                                                                                                                                                                       | None.                                                                                                 | Lockfile exists at primary path.                                                                            |
+| `not_started`        | `event.acquire_run_lock`       | `RunLock.acquire(run_id)==false` AND `--force-run-lock==false`               | `lock_denied`                                                  | MUST exit fail-closed. MUST NOT create or mutate `runs/<run_id>/`.                                                                                                                                                                                                                                       | Invocation failure classified as `lock_acquisition_failed` for CLI/exit-code purposes (see ADR-0005). | Run bundle absent; deterministic error output; non-zero exit code.                                          |
+| `not_started`        | `event.force_acquire_run_lock` | `--force-run-lock==true` AND break-glass rename + retry acquisition succeeds | `locked_no_manifest`                                           | Apply break-glass procedure from "Port: `RunLock`" (rename to `.stale.<nnnn>`, retry acquire). Defer recording `break_glass_events[]` until `event.initialize_run_bundle` when a manifest exists.                                                                                                        | None.                                                                                                 | `.stale.<nnnn>` lockfile preserved; primary lockfile exists.                                                |
+| `not_started`        | `event.force_acquire_run_lock` | `--force-run-lock==true` AND break-glass rename + retry acquisition fails    | `lock_denied`                                                  | MUST exit fail-closed. MUST NOT create or mutate `runs/<run_id>/`.                                                                                                                                                                                                                                       | Invocation failure classified as `lock_acquisition_failed` for CLI/exit-code purposes (see ADR-0005). | Run bundle absent; deterministic error output; non-zero exit code.                                          |
+| `locked_no_manifest` | `event.initialize_run_bundle`  | Manifest is absent OR (manifest exists and is contract-valid)                | `in_progress`                                                  | Create `runs/<run_id>/` (if absent). Write or validate an initial contract-valid `manifest.json` skeleton (atomic replace). If break-glass was used, append `extensions.orchestrator.run_lock.break_glass_events[]` entry (atomic replace).                                                              | None.                                                                                                 | Manifest exists and validates; break-glass extension (if applicable).                                       |
+| `in_progress`        | `event.reconcile_run_bundle`   | Run lock is held by the current invocation                                   | `in_progress`                                                  | Perform deterministic reconciliation per ADR-0004 (including inconsistent stage artifact handling). MUST NOT execute any stage before this completes.                                                                                                                                                    | May append derived stage outcomes and/or mark downstream stages skipped per ADR-0004/ADR-0005.        | Deterministic stage outcome deltas; contract validation reports (when emitted).                             |
+| `in_progress`        | `event.execute_enabled_stages` | Run lock is held by the current invocation                                   | `in_progress`                                                  | Execute enabled stages in canonical order. For each enabled stage without a terminal outcome, drive the stage execution lifecycle machine to a terminal state and record the resulting stage outcome in the manifest (atomic replace).                                                                   | Stage outcomes appended in deterministic order (ADR-0005 / `025_data_contracts.md`).                  | `manifest.stage_outcomes[]` grows deterministically; published stage outputs appear under contracted paths. |
+| `in_progress`        | `event.finalize_run`           | All enabled stages have terminal outcomes recorded                           | `completed_success` / `completed_partial` / `completed_failed` | Compute `manifest.status` deterministically from stage outcomes (`025_data_contracts.md`). Enforce publish-scratch hygiene (`runs/<run_id>/.staging/` MUST be absent or empty). Persist `manifest.status` (atomic replace). Emit `logs/health.json.status` when enabled. Release run lock (best-effort). | Run status MUST equal derived `manifest.status`.                                                      | `manifest.status` set; lock released; `.staging/` absent/empty.                                             |
+| `completed_success`  | `event.finalize_run`           | `manifest.status=="success"`                                                 | `completed_success`                                            | Idempotent no-op (MUST NOT rewrite state-defining fields). MAY attempt best-effort lock release.                                                                                                                                                                                                         | None.                                                                                                 | No artifact diffs in state-defining fields.                                                                 |
+| `completed_partial`  | `event.finalize_run`           | `manifest.status=="partial"`                                                 | `completed_partial`                                            | Idempotent no-op (MUST NOT rewrite state-defining fields). MAY attempt best-effort lock release.                                                                                                                                                                                                         | None.                                                                                                 | No artifact diffs in state-defining fields.                                                                 |
+| `completed_failed`   | `event.finalize_run`           | `manifest.status=="failed"`                                                  | `completed_failed`                                             | Idempotent no-op (MUST NOT rewrite state-defining fields). MAY attempt best-effort lock release.                                                                                                                                                                                                         | None.                                                                                                 | No artifact diffs in state-defining fields.                                                                 |
+
+#### Entry actions and exit actions
+
+- **Entry actions**:
+
+  - `locked_no_manifest`:
+    - MUST NOT create or mutate `runs/<run_id>/` until the lock is acquired.
+  - `in_progress`:
+    - MUST run `event.reconcile_run_bundle` before executing any stage.
+  - `completed_*`:
+    - MUST release the run lock (best-effort) and MUST leave `.staging/` absent or empty.
+
+- **Exit actions**:
+
+  - `in_progress`:
+    - When exiting to a terminal state, MUST persist `manifest.status` using atomic replace.
+
+Requirements (normative):
+
+- Artifact writes that define or advance state MUST be atomic or fail closed.
+- Entry/exit actions MUST be idempotent with respect to the authoritative state representation.
+
+#### Illegal transitions
+
+- **Policy**: `fail_closed`
+- **Classification**:
+  - If the illegal transition is detected before `manifest.json` exists, the orchestrator MUST abort
+    the invocation with a deterministic error and MUST NOT create or mutate `runs/<run_id>/`.
+  - If the illegal transition is detected after `manifest.json` exists, the orchestrator MUST abort
+    further stage execution, MUST NOT publish additional stage outputs, and SHOULD proceed to
+    `event.finalize_run` if it can do so without violating atomicity/invariant requirements.
+- **Observable evidence**: deterministic non-zero exit code and a deterministic error message. When
+  `logs/health.json` is enabled and writable, implementations SHOULD additionally surface an
+  operator-visible health error.
+
+Requirements (normative):
+
+- Illegal transitions MUST NOT silently mutate state.
+- Illegal transitions MUST be observable.
+
+#### Inconsistent artifact state handling
+
+The orchestrator MUST handle the following inconsistent artifact cases deterministically during
+`event.reconcile_run_bundle` (authority: ADR-0004):
+
+- **Published outputs present but stage outcome missing**:
+  - MUST rerun contract validation for the published artifacts.
+  - If validation passes, MUST record the missing stage outcome as `status="success"`.
+  - If validation fails, MUST treat the stage as `status="failed", fail_mode="fail_closed"` and MUST
+    mark downstream enabled stages `status="skipped"` with an ADR-0005 stage-scoped reason code.
+- **Stage outcome recorded but publication invariants violated** (for example output present where
+  outputs must be absent, or required outputs missing where outputs must be present):
+  - MUST fail closed and MUST NOT continue stage execution. Prefer `reason_code="storage_io_error"`
+    when the inconsistency reflects filesystem corruption/partial publish, and prefer
+    `reason_code="input_missing"` when it reflects missing required inputs.
+- **Non-empty publish scratch after terminalization** (`runs/<run_id>/.staging/` non-empty when the
+  run is being finalized):
+  - MUST fail closed with `reason_code="storage_io_error"` (see `025_data_contracts.md` invariants).
+
+#### Observability
+
+- **Required artifacts**:
+  - `runs/<run_id>/manifest.json` (including `stage_outcomes[]` and terminal `manifest.status`)
+  - `runs/.locks/<run_id>.lock` and any preserved `runs/.locks/<run_id>.lock.stale.<nnnn>`
+  - `runs/<run_id>/logs/health.json` when `operability.health.emit_health_files=true`
+- **Human-readable logs**:
+  - Orchestrator log output MUST include deterministic error strings for lock denial and other
+    illegal transitions.
+- **Counters/metrics** (optional):
+  - Implementations MAY emit counters for reconciliation repairs and illegal transitions, but these
+    MUST NOT be the sole conformance-critical signal.
+
+Requirements (normative):
+
+- Observability signals MUST be deterministic for equivalent inputs.
+- If this state machine affects CI gating, it MUST map to deterministic artifacts consumed by
+  reporting and/or CI (manifest and, when enabled, health).
+
+#### Conformance tests
+
+Minimum conformance suite (normative):
+
+1. **Happy path**: acquire lock → initialize bundle → reconcile → execute enabled stages → finalize
+   to `completed_success`.
+1. **Each terminal failure mode**:
+   - `lock_denied` (existing lock; no force)
+   - `completed_failed` (at least one stage fails `fail_closed`)
+   - `completed_partial` (at least one stage fails `warn_and_skip`)
+1. **Illegal transition handling**: attempt `event.execute_enabled_stages` without owning the lock
+   and verify fail-closed behavior and observability.
+1. **Idempotency**: run `event.reconcile_run_bundle` twice on the same fixture and verify identical
+   stage outcomes and no duplicated side effects.
+1. **Determinism**: run the same fixture twice and assert identical state-related artifact content
+   (`manifest.json`, and `logs/health.json` when enabled), excluding fields explicitly permitted to
+   vary by their own contracts.
+
+Tests MUST be automatable in CI and SHOULD reuse or extend the run-lock fixture suite described in
+`100_test_strategy_ci.md`.
+
+### State machine: Stage execution lifecycle
+
+#### Purpose
+
+- **What it represents**: The per-stage lifecycle for producing a top-level pipeline stage outcome
+  (`lab_provider`, `runner`, `telemetry`, `normalization`, `validation`, `detection`, `scoring`,
+  `reporting`, `signing`) within a run bundle. It constrains how a stage moves from "enabled and not
+  yet executed" to a terminal stage outcome while enforcing publish-gate invariants (staged →
+  validated → atomically promoted or absent).
+- **Scope**: stage
+- **Machine ID**: `stage-execution-lifecycle` (see ADR-0001 `id_slug_v1`)
+- **Version**: `0.1.0`
+
+#### Lifecycle authority references
+
+This state machine overlays and reuses lifecycle semantics defined elsewhere:
+
+- [ADR-0004] (stage completion semantics; reconciliation rules)
+- [ADR-0005] (stage outcome schema; failure classification; run-status derivation)
+- `025_data_contracts.md` (stage enablement and required contract outputs)
+- This document:
+  - "Port: `PublishGate`" (stage publication rules and invariants)
+  - "Stage IO boundaries" (allowed output roots by stage owner)
+
+If this state machine definition conflicts with the linked lifecycle authority, the linked lifecycle
+authority is authoritative unless this document explicitly states it is overriding those semantics.
+
+#### Entities and identifiers
+
+- **Machine instance key**: `(run_id, stage_id)`
+- **Correlation identifiers**:
+  - Stage outcome record: `runs/<run_id>/manifest.json.stage_outcomes[]` entry where
+    `stage==stage_id`
+  - Stage publish scratch: `runs/<run_id>/.staging/<stage_id>/`
+  - Stage contracted outputs: artifact paths bound to `stage_owner==stage_id` in
+    `contract_registry.json`
+
+#### Authoritative state representation
+
+- **Source of truth**:
+  - Stage outcome record in `runs/<run_id>/manifest.json` (authoritative for terminal states), and
+  - presence/absence of the stage publish scratch directory for the `running` intermediate state.
+- **Derivation rule** (deterministic):
+  - If a stage outcome entry exists for `stage_id`:
+    - if `status=="success"`, state is `succeeded`
+    - else if `status=="failed"` and `fail_mode=="fail_closed"`, state is `failed_fail_closed`
+    - else if `status=="failed"` and `fail_mode=="warn_and_skip"`, state is `failed_warn_and_skip`
+    - else if `status=="skipped"`, state is `skipped`
+  - Else if `runs/<run_id>/.staging/<stage_id>/` exists, state is `running`
+  - Else state is `pending`
+- **Persistence requirement**:
+  - MUST persist: yes (terminal state)
+  - MUST be persisted in: `runs/<run_id>/manifest.json.stage_outcomes[]` (atomic replace), with
+    `manifest.status` derived only when the run finalizes.
+
+#### Events / triggers
+
+- `event.stage_begin`: The orchestrator begins executing `stage_id` and opens a publish session via
+  `PublishGate.begin_stage(stage_id)`.
+- `event.stage_complete_success`: The stage completes and publishes outputs successfully
+  (`StagePublishSession.finalize(...)` succeeds) and the orchestrator records `status="success"`.
+- `event.stage_complete_failed_fail_closed`: The stage completes in a fail-closed failure mode and
+  the orchestrator records `status="failed", fail_mode="fail_closed"` after aborting publication.
+- `event.stage_complete_failed_warn_and_skip`: The stage completes in warn-and-skip mode and the
+  orchestrator records `status="failed", fail_mode="warn_and_skip"` after successful publication.
+- `event.stage_complete_skipped`: The orchestrator intentionally short-circuits the stage (enabled
+  but not executed) and records `status="skipped"` with a stage-scoped `reason_code`.
+- `event.reconcile_outputs_without_outcome`: Reconciliation detects published outputs for `stage_id`
+  but no stage outcome record exists.
+
+Event requirements (normative):
+
+- Events MUST be named with ASCII `lower_snake_case` after the `event.` prefix.
+- When multiple stage machines are driven within a run, the orchestrator MUST process stages in the
+  canonical order defined in "Stage execution order". Within a stage, if multiple substage outcomes
+  are emitted, ordering MUST follow ADR-0005 / `025_data_contracts.md`.
+
+#### States
+
+Closed set (v0.1):
+
+| State                  | Kind           | Description                                               | Invariants (normative)                                                                                                               | Observable signals                      |
+| ---------------------- | -------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| `pending`              | `initial`      | Stage is enabled for the run but has no outcome.          | No top-level stage outcome record for `stage_id`. No published outputs for `stage_id` are required to exist.                         | Stage outcome absent.                   |
+| `running`              | `intermediate` | Stage is executing and has an active publish session.     | `runs/<run_id>/.staging/<stage_id>/` exists. No top-level stage outcome record for `stage_id`.                                       | Staging directory exists.               |
+| `succeeded`            | `terminal`     | Stage completed successfully and published outputs.       | Stage outcome `status="success"`. Staging directory absent. Outputs MUST be published under allowed roots.                           | Stage outcome present; outputs present. |
+| `failed_fail_closed`   | `terminal`     | Stage failed in fail-closed mode; outputs must be absent. | Stage outcome `status="failed", fail_mode="fail_closed"`. Staging directory absent. Published outputs for `stage_id` MUST be absent. | Stage outcome present; outputs absent.  |
+| `failed_warn_and_skip` | `terminal`     | Stage failed but published outputs (warn-and-skip).       | Stage outcome `status="failed", fail_mode="warn_and_skip"`. Staging directory absent. Outputs MUST be published under allowed roots. | Stage outcome present; outputs present. |
+| `skipped`              | `terminal`     | Stage was enabled but intentionally not executed.         | Stage outcome `status="skipped"`. Staging directory absent. Published outputs for `stage_id` MUST be absent.                         | Stage outcome present; outputs absent.  |
+
+#### Transition rules
+
+| From state | Event                                       | Guard (deterministic)                                                                                    | To state               | Actions (entry/exit)                                                                                                                                                                                                                                                                  | Outcome mapping                                                                                                                         | Observable transition evidence                                    |
+| ---------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `pending`  | `event.stage_begin`                         | Stage is enabled AND no terminal stage outcome record exists for `stage_id`                              | `running`              | Open `PublishGate.begin_stage(stage_id)`; stage writes only under `runs/<run_id>/.staging/<stage_id>/`.                                                                                                                                                                               | None.                                                                                                                                   | Staging directory exists.                                         |
+| `pending`  | `event.stage_complete_skipped`              | Stage is enabled AND stage not executed (short-circuited)                                                | `skipped`              | Record stage outcome `status="skipped"` with a stage-scoped `reason_code` per ADR-0005. MUST NOT publish outputs. MUST ensure staging directory absent.                                                                                                                               | Append stage outcome record in manifest (and health when enabled).                                                                      | Stage outcome present; outputs absent.                            |
+| `running`  | `event.stage_complete_success`              | `StagePublishSession.finalize(...)` succeeds AND required outputs are present per expected outputs rules | `succeeded`            | Finalize publication (validate, then atomically promote). Record stage outcome `status="success"` (atomic replace of manifest). MUST remove staging directory (or make empty) before returning.                                                                                       | Append stage outcome record in manifest (and health when enabled).                                                                      | Outputs present at contracted paths; stage outcome present.       |
+| `running`  | `event.stage_complete_failed_fail_closed`   | Stage failure classified as `fail_closed`                                                                | `failed_fail_closed`   | Abort publication (`StagePublishSession.abort()`), ensuring no staged outputs are promoted. Record stage outcome `status="failed", fail_mode="fail_closed", reason_code=...` (atomic replace). MUST remove staging directory (or make empty) before returning.                        | Append stage outcome record in manifest (and health when enabled). Downstream enabled stages MUST be marked skipped by the run machine. | Stage outcome present; outputs absent.                            |
+| `running`  | `event.stage_complete_failed_warn_and_skip` | Stage failure classified as `warn_and_skip` AND `StagePublishSession.finalize(...)` succeeds             | `failed_warn_and_skip` | Finalize publication (validate, then atomically promote). Record stage outcome `status="failed", fail_mode="warn_and_skip", reason_code=...` (atomic replace). MUST remove staging directory (or make empty) before returning.                                                        | Append stage outcome record in manifest (and health when enabled).                                                                      | Stage outcome present; outputs present.                           |
+| `pending`  | `event.reconcile_outputs_without_outcome`   | Published outputs for `stage_id` are present AND contract validation passes                              | `succeeded`            | Rerun contract validation for the published artifacts. Record missing stage outcome as `status="success"` (atomic replace).                                                                                                                                                           | Append stage outcome record in manifest (and health when enabled).                                                                      | Stage outcome present; validation evidence (if emitted).          |
+| `pending`  | `event.reconcile_outputs_without_outcome`   | Published outputs for `stage_id` are present AND contract validation fails                               | `failed_fail_closed`   | Record stage outcome `status="failed", fail_mode="fail_closed"`. Prefer `reason_code="contract_validation_failed"` when schema/content invalid; prefer `reason_code="storage_io_error"` when unreadable/corrupt. Downstream enabled stages MUST be marked skipped by the run machine. | Append stage outcome record in manifest (and health when enabled).                                                                      | Stage outcome present; deterministic validation failure evidence. |
+
+#### Entry actions and exit actions
+
+- **Entry actions**:
+
+  - `running`:
+    - MUST write all stage outputs into the stage's publish scratch directory and MUST NOT mutate
+      published output paths directly.
+  - `succeeded` / `failed_warn_and_skip`:
+    - MUST ensure that any promoted outputs lie within the stage's allowed output roots and that
+      contract-backed outputs validate before promotion.
+  - `failed_fail_closed` / `skipped`:
+    - MUST ensure published outputs for `stage_id` are absent.
+
+- **Exit actions**:
+
+  - `running`:
+    - MUST either `finalize()` or `abort()` the publish session and MUST ensure the staging
+      directory is removed or empty.
+
+Requirements (normative):
+
+- Artifact writes that define or advance state MUST be atomic or fail closed.
+- Entry/exit actions MUST be idempotent with respect to the authoritative state representation.
+
+#### Illegal transitions
+
+- **Policy**: `fail_closed`
+- **Classification**:
+  - Implementations MUST NOT execute a stage when a terminal stage outcome record already exists for
+    that `stage_id` in the current run bundle.
+  - If an illegal transition occurs while a stage is `running`, the stage MUST be recorded as
+    `status="failed", fail_mode="fail_closed"` with a deterministic `reason_code` (prefer
+    `storage_io_error` for publication/invariant violations).
+- **Observable evidence**: a terminal stage outcome record reflecting the failure plus deterministic
+  publish-gate/validator error evidence (when emitted).
+
+Requirements (normative):
+
+- Illegal transitions MUST NOT silently mutate state.
+- Illegal transitions MUST be observable.
+
+#### Inconsistent artifact state handling
+
+During run reconciliation (authority: ADR-0004) and during stage completion, implementations MUST
+handle these cases deterministically:
+
+- **Outcome implies outputs present but outputs missing**:
+  - If stage outcome is `succeeded` or `failed_warn_and_skip` but required published outputs are
+    absent, the run MUST fail closed. Prefer `reason_code="storage_io_error"` when the path existed
+    but is corrupt/unreadable; prefer `reason_code="input_missing"` when the artifact is missing.
+- **Outcome implies outputs absent but outputs present**:
+  - If stage outcome is `failed_fail_closed` or `skipped` but published outputs are present, the run
+    MUST fail closed with `reason_code="storage_io_error"`.
+- **Staging directory present after terminalization**:
+  - If `runs/<run_id>/.staging/<stage_id>/` remains non-empty after a terminal outcome is recorded,
+    the run MUST fail closed with `reason_code="storage_io_error"`.
+
+#### Observability
+
+- **Required artifacts**:
+  - Stage outcome record in `runs/<run_id>/manifest.json.stage_outcomes[]`
+  - `runs/<run_id>/.staging/<stage_id>/` (transient; presence/absence is observable during execution
+    and reconciliation)
+  - Published stage outputs under run-relative contracted paths (as bound in
+    `contract_registry.json`)
+- **Structured logs** (optional):
+  - Contract validation reports and publish-gate errors, when emitted, MUST be deterministic for
+    equivalent inputs.
+- **Human-readable logs**:
+  - Stage wrappers SHOULD log lifecycle transitions, but logs MUST NOT be the sole conformance
+    signal for CI.
+
+Requirements (normative):
+
+- Observability signals MUST be deterministic for equivalent inputs.
+- Stage lifecycle state MUST be inferable from `manifest.json` for terminal states.
+
+#### Conformance tests
+
+Minimum conformance suite (normative):
+
+1. **Happy path**: `pending` → `running` → `succeeded` with deterministic stage outcome and
+   published outputs.
+1. **Each terminal failure mode**:
+   - `failed_fail_closed` (no outputs published)
+   - `failed_warn_and_skip` (outputs published)
+   - `skipped` (no outputs published)
+1. **Illegal transition handling**: attempt to begin a stage with an existing terminal outcome and
+   verify fail-closed behavior and observability.
+1. **Idempotency**: simulate crash after outputs are promoted but before the stage outcome is
+   recorded; then run reconciliation and verify `event.reconcile_outputs_without_outcome` records a
+   single `succeeded` outcome without duplicating outputs.
+1. **Determinism**: run the same fixture twice and assert identical stage outcome records and
+   published artifact content for state-related outputs (excluding fields explicitly permitted to
+   vary by their own contracts).
+
+Tests MUST be automatable in CI and SHOULD reuse publish-gate conformance fixtures and the
+stage-required-output matrix fixtures described in `100_test_strategy_ci.md`.
 
 ## Cross-cutting patterns (v0.1; normative)
 

@@ -532,7 +532,7 @@ runs/<run_id>/
     principal_context.json        # optional (policy-controlled)
 
   raw_parquet/                    # analytics tier: structured raw telemetry tables (Parquet)
-                                  # NOTE: excluded from default exports and signing scope
+  
   raw/                            # evidence tier: source-native payloads/blobs (optional; policy-controlled)
 
   normalized/                     # normalized OCSF event store + mapping coverage

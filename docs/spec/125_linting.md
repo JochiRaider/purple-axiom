@@ -98,6 +98,66 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted 
 - **Finding**: One lint issue (schema, semantics, reference, safety) produced by a rule.
 - **Lint report**: Machine-readable output emitted by the lint engine, conforming to this spec.
 
+## Semantic validation depth rubric
+
+This section is non-normative.
+
+To make “backend support” and “semantic validation” claims concrete and comparable, this spec uses a
+4-level semantic validation depth rubric.
+
+The levels are cumulative: Level N includes the behaviors of all lower levels.
+
+- Level 0: Parse only
+
+  - Decode/parse succeeds or fails deterministically (no crashes).
+  - Only syntax/parse failures are reported; no schema or semantic checks are required.
+
+- Level 1: Structural validity
+
+  - Schema validation (when a schema exists for the target kind) and required metadata checks for
+    the target kind (for example required identifiers, version fields, required top-level keys).
+
+- Level 2: Semantic IR validity
+
+  - The tool produces and validates a canonical intermediate representation (IR) and enforces
+    deterministic normal forms and reference resolution rules for that IR.
+  - Example: Sigma rule inputs are parsed into the canonical `sigma_ast_v1` form and undergo
+    deterministic reference resolution (`ref`, `x of`, correlation rule reference resolution).
+
+- Level 3: Backend- and version-aware validity with guardrails
+
+  - Validation includes backend capability gating using an effective capability profile (backend
+    defaults plus any config overrides) and any version pins that affect semantics (for example
+    pinned OCSF schema version and regex dialect/engine constraints).
+  - Validation enforces compile-time safety/cost guardrails that do not depend on runtime telemetry
+    values (for example regex policy limits and predicate/IR complexity budgets).
+  - Rejections are classifiable into stable reason codes suitable for CI and reporting.
+
+## Validation depth declarations
+
+Every lint target kind defined in this document MUST declare a supported semantic validation depth
+level (0–3).
+
+Every backend adapter id that can be selected for Sigma validation (`pa lint --backend <backend_id>`
+or `detection.sigma.bridge.backend`) MUST declare a supported semantic validation depth level (0–3).
+
+Until a machine-readable manifest exists, declarations MUST be maintained as a static table in this
+document.
+
+### Declared validation depth matrix (v0.1)
+
+| Surface               | Identifier                 | Declared depth | Notes                                                             |
+| --------------------- | -------------------------- | -------------: | ----------------------------------------------------------------- |
+| Lint target kind      | range-config               |              2 | Schema + reference resolution (redaction policy)                  |
+| Lint target kind      | redaction-policy           |              2 | JSONPath parsing via `pa.jsonpath.v1`                             |
+| Lint target kind      | scenario                   |              2 | Schema + semantic checks; references when available               |
+| Lint target kind      | criteria-pack              |              2 | Operator semantics + canonical ordering                           |
+| Lint target kind      | plan-draft                 |              2 | Schema + semantic checks; references when available               |
+| Lint target kind      | sigma-rule (baseline)      |              2 | `sigma_ast_v1` parse + deterministic ref resolution               |
+| Lint target kind      | sigma-rule (backend-aware) |              3 | Capability gate + safety/cost guardrails                          |
+| Lint target kind      | report-html                |              2 | Policy checks (no remote assets)                                  |
+| Sigma backend adapter | native_pcre2               |              3 | Capability gate + pinned versions + semantic validator guardrails |
+
 ## Authority and precedence
 
 - Parsing and schema-validation invariants in this spec are intended to align with existing
@@ -707,11 +767,12 @@ Sigma parsing and resolution requirements (normative):
     configured pack scope) using the exact-match priority order `id` → `name` → `title`
     (compatibility fallback). Missing or ambiguous references MUST be reported.
 
-- If a backend profile is selected (for example via resolved config
-  `detection.sigma.bridge.backend`), the linter MUST run backend-profile validation against the
-  parsed `sigma_ast_v1` using configured backend restrictions (when present). Findings SHOULD map to
-  the same non-executable `reason_code` values used by bridge compilation (see
-  `065_sigma_to_ocsf_bridge.md`, "Non-executable classification mapping").
+- - If a backend profile is selected (for example via resolved config
+    `detection.sigma.bridge.backend`), the linter MUST run backend-profile validation against the
+    parsed `sigma_ast_v1` using configured backend restrictions (capability profile allowlists and
+    regex safety limits) when present. Findings SHOULD map to the same non-executable `reason_code`
+    values used by bridge compilation (see `065_sigma_to_ocsf_bridge.md`, "Non-executable
+    classification mapping").
 
 ### Target kind `report-html`
 

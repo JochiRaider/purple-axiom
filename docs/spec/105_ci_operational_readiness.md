@@ -168,6 +168,95 @@ Fail-closed policy (normative):
 - Canonical JSON nondeterminism (byte mismatch across repeated canonicalization) MUST produce an
   `error` finding with `reason_code="fixture_registry_nondeterministic"` and MUST fail the gate.
 
+#### `content.sigma.semantic` gate (Sigma semantic validators)
+
+Gate ID (v0.1): `content.sigma.semantic`
+
+Required outputs (workspace-root):
+
+- `artifacts/findings/content.sigma.semantic.findings.v1.json`
+
+Purpose (normative):
+
+- Provide deterministic, offline Sigma rule semantic validation that catches authoring hazards early
+  (before bridge compilation and Run CI execution).
+
+Inputs (normative):
+
+- The effective Sigma ruleset discovered from `detection.sigma.rule_paths[]` using the deterministic
+  rule loading procedure defined in `060_detection_sigma.md` ("Deterministic rule loading
+  requirements").
+
+Minimum validator set (v0.1; normative):
+
+1. Control characters (`rule_id="sigma.semantic.control_characters"`)
+
+   - Severity: `error`
+   - Emit when a Sigma YAML source file contains any disallowed ASCII control byte:
+     - `0x00-0x08`, `0x0B`, `0x0C`, `0x0E-0x1F`, or `0x7F`
+     - (Tab `0x09`, LF `0x0A`, and CR `0x0D` are permitted by this check.)
+   - Emit exactly one finding per offending file.
+   - Findings MUST use:
+     - `category="semantic"`
+     - `reason_domain="ci_gate_findings"`
+     - `reason_code="control_characters"`
+     - `subject.kind="sigma_rule_file"`
+     - `subject.stable_id=<ruleset_path>` (as defined in `060_detection_sigma.md`)
+     - `location.file_path=<ruleset_path>`
+
+1. Invalid modifier combinations (`rule_id="sigma.semantic.invalid_modifier_combinations"`)
+
+   - Severity: `error`
+   - Applies to selector field-reference keys inside the Sigma `detection:` map (excluding
+     `detection.condition`).
+   - Define the modifier chain for a selector key `k` as:
+     - `parts = split(k, "|")` (literal `|`, no escaping; preserves order)
+     - `field_name = parts[0]`
+     - `modifiers = parts[1..]` (may be empty)
+   - Emit an error finding for any selector key where any of the following hold:
+     - More than one "primary match modifier" is present in `modifiers`, where
+       `primary_match_modifiers = {"contains","startswith","endswith","re"}`.
+     - The modifier `all` is present and is not the last modifier.
+     - Any modifier token is empty (`""`).
+   - Emit exactly one finding per offending selector key per rule.
+   - Findings MUST use:
+     - `category="semantic"`
+     - `reason_domain="ci_gate_findings"`
+     - `reason_code="invalid_modifier_combinations"`
+     - `subject.kind="sigma_rule"`
+     - `subject.stable_id=<sigma_rule_id>` (Sigma `id`)
+     - `location.file_path=<ruleset_path>` when available
+
+1. Wildcards instead of modifiers (`rule_id="sigma.semantic.wildcards_instead_of_modifiers"`)
+
+   - Severity: `warn`
+   - Emit when a selector field-reference key has no explicit modifiers (does not contain `|`) but
+     any associated scalar string value begins with `*` or ends with `*` (example: `*foo*`, `foo*`,
+     `*foo`).
+   - Emit at most one finding per selector key per rule (summarize multiple offending values in a
+     deterministic way if desired).
+   - Findings MUST use:
+     - `category="semantic"`
+     - `reason_domain="ci_gate_findings"`
+     - `reason_code="wildcards_instead_of_modifiers"`
+     - `subject.kind="sigma_rule"`
+     - `subject.stable_id=<sigma_rule_id>` (Sigma `id`)
+     - `location.file_path=<ruleset_path>` when available
+
+Determinism requirements (normative):
+
+- The gate MUST evaluate rule files in deterministic order:
+  - ascending `ruleset_path` (Contract Spine bytewise UTF-8 lexical ordering).
+- When iterating selector keys within a rule, keys MUST be processed in deterministic order:
+  - ascending UTF-8 byte order of the exact key string.
+- Emitted findings MUST satisfy the `ci_gate_findings` ordering and fingerprinting rules (see this
+  document, "CI gate findings artifacts (required)").
+
+Verification hooks (normative):
+
+- Content CI fixtures MUST cover (at minimum) the three minimum validator cases declared in
+  `100_test_strategy_ci.md` under `tests/fixtures/validators/sigma_semantic/`.
+
 #### `content.bundle.integrity` gate (offline bundle validation)
 
 Content CI MUST build at least one Detection Content Release (detection content bundle) and MUST
@@ -492,9 +581,17 @@ Canonical bytes:
 
 Findings ordering:
 
+- Reason domain pairing (normative):
+
+  - Each finding MUST include `reason_domain` and `reason_code` as a sibling pair.
+  - For `ci_gate_findings` artifacts, `reason_domain` MUST equal the contract id `ci_gate_findings`.
+  - `reason_domain` MUST be present iff `reason_code` is present. (Since `reason_code` is required
+    by this contract, `reason_domain` is required for all findings.)
+
 - Before writing the artifact, producers MUST sort the `findings[]` array ascending by:
 
   1. `severity_rank` (`fatal=0`, `error=1`, `warn=2`, `info=3`)
+  1. `reason_domain` (UTF-8 byte order, no locale)
   1. `reason_code` (UTF-8 byte order, no locale)
   1. `subject.kind`
   1. `subject.stable_id`

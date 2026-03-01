@@ -820,6 +820,11 @@ Each element of `views[]` MUST have:
     patterns included in the view.
   - Each entry MUST be a valid `glob_v1` pattern over dataset-release-root relative candidate paths
     (fail closed on invalid patterns).
+  - Implementations MUST validate `includes[]` entries by invoking the canonical `glob_v1` parser
+    module (shared with contract registry `bindings[].artifact_glob` validation) and MUST NOT accept
+    a divergent glob dialect here.
+  - If any `includes[]` entry fails to parse under `glob_v1`, the dataset manifest MUST be treated
+    as invalid and the dataset build MUST fail closed.
   - Each entry MUST obey the same path constraints as `root_path` (no leading `/`, no `..`, no `//`,
     no `\`).
 - `excludes[]`: array of strings (optional)
@@ -827,6 +832,11 @@ Each element of `views[]` MUST have:
     patterns excluded from the view.
   - Each entry MUST be a valid `glob_v1` pattern over dataset-release-root relative candidate paths
     (fail closed on invalid patterns).
+  - Implementations MUST validate `excludes[]` entries by invoking the canonical `glob_v1` parser
+    module (shared with contract registry `bindings[].artifact_glob` validation) and MUST NOT accept
+    a divergent glob dialect here.
+  - If any `excludes[]` entry fails to parse under `glob_v1`, the dataset manifest MUST be treated
+    as invalid and the dataset build MUST fail closed.
   - Each entry MUST obey the same path constraints as `root_path` (no leading `/`, no `..`, no `//`,
     no `\`).
 

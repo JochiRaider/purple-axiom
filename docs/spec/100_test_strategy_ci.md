@@ -443,11 +443,27 @@ Index entry format (normative):
 - **`validators` (Sigma semantic validators)**
 
   - Canonical fixture roots:
+
     - `tests/fixtures/validators/sigma_semantic/<case_id>/`
+
+  - Gate mapping (normative):
+
+    - These fixtures MUST be exercised by the REQUIRED Content CI gate `content.sigma.semantic`.
+
   - Minimum fixture sets (normative):
+
     - `control_characters_error`
     - `invalid_modifier_combinations_error`
     - `wildcards_instead_of_modifiers_warn`
+
+  - Minimum expected `ci_gate_findings` outputs (normative):
+
+    - `control_characters_error`: at least one finding with `severity="error"` and
+      `reason_code="control_characters"`.
+    - `invalid_modifier_combinations_error`: at least one finding with `severity="error"` and
+      `reason_code="invalid_modifier_combinations"`.
+    - `wildcards_instead_of_modifiers_warn`: at least one finding with `severity="warn"` and
+      `reason_code="wildcards_instead_of_modifiers"`.
 
 - **`scoring`**
 
@@ -577,34 +593,115 @@ Additional required vectors (normative):
 Glob expansion and matching is used by both producers (publish-gate `expected_outputs[]` discovery)
 and consumers (contract-backed artifact discovery). To ensure multi-language implementations match,
 tests MUST lock glob semantics to `glob_v1` as defined in `025_data_contracts.md` ("Glob semantics
-(glob_v1)").
+(glob_v1) (normative)").
 
 Fixture set (normative):
 
 - `glob_v1_vectors` (semantic lock)
 
-  - Provide `tests/fixtures/glob_v1/vectors.json` as canonical JSON with:
-    - `glob_version` (string; MUST equal `glob_v1`)
-    - `cases[]`: array of objects, each containing:
-      - `pattern` (string; run-relative POSIX glob)
-      - `candidates[]` (array of run-relative POSIX paths)
-      - `matches[]` (array of expected matches)
-        - `matches[]` MUST equal the subset of `candidates[]` that match `pattern` under `glob_v1`.
-        - `matches[]` MUST be sorted by UTF-8 byte order ascending (no locale).
-  - The case set MUST include, at minimum:
-    - Each distinct wildcard form currently present in `docs/contracts/contract_registry.json`
-      `bindings[].artifact_glob` (for example `bridge/compiled_plans/*.plan.json` and
-      `runner/actions/*/executor.json`).
-    - At least one recursive `**` case (for example `runner/**/executor.json`).
-    - At least one `?` case and at least one `[...]` case.
-  - Each case's `candidates[]` MUST include both positive and negative examples that enforce:
-    - `*` does not match `/`,
-    - matching is case-sensitive (example: `Executor.json` MUST NOT match `executor.json`), and
-    - `**` matches zero or more path segments.
+  - Provide `tests/fixtures/glob_v1/vectors.json` as RFC 8785 canonical JSON bytes (JCS), UTF-8, no
+    BOM, conforming to the shared parser-module vectors schema `pa.parser_vectors.v1` (see "Parser
+    modules / Vector file schema") with module identity:
+
+    - `parser_vectors_version` (string; MUST equal `pa.parser_vectors.v1`)
+    - `module_token` (string; MUST equal `pa.glob.v1`)
+    - `module_id` (string; MUST equal `glob`)
+    - `module_version` (string; MUST equal `v1`)
+
+  - Each `cases[]` entry MUST follow the `pa.parser_vectors.v1` case contract, with the following
+    `glob_v1` requirements:
+
+    - `case_id` (string; stable identifier, `id_slug_v1`)
+
+    - `input_kind` (MUST equal `utf8_text`)
+
+    - `input.utf8` (string; the `glob_v1` pattern)
+
+    - If `expect_ok=true`:
+
+      - `expected_ast` (JSON value; MUST exactly equal the canonical `glob_v1` AST defined in
+        `025_data_contracts.md`, "Glob semantics (glob_v1) (normative)")
+
+      - `expected_rendered` MUST be omitted (no canonical rendered form is defined for `glob_v1` in
+        v0.1).
+
+      - Additional matching fields (glob-specific; normative):
+
+        - `candidates[]`: array of strings, candidate paths
+          - Each entry MUST be a valid run-relative POSIX path under the same constraints as
+            `glob_v1` patterns.
+        - `matches[]`: array of strings, expected matched candidates
+          - `matches[]` MUST equal the subset of `candidates[]` that match `input.utf8` under
+            `glob_v1`.
+          - `matches[]` MUST be sorted lexicographically by UTF-8 byte order ascending (no locale).
+
+    - If `expect_ok=false`:
+
+      - `expected_errors[]` MUST contain exactly one entry.
+
+      - The single error MUST be a `glob_v1` parser-module error as defined in
+        `025_data_contracts.md` ("Glob semantics (glob_v1) (normative)"), including:
+
+        - `error_code` (string; lower_snake_case; one of the `glob_v1` error codes)
+        - `message_prefix` (string; MUST match the parser error message prefix exactly)
+        - `location.byte_offset` (integer; 0-indexed byte offset into the UTF-8 `input.utf8`)
+
+      - `expected_rendered`, `candidates[]`, and `matches[]` MUST be omitted.
+
+  - Determinism (normative):
+
+    - `cases[]` MUST be sorted by `case_id` ascending using UTF-8 byte order (no locale).
+    - Within a case, `matches[]` ordering is normative (see above).
+
+  - Minimum case coverage (normative):
+
+    - The case set MUST include, at minimum:
+
+      - Each distinct wildcard form currently present in:
+
+        - `docs/contracts/contract_registry.json` `bindings[].artifact_glob`, and
+        - `docs/contracts/workspace_contract_registry.json` `bindings[].artifact_glob`.
+
+      - Each distinct metacharacter form:
+
+        - `*`, `?`, character classes (`[abc]`), negated classes (`[!abc]`), and ranges (`[a-z]`).
+
+      - At least one recursive `**` case (for example `runner/**/executor.json`), including a case
+        where `**` matches zero path segments.
+
+      - At least one pattern that matches zero candidates (empty `matches[]`).
+
+      - Edge cases around `/` boundaries that enforce:
+
+        - `*` does not match `/`,
+        - `?` does not match `/`,
+        - matching is case-sensitive (example: `Executor.json` MUST NOT match `executor.json`).
+
+      - Invalid-pattern cases (one case per error code; `expect_ok=false`) covering the full
+        `glob_v1` error vocabulary:
+
+        - `invalid_path` (at least: leading `/`, `//`, trailing `/`, and `..` segment)
+        - `contains_nul`
+        - `invalid_escape` (any backslash in the pattern; no escape syntax)
+        - `unterminated_class` (`[` with no closing `]`)
+        - `empty_class` (`[]` and `[!]`)
+        - `invalid_range` (for example `[z-a]`)
+        - `invalid_globstar` (invalid `**` adjacency, for example `a**/b`)
+
   - Verification (normative):
+
     - The reference reader SDK (`pa.reader.v1`) and reference publisher SDK (`pa.publisher.v1`) test
       suites MUST include this fixture and MUST fail if any case does not match.
-    - Any other first-party implementation of `glob_v1` MUST also include this fixture in CI.
+    - Any other first-party implementation of `pa.glob.v1` MUST also include this fixture in CI.
+    - For each case:
+      - if `expect_ok=true`:
+        - parse `input.utf8` as `glob_v1` and compare the resulting AST to `expected_ast` by
+          canonical JSON bytes, and
+        - compute matches by applying `glob_v1` matching to `candidates[]` and compare to
+          `matches[]`.
+      - if `expect_ok=false`:
+        - parse MUST fail closed and the resulting parser-module error MUST match
+          `expected_errors[]` exactly.
 
 ### Parser modules
 

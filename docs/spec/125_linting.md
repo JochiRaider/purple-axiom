@@ -448,56 +448,57 @@ Given a `lint.json` report:
 
 1. `findings[]` mapping rules:
 
-   - When `lint.json.summary.status == "tool_error"`:
+- When `lint.json.summary.status == "tool_error"`:
 
-     - The findings artifact MUST contain exactly one finding with:
-       - `severity = "fatal"`
-       - `category = "internal"`
-       - `reason_code = "lint_tool_error"`
-       - `rule_id = "lint.tool_error"`
-       - `subject.kind = "lint_report"`
-       - `subject.stable_id = "lint.json"`
-       - `location.file_path = "lint.json"`
-       - `message` MUST be a stable, non-volatile explanation (for example
-         `"Lint failed due to an internal tool error; see CI logs for details."`).
+  - The findings artifact MUST contain exactly one finding with:
 
-   - Otherwise, for each element `f` of `lint.json.findings[]`, emit exactly one corresponding
-     finding `g` in the gate findings artifact:
+    - `severity = "fatal"`
+    - `category = "internal"`
+    - `reason_domain = "ci_gate_findings"`
+    - `reason_code = "lint_tool_error"`
+    - `rule_id = "lint.tool_error"`
+    - `subject.kind = "lint_report"`
+    - `subject.stable_id = "lint.json"`
+    - `location.file_path = "lint.json"`
+    - `message` MUST be a stable, non-volatile explanation (for example
+      `"Lint failed due to an internal tool error; see CI logs for details."`).
 
-     - `g.severity` MUST map as:
+  - Otherwise, for each element `f` of `lint.json.findings[]`, emit exactly one corresponding
+    finding `g` in the gate findings artifact:
 
-       - `error` → `error`
-       - `warning` → `warn`
-       - `info` → `info`
+    - `g.severity` MUST map as:
 
-     - `g.category` MUST be:
+      - `error` → `error`
+      - `warning` → `warn`
+      - `info` → `info`
 
-       - `syntax` when `f.rule_id == "lint-core-parse-error"` or `f.rule_id` ends with
-         `"-schema-invalid"`
-       - otherwise `semantic`
+    - `g.category` MUST be:
 
-     - `g.reason_code` MUST be:
+      - `syntax` when `f.rule_id == "lint-core-parse-error"` or `f.rule_id` ends with
+        `"-schema-invalid"`
+      - otherwise `semantic`
 
-       - `lint_parse_error` when `f.rule_id == "lint-core-parse-error"`
-       - `lint_schema_invalid` when `f.rule_id` ends with `"-schema-invalid"`
-       - otherwise `lint_rule_violation`
+    - `g.reason_code` MUST be:
 
-     - `g.rule_id` MUST be copied from `f.rule_id`.
+      - `lint_parse_error` when `f.rule_id == "lint-core-parse-error"`
+      - `lint_schema_invalid` when `f.rule_id` ends with `"-schema-invalid"`
+      - otherwise `lint_rule_violation`
 
-     - `g.message` MUST be copied from `f.message`.
+    - `g.rule_id` MUST be copied from `f.rule_id`.
 
-     - `g.subject.kind` MUST be `"workspace_file"`.
+    - `g.message` MUST be copied from `f.message`.
 
-     - `g.subject.stable_id` MUST equal `f.file` when present; otherwise it MUST equal
-       `"(unknown)"`.
+    - `g.subject.kind` MUST be `"workspace_file"`.
 
-     - `g.location.file_path` MUST equal `f.file` when present.
+    - `g.subject.stable_id` MUST equal `f.file` when present; otherwise it MUST equal `"(unknown)"`.
 
-     - `g.evidence.details` SHOULD copy `f.details` when present.
+    - `g.location.file_path` MUST equal `f.file` when present.
 
-     - `g.help_uri` MAY be set when `f.help` is a valid absolute URI; otherwise it MUST be omitted.
+    - `g.evidence.details` SHOULD copy `f.details` when present.
 
-     - `g.fingerprint` MUST be computed per the `ci_gate_findings` fingerprint algorithm.
+    - `g.help_uri` MAY be set when `f.help` is a valid absolute URI; otherwise it MUST be omitted.
+
+    - `g.fingerprint` MUST be computed per the `ci_gate_findings` fingerprint algorithm.
 
 1. Deterministic ordering:
 
@@ -542,10 +543,23 @@ Minimum rule requirements:
 - Prohibit direct secret material; enforce secrets-by-reference conventions.
 - If `security.redaction.policy_ref` is present, the linter MUST resolve and lint the referenced
   file as target kind `redaction-policy`.
-  - Missing or unreadable policy files MUST emit an `error` finding with
-    `rule_id="lint-range-config-redaction-policy-ref-invalid"`.
   - The referenced file MUST be linted even when `security.redaction.enabled=false`; policy shape
     and JSONPath validity are authoring-time safety constraints.
+
+  - Resolution (normative):
+
+    - The `policy_ref` value MUST be a workspace-relative POSIX path and MUST satisfy the "Path
+      normalization" constraints in this document.
+    - Resolution MUST be relative to the workspace root (not relative to the referencing file).
+    - The resolved path MUST refer to a regular file (directories and symlinks fail closed).
+
+  - Rule ID: `lint-range-config-redaction-policy-ref-invalid`
+
+    - Any invalid `policy_ref` value (invalid path syntax, path outside workspace, missing file, or
+      unreadable file) MUST emit an `error` finding with:
+      - `instance_path="/security/redaction/policy_ref"`
+      - `rule_id="lint-range-config-redaction-policy-ref-invalid"`
+      - `severity="error"`
 
 ### Target kind `redaction-policy`
 

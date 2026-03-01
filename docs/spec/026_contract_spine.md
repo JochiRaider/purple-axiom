@@ -1029,11 +1029,24 @@ Parser modules MUST be pure with respect to their inputs:
 Each parser module MUST declare:
 
 - `module_id`: stable identifier for the language/grammar family.
-  - MUST conform to `id_slug_v1` (see ADR-0001).
+  - MUST conform to `module_id_v1` (defined below).
 - `module_version`: stable version token for the grammar, AST contract, and error vocabulary.
   - MUST be of the form `v<digits>` (example: `v1`).
 - `module_token`: canonical combined identifier used by specs, fixtures, and lint output.
   - MUST be `pa.<module_id>.<module_version>` (example: `pa.jsonpath.v1`).
+
+`module_id_v1` requirements (normative):
+
+- MUST be ASCII lowercase.
+- MUST contain only `a-z`, `0-9`, and `_`.
+- MUST be 1 to 64 characters long.
+- MUST start with `a-z` or `0-9`.
+- MUST end with `a-z` or `0-9`.
+- MUST NOT contain `__` (double underscore).
+
+Regex (informative, suitable for schema validation):
+
+- `^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$` plus an additional check that `__` is not present.
 
 Compatibility for legacy tokens (v0.1; normative):
 
@@ -1044,6 +1057,12 @@ Compatibility for legacy tokens (v0.1; normative):
   - Example mappings:
     - `glob_v1` -> `module_id="glob"`, `module_version="v1"`
     - `sigma_ast_v1` -> `module_id="sigma_ast"`, `module_version="v1"`
+    - `glob_v1` (legacy alias; canonical combined identifier `pa.glob.v1`)
+      - Purpose: shared glob parser/matcher used by contract registry `bindings[].artifact_glob` and
+        dataset manifests `views[].includes[]` / `views[].excludes[]`.
+      - Normative semantics, AST, and error codes: "Glob semantics (glob_v1) (normative)" in
+        `025_data_contracts.md`.
+      - Golden vectors: `tests/fixtures/glob_v1/vectors.json` (see `100_test_strategy_ci.md`).
 
 ### Inputs
 
@@ -1070,6 +1089,13 @@ Max input size (normative):
   - `max_input_bytes` for `bytes`, or
   - `max_input_chars` for `utf8_text`.
 - If the limit is exceeded, parsing MUST fail closed.
+
+Max input size basis (normative):
+
+- `max_input_bytes` MUST be measured on the canonical parse input bytes after any module-declared
+  preprocessing (BOM stripping and newline normalization, if declared).
+- `max_input_chars` MUST be measured as the count of Unicode scalar values (code points) in the
+  canonical parse input after preprocessing (not UTF-16 code units and not grapheme clusters).
 
 ### Outputs
 
@@ -1100,7 +1126,7 @@ Error shape (normative minimum):
 - `error_code`: stable machine-readable token (`lower_snake_case`).
 - `message`: human-readable message.
   - `message` MUST begin with a stable prefix of the form: `PA_<MODULE>_<CODE>:`
-    - `<MODULE>` is `module_id` uppercased with `-` converted to `_`.
+    - `<MODULE>` is `module_id` uppercased.
     - `<CODE>` is `error_code` uppercased.
 - `location`:
   - `byte_offset`: REQUIRED, 0-indexed

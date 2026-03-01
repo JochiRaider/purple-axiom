@@ -315,6 +315,86 @@ Metacharacters (normative):
   - Any occurrence of `**` adjacent to other characters in the same segment (for example `ab**` or
     `**cd`) is invalid in `glob_v1`.
 
+Lexer and parser contract (glob_v1) (normative):
+
+Lexer rules (normative):
+
+- Input kind: the `pattern` is a UTF-8 text string (`utf8_text`) and MUST be treated as Unicode
+  scalar values for the purposes of `?` and character-class matching.
+- `glob_v1` defines no escape syntax.
+  - The backslash character (`\`) MUST be rejected (fail closed); it MUST NOT introduce an escape.
+- The NUL code point (`\u0000`) MUST be rejected (fail closed).
+
+Bracket class rules (normative):
+
+- `[` begins a character class; the next `]` ends it. (`glob_v1` has no escape syntax.)
+- The class body MUST be non-empty.
+  - `[]` is invalid.
+  - `[!]` is invalid.
+- `!` is treated as a negation marker only when it is the first character after `[`. Otherwise it is
+  literal.
+- Range recognition:
+  - `x-y` denotes an inclusive range only when `-` appears between two characters inside a class.
+  - A range whose start code point is greater than its end code point is invalid.
+
+AST contract (normative):
+
+On successful parse, implementations MUST produce a `glob_v1` AST that can be expressed as a JSON
+object with:
+
+- `tokens[]`: an ordered list of tokens, each with one of the following shapes:
+
+  - Literal text:
+    - `{ "kind": "literal", "text": "<non-empty string>" }`
+  - Segment separator:
+    - `{ "kind": "slash" }`
+  - Wildcards:
+    - `{ "kind": "star" }` for `*`
+    - `{ "kind": "qmark" }` for `?`
+    - `{ "kind": "globstar" }` for a `**` segment
+  - Character class:
+    - `{ "kind": "char_class", "negated": <bool>, "items": [ ... ] }` where each item is either:
+      - `{ "kind": "char", "ch": "<single character>" }`
+      - `{ "kind": "range", "start": "<single character>", "end": "<single character>" }`
+
+AST invariants (normative):
+
+- The AST MUST be canonical:
+  - Adjacent literal runs MUST be coalesced into a single `{kind:"literal"}` token.
+  - No empty literal tokens are permitted.
+- `{kind:"slash"}` tokens MUST NOT appear at the beginning or end of the token stream, and MUST NOT
+  be adjacent (this encodes the "no leading `/`", "no trailing `/`", and "no `//`" constraints).
+- `{kind:"globstar"}` MUST appear only as a full segment:
+  - It MUST be either the first token or immediately preceded by `{kind:"slash"}`.
+  - It MUST be either the last token or immediately followed by `{kind:"slash"}`.
+
+Deterministic parse errors (normative):
+
+- Parsing MUST fail closed on any invalid `glob_v1` pattern.
+- On parse failure, the implementation MUST return exactly one parser-module error (the leftmost
+  failure by `location.byte_offset`), with:
+  - `error_code`: one of the codes below
+  - `message_prefix`: the stable prefix required by the parser module contract
+  - `location.byte_offset`: 0-indexed byte offset into the UTF-8 input
+
+The following `error_code` values are defined for `glob_v1`:
+
+- `invalid_path`: pattern violates run-relative POSIX constraints (leading `/`, trailing `/`, `//`,
+  drive prefix, or `..` segment).
+- `contains_nul`: pattern contains a NUL code point.
+- `invalid_escape`: pattern contains a backslash (`\`).
+- `unterminated_class`: `[` with no closing `]`.
+- `empty_class`: `[]` or `[!]`.
+- `invalid_range`: a character-class range whose start code point is greater than its end.
+- `invalid_globstar`: `**` appears adjacent to other characters in a segment.
+
+Error mapping (normative):
+
+- If any `bindings[].artifact_glob` fails `glob_v1` parsing, the contract registry MUST be treated
+  as invalid (fail closed) and surfaced as a registry parse error.
+- If any dataset manifest view include/exclude glob fails `glob_v1` parsing, the dataset manifest
+  MUST be treated as invalid (fail closed).
+
 Pattern validity and fail-closed behavior (normative):
 
 - Patterns MUST be well-formed per the rules above:

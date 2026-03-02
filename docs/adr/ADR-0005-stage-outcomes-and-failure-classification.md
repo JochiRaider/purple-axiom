@@ -134,6 +134,60 @@ Per-gap classification (for example `measurement_layer` and deterministic eviden
 reports) is a reporting/scoring concern. It MUST be emitted in stage output artifacts (for example
 under `runs/<run_id>/report/**`) and MUST NOT change `logs/health.json` semantics or structure.
 
+## Outcomes are summaries of diagnostics (normative)
+
+Stage outcomes are the **summary channel**. Detailed, structured issues MUST be emitted via
+contract-backed artifacts (for example CI gate findings, publish-gate contract validation reports,
+or stage-owned evidence artifacts), not embedded into the stage outcome tuple.
+
+Normative requirements:
+
+- Stage outcomes (`manifest.json` and `logs/health.json`) MUST NOT introduce `reason_domain` or any
+  other schema-scoped reason vocabulary field. Stage outcomes remain governed solely by this ADR’s
+  `reason_code` registry.
+- When a stage failure is attributable to structured diagnostics, implementations SHOULD make the
+  stage outcome deterministically traceable to a **primary diagnostic** record.
+
+### Primary diagnostic selection (deterministic)
+
+When a stage failure has an associated diagnostic set, the implementation SHOULD select a primary
+diagnostic record using the canonical ordering defined for `pa:diagnostic-record:v1`
+(`025_data_contracts.md`, "Diagnostic record"):
+
+1. Determine the candidate diagnostic set in priority order:
+
+   1. Stage-owned diagnostic surface (if the stage publishes an artifact that includes
+      `diagnostics[]` scoped to the failing condition).
+   1. Publish-gate contract validation report for the stage:
+      `logs/contract_validation/<stage_id>.json`:
+      - If the report includes `diagnostics[]`, use that list.
+      - Otherwise, derive diagnostics deterministically from `artifacts[].errors[]` per
+        `025_data_contracts.md` ("Derived diagnostics surface").
+
+1. Sort the candidate diagnostics by the `pa:diagnostic-record:v1` ordering rules and select the
+   first entry as the primary diagnostic.
+
+If no candidate diagnostic set exists, no primary diagnostic is selected (the stage outcome remains
+a summary-only signal).
+
+### Deterministic mapping for publish-gate contract validation failures
+
+When a stage fails due to publish-gate contract validation invalid, the stage outcome reason code
+selection SHOULD follow this deterministic rule:
+
+1. Let `d` be the primary diagnostic record selected above.
+1. If `d.evidence.details.contract_id` is present and this ADR defines a stage-scoped
+   `<contract_id>_invalid` reason code for the failing stage, implementations SHOULD emit that
+   stage-scoped reason code.
+1. Otherwise, implementations MUST emit `contract_validation_failed`.
+
+Traceability requirement (normative):
+
+- When a stage emits a stage-scoped `<contract_id>_invalid` reason code, the corresponding publish
+  gate evidence MUST include at least one diagnostic record whose `evidence.details.contract_id`
+  equals `<contract_id>` (so CI and operators can mechanically link the summary reason to a concrete
+  failure).
+
 ## Determinism requirements
 
 ### Stable ordering

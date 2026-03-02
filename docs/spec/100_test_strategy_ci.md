@@ -184,6 +184,8 @@ Run CI MUST include, at minimum:
 - `run.goodlog` (negative baseline): evaluate benign fixtures and fail on any non-allowlisted match.
 - `run.regression` (fixture expected outcomes): evaluate regression fixtures and assert all declared
   `expected_outcomes[]`.
+- `run.publish_gate` (publish-gate contract validation): emit canonical CI findings from
+  `logs/contract_validation/*.json` (see `105_ci_operational_readiness.md`).
 - The evaluator conformance harness executed against at least one pinned Baseline Detection Package
   (BDP) or equivalent pinned event fixture set (see "Evaluator conformance harness").
 - At least one end-to-end "golden run" bundle executed in a minimal lab profile when a lab provider
@@ -213,6 +215,11 @@ Minimum checks (normative):
 - CI gate findings determinism: all emitted `ci_gate_findings` artifacts MUST be canonical JSON
   bytes, MUST be sorted/deduplicated per the findings ordering rules, and MUST have stable
   fingerprints (see `105_ci_operational_readiness.md`, "CI gate findings artifacts").
+- Diagnostic record conformance: any emitted `diagnostics[]` list MUST contain only
+  `pa:diagnostic-record:v1` entries and MUST satisfy the canonical ordering, fingerprinting, and
+  de-duplication rules (see `025_data_contracts.md`). When a contract validation report includes
+  `diagnostics[]`, CI MUST also verify it is deterministically derivable from
+  `artifacts[].errors[]`.
 - Router determinism: for each Sigma rule `logsource`, routing via the selected mapping pack MUST
   yield a single deterministic route; ambiguous routing MUST fail closed.
 - Mapping pack referential integrity: mapping pack references (classes, aliases, transforms) MUST
@@ -362,6 +369,16 @@ Index entry format (normative):
     - `publisher_publish_gate_success_atomic_promotion`
     - `publisher_crash_mid_promotion_reconciliation`
     - `publisher_canonical_json_and_jsonl_bytes`
+
+- **Cross-cutting: diagnostic record (`pa:diagnostic-record:v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/diagnostics/v1/`
+  - Minimum fixture sets (normative):
+    - `diagnostic_ordering_and_fingerprint_smoke`
+    - `lint_to_ci_gate_findings_lossless`
+    - `contract_validation_report_diagnostics_derivation`
+    - `run_publish_gate_findings_mapping`
 
 - **Cross-cutting: run lock (`pa.run_lock.v1`)**
 

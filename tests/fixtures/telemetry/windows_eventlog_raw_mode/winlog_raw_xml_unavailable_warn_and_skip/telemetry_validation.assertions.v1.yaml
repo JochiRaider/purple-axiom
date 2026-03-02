@@ -1,0 +1,21 @@
+must_exist:
+  - /windows_eventlog_raw_mode/performed
+  - /windows_eventlog_raw_mode/observed
+  - /windows_eventlog_raw_mode/canary_observed_at/asset_id
+  - /windows_eventlog_raw_mode/canary_observed_at/channel
+  - /windows_eventlog_raw_mode/canary_observed_at/path
+  - /windows_eventlog_raw_xml/wineventlog_used_log_record_original_total
+  - /windows_eventlog_raw_xml/wineventlog_raw_unavailable_total
+  - /windows_eventlog_raw_xml/wineventlog_raw_malformed_total
+  - /windows_eventlog_raw_xml/fail_mode
+
+equals:
+  /windows_eventlog_raw_mode/performed: true
+  /windows_eventlog_raw_mode/observed: true
+  /windows_eventlog_raw_xml/wineventlog_used_log_record_original_total: 1
+  /windows_eventlog_raw_xml/wineventlog_raw_unavailable_total: 1
+  /windows_eventlog_raw_xml/wineventlog_raw_malformed_total: 0
+  /windows_eventlog_raw_xml/fail_mode: warn_and_skip
+
+must_not_exist:
+  - /windows_eventlog_raw_xml/reason_code

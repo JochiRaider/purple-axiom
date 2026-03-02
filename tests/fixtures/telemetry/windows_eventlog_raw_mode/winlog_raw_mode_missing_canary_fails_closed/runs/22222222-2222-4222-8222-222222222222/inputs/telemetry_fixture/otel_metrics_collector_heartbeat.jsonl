@@ -1,0 +1,2 @@
+{"asset_id": "win-asset-01", "metric_name": "otelcol_process_memory_rss", "time_unix_nano": 0, "value": 123}
+{"asset_id": "win-asset-01", "metric_name": "otelcol_process_cpu_seconds", "time_unix_nano": 0, "value": 1.0}

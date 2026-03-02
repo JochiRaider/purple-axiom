@@ -1,0 +1,32 @@
+lab:
+  assets:
+    - asset_id: win-asset-01
+      os: windows
+      role: endpoint
+      hostname: win-asset-01.local
+
+runner:
+  type: atomic
+  atomic:
+    synthetic_correlation_marker:
+      enabled: true
+      method: windows_eventlog
+
+telemetry:
+  # NOTE: v0.1 schemas reject unknown keys except under `extensions`.
+  # TODO: Replace `extensions.raw_xml_fail_mode` with the canonical config key if/when specified.
+  extensions:
+    raw_xml_fail_mode: fail_closed
+
+  otel:
+    enabled: true
+    # OTel collector config is owned by upstream OTel; path is hashed for reproducibility.
+    config_path: configs/otel-collector.yaml
+    channels: ["security"]
+    agent_liveness:
+      startup_grace_seconds: 30
+      required_metric_names: ["otelcol_process_memory_rss", "otelcol_process_cpu_seconds"]
+  baseline_profile:
+    enabled: true
+    # The implementation snapshots the effective profile to this run-bundle path.
+    profile_path: inputs/telemetry_baseline_profile.json

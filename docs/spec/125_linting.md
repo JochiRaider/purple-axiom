@@ -565,7 +565,15 @@ Given a `lint.json` report:
 
     - `g.location.file_path` MUST equal `f.file` when present.
 
-    - `g.evidence.details` SHOULD copy `f.details` when present.
+    - `g.reason_domain` MUST be `"ci_gate_findings"`.
+
+    - `g.evidence.details` MUST be set to an object and MUST preserve lint pointer/location fields
+      losslessly:
+
+      - `g.evidence.details.instance_path` MUST equal `f.instance_path`.
+      - If `f.location` is present, `g.evidence.details.location` MUST include any present `line`
+        and `column`.
+      - If `f.details` is present, it MUST be copied to `g.evidence.details.lint_details` (as-is).
 
     - `g.help_uri` MAY be set when `f.help` is a valid absolute URI; otherwise it MUST be omitted.
 

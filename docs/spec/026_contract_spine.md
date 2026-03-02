@@ -27,6 +27,7 @@ consolidates the mechanically-actionable requirements for:
 - Expected outputs construction (including requiredness)
 - Publish-gate staging, validation, and atomic promotion
 - Contract validation report emission
+- Pass manifest emission
 - Deterministic serialization rules for contract-backed artifacts
 - Reader discovery, classification, and stable error codes
 - Observability surfaces and CI conformance gates
@@ -58,6 +59,7 @@ This document is authoritative for:
   - how failures surface in:
 
     - `runs/<run_id>/logs/contract_validation/<stage_id>.json`
+    - `runs/<run_id>/logs/pass_manifest.json`
     - `runs/<run_id>/logs/health.json`
     - CI output and exit codes
 
@@ -98,6 +100,11 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted 
 - Run bundle root: the directory that contains `manifest.json` for a specific run.
 - Run-relative path / `artifact_path`: a POSIX path (separator `/`) relative to the run bundle root
   (for example `scoring/summary.json`). It is not an absolute path.
+- Pass identifier / `pass_id`: stable, globally unique producer-pass identifier declared centrally
+  in contract registry bindings (see `025_data_contracts.md`, "Pass identifiers (`pass_id`)").
+- Pass manifest: `runs/<run_id>/logs/pass_manifest.json`, a deterministic, contract-backed index
+  that maps each contract-backed `artifact_path` present in the run bundle to its resolved `pass_id`
+  attribution.
 - Contract-backed artifact: a run-bundle artifact whose `artifact_path` matches a binding in the
   contract registry and is therefore schema-validated by publish-gate rules.
 - Non-contract artifact: an artifact that does not match a registry binding, or is explicitly
@@ -192,6 +199,8 @@ The registry MUST contain:
   - `contract_id` (must exist in `contracts[]`)
   - `validation_mode` (authoritative parse/validation dispatch key)
   - `stage_owner` (owning stage ID, or `orchestrator`)
+  - `pass_id` (stable producer-pass identifier; required for `registry_version >= 0.2.1`; see
+    `025_data_contracts.md`, "Pass identifiers (`pass_id`)")
 
 ### Path requirements
 
@@ -408,6 +417,7 @@ ResolvedContract:
   contract_version: str
   schema_path: str
   validation_mode: str
+  pass_id: str
   stage_owner: str
   artifact_glob: str
 ```
@@ -421,6 +431,8 @@ Error handling (normative):
   - the registry file is schema-invalid
   - any `artifact_glob` is invalid
   - any binding references an unknown `contract_id`
+  - for `registry_version >= 0.2.1`, any binding is missing `pass_id` or has an invalid `pass_id`
+    (see `025_data_contracts.md`, "Pass identifiers (`pass_id`)")
   - any `(contract_id, contract_version, schema_path)` inconsistencies exist
   - any `yaml_document` binding violates the YAML ingress-only invariants (see “YAML validation mode
     policy (ingress-only; v0.1)”)
@@ -784,6 +796,10 @@ downstream references are updated.
 
 ContractValidationReport MUST include:
 
+- `contract_version` (MUST be `0.1.0`)
+
+- `schema_version` (MUST be `pa:contract-validation-report:v1`)
+
 - `run_id`
 
 - `stage_id`
@@ -801,6 +817,10 @@ ContractValidationReport MUST include:
   - `errors_truncated` (boolean)
   - `errors[]` (the deterministic, capped, sorted error list)
 
+- `diagnostics[]` (optional but RECOMMENDED): a flattened list of `pa:diagnostic-record:v1` entries
+  deterministically derived from `artifacts[].errors[]` (see `025_data_contracts.md`, "Derived
+  diagnostics surface")
+
 Canonical bytes (normative):
 
 - The persisted report file MUST be serialized as Canonical JSON bytes (RFC 8785 / JCS):
@@ -811,6 +831,9 @@ Canonical bytes (normative):
   therefore, two executions are not required to produce byte-identical report files even when they
   detect the same validation failures.
 - Semantic comparisons (CI fixtures, report diff tooling) MUST ignore `generated_at_utc`.
+- When `diagnostics[]` is present, semantic comparisons MAY treat `diagnostics[]` as the stable
+  comparison surface for validation failures (it is deterministically derivable from the sorted
+  `errors[]` lists).
 - Integrity artifacts (checksums/signing) MUST cover the report bytes exactly as persisted
   (including `generated_at_utc` when present).
 
@@ -818,6 +841,8 @@ Deterministic ordering (normative):
 
 - `artifacts[]` MUST be sorted by `artifact_path` ascending using UTF-8 byte order (no locale).
 - Each `errors[]` list MUST be sorted per "Deterministic error ordering".
+- When `diagnostics[]` is present, it MUST be derived deterministically from `artifacts[].errors[]`
+  and MUST satisfy the `pa:diagnostic-record:v1` ordering, fingerprinting, and de-duplication rules.
 
 Tier classification (normative):
 
@@ -829,6 +854,119 @@ Tier classification (normative):
   - `runs/<run_id>/security/checksums.txt` when signing is enabled
 
 - `.staging/` MUST be excluded from default exports and from checksums/signing inputs.
+
+## Pass manifest
+
+### Purpose
+
+- Provides a deterministic, contract-backed mapping from contracted `artifact_path` values present
+  in the run bundle to their resolved `pass_id` attribution.
+- Enables provenance inspection, cache keys, and diffing at producer-pass granularity without
+  requiring immediate schema changes to every contracted artifact.
+
+### Location
+
+- `runs/<run_id>/logs/pass_manifest.json`
+
+### Contract binding (normative)
+
+- `artifact_glob`: `logs/pass_manifest.json`
+- `contract_id`: `pass_manifest`
+- `schema_path`: `docs/contracts/pass_manifest.schema.json`
+- `stage_owner`: `orchestrator`
+- `validation_mode`: `json_document`
+- `pass_id`: `orchestrator.pass_manifest.emit`
+
+### When it is emitted (normative)
+
+- The orchestrator MUST emit `logs/pass_manifest.json` during run finalization after all stage
+  publish sessions that will contribute contracted artifacts have been finalized (or aborted).
+- The orchestrator MUST attempt to emit the pass manifest even for failed runs, provided a run
+  bundle exists and the orchestrator is able to acquire the run lock.
+
+### Content (normative)
+
+The pass manifest MUST validate against `contract_id="pass_manifest"`.
+
+Minimum required fields:
+
+- `contract_version` (schema constant)
+- `schema_version` (const: `pa:pass_manifest:v1`)
+- `run_id` (string; MUST equal `manifest.run_id`)
+- `entries[]` (array; MAY be empty)
+
+Each `entries[]` item MUST include:
+
+- `artifact_path` (run-relative POSIX path)
+- `contract_id`
+- `stage_owner`
+- `pass_id`
+
+Optional fields:
+
+- `validation_mode`
+- `sha256`
+- `size_bytes`
+- `generated_at_utc` (see determinism rules)
+
+### Deterministic generation (normative)
+
+Entry set:
+
+- `entries[]` MUST contain exactly one entry for each contract-backed artifact that is present as a
+  regular file in the **final run bundle**.
+- `entries[]` MUST NOT include an entry for `logs/pass_manifest.json` itself (to avoid self-hash
+  recursion).
+- Contract-backed classification MUST be computed using the run-bundle contract registry instance
+  (`docs/contracts/contract_registry.json`) and `glob_v1` matching rules.
+
+Resolution algorithm (normative):
+
+1. Load the run-bundle contract registry (`ContractRegistry.load(...)`).
+1. For each registry binding, compute `matches(binding)` against the final run bundle root:
+   - If `binding.artifact_glob` has no glob metacharacters, `matches(binding)` is `{artifact_glob}`
+     **iff** that path exists as a regular file.
+   - Otherwise, `matches(binding)` is the set of all regular files under the run bundle root that
+     match `binding.artifact_glob` per `glob_v1`.
+1. For each `artifact_path` in every `matches(binding)`, emit exactly one manifest entry with:
+   - `artifact_path`
+   - `contract_id = binding.contract_id`
+   - `stage_owner = binding.stage_owner`
+   - `pass_id = binding.pass_id`
+   - `validation_mode = binding.validation_mode` (RECOMMENDED)
+1. Remove any entry with `artifact_path == "logs/pass_manifest.json"` (self-exclusion).
+1. Sort `entries[]` by `artifact_path` ascending using Canonical ordering.
+1. De-duplicate:
+   - If any `artifact_path` would appear more than once (overlapping bindings), generation MUST fail
+     closed (invalid registry ambiguity).
+
+Hash fields (optional; normative when present):
+
+- If `sha256` is present for an entry, it MUST be the SHA-256 of the artifact's exact persisted
+  bytes encoded as lowercase hex.
+- If `size_bytes` is present for an entry, it MUST equal the byte length of the artifact's exact
+  persisted bytes.
+- Implementations MAY omit hash fields entirely; if they include them, they MUST do so
+  deterministically (no concurrency- or filesystem-order dependence).
+
+`generated_at_utc` (optional; normative when present):
+
+- Producers SHOULD omit `generated_at_utc` to preserve stable manifest bytes for caching/diffing.
+- When present, semantic comparisons and CI fixtures MUST ignore `generated_at_utc`.
+
+Canonical bytes (normative):
+
+- The pass manifest file MUST be serialized as Canonical JSON bytes (RFC 8785 / JCS) with UTF-8
+  encoding, no BOM, and no trailing newline.
+
+Failure handling (normative):
+
+- If a run-bundle file is present that matches no registry binding, pass manifest generation MUST
+  ignore it (non-contract artifact).
+- If any present run-bundle file matches multiple registry bindings, generation MUST fail closed
+  (invalid registry ambiguity).
+- If the selected registry is invalid (including missing/invalid `pass_id` on a binding), pass
+  manifest emission MUST fail closed and the run MUST be treated as invalid.
 
 ## Deterministic artifact path rule
 

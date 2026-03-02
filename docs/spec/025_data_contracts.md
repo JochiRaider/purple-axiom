@@ -66,7 +66,15 @@ invariants that cannot be expressed in JSON Schema alone.
     - [Universal placeholder field support (v0.1) (normative)](#universal-placeholder-field-support-v01-normative)
     - [Reference resolution (local-only, normative)](#reference-resolution-local-only-normative)
     - [Deterministic error ordering and error caps (normative)](#deterministic-error-ordering-and-error-caps-normative)
+    - [Diagnostic record (`pa:diagnostic-record:v1`) (normative)](#diagnostic-record-padiagnostic-recordv1-normative)
+      - [Record shape](#record-shape)
+      - [Reason domain discipline (cross-artifact invariant)](#reason-domain-discipline-cross-artifact-invariant)
+      - [Deterministic ordering and de-duplication (normative)](#deterministic-ordering-and-de-duplication-normative)
+      - [Fingerprint algorithm (normative)](#fingerprint-algorithm-normative)
     - [Contract validation report artifact (normative)](#contract-validation-report-artifact-normative)
+      - [Derived diagnostics surface (`diagnostics[]`) (normative; additive)](#derived-diagnostics-surface-diagnostics-normative-additive)
+        - [Deterministic derivation from `artifacts[].errors[]` (normative)](#deterministic-derivation-from-artifactserrors-normative)
+        - [Losslessness requirement (normative)](#losslessness-requirement-normative)
       - [Deterministic artifact path rule (normative)](#deterministic-artifact-path-rule-normative)
     - [Validation scope and timing](#validation-scope-and-timing)
       - [Publish-gate contract validation (required)](#publish-gate-contract-validation-required)
@@ -297,8 +305,9 @@ Define:
 - Consumers and producers that enforce Contract Spine conformance MUST treat a missing or invalid
   `pass_id` as an invalid registry configuration and MUST fail closed.
 
-Note (non-normative): A future update introduces a deterministic run-bundle "pass manifest" artifact
-that maps each contract-backed `artifact_path` present in a run bundle to its resolved `pass_id`.
+Note (non-normative): `logs/pass_manifest.json` (contract_id `pass_manifest`) provides run-bundle
+pass attribution by mapping each contract-backed `artifact_path` present in a run bundle to its
+resolved `pass_id` (and related binding metadata). See `026_contract_spine.md`, "Pass manifest".
 
 #### Glob semantics (glob_v1) (normative)
 
@@ -1053,6 +1062,99 @@ Error caps (normative):
   - set `errors_truncated=true` in the validation summary, and
   - stop collecting additional errors for that artifact (deterministically).
 
+### Diagnostic record (`pa:diagnostic-record:v1`) (normative)
+
+Purple Axiom defines a single canonical **diagnostic record** shape for structured issues. Any
+surface that emits structured issues (for example `findings[]`, `errors[]`, or `diagnostics[]`) MUST
+either:
+
+- emit `pa:diagnostic-record:v1` entries directly, or
+- define a deterministic, lossless mapping to `pa:diagnostic-record:v1`.
+
+Schema (normative):
+
+- `docs/contracts/diagnostic_record.schema.json` (`$id` = `pa:diagnostic-record:v1`)
+
+#### Record shape
+
+A diagnostic record is a JSON object with the following fields:
+
+- `severity` (required): `fatal | error | warn | info`
+- `category` (required): `syntax | semantic | internal`
+- `reason_domain` (required): stable reason vocabulary domain token
+- `reason_code` (required): stable reason token (`lower_snake_case`)
+- `rule_id` (required): stable check identifier (string; producers MUST keep stable over time)
+- `subject` (required): object with:
+  - `kind` (required): stable subject class token (examples: `workspace_file`, `run_artifact`,
+    `sigma_rule`, `stage`)
+  - `stable_id` (required): stable subject identifier within the `kind` namespace
+- `message` (required): stable, human-readable message (MUST NOT embed volatile values such as
+  timestamps, hostnames, or absolute paths)
+- `location` (optional): object with:
+  - `file_path` (optional): workspace-relative or run-relative POSIX path
+  - `span` (optional): object with optional informational fields:
+    - `start_line` (1-indexed integer)
+    - `start_col` (1-indexed integer)
+- `evidence` (optional): object with:
+  - `details` (optional): redaction-safe JSON object carrying structured fields not represented by
+    core fields (for example JSON Pointer `instance_path`, schema pointer, keyword, contract_id)
+- `help_uri` (optional): absolute URI string
+- `fingerprint` (required): stable SHA-256 hex digest (lowercase, 64 hex chars)
+
+#### Reason domain discipline (cross-artifact invariant)
+
+- When a diagnostic record appears inside a **contract-backed artifact**, `reason_domain` MUST equal
+  the container artifact’s `contract_id`.
+- The “thing being diagnosed” (for example a contract id being validated) MUST be carried in
+  `subject` and/or `evidence.details`.
+
+#### Deterministic ordering and de-duplication (normative)
+
+Any list field named `diagnostics[]` (in any artifact) MUST:
+
+1. Be sorted ascending by:
+
+   1. `severity_rank` (`fatal=0`, `error=1`, `warn=2`, `info=3`)
+   1. `reason_domain` (UTF-8 byte order, no locale)
+   1. `reason_code` (UTF-8 byte order, no locale)
+   1. `subject.kind`
+   1. `subject.stable_id`
+   1. `rule_id`
+   1. `location.file_path` (missing sorts as empty string)
+   1. `location.span.start_line` (missing sorts as `0`)
+   1. `location.span.start_col` (missing sorts as `0`)
+   1. `fingerprint`
+
+1. After sorting, be de-duplicated by `fingerprint` (keep the first entry after sort for each
+   distinct fingerprint).
+
+#### Fingerprint algorithm (normative)
+
+Each diagnostic record MUST include `fingerprint` computed as:
+
+```text
+message_normalized =
+  trim(message) with all runs of whitespace collapsed to a single ASCII space
+
+fingerprint = SHA256_HEX(
+  severity + "\n" +
+  category + "\n" +
+  reason_code + "\n" +
+  rule_id + "\n" +
+  subject.kind + "\n" +
+  subject.stable_id + "\n" +
+  (location.file_path || "") + "\n" +
+  (location.span.start_line || 0) + ":" + (location.span.start_col || 0) + "\n" +
+  message_normalized
+)
+```
+
+Notes:
+
+- `reason_domain` is intentionally excluded from the fingerprint basis (the contract-owned domain is
+  validated separately).
+- Producers MUST compute `fingerprint` **before** de-duplication.
+
 ### Contract validation report artifact (normative)
 
 When publish-gate contract validation fails, stages MUST persist a structured validation report so
@@ -1064,6 +1166,8 @@ Location (normative):
 
 Minimum fields (normative):
 
+- `contract_version` (MUST be `0.1.0`)
+- `schema_version` (MUST be `pa:contract-validation-report:v1`)
 - `run_id`
 - `stage_id`
 - `generated_at_utc`
@@ -1075,6 +1179,8 @@ Minimum fields (normative):
   - `status` (`valid | invalid`)
   - `errors_truncated` (boolean)
   - `errors[]` (the deterministic, capped, sorted error list defined above)
+- `diagnostics[]` (optional but RECOMMENDED): a flattened list of `pa:diagnostic-record:v1` entries
+  deterministically derived from `artifacts[].errors[]` (see "Derived diagnostics surface" below)
 
 Notes:
 
@@ -1083,6 +1189,77 @@ Notes:
   formats Tier 0 export classification).
 - Stages MUST still record the stage outcome with a stable `reason_code` per ADR-0005 and
   operability rules.
+
+#### Derived diagnostics surface (`diagnostics[]`) (normative; additive)
+
+To standardize on a single canonical diagnostic shape without breaking existing consumers, the
+contract validation report MAY include a report-level `diagnostics[]` list.
+
+When `diagnostics[]` is present:
+
+- Each element MUST conform to `pa:diagnostic-record:v1`.
+- `reason_domain` MUST equal the contract id of the container artifact:
+  - `reason_domain = "contract_validation_report"`.
+
+##### Deterministic derivation from `artifacts[].errors[]` (normative)
+
+`diagnostics[]` MUST be derivable deterministically from the per-artifact `errors[]` lists.
+
+Derivation algorithm:
+
+1. For each `artifact` entry in `artifacts[]`, and for each `error` entry in `artifact.errors[]`,
+   derive exactly one diagnostic record `d` with:
+
+   - `severity = "error"`
+
+   - `category = "syntax"`
+
+   - `reason_domain = "contract_validation_report"`
+
+   - `reason_code` (deterministic):
+
+     1. If `error.error_code` is present, `reason_code = error.error_code`.
+     1. Else if `error.keyword` is present, `reason_code = "jsonschema_" + error.keyword`.
+     1. Else if `error.line_number` is present AND `error.schema_path == ""`,
+        `reason_code = "jsonl_parse_error"`.
+     1. Else `reason_code = "contract_validation_error"`.
+
+   - `rule_id = "contract_validation"`
+
+   - `subject.kind = "run_artifact"`
+
+   - `subject.stable_id = artifact.artifact_path + "#" + error.instance_path` (for
+     `instance_path=""`, the stable id ends with `#`)
+
+   - `location.file_path = artifact.artifact_path`
+
+   - `location.span.start_line = error.line_number` when present
+
+   - `message = error.message`
+
+   - `evidence.details` MUST include (at minimum):
+
+     - `artifact_path` (string; equals `artifact.artifact_path`)
+     - `contract_id` (string; equals `artifact.contract_id`)
+     - `contract_version` (string; equals `artifact.contract_version`)
+     - `instance_path` (string; equals `error.instance_path`)
+     - `schema_path` (string; equals `error.schema_path`)
+     - `keyword` (string) when present
+     - `error_code` (string) when present
+     - `line_number` (integer) when present
+
+1. After derivation, producers MUST apply the `pa:diagnostic-record:v1` ordering, fingerprinting,
+   and de-duplication rules (see "Diagnostic record (`pa:diagnostic-record:v1`)").
+
+##### Losslessness requirement (normative)
+
+When `diagnostics[]` is present, the mapping MUST be lossless with respect to the per-artifact error
+surface:
+
+- Every field of every `errors[]` entry MUST be preserved either in a core diagnostic field or in
+  `evidence.details`.
+- A consumer MUST be able to reconstruct the original `errors[]` entry from the diagnostic record
+  (for the fields defined in this specification) without external state.
 
 #### Deterministic artifact path rule (normative)
 
@@ -1271,6 +1448,7 @@ stage_enablement_matrix_v1:
       - manifest
       - range_config
       - counters
+      - pass_manifest
     optional_contract_ids_when_enabled: []
     conditional_required_contracts:
       - contract_id: audit_event
@@ -1387,6 +1565,7 @@ stage_enablement_matrix_v2:
       - manifest
       - range_config
       - counters
+      - pass_manifest
     optional_contract_ids_when_enabled:
       - run_results
       - plan_draft
@@ -2118,6 +2297,10 @@ Required fields (normative):
 - `contract_version` (string; const: `0.1.0`)
 - `schema_version` (string; const: `pa:compiled_artifact_provenance:v1`)
 - `pass_id` (string; producing pass identifier; MUST be stable and versioned)
+  - `pass_id` MUST conform to the `pass_id` grammar (v1) defined in this document (see "Pass
+    identifiers (`pass_id`)").
+  - For contract-backed artifacts, producers SHOULD set `compiled_provenance.pass_id` equal to the
+    contract registry binding’s `pass_id` value (when present).
 - `inputs[]` (array; stable order; see Ordering below)
 - `toolchain[]` (array; stable order; see Ordering below)
 - `compilation_unit_sha256` (string; canonical digest string: `sha256:<lowercase_hex>`)
@@ -3732,6 +3915,9 @@ Optional compiled provenance envelope (normative when present):
   in "Compiled provenance envelope (shared shape)".
 
 - When `compiled_provenance` is present:
+
+  - `compiled_provenance.pass_id` MUST equal the contract registry binding `pass_id` for
+    `bridge/compiled_plans/*.plan.json` (v0.1: `detection.bridge.compiled_plans.emit`).
 
   - `compiled_provenance.output_basis` MUST equal `artifact_without_compiled_provenance_v1`.
 

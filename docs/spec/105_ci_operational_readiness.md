@@ -353,6 +353,88 @@ When BDP replay is used, Run CI MUST:
   mismatch or any non-allowlisted match (see `086_detection_baseline_library.md`, "Fixture registry
   and allowlisting (v0.1 CI)").
 
+#### `run.publish_gate` gate (publish-gate contract validation)
+
+Objective: provide a single, canonical CI findings surface for publish-gate failures, including
+contract validation errors emitted under `runs/<run_id>/logs/contract_validation/`.
+
+Inputs (normative):
+
+- `runs/<run_id>/manifest.json` and/or `runs/<run_id>/logs/health.json` (stage outcomes surface)
+- Any present contract validation reports:
+  - `runs/<run_id>/logs/contract_validation/*.json` (contract: `contract_validation_report`)
+- Contract registry for schema validation:
+  - `docs/contracts/contract_registry.json`
+
+Behavior (normative):
+
+1. The gate MUST emit exactly one findings artifact:
+
+   - `artifacts/findings/run.publish_gate.findings.v1.json` (contract: `ci_gate_findings`)
+
+1. Report presence and schema validity:
+
+   - Each discovered `logs/contract_validation/*.json` report MUST be schema-validated.
+   - If any report is missing required fields or is schema-invalid, the gate MUST emit a `fatal`
+     finding with:
+     - `reason_code="publish_gate_report_invalid"`
+     - `subject.kind="run_artifact"`
+     - `subject.stable_id=<report_path>`
+     - `location.file_path=<report_path>`
+
+1. Report requiredness cross-check:
+
+   - If the stage outcome surface contains a failed stage whose `reason_code` indicates contract
+     validation invalid (`contract_validation_failed` or a stage-scoped `*_invalid` code), CI MUST
+     expect a corresponding report at `logs/contract_validation/<stage_id>.json`.
+   - Any missing expected report MUST emit an `error` finding with:
+     - `reason_code="publish_gate_report_missing"`
+     - `subject.kind="stage"`
+     - `subject.stable_id=<stage_id>`
+
+1. Findings mapping (preferred path):
+
+   - For each schema-valid report that includes `diagnostics[]`, emit exactly one CI finding per
+     diagnostic record.
+   - Mapping MUST be lossless: the original diagnostic MUST be preserved under
+     `finding.evidence.details.contract_validation_diagnostic` as a JSON object.
+
+1. Findings mapping (fallback path):
+
+   - If a schema-valid report omits `diagnostics[]`, CI MUST derive diagnostics deterministically
+     from `artifacts[].errors[]` using the derivation algorithm in `025_data_contracts.md` ("Derived
+     diagnostics surface"), and then map those derived diagnostics to CI findings.
+
+1. For every mapped CI finding `g` (from either path above), producers MUST set:
+
+   - `g.severity` and `g.category` copied from the diagnostic record
+
+   - `g.reason_domain = "ci_gate_findings"`
+
+   - `g.reason_code` (deterministic):
+
+     - `"publish_gate_artifact_path_invalid"` when the diagnostic `reason_code` is
+       `"timestamped_filename_disallowed"`
+     - otherwise `"publish_gate_contract_invalid"`
+
+   - `g.rule_id = "publish_gate.contract_validation"`
+
+   - `g.subject` copied from the diagnostic record
+
+   - `g.location` copied from the diagnostic record when present
+
+   - `g.message` copied from the diagnostic record
+
+   - `g.evidence.details` MUST include:
+
+     - `contract_validation_report_path` (run-relative)
+     - `contract_validation_stage_id` (string)
+     - `contract_validation_diagnostic` (object; the diagnostic record)
+
+Outputs (normative):
+
+- `artifacts/findings/run.publish_gate.findings.v1.json`
+
 #### `run.goodlog` gate (negative baseline)
 
 Objective: detect false positives by asserting that benign fixtures produce zero non-allowlisted
@@ -605,6 +687,18 @@ annotations.
 - Path (workspace-root): `artifacts/findings/<gate_id>.findings.v1.json`
 - Contract: `ci_gate_findings` (workspace contract registry binding)
 
+#### Shared diagnostic record (`pa:diagnostic-record:v1`) (normative)
+
+All `ci_gate_findings.findings[]` entries MUST conform to the canonical diagnostic record shape
+`pa:diagnostic-record:v1` as defined by `025_data_contracts.md` ("Diagnostic record").
+
+Additional constraints imposed by the `ci_gate_findings` contract (normative):
+
+- `reason_domain` MUST equal `"ci_gate_findings"` for every finding (because `reason_domain` is
+  schema-owned for contract-backed artifacts).
+- The `ci_gate_findings` ordering, de-duplication, and fingerprint algorithm is the default ordering
+  for any `pa:diagnostic-record:v1` list emitted as `diagnostics[]` elsewhere.
+
 CI MUST treat findings artifacts as **required evidence** for any enforced REQUIRED gate:
 
 - Each enforced gate MUST emit exactly one findings artifact at the path above, even when
@@ -687,6 +781,7 @@ To keep the CI surface stable across implementations, the following gate IDs are
 - `content.sigma.semantic` (Content CI Sigma semantic validators)
 - `content.fixtures.validate` (Content CI fixture registry validation + canonicalization)
 - `content.bundle.integrity` (Content CI offline bundle validation)
+- `run.publish_gate` (Run CI publish-gate contract validation surface)
 
 ### Publish-gate enforcement
 

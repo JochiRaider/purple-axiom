@@ -1,0 +1,7 @@
+[
+  {
+    "artifact_path": "logs/telemetry_validation.json",
+    "contract_id": "telemetry_validation",
+    "required": true
+  }
+]

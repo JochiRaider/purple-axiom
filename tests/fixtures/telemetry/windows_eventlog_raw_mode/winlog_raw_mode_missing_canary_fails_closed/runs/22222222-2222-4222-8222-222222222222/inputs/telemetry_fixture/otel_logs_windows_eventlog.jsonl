@@ -1,0 +1,1 @@
+{"asset_id": "win-asset-01", "attributes": {"log.record.original": "<Event><System><Channel>Security</Channel></System><EventData><Data Name=\"Marker\">not-a-marker</Data></EventData></Event>"}, "body": "non-canary", "channel": "Security", "time_unix_nano": 0}

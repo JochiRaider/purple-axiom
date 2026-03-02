@@ -1,0 +1,12 @@
+must_exist:
+  - /baseline_profile/profile_path
+  - /baseline_profile/assets/0/asset_id
+
+equals:
+  /baseline_profile/profile_path: inputs/telemetry_baseline_profile.json
+
+must_not_exist:
+  - /baseline_profile/profile_sha256
+  - /baseline_profile/assets/0/matched_profile_id
+  - /baseline_profile/assets/0/signals
+  - /baseline_profile/assets/1

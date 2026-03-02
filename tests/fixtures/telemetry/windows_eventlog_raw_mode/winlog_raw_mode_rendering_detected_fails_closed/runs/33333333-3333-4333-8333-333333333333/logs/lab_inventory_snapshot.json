@@ -1,0 +1,15 @@
+{
+  "assets": [
+    {
+      "asset_id": "win-asset-01",
+      "hostname": "win-asset-01.local",
+      "os": "windows",
+      "role": "endpoint",
+      "tags": [
+        "fixture",
+        "windows"
+      ]
+    }
+  ],
+  "v": 1
+}

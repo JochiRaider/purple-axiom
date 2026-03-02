@@ -1,0 +1,28 @@
+{
+  "contract_version": "0.1.0",
+  "description": "Fixture baseline profile for telemetry stage isolation tests.",
+  "profile_id": "telemetry-baseline-fixture",
+  "profile_version": "0.1.0",
+  "profiles": [
+    {
+      "priority": 0,
+      "profile_id": "win-endpoint-min",
+      "required_signals": [
+        {
+          "match": {
+            "channel": "Security"
+          },
+          "min_count": 1,
+          "notes": "At least one Security channel event must be observed.",
+          "signal_id": "winlog-security-min",
+          "source_type": "windows_eventlog"
+        }
+      ],
+      "selector": {
+        "asset_ids": [
+          "win-asset-01"
+        ]
+      }
+    }
+  ]
+}

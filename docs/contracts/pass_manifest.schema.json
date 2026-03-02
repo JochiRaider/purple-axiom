@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pass manifest (pa:pass_manifest:v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "schema_version",
+    "run_id",
+    "entries"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "schema_version": {
+      "const": "pa:pass_manifest:v1"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Run identifier (RFC 4122 UUID; canonical hyphenated lowercase).",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "description": "Optional generation timestamp (RFC 3339 / ISO 8601 UTC). When present, must not be used as a hash basis.",
+      "format": "date-time"
+    },
+    "entries": {
+      "type": "array",
+      "description": "Deterministically ordered list of contracted artifacts present in the run bundle.",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "validation_mode": {
+      "type": "string",
+      "enum": [
+        "json_document",
+        "jsonl_lines",
+        "yaml_document",
+        "parquet_dataset_v1",
+        "text_document_v1"
+      ]
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_path",
+        "contract_id",
+        "stage_owner",
+        "pass_id"
+      ],
+      "properties": {
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "POSIX run-relative artifact path (for example, scoring/summary.json).",
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\/$).+"
+        },
+        "contract_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Resolved contract identifier for the artifact_path."
+        },
+        "stage_owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Resolved stage owner for the artifact_path (orchestrator or stage_id).",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "pass_id": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Resolved pass identifier for the artifact_path.",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+        },
+        "validation_mode": {
+          "$ref": "#/$defs/validation_mode"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

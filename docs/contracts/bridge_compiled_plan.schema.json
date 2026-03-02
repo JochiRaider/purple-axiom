@@ -49,7 +49,7 @@
         },
         "mapping_pack_sha256": {
           "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
+          "pattern": "^sha256:[0-9a-f]{64}$"
         }
       }
     },
@@ -93,7 +93,7 @@
         },
         "rule_sha256": {
           "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
+          "pattern": "^sha256:[0-9a-f]{64}$"
         },
         "logsource": {
           "type": "object",
@@ -235,6 +235,10 @@
         }
       }
     },
+    "compiled_provenance": {
+      "description": "Optional compiled artifact provenance envelope (compiled_provenance).",
+      "$ref": "compiled_artifact_provenance.schema.json"
+    },    
     "plan": {
       "type": "object",
       "additionalProperties": false,

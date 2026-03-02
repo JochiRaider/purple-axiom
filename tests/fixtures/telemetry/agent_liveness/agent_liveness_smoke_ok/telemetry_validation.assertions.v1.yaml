@@ -1,0 +1,14 @@
+must_exist:
+  - /agent_liveness/startup_grace_seconds
+  - /agent_liveness/required_metric_names
+  - /agent_liveness/assets/0/asset_id
+  - /agent_liveness/assets/0/observed
+  - /agent_liveness/assets/0/first_seen
+  - /agent_liveness/assets/0/last_seen
+  - /agent_liveness/assets/0/evidence_path
+
+equals:
+  /agent_liveness/assets/0/observed: true
+
+must_not_exist:
+  - /agent_liveness/assets/1

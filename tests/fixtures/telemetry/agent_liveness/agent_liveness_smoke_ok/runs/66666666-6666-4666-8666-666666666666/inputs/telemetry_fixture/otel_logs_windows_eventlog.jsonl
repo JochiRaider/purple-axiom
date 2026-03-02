@@ -1,0 +1,1 @@
+{"asset_id": "win-asset-01", "attributes": {"log.record.original": "<Event><System><Channel>Security</Channel></System><EventData><Data Name=\"Marker\">pa:synth:v1:66666666-6666-4666-8666-666666666666:s1:execute</Data></EventData></Event>"}, "body": "canary", "channel": "Security", "time_unix_nano": 0}

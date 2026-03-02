@@ -1017,6 +1017,8 @@ These artifacts MUST conform to the data contracts specification, including cano
     - `compiled_provenance` (object, optional): compiled artifact provenance envelope.
       - When present, it MUST follow the shared shape defined in `025_data_contracts.md` ("Compiled
         provenance envelope (shared shape)").
+      - `compiled_provenance.pass_id` MUST equal the contract registry binding `pass_id` for
+        `bridge/compiled_plans/*.plan.json` (v0.1: `detection.bridge.compiled_plans.emit`).
       - `compiled_provenance.output_basis` MUST equal `artifact_without_compiled_provenance_v1`.
       - `compiled_provenance.output_payload_sha256` MUST verify against the plan content with
         `compiled_provenance` removed.

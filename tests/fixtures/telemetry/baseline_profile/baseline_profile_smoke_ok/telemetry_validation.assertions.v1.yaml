@@ -1,0 +1,16 @@
+must_exist:
+  - /baseline_profile/profile_path
+  - /baseline_profile/profile_sha256
+  - /baseline_profile/assets/0/asset_id
+  - /baseline_profile/assets/0/matched_profile_id
+  - /baseline_profile/assets/0/signals/0/signal_id
+  - /baseline_profile/assets/0/signals/0/min_count
+  - /baseline_profile/assets/0/signals/0/observed_count
+  - /baseline_profile/assets/0/signals/0/passed
+
+equals:
+  /baseline_profile/profile_path: inputs/telemetry_baseline_profile.json
+  /baseline_profile/assets/0/signals/0/passed: true
+
+must_not_exist:
+  - /baseline_profile/assets/1

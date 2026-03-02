@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pa:diagnostic-record:v1",
+  "title": "Purple Axiom Diagnostic Record (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "severity",
+    "category",
+    "reason_domain",
+    "reason_code",
+    "rule_id",
+    "subject",
+    "message",
+    "fingerprint"
+  ],
+  "properties": {
+    "severity": {
+      "type": "string",
+      "enum": ["fatal", "error", "warn", "info"]
+    },
+    "category": {
+      "type": "string",
+      "enum": ["syntax", "semantic", "internal"]
+    },
+    "reason_domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "rule_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "stable_id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "stable_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "start_line": { "type": "integer", "minimum": 1 },
+            "start_col": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "help_uri": {
+      "type": "string",
+      "format": "uri"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

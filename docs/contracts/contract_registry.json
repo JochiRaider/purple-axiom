@@ -12,7 +12,7 @@
     {
       "contract_id": "baseline_detection_package_manifest",
       "schema_path": "docs/contracts/baseline_detection_package_manifest.schema.json",
-      "contract_version": "0.1.0",
+      "contract_version": "0.2.0",
       "purpose": "Manifest for a Baseline Detection Package stored under exports/baselines/<baseline_id>/<baseline_version>/baseline_package_manifest.json.",
       "artifact_kind": "other",
       "format": "json"
@@ -30,6 +30,14 @@
       "schema_path": "docs/contracts/compiled_artifact_provenance.schema.json",
       "contract_version": "0.1.0",
       "purpose": "Shared compiled artifact provenance envelope (embedded as compiled_provenance).",
+      "artifact_kind": "other",
+      "format": "json"
+    },    
+    {
+      "contract_id": "sigma_ast_v1",
+      "schema_path": "docs/contracts/sigma_ast_v1.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Shared Sigma AST v1 schema (embedded under bridge compiled plans as sigma_ast).",
       "artifact_kind": "other",
       "format": "json"
     },    
@@ -156,7 +164,7 @@
     {
       "contract_id": "export_manifest",
       "schema_path": "docs/contracts/export_manifest.schema.json",
-      "contract_version": "0.1.0",
+      "contract_version": "0.2.0",
       "purpose": "Export manifest output (exports/<run_id>/<export_id>/export_manifest.json).",
       "artifact_kind": "run_artifact",
       "format": "json"
@@ -493,7 +501,7 @@
     { "artifact_glob": "logs/cache_provenance.json", "contract_id": "cache_provenance", "stage_owner": "orchestrator", "validation_mode": "json_document", "pass_id": "orchestrator.cache.provenance.emit"},
     { "artifact_glob": "logs/counters.json", "contract_id": "counters", "stage_owner": "orchestrator", "validation_mode": "json_document", "pass_id": "orchestrator.operability.counters.emit"},
     { "artifact_glob": "logs/pass_manifest.json", "contract_id": "pass_manifest", "stage_owner": "orchestrator", "validation_mode": "json_document", "pass_id": "orchestrator.pass_manifest.emit"},
-    { "artifact_glob": "logs/contract_validation/*.json", "contract_id": "contract_validation_report", "stage_owner": "orchestrator", "validation_mode": "json_document", "pass_id": "TODO"},
+    { "artifact_glob": "logs/contract_validation/*.json", "contract_id": "contract_validation_report", "stage_owner": "orchestrator", "validation_mode": "json_document", "pass_id": "orchestrator.contract_validation_report.emit"},
     { "artifact_glob": "logs/lab_inventory_snapshot.json", "contract_id": "lab_inventory_snapshot", "stage_owner": "lab_provider", "validation_mode": "json_document", "pass_id": "lab_provider.inventory_snapshot.emit"},
     { "artifact_glob": "logs/telemetry_validation.json", "contract_id": "telemetry_validation", "stage_owner": "telemetry", "validation_mode": "json_document", "pass_id": "telemetry.validation.emit"},
     { "artifact_glob": "manifest.json", "contract_id": "manifest", "stage_owner": "orchestrator", "validation_mode": "json_document", "pass_id": "orchestrator.manifest.emit"},

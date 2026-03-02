@@ -6,13 +6,12 @@
   "additionalProperties": false,
   "required": [
     "contract_version",
-    "run_id",
-    "scenario_id",
-    "generated_at_utc",
-    "mapping_pack_ref",
+    "rule_id",
+    "sigma_ast",
+    "rule_sha256",
+    "mapping_pack_sha256",
     "backend",
-    "rule",
-    "compilation"
+    "executable"
   ],
   "properties": {
     "contract_version": {

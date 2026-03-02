@@ -44,11 +44,11 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id            | path/glob                        | Required?                                               |
-| ---------------------- | -------------------------------- | ------------------------------------------------------- |
-| `telemetry_validation` | `logs/telemetry_validation.json` | required (when `telemetry.otel.enabled=true`)           |
-| `pcap_manifest`        | `raw/pcap/manifest.json`         | optional (placeholder source; when enabled/implemented) |
-| `netflow_manifest`     | `raw/netflow/manifest.json`      | optional (placeholder source; when enabled/implemented) |
+| contract_id            | path/glob                        | pass_id                           | Required?                                               |
+| ---------------------- | -------------------------------- | --------------------------------- | ------------------------------------------------------- |
+| `telemetry_validation` | `logs/telemetry_validation.json` | `telemetry.validation.emit`       | required (when `telemetry.otel.enabled=true`)           |
+| `pcap_manifest`        | `raw/pcap/manifest.json`         | `telemetry.pcap.manifest.emit`    | optional (placeholder source; when enabled/implemented) |
+| `netflow_manifest`     | `raw/netflow/manifest.json`      | `telemetry.netflow.manifest.emit` | optional (placeholder source; when enabled/implemented) |
 
 #### Required inputs
 
@@ -84,19 +84,6 @@ Notes:
   (`telemetry`)".
 
 ### Isolation test fixture(s)
-
-- `tests/fixtures/telemetry/synthetic_marker/` (marker observability; `synthetic_marker_smoke`,
-  `egress_policy_canary_smoke`)
-- `tests/fixtures/telemetry/clock_sync/`: simulate orchestrator↔asset clock skew (exceeded +
-  unmeasurable) and verify deterministic `telemetry.clock_sync` failure mapping plus presence/shape
-  of `telemetry_validation.json.clock_sync`.
-- `tests/fixtures/telemetry/checkpointing/`: checkpoint store integrity + loss/replay conformance
-  for the checkpointing state machine (`telemetry-checkpointing-replay`).
-- `tests/fixtures/telemetry/agent_liveness/`: agent heartbeat/liveness gate fixtures (pass + fail
-  closed).
-- `tests/fixtures/telemetry/baseline_profile/`: baseline profile gate fixtures (pass + fail closed).
-- `tests/fixtures/windows_event_xml/v1/`: raw Windows Event XML corpus used by telemetry collection
-  tests and identity/parsing conformance (see `100_test_strategy_ci.md`).
 
 See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
 mapping.
@@ -1729,8 +1716,9 @@ On failure, the module returns `parse_error` with deterministic `error_code` val
 - `xml_invalid_guid`
 - `rendering_info_present`
 
-The `message` MUST begin with the stable prefix required by `026_contract_spine.md`:
-`PA_WIN_EVENT_XML_<ERROR_CODE>:` (where `<ERROR_CODE>` is uppercase).
+The `message_prefix` MUST be exactly `pa.win_event_xml.v1: `.
+
+The `message` MUST begin with `message_prefix`.
 
 Location rules (v1):
 

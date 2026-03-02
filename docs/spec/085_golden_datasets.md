@@ -500,31 +500,30 @@ Consumer note (normative):
 Dataset build tooling MUST treat all `runs/<run_id>/` inputs as read-only and MUST NOT create or
 modify artifacts inside any run bundle directory.
 
-#### Build staging and atomic publish (recommended)
+#### Build staging and atomic publish (normative)
 
-To be crash-safe and to integrate cleanly with filesystem-derived state machines (ADR-0004,
-ADR-0007), producers SHOULD:
+To be crash-safe and compatible with filesystem-derived state machines and CI pipelines, dataset
+release producers MUST publish dataset directories using crash-safe staging + atomic rename.
 
-1. Write the entire dataset release into a staging directory under the workspace exports staging
-   root:
-   - `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`
-1. Validate the staged output (schemas, required files, determinism checks).
-1. Atomically publish by renaming the staging directory to the final location:
+Requirements (normative):
+
+1. Dataset release outputs MUST be staged under:.
+2. The final dataset directory MUST be published by atomic rename of the staged directory into:
    - `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
+3. Producers MUST validate contract-backed dataset release artifacts against the workspace contract
+   registry before the final rename (minimum required artifacts):
+   - `dataset_manifest.json`
+   - `splits/split_config.json`
+   - `splits/split_assignments.jsonl`
+4. Producers MUST publish via `pa.publisher.workspace.v1` semantics:
+   - No partial publish on validation failure (no final directory mutation).
+   - On contract validation failure, producers MUST emit the workspace contract validation report
+     at:
+     - `logs/contract_validation/exports/datasets/<dataset_id>/<dataset_version>.contract_validation.json
 
-If a build fails before publish, the final output directory MUST NOT be created or partially
-populated. The staging directory MAY remain on failure for inspection and operator cleanup.
+Staging cleanup (normative):
 
-Representational state machine (non-normative; lifecycle authority: ADR-0004, ADR-0007):
-
-- `absent` -> `staging` -> `published`
-- `staging` -> `failed` (staging directory retained for inspection; operator cleanup required)
-
-Authoritative observability signals:
-
-- `published`: final directory exists and contains `dataset_manifest.json` and
-  `security/checksums.txt`
-- `staging`: staging directory exists under `exports/.staging/`
+- Staging directories are non-authoritative and MAY be cleaned up when no publish is in progress.
 
 #### Export path helpers (recommended)
 
@@ -738,7 +737,7 @@ Contract binding (normative):
 
 `dataset_manifest.json` MUST be a single JSON object with:
 
-- `contract_version`: SemVer string (MUST be `0.1.0`)
+- `contract_version`: SemVer string (MUST be `0.2.0`)
 - `schema_version`: `"pa:dataset_manifest:v1"`
 - `dataset_id`: id_slug_v1
 - `dataset_version`: SemVer
@@ -901,7 +900,7 @@ Contract binding (normative):
 
 The dataset release MUST include a split config that declares:
 
-- `contract_version`: SemVer string (MUST be `0.1.0`)
+- `contract_version`: SemVer string (MUST be `0.2.0`)
 - `schema_version`: `"pa:dataset_splits_config:v1"`
 - `policy`:
   - `split_names`: array (default: `["train","val","test"]`)
@@ -966,7 +965,7 @@ Contract binding (normative):
 
 - `splits/split_assignments.jsonl` with one JSON object per run:
 
-  - `contract_version`: SemVer string (MUST be `0.1.0`)
+  - `contract_version`: SemVer string (MUST be `0.2.0`)
   - `schema_version`: `"pa:dataset_split_assignment:v1"`
   - `run_id`
   - `split`
@@ -1068,13 +1067,20 @@ CI MUST include a fixture dataset build that:
   read-only input; validate via a before/after tree snapshot or hashes),
 - writes only within the reserved export namespaces used by dataset builds:
   - `exports/datasets/**` (final output)
-  - `exports/.staging/datasets/**` (staging; when enabled),
+  - `exports/.staging/datasets/**` (staging; required),
 - validates:
   1. workspace contract validation (registry-driven) for each produced dataset release directory:
 
      - `dataset_manifest.json` (validation_mode `json_document`)
      - `splits/split_config.json` (validation_mode `json_document`)
      - `splits/split_assignments.jsonl` (validation_mode `jsonl_lines`)
+
+  1. failure observability on contract validation errors:
+
+     - an intentionally invalid `dataset_manifest.json` MUST cause publish to fail closed,
+     - the final dataset directory MUST NOT exist (no partial publish), and
+     - the workspace contract validation report MUST exist at
+       `logs/contract_validation/exports/datasets/<dataset_id>/<dataset_version>.contract_validation.json`.
 
   1. `dataset_manifest.json` and `splits/split_config.json` deterministic ordering,
 

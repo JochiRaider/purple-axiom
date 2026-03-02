@@ -36,9 +36,9 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id | path/glob              | Required?                              |
-| ----------- | ---------------------- | -------------------------------------- |
-| `summary`   | `scoring/summary.json` | required (when `scoring.enabled=true`) |
+| contract_id | path/glob              | pass_id                | Required?                              |
+| ----------- | ---------------------- | ---------------------- | -------------------------------------- |
+| `summary`   | `scoring/summary.json` | `scoring.summary.emit` | required (when `scoring.enabled=true`) |
 
 #### Required inputs
 

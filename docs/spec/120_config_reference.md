@@ -55,12 +55,25 @@ Workspace boundary rules (normative):
 - Cross-run caches MUST live under `<workspace_root>/cache/` (reserved workspace directory).
 - Derived exports produced outside the run bundle MUST live under `<workspace_root>/exports/`
   (reserved workspace directory).
+  - Export products under `exports/**` MUST be staged under `<workspace_root>/exports/.staging/**`
+    and published by atomic rename into the final `exports/**` location.
+  - Tools MUST NOT create per-product staging directories under the final export namespaces (for
+    example `exports/datasets/.staging/**`).  
   - Dataset releases MUST be published under
     `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`.
-    - Crash-safe staging is RECOMMENDED under
-      `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`.
+    - Crash-safe staging is REQUIRED under
+      `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/` and
+      the dataset directory MUST be published by atomic rename into place.
   - Export/packaging commands MUST NOT create or modify artifacts inside any `runs/<run_id>/`
     directory.
+
+- Workspace-local artifacts produced outside the run bundle MUST live under `<workspace_root>/artifacts/`
+  (reserved workspace directory).
+  - This includes CI findings/fixtures (`artifacts/findings/**`, `artifacts/fixtures/**`) and connector
+    outputs as bound by the workspace contract registry.
+
+- Workspace publish/validation failures emit deterministic contract validation reports under
+  `<workspace_root>/logs/contract_validation/**` (see `025_data_contracts.md`).
 
 ## Top-level keys
 
@@ -901,6 +914,9 @@ Common keys:
     - `compile_cache_dir` (optional): workspace-root relative path under `<workspace_root>/cache/`
       for cached compiled plans keyed by `compiled_provenance.compilation_unit_sha256`
       (content-addressed)
+      - When `compile_cache_dir` is set, the bridge MUST embed `compiled_provenance` in each
+        compiled plan artifact it reads/writes; the cache key MUST equal
+        `compiled_provenance.compilation_unit_sha256`.      
       - `compile_cache_dir` MUST NOT be an absolute path and MUST resolve under
         `<workspace_root>/cache/` (see "Workspace root and filesystem paths").
       - If `compile_cache_dir` points to a location reused across runs, it is a cross-run cache and

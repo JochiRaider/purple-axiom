@@ -84,8 +84,8 @@ This spec explicitly does NOT define:
   elsewhere.
 - **Workspace root**: The appliance’s durable data root (usually volume-mounted). It contains
   `runs/` (run bundles) and additional operator/control-plane directories such as `state/` (secrets
-  \+ durable UI control-plane state), `logs/` (appliance logs), `plans/` (draft plans), and
-  `exports/` (derived export outputs).
+  and durable UI control-plane state), `logs/` (appliance logs), `plans/` (draft plans), `exports/`
+  (derived export outputs), and `artifacts/` (CI/workspace artifacts and connector outputs).
 - **Quarantine path**: The run-bundle subpath excluded from default disclosure. The quarantine
   directory is `runs/<run_id>/<security.redaction.unredacted_dir>` (default:
   `runs/<run_id>/unredacted/`). Validation and canonicalization rules for
@@ -114,6 +114,7 @@ to exist in v0.1.
 | `runs/`                        | Run bundles (pipeline outputs; authoritative)         | mixed       | 0750          |
 | `state/`                       | Secrets + durable control-plane state                 | high        | 0700          |
 | `logs/`                        | Appliance-local logs (including `ui_audit.jsonl`)     | medium      | 0750          |
+| `artifacts/`                   | CI/workspace artifacts (findings/fixtures, connectors)| medium      | 0750          |
 | `plans/`                       | Plan drafts + draft metadata (OI-authored)            | medium      | 0700          |
 | `exports/`                     | Derived exports (archives + `export_manifest.json`)   | high        | 0700          |
 | `cache/`                       | Cross-run caches and derived state (explicitly gated) | medium      | 0700          |
@@ -124,6 +125,8 @@ Notes:
 - `state/` MUST NOT be served by the artifact-serving endpoints.
 - `exports/` MUST NOT be served by the run artifact endpoints; exports are accessed only via
   explicit export download endpoints and policy gates.
+- `artifacts/` MUST NOT be served by the run artifact endpoints; it MAY be served only via
+  explicit findings/CI endpoints with their own policy gates.
 - `exports/datasets/` is a reserved export namespace for dataset releases (see
   `085_golden_datasets.md`) and MUST NOT be served by the run artifact endpoints.
 - `cache/` MUST NOT be served by the artifact-serving endpoints.
@@ -149,6 +152,20 @@ All control-plane writes under the workspace root MUST be crash-safe:
   write-to-temp + atomic rename.
 - When supported, implementations SHOULD `fsync()` the containing directory after atomic rename to
   reduce rename-loss risk on crash.
+
+Contract validation before publish (normative):
+
+- Before appending an event to `logs/ui_audit.jsonl`, the implementation MUST validate the event
+  instance against the `audit_event` contract as bound in the workspace contract registry.
+- Before publishing `state/run_registry.json`, the implementation MUST validate the document
+  instance against the `run_registry` contract as bound in the workspace contract registry.
+- On validation failure, the implementation MUST fail closed and MUST NOT modify the final artifact.
+  For contract-backed control-plane writes, implementations SHOULD emit the workspace contract
+  validation report defined in `025_data_contracts.md` ("Workspace contract validation report
+  artifact (normative)").
+
+Implementation note (non-normative): The reference mechanism for these semantics is
+`pa.publisher.workspace.v1` (see `025_data_contracts.md`).
 
 ## Deployment model (v0.2 normative)
 
@@ -906,6 +923,24 @@ Exports MUST follow the orchestrator `export` verb semantics:
 - `export_id` MUST be a UUID.
 - Export filenames MUST NOT include timestamps.
 
+**Crash-safe staging + publish (normative):**
+
+- Export outputs under `exports/**` MUST be staged under `<workspace_root>/exports/.staging/**` and
+  published by atomic directory rename into the final export location (see
+  `045_storage_formats.md`, "Workspace-global export staging directories").
+- Implementations MUST NOT use per-product staging directories under the final export namespaces
+  (for example `exports/datasets/.staging/**`).
+- Implementations SHOULD use `pa.publisher.workspace.v1` for this publish step (see
+  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics (pa.publisher.workspace.v1)").
+
+**Contract validation + failure observability (normative):**
+
+- `export_manifest.json` MUST validate against the `export_manifest` contract as bound in the
+  workspace contract registry before publish.
+- On contract validation failure, the final export output at `exports/<run_id>/<export_id>/` MUST
+  NOT be created or modified, and the implementation MUST write the workspace contract validation
+  report at `logs/contract_validation/exports/<run_id>/<export_id>.contract_validation.json`.
+
 **Export manifest (normative):**
 
 Every export MUST include an `export_manifest.json` written adjacent to the produced export output,
@@ -932,6 +967,7 @@ when used for a run.
 
 - Draft authoring format: YAML.
 - Hash basis: canonical JSON derived from YAML, canonicalized using RFC 8785 JCS, then SHA-256.
+  (This hash basis corresponds to `yaml_semantic_sha256_v1` in `026_contract_spine.md`.)
 
 **YAML restrictions (normative):**
 
@@ -949,7 +985,7 @@ when used for a run.
   - `draft.json` (metadata)
 - `draft.json` MUST include at minimum:
   - `draft_id` (UUID)
-  - `plan_sha256` (string; lowercase hex; computed as specified above for the current `plan.yaml`)
+  - `plan_sha256` (string; lowercase hex; computed as specified above for the current `plan.yaml`; corresponds to `yaml_semantic_sha256_v1(plan.yaml_bytes)` in `026_contract_spine.md`)
   - `created_at_utc` (RFC3339)
   - `updated_at_utc` (RFC3339)
 - Writes to `plan.yaml` and `draft.json` MUST use write-to-temp + atomic rename.
@@ -960,12 +996,19 @@ When a plan draft is assigned to a run (for example, when starting `simulate`):
 
 - the exact draft YAML content MUST be copied into the run bundle at:
   - `runs/<run_id>/inputs/plan_draft.yaml`
-- the plan hash (`plan_sha256`) MUST be recorded in the run manifest under:
-  - `manifest.extensions.operator_interface.plan_draft_sha256`
+- the plan semantic hash MUST be recorded in the run manifest under:
+  - `manifest.extensions.operator_interface.plan_draft_sha256` (canonical digest string form:
+    `sha256:<lowercase_hex>`; value MUST equal the string `sha256:` concatenated with
+    `draft.json.plan_sha256`)
 - the run manifest MUST also record the run-relative plan snapshot path under:
   - `manifest.extensions.operator_interface.plan_draft_path` (v0.2 value: `inputs/plan_draft.yaml`)
 - the recorded hash MUST match the copied draft (computed as specified in
   [Draft plans](#draft-plans))
+
+Contract surface note (normative): The field shapes, requiredness conditions, and cross-artifact
+invariants for `manifest.extensions.operator_interface.*` are defined in `025_data_contracts.md`
+under "Extensions and vendor fields". This document defines the operator workflow and semantic
+intent.
 
 Once copied into `runs/<run_id>/inputs/plan_draft.yaml`, the plan snapshot MUST be treated as
 immutable for the lifetime of the run.
@@ -1658,6 +1701,7 @@ that adopt it:
    | Global UI audit log | `logs/ui_audit.jsonl`                               | `audit_event` (reuse) | `docs/contracts/audit_event.schema.json`     | `jsonl_lines`     |
    | Run registry        | `state/run_registry.json`                           | `run_registry`        | `docs/contracts/run_registry.schema.json`    | `json_document`   |
    | Export manifest     | `exports/<run_id>/<export_id>/export_manifest.json` | `export_manifest`     | `docs/contracts/export_manifest.schema.json` | `json_document`   |
+   | Workspace validation report | `logs/contract_validation/<target_path>.contract_validation.json` | `workspace_contract_validation_report` | `docs/contracts/workspace_contract_validation_report.schema.json` | `json_document`   |
 
    **Test hooks (CI).**
 
@@ -1680,18 +1724,25 @@ that adopt it:
      `### Run association and immutability`
    - export manifest: `### Export behavior (normative)` → **Export manifest (normative)**
 
-1. **Workspace-global artifacts (validation strategy required)**
+1. **Workspace-global artifacts (workspace-root validation; resolved)**
 
-   `logs/ui_audit.jsonl`, `state/run_registry.json`, and `exports/**` outputs are workspace-root
-   artifacts.
+  `logs/ui_audit.jsonl`, `state/run_registry.json`, `artifacts/**`, and `exports/**` outputs are
+  workspace-root artifacts (not run-relative).
 
-   Implementations MUST choose one:
+  Resolution (normative):
 
-   - Add workspace-root binding capability to the contract registry + validator, OR
-   - Introduce a separate workspace registry + validator invocation (recommended), without changing
-     run-bundle artifact paths.
-
-   The chosen approach MUST be enforced in CI (do not "best-effort" validate).
+  - Contract-backed workspace artifacts MUST be validated against the workspace contract registry
+    (`docs/contracts/workspace_contract_registry.json`, `registry_kind="workspace"`).
+  - Publication MUST follow `pa.publisher.workspace.v1` semantics, including:
+    - directory staging + rename for `exports/**` via `exports/.staging/**`,
+    - atomic replace for single-file artifacts under `state/**` and `artifacts/**`, and
+    - append + `fsync()` for `logs/ui_audit.jsonl`.
+  - On contract validation failure, the implementation MUST fail closed and MUST emit the
+     workspace contract validation report defined in `025_data_contracts.md`.
+  
+  Constraint (normative):
+  
+   - Run-bundle publish-gate behavior (`pa.publisher.v1`) remains unchanged.
 
 1. **Asciinema playback (required; locally bundled assets + fallback)**
 

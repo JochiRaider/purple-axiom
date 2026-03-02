@@ -79,7 +79,15 @@
       "contract_id": "connector_result",
       "schema_path": "docs/contracts/connector_result.schema.json",
       "contract_version": "0.1.0"
-     }
+    },
+    {
+      "contract_id": "workspace_contract_validation_report",
+      "schema_path": "docs/contracts/workspace_contract_validation_report.schema.json",
+      "contract_version": "0.1.0",
+      "purpose": "Workspace publish-gate contract validation report (logs/contract_validation/<target_path>.contract_validation.json).",
+      "artifact_kind": "other",
+      "format": "json"
+    }
   ],
   "bindings": [
     {
@@ -88,7 +96,14 @@
       "stage_owner": "orchestrator",
       "validation_mode": "jsonl_lines",
       "pass_id": "orchestrator.workspace_logs.ui_audit.emit"
-     },
+    },
+    {
+      "artifact_glob": "logs/contract_validation/**/*.json",
+      "contract_id": "workspace_contract_validation_report",
+      "stage_owner": "orchestrator",
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.workspace_logs.contract_validation.emit"
+    },    
     {
       "artifact_glob": "state/run_registry.json",
       "contract_id": "run_registry",

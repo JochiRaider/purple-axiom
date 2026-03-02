@@ -832,6 +832,15 @@ Input kind (normative):
 
 - `pa.template_atomic.v1.input_kind` MUST be `utf8_text`.
 
+Newline normalization and limits (normative):
+
+- `newline_normalization` MUST be `false` (no normalization).
+- `max_input_chars` MUST be `65536` (see `026_contract_spine.md`, "Template module common
+  requirements").
+  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
+    - `error_code="input_too_large"`, and
+    - `location.byte_offset == 0`.
+
 Delimiter and scanning rules (normative):
 
 - Placeholder start delimiter: the exact two-byte sequence `#{`.
@@ -872,6 +881,7 @@ On parse failure, `pa.template_atomic.v1` MUST fail closed.
 
 Error vocabulary (normative):
 
+- `input_too_large`: input exceeds `max_input_chars`
 - `unterminated_placeholder`: a `#{` start delimiter was encountered with no closing `}`.
 - `empty_placeholder_name`: a placeholder of the form `#{}` was encountered.
 - `invalid_placeholder_name_start`: the first character of `<name>` is invalid.
@@ -880,10 +890,13 @@ Error vocabulary (normative):
 Error selection and ordering (normative):
 
 - The module MUST return exactly one error (first error wins).
-- The module MUST choose the leftmost failure in the input by `location.byte_offset`.
+- Limit enforcement MUST occur before any token scanning.
+  - If the input exceeds `max_input_chars`, the module MUST return `error_code="input_too_large"`.
+- Otherwise, the module MUST choose the leftmost failure in the input by `location.byte_offset`.
 
 Error locations (normative):
 
+- For `input_too_large`, `location.byte_offset == 0`.
 - For `unterminated_placeholder`, `location.byte_offset` MUST point to the `#` byte that began the
   placeholder start delimiter.
 - For `empty_placeholder_name`, `location.byte_offset` MUST point to the `}` byte that immediately

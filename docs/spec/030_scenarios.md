@@ -44,16 +44,16 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id                   | path/glob                                           | Required?                                          |
-| ----------------------------- | --------------------------------------------------- | -------------------------------------------------- |
-| `ground_truth`                | `ground_truth.jsonl`                                | required                                           |
-| `principal_context`           | `runner/principal_context.json`                     | required (per run; may be placeholder)             |
-| `runner_executor_evidence`    | `runner/actions/*/executor.json`                    | required (per action attempted)                    |
-| `requirements_evaluation`     | `runner/actions/*/requirements_evaluation.json`     | required (per action evaluated, including skipped) |
-| `resolved_inputs_redacted`    | `runner/actions/*/resolved_inputs_redacted.json`    | required (per action; may be placeholder)          |
-| `side_effect_ledger`          | `runner/actions/*/side_effect_ledger.json`          | required (per action; may be placeholder)          |
-| `state_reconciliation_report` | `runner/actions/*/state_reconciliation_report.json` | optional (when state reconciliation is enabled)    |
-| `cleanup_verification`        | `runner/actions/*/cleanup_verification.json`        | optional (when cleanup verification is enabled)    |
+| contract_id                   | path/glob                                           | pass_id                                          | Required?                                          |
+| ----------------------------- | --------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------- |
+| `ground_truth`                | `ground_truth.jsonl`                                | `runner.ground_truth.emit`                       | required                                           |
+| `principal_context`           | `runner/principal_context.json`                     | `runner.principal_context.emit`                  | required (per run; may be placeholder)             |
+| `runner_executor_evidence`    | `runner/actions/*/executor.json`                    | `runner.action.executor_evidence.emit`           | required (per action attempted)                    |
+| `requirements_evaluation`     | `runner/actions/*/requirements_evaluation.json`     | `runner.action.requirements_evaluation.emit`     | required (per action evaluated, including skipped) |
+| `resolved_inputs_redacted`    | `runner/actions/*/resolved_inputs_redacted.json`    | `runner.action.resolved_inputs_redacted.emit`    | required (per action; may be placeholder)          |
+| `side_effect_ledger`          | `runner/actions/*/side_effect_ledger.json`          | `runner.action.side_effect_ledger.emit`          | required (per action; may be placeholder)          |
+| `state_reconciliation_report` | `runner/actions/*/state_reconciliation_report.json` | `runner.action.state_reconciliation_report.emit` | optional (when state reconciliation is enabled)    |
+| `cleanup_verification`        | `runner/actions/*/cleanup_verification.json`        | `runner.action.cleanup_verification.emit`        | optional (when cleanup verification is enabled)    |
 
 #### Required inputs
 

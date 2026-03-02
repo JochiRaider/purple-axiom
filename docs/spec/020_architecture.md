@@ -168,7 +168,9 @@ Verb definitions (v0.1):
           validation before writing them to `runs/<run_id>/inputs/...` (see
           `026_contract_spine.md`),
         - compute `yaml_semantic_sha256_v1` for the bytes and record the digest string in the run
-          manifest field defined for that input, and
+          manifest field defined for that input. For `inputs/plan_draft.yaml`, record it at
+          `manifest.extensions.operator_interface.plan_draft_sha256` and record the snapshot path at
+          `manifest.extensions.operator_interface.plan_draft_path`, and
         - write the original bytes into `runs/<run_id>/inputs/...` verbatim (opaque copy; no
           rewriting or normalization).
       - Canonical YAML byte emission is intentionally unspecified in v0.1; this is reception and
@@ -515,6 +517,7 @@ unrelated content at these paths, and v0.1 tooling MUST ignore their presence wh
 | ------------------------------ | ------------------------------------------------------------------- | ---------------- |
 | `runs/`                        | Run bundles (authoritative pipeline outputs)                        | required         |
 | `state/`                       | Durable control-plane state (run registry, secrets, UI/daemon)      | reserved         |
+| `artifacts/`                   | Workspace-local artifacts (CI findings/fixtures, connector outputs) | reserved         |
 | `exports/`                     | Derived exports and export manifests                                | reserved         |
 | `cache/`                       | Cross-run caches and derived state (explicitly gated; optional use) | reserved         |
 | `logs/`                        | Workspace-local logs/audit (v0.2+)                                  | reserved         |
@@ -522,14 +525,12 @@ unrelated content at these paths, and v0.1 tooling MUST ignore their presence wh
 
 Notes:
 
-- v0.1 tooling MUST NOT require `state/`, `logs/`, `plans/`, `exports/`, or `cache/` to exist unless
-  the invoked feature explicitly uses that directory.
+- v0.1 tooling MUST NOT require `state/`, `artifacts/`, `logs/`, `plans/`, `exports/`, or `cache/` to exist unless the invoked feature explicitly uses that directory.
 - For the authoritative default scope profile (including which v0.2 seams are inert by default), see
   the project charter: [Target contract surface and scope profile][charter-scope].
 - `runs/` is the only directory whose contents are treated as authoritative pipeline outputs.
 - `runs/.locks/` is reserved for lockfiles and is not a run directory; scanners MUST ignore it.
-- `state/`, `exports/`, `cache/`, `logs/`, and `plans/` MUST NOT be treated as run artifact roots
-  and MUST NOT be included in run-bundle export packaging unless a spec explicitly says so.
+- `state/`, `artifacts/`, `exports/`, `cache/`, `logs/`, and `plans/` MUST NOT be treated as run artifact roots and MUST NOT be included in run-bundle export packaging unless a spec explicitly says so.
 
 ### Reserved exports namespaces
 
@@ -550,12 +551,16 @@ Reserved export namespaces (v0.1+; normative):
 
 Reserved export staging root (v0.1+; reserved):
 
-- `<workspace_root>/exports/.staging/` is reserved scratch space for crash-safe export/packaging
-  commands that publish multi-file outputs using a staging-then-rename pattern.
+- `<workspace_root>/exports/.staging/` is reserved scratch space for crash-safe export staging.
+  - Export/packaging commands that publish export products under `exports/**` MUST stage outputs
+    under `exports/.staging/**` and MUST publish by atomic rename into the final `exports/**`
+    location (see `045_storage_formats.md`, "Workspace-global export staging directories").
   - Producers SHOULD namespace staging by export kind (for example:
     `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`).
-  - Staging directories MUST be treated as non-authoritative and safe to delete when no export is in
-    progress.
+  - Producers MUST NOT create per-product staging directories under the final export namespaces
+    (for example `exports/datasets/.staging/**` or `exports/baselines/.staging/**`).
+  - Staging directories MUST be treated as non-authoritative and safe to delete when no export is
+    in progress.
 
 Mechanical enforcement guidance (non-normative):
 
@@ -580,8 +585,13 @@ Normative requirements:
   - `<workspace_root>/exports/` (optional; only for explicit export/packaging commands; writes MUST
     be confined to reserved export namespaces such as `exports/<run_id>/<export_id>/`,
     `exports/baselines/**`, `exports/datasets/**`, and `exports/.staging/**`)
-  - `<workspace_root>/state/` and `<workspace_root>/logs/` (reserved for v0.2+ control-plane
-    features; v0.1 SHOULD leave these untouched)
+  - `<workspace_root>/artifacts/` (optional; for CI and other workspace-local, contract-backed
+    artifacts such as findings/fixtures and connector outputs; see
+    `docs/contracts/workspace_contract_registry.json`)
+  - `<workspace_root>/state/` and `<workspace_root>/logs/` (reserved control-plane roots; v0.1
+    MAY write the contract-backed control-plane artifacts defined by the workspace registry,
+    including `state/run_registry.json`, `logs/ui_audit.jsonl`, and `logs/contract_validation/**`.
+    Other subpaths remain reserved and SHOULD be left untouched when unused.)
 
 - Tooling MUST NOT create or modify other workspace-root siblings as a side effect of a run.
 

@@ -156,6 +156,8 @@ document.
 | Lint target kind      | sigma-rule (baseline)      |              2 | `sigma_ast_v1` parse + deterministic ref resolution               |
 | Lint target kind      | sigma-rule (backend-aware) |              3 | Capability gate + safety/cost guardrails                          |
 | Lint target kind      | report-html                |              2 | Policy checks (no remote assets)                                  |
+| Lint target kind      | contract-registry          |              2 | Schema + registry binding invariants (pass_id)                    |
+| Lint target kind      | workspace-contract-registry |              2 | Schema + registry binding invariants (pass_id)                    |
 | Sigma backend adapter | native_pcre2               |              3 | Capability gate + pinned versions + semantic validator guardrails |
 
 ## Authority and precedence
@@ -506,6 +508,36 @@ The `content.lint` findings artifact is also an aggregation surface:
   by other local-only conformance checks executed under the `content.lint` gate (for example,
   Contract Spine conformance checks).
 
+#### Additional findings from Contract Spine conformance (normative)
+
+Contract Spine conformance checks executed under the `content.lint` gate MAY append additional
+`ci_gate_findings.findings[]` entries after the lint-derived mapping is applied.
+
+Parser module inventory synchronization (`parser_module_inventory_sync`) (normative):
+
+- Rule ID: `contract-spine-parser-module-inventory-sync`
+
+- When the Contract Spine conformance check detects that the parser module inventory in
+  `026_contract_spine.md` omits one or more required parser modules enumerated by
+  `100_test_strategy_ci.md`, "Cross-cutting: parser modules", it MUST emit an `error` finding with:
+
+  - `severity = "error"`
+  - `category = "semantic"`
+  - `reason_domain = "ci_gate_findings"`
+  - `reason_code = "parser_module_inventory_out_of_sync"`
+  - `rule_id = "contract-spine-parser-module-inventory-sync"`
+  - `subject.kind = "workspace_file"`
+  - `subject.stable_id = "026_contract_spine.md"`
+  - `location.file_path = "026_contract_spine.md"`
+
+- The finding `message` MUST list missing module tokens in ascending UTF-8 byte order (no locale)
+  to ensure deterministic output.
+
+- The finding `evidence.details` SHOULD include a redaction-safe structured payload containing:
+
+  - `missing_module_tokens[]` (sorted ascending, UTF-8 byte order)
+  - `required_module_tokens[]` (sorted ascending, UTF-8 byte order)
+  
 #### Deterministic mapping from `lint.json` → `ci_gate_findings` (normative)
 
 Given a `lint.json` report:
@@ -858,6 +890,99 @@ Minimum rule requirements:
   - The rendered HTML MUST NOT contain `<base` tags or `<meta http-equiv="refresh"`
     (case-insensitive).
 
+### Target kind `contract-registry`
+
+Intended for the run-bundle contract registry:
+
+- `docs/contracts/contract_registry.json`
+
+Minimum rule requirements:
+
+- Parse as JSON (YAML is not permitted for registries).
+- Structural validity checks for the contract registry shape defined in `025_data_contracts.md`,
+  "Contract registry" (top-level keys, required arrays, required fields per entry).
+- Binding `pass_id` checks (normative):
+
+  - Rule ID: `lint-contract-registry-pass-id-required`
+
+    - For every `bindings[i]`, `pass_id` MUST be present and MUST be a non-empty string.
+    - On violation, emit an `error` finding with:
+      - `instance_path="/bindings/<i>/pass_id"`
+      - `rule_id="lint-contract-registry-pass-id-required"`
+      - `severity="error"`
+
+  - Rule ID: `lint-contract-registry-pass-id-grammar-invalid`
+
+    - `bindings[i].pass_id` MUST match the `pass_id` grammar defined in `025_data_contracts.md`,
+      "Pass identifiers (`pass_id`)" (v1), i.e. `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`.
+    - On violation, emit an `error` finding with:
+      - `instance_path="/bindings/<i>/pass_id"`
+      - `rule_id="lint-contract-registry-pass-id-grammar-invalid"`
+      - `severity="error"`
+
+  - Rule ID: `lint-contract-registry-pass-id-prefix-mismatch`
+
+    - The `pass_id` root (substring before the first `.`) MUST equal `bindings[i].stage_owner`.
+    - On violation, emit an `error` finding with:
+      - `instance_path="/bindings/<i>/pass_id"`
+      - `rule_id="lint-contract-registry-pass-id-prefix-mismatch"`
+      - `severity="error"`
+      - `details.expected_root=<bindings[i].stage_owner>` (RECOMMENDED)
+      - `details.observed_root=<pass_id_root>` (RECOMMENDED)
+
+- Required pass manifest binding check (normative):
+
+  - Rule ID: `lint-contract-registry-pass-manifest-binding-missing`
+
+  - The registry MUST include a binding with:
+    - `artifact_glob="logs/pass_manifest.json"`
+    - `contract_id="pass_manifest"`
+    - `stage_owner="orchestrator"`
+  - On violation, emit an `error` finding with:
+    - `instance_path="/bindings"`
+    - `rule_id="lint-contract-registry-pass-manifest-binding-missing"`
+    - `severity="error"`
+
+### Target kind `workspace-contract-registry`
+
+Intended for the workspace contract registry:
+
+- `docs/contracts/workspace_contract_registry.json`
+
+Minimum rule requirements:
+
+- Parse as JSON (YAML is not permitted for registries).
+- Structural validity checks for the workspace contract registry shape defined in
+  `025_data_contracts.md`, "Contract registry" (the same entry model is used).
+- Binding `pass_id` checks (normative):
+
+  - Rule ID: `lint-workspace-contract-registry-pass-id-required`
+
+    - For every `bindings[i]`, `pass_id` MUST be present and MUST be a non-empty string.
+    - On violation, emit an `error` finding with:
+      - `instance_path="/bindings/<i>/pass_id"`
+      - `rule_id="lint-workspace-contract-registry-pass-id-required"`
+      - `severity="error"`
+
+  - Rule ID: `lint-workspace-contract-registry-pass-id-grammar-invalid`
+
+    - `bindings[i].pass_id` MUST match the `pass_id` grammar defined in `025_data_contracts.md`,
+      "Pass identifiers (`pass_id`)" (v1), i.e. `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`.
+    - On violation, emit an `error` finding with:
+      - `instance_path="/bindings/<i>/pass_id"`
+      - `rule_id="lint-workspace-contract-registry-pass-id-grammar-invalid"`
+      - `severity="error"`
+
+  - Rule ID: `lint-workspace-contract-registry-pass-id-prefix-mismatch`
+
+    - The `pass_id` root (substring before the first `.`) MUST equal `bindings[i].stage_owner`.
+    - On violation, emit an `error` finding with:
+      - `instance_path="/bindings/<i>/pass_id"`
+      - `rule_id="lint-workspace-contract-registry-pass-id-prefix-mismatch"`
+      - `severity="error"`
+      - `details.expected_root=<bindings[i].stage_owner>` (RECOMMENDED)
+      - `details.observed_root=<pass_id_root>` (RECOMMENDED)
+
 ## Schema publishing and editor integration
 
 ### Schema file location
@@ -917,6 +1042,10 @@ Implementations MUST provide tests that assert:
   - ambiguous operator usage,
   - canonical ordering violations, and
   - missing required columns/fields in authoring inputs.
+- Contract registry linting fixtures cover:
+  - missing `pass_id` on a binding (fail closed),
+  - invalid `pass_id` grammar, and
+  - `pass_id` root mismatch vs `stage_owner`.
 - Sigma rule linting fixtures cover:
   - boolean precedence and parentheses for `detection.condition`,
   - `x of` expansion semantics (including `them` underscore exclusion and deterministic ordering),
@@ -929,6 +1058,13 @@ Implementations MUST provide tests that assert:
   - `lint.json` validates against the lint report schema.
   - golden fixtures ignore no fields because the report MUST avoid volatile metadata by design.
 
+Contract registry change discipline (non-normative):
+
+- Any change to `contract_registry.json` or `workspace_contract_registry.json` SHOULD be
+  accompanied by a fixture update (or new fixture) that proves Contract Spine conformance remains
+  green, particularly for publisher semantics suites (`pa.publisher.v1` and
+  `pa.publisher.workspace.v1`).
+  
 Snapshot testing guidance:
 
 - Maintain a small fixture corpus per target kind.

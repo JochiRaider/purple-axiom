@@ -283,6 +283,13 @@ Index entry format (normative):
 
 - **Cross-cutting: parser modules**
 
+  - Inventory synchronization (normative):
+
+    - The module tokens covered by the REQUIRED parser-module vector fixtures in this section MUST
+      be listed in `026_contract_spine.md`, "Parser module inventory".
+    - Content CI MUST fail closed if the required vector set and the Contract Spine inventory are
+      out of sync (Contract Spine conformance check `parser_module_inventory_sync`).
+      
   - Canonical fixture roots:
 
     - `tests/fixtures/parser_modules/jsonpath_v1/vectors.json` (vector file)
@@ -369,6 +376,34 @@ Index entry format (normative):
     - `publisher_publish_gate_success_atomic_promotion`
     - `publisher_crash_mid_promotion_reconciliation`
     - `publisher_canonical_json_and_jsonl_bytes`
+
+- **Cross-cutting: pass manifest (`pa:pass_manifest:v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/pass_manifest/v1/`
+  - Minimum fixture sets (normative):
+    - `pass_manifest_emit_smoke`
+
+- **Cross-cutting: registry linting (`contract-registry`, `workspace-contract-registry`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/lint/registries/v1/`
+  - Minimum fixture sets (normative):
+    - `contract_registry_pass_id_smoke`
+    - `workspace_contract_registry_pass_id_smoke`
+
+- **Cross-cutting: workspace publisher semantics (`pa.publisher.workspace.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/publisher/workspace/v1/`
+  - Minimum fixture sets (normative):
+    - `workspace_publisher_atomic_dir_publish_no_partial` (exports target; stage under
+      `exports/.staging/**`; no partial publish on validation failure; includes invalid dataset and
+      invalid baseline publish cases)
+    - `workspace_publisher_atomic_file_publish_no_partial` (single-file target under `artifacts/**`;
+      atomic replace; no partial writes)
+    - `workspace_validation_report_path_rule` (report path derivation from `target_path` +
+      deterministic ordering/caps of errors, matching `025_data_contracts.md`)
 
 - **Cross-cutting: diagnostic record (`pa:diagnostic-record:v1`)**
 
@@ -802,6 +837,7 @@ Fixture set (normative):
       - Invalid-pattern cases (one case per error code; `expect_ok=false`) covering the full
         `glob_v1` error vocabulary:
 
+        - `input_too_large`
         - `invalid_path` (at least: leading `/`, `//`, trailing `/`, and `..` segment)
         - `contains_nul`
         - `invalid_escape` (any backslash in the pattern; no escape syntax)
@@ -824,6 +860,52 @@ Fixture set (normative):
       - if `expect_ok=false`:
         - parse MUST fail closed and the resulting parser-module error MUST match
           `expected_errors[]` exactly.
+
+### Contract registry linting (pass_id vocabulary)
+
+Contract registries are the canonical declaration point for `pass_id` values. CI MUST validate the
+registry lint target kinds introduced in `125_linting.md`:
+
+- `contract-registry` (`docs/contracts/contract_registry.json`)
+- `workspace-contract-registry` (`docs/contracts/workspace_contract_registry.json`)
+
+Fixture root (normative): `tests/fixtures/lint/registries/v1/`
+
+Minimum required fixture cases (normative):
+
+- `contract_registry_pass_id_smoke`
+
+  - Input workspace MUST include `docs/contracts/contract_registry.json` with at least the
+    following violations (can be in a single file):
+
+    - one binding missing `pass_id` (rule `lint-contract-registry-pass-id-required`),
+    - one binding with an invalid `pass_id` grammar (rule `lint-contract-registry-pass-id-grammar-invalid`),
+    - one binding whose `pass_id` root does not equal `stage_owner` (rule
+      `lint-contract-registry-pass-id-prefix-mismatch`), and
+    - omission of the required `logs/pass_manifest.json` binding (rule
+      `lint-contract-registry-pass-manifest-binding-missing`).
+
+  - Expected: lint fails closed with `lint.json.summary.status="fail"` and emits at least one
+    finding for each rule above.
+
+- `workspace_contract_registry_pass_id_smoke`
+
+  - Input workspace MUST include `docs/contracts/workspace_contract_registry.json` with at least the
+    following violations:
+
+    - one binding missing `pass_id` (rule `lint-workspace-contract-registry-pass-id-required`),
+    - one binding with an invalid `pass_id` grammar (rule
+      `lint-workspace-contract-registry-pass-id-grammar-invalid`), and
+    - one binding whose `pass_id` root does not equal `stage_owner` (rule
+      `lint-workspace-contract-registry-pass-id-prefix-mismatch`).
+
+  - Expected: lint fails closed with `lint.json.summary.status="fail"` and emits at least one
+    finding for each rule above.
+
+Golden output policy (normative):
+
+- The fixture harness MUST assert canonical JSON bytes for `lint.json` and MUST compare bytes
+  directly (no parse-and-reemit), consistent with `125_linting.md`.
 
 ### Parser modules
 
@@ -852,8 +934,26 @@ Each `cases[]` entry (normative):
 - `case_id` (string; stable identifier, `id_slug_v1`)
 - `input_kind` (`bytes | utf8_text`)
 - `input`:
-  - when `input_kind="utf8_text"`: `input.utf8` (string)
-  - when `input_kind="bytes"`: `input.base64` (string; standard base64; no newlines)
+  - when `input_kind="utf8_text"`: exactly one of:
+    - `input.utf8` (string)
+    - `input.file` (string; relative path to a file containing the raw input bytes)
+  - when `input_kind="bytes"`: exactly one of:
+    - `input.base64` (string; standard base64; no newlines)
+    - `input.file` (string; relative path to a file containing the raw input bytes)
+
+`input.file` rules (normative):
+
+- `input.file` MUST be a relative path, resolved relative to the directory containing the vectors
+  file.
+- The harness MUST read `input.file` as raw bytes and pass those bytes as the parser-module input
+  (the module under test performs any module-declared preprocessing).
+- `input.file` MUST NOT be present alongside `input.utf8` or `input.base64`.
+
+Error location basis (normative):
+
+- `expected_errors[].location.byte_offset` MUST be specified against the canonical parse input after
+  any module-declared preprocessing (BOM stripping and newline normalization, if declared), per
+  `026_contract_spine.md`, "Parser modules".
 - `expect_ok` (boolean)
 
 If `expect_ok=true` (normative):
@@ -944,6 +1044,7 @@ Minimum case set (normative):
 
 - The vectors file MUST include, at minimum, invalid cases that fail closed for:
 
+  - input exceeds `max_input_chars` (`error_code=input_too_large`; `location.byte_offset=0`)
   - missing root `$` (example `.a`)
   - recursive descent (`..`)
   - filters (`?()`)
@@ -1044,6 +1145,7 @@ Minimum case set (normative):
   - A `parse_ok` case covering a prefixed-namespaced Windows Event XML form (namespace URI and
     prefix MUST NOT affect extraction; only local-name matching is allowed).
   - `parse_error` cases covering:
+    - `xml_input_too_large` (see note below)
     - `rendering_info_present`
     - `xml_not_well_formed`
     - `xml_disallowed_doctype`
@@ -1054,6 +1156,12 @@ Minimum case set (normative):
     - `xml_invalid_integer`
     - `xml_invalid_guid`
     - `xml_invalid_utf8`
+
+Notes (normative):
+
+- The vectors file MUST include at least one `xml_input_too_large` case. The case SHOULD use
+  `input.file` (see "Vector file schema") to avoid embedding a >16 MiB base64 payload in
+  `vectors.json`.
 
 #### Checksums file vectors (`pa.checksums_file.v1`)
 
@@ -1071,8 +1179,10 @@ Grammar source (normative):
 Input encoding (normative):
 
 - `input_kind` MUST be `bytes`.
-- Inputs MUST be provided as `input.base64` to preserve exact byte offsets and to allow invalid
-  UTF-8 / NUL fixtures.
+- Inputs MUST be provided as either `input.base64` or `input.file`:
+  - `input.base64` is RECOMMENDED for small/medium cases (keeps the vectors file self-contained).
+  - `input.file` is RECOMMENDED for very large payloads (for example `input_too_large`) to avoid
+    embedding massive base64 blobs in `vectors.json`.
 
 AST contract (normative):
 
@@ -1105,6 +1215,7 @@ Required coverage (normative):
 
 - Invalid cases MUST include at least one case for each of the following error codes:
 
+  - `input_too_large`
   - `contains_nul`
   - `contains_cr`
   - `invalid_utf8`
@@ -1119,6 +1230,7 @@ Error location (normative):
 
 - For invalid cases, `expected_errors[0].location.byte_offset` MUST be present and MUST refer to the
   leftmost parse failure byte offset (0-indexed) as required by `pa.parser_vectors.v1`.
+- For the `input_too_large` case, `expected_errors[0].location.byte_offset` MUST be `0`.
 
 #### Syslog line vectors
 
@@ -1148,9 +1260,13 @@ Success cases (normative minimum coverage):
     exercising the deterministic "closest timestamp at or before run end" inference rule.
 - RFC5424-like line with PRI + version + RFC3339 timestamp + structured data `-`.
 - RFC5424-like line with syntactically valid structured data (one bracketed element) and a message.
+- byte-heavy but char-legal line: canonical parse input that is `<= 65536` Unicode scalar values but
+  would exceed `65536` UTF-8 bytes if a byte cap were (incorrectly) enforced.
 
 Failure cases (normative minimum coverage; MUST fail closed):
 
+- canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
+  `location.byte_offset=0`) 
 - invalid PRI (non-numeric or out of range)
 - invalid timestamp (RFC3164 timestamp malformed; RFC5424 timestamp malformed or NILVALUE)
 - unknown/unsupported format (does not match RFC3164-like or RFC5424-like)
@@ -1169,7 +1285,9 @@ Errors contract (normative):
 
 - Failure cases MUST assert `expected_errors[]` exactly (stable `error_code`, `message_prefix`, and
   `location`).
-
+- For the `line_too_long` case, `expected_errors[0].location.byte_offset` MUST equal the UTF-8 byte
+  offset of the first byte of the first disallowed Unicode scalar in the canonical parse input.
+  
 #### Audit correlation-key vectors
 
 `audit_event_key_v1_vectors` validate parsing of the audit correlation key substring
@@ -1191,11 +1309,14 @@ Success cases (normative minimum coverage):
 
 Failure cases (normative minimum coverage; MUST fail closed):
 
+- canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
+  `location.byte_offset=0`)
 - missing `audit(` prefix or closing `)`
 - missing `.` or `:`
 - empty numeric segments
 - fraction longer than 9 digits
 - numeric overflow (epoch_seconds or serial does not fit in unsigned 64-bit)
+- input exceeds `max_input_chars` (`line_too_long`)
 
 #### Audit record KV vectors
 
@@ -1214,9 +1335,13 @@ Success cases (normative minimum coverage):
 - a record line containing `node=<value>` (node is surfaced as `node` in the AST)
 - a record line with quoted values (e.g., `exe="... ..."`) and preserved escapes
 - a record line with repeated non-required keys, asserting array behavior
-
+- byte-heavy but char-legal record line: canonical parse input that is `<= 65536` Unicode scalar values
+  but would exceed `65536` UTF-8 bytes if a byte cap were (incorrectly) enforced.
+  
 Failure cases (normative minimum coverage; MUST fail closed):
 
+- canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
+  `location.byte_offset=0`)
 - missing required `type=...`
 - missing required `msg=...`
 - `type` or `msg` repeated
@@ -1228,7 +1353,9 @@ Errors contract (normative):
 
 - Failure cases MUST assert `expected_errors[]` exactly (stable `error_code`, `message_prefix`, and
   `location`).
-
+- For the `line_too_long` case, `expected_errors[0].location.byte_offset` MUST equal the UTF-8 byte
+  offset of the first byte of the first disallowed Unicode scalar in the canonical parse input.
+  
 #### Atomic template placeholder vectors
 
 Fixture set (normative):
@@ -1271,6 +1398,7 @@ Minimum case set (normative):
 
 - The vectors file MUST include, at minimum, invalid cases that fail closed for:
 
+  - input exceeds `max_input_chars` (`input_too_large`)
   - unterminated placeholder (`#{` with no closing `}`)
   - empty placeholder name (`#{}`)
   - invalid placeholder name start (first char not in `[A-Za-z_]`)
@@ -1319,6 +1447,7 @@ Minimum case set (normative):
 
 - The vectors file MUST include, at minimum, invalid cases that fail closed for:
 
+  - input exceeds `max_input_chars` (`input_too_large`)
   - unterminated placeholder (`{{ARG.` with no closing `}}`)
   - empty placeholder name (`{{ARG.}}`)
   - invalid placeholder name start (first char not in `[A-Za-z_]`)
@@ -2553,33 +2682,61 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
   - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_valid/`
   - Provide a minimal run bundle that includes a valid `control/cancel.json`.
   - Assert contract validation succeeds for the operator control-plane artifacts present.
+
 - `control_plane_cancel_invalid_rejected` (v0.2+; fail closed)
   - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_invalid_rejected/`
   - Provide a run bundle that includes a schema-invalid `control/cancel.json`.
   - Assert contract validation fails closed.
   - Assert the failure output identifies the invalid location deterministically (for example, JSON
     pointer or dotted path).
+
 - `control_plane_resume_request_decision_valid` (v0.2+)
   - Fixture root: `tests/fixtures/orchestrator/control_plane/resume_request_decision_valid/`
   - Provide a run bundle that includes:
     - `control/resume_request.json`, and
     - `control/operator_decisions.json` (with a decision for the request).
   - Assert all present operator control-plane artifacts validate successfully.
+
 - `control_plane_retry_request_decision_valid` (v0.2+)
   - Fixture root: `tests/fixtures/orchestrator/control_plane/retry_request_decision_valid/`
   - Provide a run bundle that includes:
     - `control/retry_request.json`, and
     - `control/operator_decisions.json` (with a decision for the request).
   - Assert all present operator control-plane artifacts validate successfully.
+
 - `plan_draft_valid` (v0.2+)
   - Fixture root: `tests/fixtures/orchestrator/plan_draft/valid/`
   - Provide a run bundle that includes a valid `inputs/plan_draft.yaml`.
   - Assert contract validation succeeds for the plan draft artifact.
+
 - `plan_draft_invalid_rejected` (v0.2+; fail closed)
   - Fixture root: `tests/fixtures/orchestrator/plan_draft/invalid_rejected/`
   - Provide a run bundle that includes an invalid `inputs/plan_draft.yaml` (syntactically invalid OR
     schema-invalid).
   - Assert contract validation fails closed and emits a deterministic error location.
+
+- `plan_draft_provenance_valid` (v0.2+; cross-artifact invariant)
+  - Fixture root: `tests/fixtures/orchestrator/plan_draft/provenance_valid/`
+  - Provide a run bundle that includes:
+    - a valid `inputs/plan_draft.yaml`, and
+    - a `manifest.json` that includes `manifest.extensions.operator_interface.plan_draft_path` and
+      `manifest.extensions.operator_interface.plan_draft_sha256`.
+  - Assert the cross-artifact invariant passes: `plan_draft_sha256` matches
+    `yaml_semantic_sha256_v1(inputs/plan_draft.yaml)` (digest string form).
+
+- `plan_draft_provenance_missing_extension_fails` (v0.2+; fail closed)
+  - Fixture root: `tests/fixtures/orchestrator/plan_draft/provenance_missing_extension_fails/`
+  - Provide a run bundle that includes `inputs/plan_draft.yaml` but omits
+    `manifest.extensions.operator_interface`.
+  - Assert the cross-artifact invariant fails closed and emits a deterministic pointer (JSON Pointer
+    or dotted path) to `manifest.extensions.operator_interface`.
+
+- `plan_draft_provenance_hash_mismatch_fails` (v0.2+; fail closed)
+  - Fixture root: `tests/fixtures/orchestrator/plan_draft/provenance_hash_mismatch_fails/`
+  - Provide a run bundle that includes both fields but sets
+    `manifest.extensions.operator_interface.plan_draft_sha256` to an intentionally incorrect value.
+  - Assert the cross-artifact invariant fails closed and emits a deterministic pointer (JSON Pointer
+    or dotted path) to `manifest.extensions.operator_interface.plan_draft_sha256`.
 
 ### Content governance: golden datasets (fail-closed)
 
@@ -2679,6 +2836,14 @@ Conformance fixtures (normative):
     descriptive context under `views/features/` or `views/labels/` (for example, a report narrative
     file or scenario description material). Assert CI fails closed with a stable error that
     identifies a leakage boundary violation.
+
+Publisher integration note (workspace; normative):
+
+- Dataset release producers MUST publish via `pa.publisher.workspace.v1` and MUST fail closed on
+  contract validation errors (no partial publish).
+- The workspace publisher conformance suite MUST include a negative dataset release publish fixture
+  that asserts the deterministic workspace validation report location for the dataset target root
+  (see "Cross-cutting: workspace publisher semantics (`pa.publisher.workspace.v1`)" above).
 
 ### Version conformance
 
@@ -2887,6 +3052,10 @@ Cross-artifact invariants enforce consistency across pipeline outputs:
 - `run_id` and `scenario_id` consistency across all artifacts
 - Referential integrity (detections reference existing `event_id` values)
 - Inventory snapshot hash matches manifest input hash
+- Plan draft provenance coupling: when `inputs/plan_draft.yaml` is present,
+  `manifest.extensions.operator_interface.plan_draft_path` and
+  `manifest.extensions.operator_interface.plan_draft_sha256` MUST be present and `plan_draft_sha256`
+  MUST match `yaml_semantic_sha256_v1(inputs/plan_draft.yaml)` (digest string form)
 - When `operability.health.emit_health_files=true`, `runs/<run_id>/logs/health.json` MUST exist and
   MUST satisfy the minimum schema in the [operability specification](110_operability.md) ("Health
   files (normative, v0.1)")
@@ -2895,6 +3064,34 @@ Cross-artifact invariants enforce consistency across pipeline outputs:
     substages allowed) consistent with the architecture specification.
   - Each `health.json.stages[].reason_code` value (when present) MUST be drawn from ADR-0005 for the
     corresponding stage/substage; unknown reason codes MUST fail CI.
+
+### Plan draft provenance coupling
+
+When plan drafts are used (v0.2+), the run bundle MUST include both:
+
+- `inputs/plan_draft.yaml` (the pinned plan draft snapshot), and
+- `manifest.extensions.operator_interface` provenance fields tying the manifest to that snapshot.
+
+The validator / CI harness MUST enforce the following (fail closed):
+
+- Presence coupling:
+  - If `inputs/plan_draft.yaml` is present, `manifest.extensions.operator_interface` MUST be present.
+  - If `manifest.extensions.operator_interface` is present, `inputs/plan_draft.yaml` MUST be present.
+- Value coupling:
+  - `manifest.extensions.operator_interface.plan_draft_path` MUST equal `inputs/plan_draft.yaml`.
+  - `manifest.extensions.operator_interface.plan_draft_sha256` MUST equal
+    `yaml_semantic_sha256_v1(inputs/plan_draft.yaml)` in canonical digest string form
+    (`sha256:<lowercase_hex>`).
+
+Stable failure classification (normative; for structured findings):
+
+- Missing provenance extension when a plan draft is present MUST emit `reason_code`:
+  - `plan_draft_provenance_missing`
+- Digest mismatch MUST emit `reason_code`:
+  - `plan_draft_provenance_hash_mismatch`
+
+Where possible, findings SHOULD carry deterministic location detail via JSON Pointer or dotted path
+(for example `manifest.extensions.operator_interface.plan_draft_sha256`) in `evidence.details`.
 
 ### Controlled noise profile conformance
 
@@ -3085,6 +3282,42 @@ Fixture set (normative):
       deterministically, and MUST emit a contract validation report that follows the deterministic
       ordering + truncation rules in `025_data_contracts.md` ("Deterministic error ordering and
       error caps").
+
+### Pass manifest conformance (run-bundle pass attribution)
+
+The pass manifest (`runs/<run_id>/logs/pass_manifest.json`) is the canonical run-bundle surface
+that attaches `pass_id` to contract-backed artifacts, enabling pass-granularity provenance,
+diffing, and caching (see `026_contract_spine.md`, "Pass manifest").
+
+Fixture set (normative):
+
+- Canonical fixture root: `tests/fixtures/pass_manifest/v1/` (see "Fixture index").
+
+- `pass_manifest_emit_smoke` (golden bytes lock)
+
+  - Provide a minimal workspace fixture that includes:
+
+    - a minimal `docs/contracts/contract_registry.json` sufficient to resolve bindings for the
+      fixture artifacts, and
+    - a minimal run bundle under `runs/<run_id>/` containing:
+      - at least three contract-backed artifacts (including at least one wildcard/glob-bound
+        artifact such as `runner/actions/*/executor.json`), and
+      - at least one non-contract artifact under `logs/` (for example `logs/run.log`) to ensure
+        non-contracted artifacts do not appear in the manifest.
+
+  - The test harness MUST run the pass manifest generator and assert:
+
+    - `runs/<run_id>/logs/pass_manifest.json` is emitted as RFC 8785 canonical JSON bytes (JCS),
+    - output bytes are byte-for-byte equal to the golden fixture file,
+    - `entries[]` is sorted by `artifact_path` ascending,
+    - no duplicate `artifact_path` entries exist, and
+    - the self entry `logs/pass_manifest.json` is absent.
+
+- `pass_manifest_ordering_stability` (RECOMMENDED)
+
+  - Provide at least one case where filesystem enumeration order is intentionally randomized by the
+    harness.
+  - Expected: `logs/pass_manifest.json` bytes remain identical across runs.
 
 ### Export and checksums scope
 

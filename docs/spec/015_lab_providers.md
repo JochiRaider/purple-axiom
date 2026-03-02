@@ -33,9 +33,9 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id              | path/glob                          | Required? |
-| ------------------------ | ---------------------------------- | --------- |
-| `lab_inventory_snapshot` | `logs/lab_inventory_snapshot.json` | required  |
+| contract_id              | path/glob                          | pass_id                                | Required? |
+| ------------------------ | ---------------------------------- | -------------------------------------- | --------- |
+| `lab_inventory_snapshot` | `logs/lab_inventory_snapshot.json` | `lab_provider.inventory_snapshot.emit` | required  |
 
 #### Required inputs
 

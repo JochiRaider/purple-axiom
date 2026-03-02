@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pa:workspace-contract-validation-report:v1",
+  "title": "Purple Axiom workspace contract validation report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "schema_version",
+    "registry_kind",
+    "workspace_registry_version",
+    "target_path",
+    "generated_at_utc",
+    "max_errors_per_artifact",
+    "artifacts"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "0.1.0"
+    },
+    "schema_version": {
+      "const": "pa:workspace-contract-validation-report:v1"
+    },
+    "registry_kind": {
+      "const": "workspace"
+    },
+    "workspace_registry_version": {
+      "type": "string",
+      "description": "The `registry_version` of the workspace contract registry instance used for validation."
+    },
+    "target_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Workspace-root-relative final publish target (file or directory root). Must not end with '/'."
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339 UTC timestamp. Treated as volatile metadata for semantic comparisons."
+    },
+    "max_errors_per_artifact": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The maximum number of errors collected per artifact before truncation."
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/validated_artifact"
+      },
+      "description": "Per-artifact validation summaries. MUST be sorted by artifact_path (UTF-8 byte order)."
+    }
+  },
+  "$defs": {
+    "validated_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_path",
+        "contract_id",
+        "contract_version",
+        "status",
+        "errors_truncated",
+        "errors"
+      ],
+      "properties": {
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Workspace-root-relative POSIX path to the validated artifact."
+        },
+        "contract_id": {
+          "type": "string"
+        },
+        "contract_version": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "invalid"
+          ]
+        },
+        "errors_truncated": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/validation_error"
+          }
+        }
+      }
+    },
+    "validation_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_path",
+        "contract_id",
+        "instance_path",
+        "schema_path",
+        "message"
+      ],
+      "properties": {
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Workspace-root-relative POSIX path to the artifact that failed validation."
+        },
+        "contract_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Optional stable, machine-readable token for the class of validation failure."
+        },
+        "instance_path": {
+          "type": "string",
+          "description": "JSON Pointer to the failing instance location (\"\" for document root)."
+        },
+        "schema_path": {
+          "type": "string",
+          "description": "JSON Pointer to the failing schema location (\"\" if unavailable)."
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Optional JSON Schema keyword that triggered the failure (e.g., required, type)."
+        },
+        "message": {
+          "type": "string"
+        },
+        "line_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-indexed line number for JSONL validation errors and JSONL parse errors."
+        }
+      }
+    }
+  }
+}

@@ -38,13 +38,13 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id           | path/glob                       | Required?                                           |
-| --------------------- | ------------------------------- | --------------------------------------------------- |
-| `report.schema`       | `report/report.json`            | required (when `reporting.emit_json=true`)          |
-| `thresholds.schema`   | `report/thresholds.json`        | required                                            |
-| `run_timeline.schema` | `report/run_timeline.md`        | required (when `reporting.emit_json=true`)          |
-| `baseline_run_ref`    | `inputs/baseline_run_ref.json`  | required (when `reporting.regression.enabled=true`) |
-| `manifest`            | `inputs/baseline/manifest.json` | optional (when `reporting.regression.enabled=true`) |
+| contract_id           | path/glob                       | pass_id                                           | Required?                                           |
+| --------------------- | ------------------------------- | ------------------------------------------------- | --------------------------------------------------- |
+| `report.schema`       | `report/report.json`            | `reporting.report.emit`                           | required (when `reporting.emit_json=true`)          |
+| `thresholds.schema`   | `report/thresholds.json`        | `reporting.thresholds.emit`                       | required                                            |
+| `run_timeline.schema` | `report/run_timeline.md`        | `reporting.run_timeline.emit`                     | required (when `reporting.emit_json=true`)          |
+| `baseline_run_ref`    | `inputs/baseline_run_ref.json`  | `reporting.regression.baseline_run_ref.snapshot`  | required (when `reporting.regression.enabled=true`) |
+| `manifest`            | `inputs/baseline/manifest.json` | `reporting.regression.baseline_manifest.snapshot` | optional (when `reporting.regression.enabled=true`) |
 
 #### Required inputs
 

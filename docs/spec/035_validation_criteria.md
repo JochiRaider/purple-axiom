@@ -39,11 +39,11 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id              | path/glob                 | Required?                                 |
-| ------------------------ | ------------------------- | ----------------------------------------- |
-| `criteria_pack_manifest` | `criteria/manifest.json`  | required (when `validation.enabled=true`) |
-| `criteria_entry`         | `criteria/criteria.jsonl` | required (when `validation.enabled=true`) |
-| `criteria_result`        | `criteria/results.jsonl`  | required (when `validation.enabled=true`) |
+| contract_id              | path/glob                 | pass_id                             | Required?                                 |
+| ------------------------ | ------------------------- | ----------------------------------- | ----------------------------------------- |
+| `criteria_pack_manifest` | `criteria/manifest.json`  | `validation.criteria.manifest.emit` | required (when `validation.enabled=true`) |
+| `criteria_entry`         | `criteria/criteria.jsonl` | `validation.criteria.emit`          | required (when `validation.enabled=true`) |
+| `criteria_result`        | `criteria/results.jsonl`  | `validation.results.emit`           | required (when `validation.enabled=true`) |
 
 #### Required inputs
 
@@ -282,6 +282,15 @@ Input kind (normative):
 
 - `pa.template_criteria_arg.v1.input_kind` MUST be `utf8_text`.
 
+Newline normalization and limits (normative):
+
+- `newline_normalization` MUST be `false` (no normalization).
+- `max_input_chars` MUST be `65536` (see `026_contract_spine.md`, "Template module common
+  requirements").
+  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
+    - `error_code="input_too_large"`, and
+    - `location.byte_offset == 0`.
+
 Delimiter and scanning rules (normative):
 
 - A placeholder token begins only at the exact byte sequence `{{ARG.`.
@@ -330,6 +339,7 @@ On parse failure, `pa.template_criteria_arg.v1` MUST fail closed.
 
 Error vocabulary (normative):
 
+- `input_too_large`: input exceeds `max_input_chars`.
 - `unterminated_placeholder`: a `{{ARG.` start delimiter was encountered with no closing `}}`.
 - `empty_placeholder_name`: a placeholder of the form `{{ARG.}}` was encountered.
 - `invalid_placeholder_name_start`: the first character of `<arg_name>` is invalid.
@@ -338,10 +348,13 @@ Error vocabulary (normative):
 Error selection and ordering (normative):
 
 - The module MUST return exactly one error (first error wins).
-- The module MUST choose the leftmost failure in the input by `location.byte_offset`.
+- Limit enforcement MUST occur before any token scanning.
+  - If the input exceeds `max_input_chars`, the module MUST return `error_code="input_too_large"`.
+- Otherwise, the module MUST choose the leftmost failure in the input by `location.byte_offset`.
 
 Error locations (normative):
 
+- For `input_too_large`, `location.byte_offset == 0`.
 - For `unterminated_placeholder`, `location.byte_offset` MUST point to the first `{` byte of the
   `{{ARG.` start delimiter.
 - For `empty_placeholder_name`, `location.byte_offset` MUST point to the first `}` byte of the

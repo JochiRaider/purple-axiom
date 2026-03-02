@@ -741,6 +741,15 @@ Outcome classification and observability (normative):
 - If invoked outside the Operator Interface, illegal transitions and guard failures MUST surface a
   deterministic error (exception / error code) and MUST NOT mutate artifacts.
 
+Contract validation failure observability (normative):
+
+- If a create or metadata update operation fails because contract-backed baseline package metadata
+  is schema-invalid (for example the baseline package manifest fails the
+  `baseline_detection_package_manifest` contract), the implementation MUST:
+  - fail closed with no mutation of the published root, and
+  - emit the workspace contract validation report for the baseline target root at
+    `logs/contract_validation/exports/baselines/<baseline_id>/<baseline_version>.contract_validation.json`.
+
 Recommended `(state,event)` failure mappings (non-exhaustive):
 
 - `published` + `event.create_requested` -> `baseline_already_exists`
@@ -887,6 +896,18 @@ To create a BDP, the builder MUST:
 
 Creation MUST fail if `<baseline_root>` already exists (conflict).
 
+Publish-gate integration (normative):
+
+- The publish step for baseline packages MUST follow `pa.publisher.workspace.v1` semantics (see
+  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics (pa.publisher.workspace.v1)").
+- Before the final rename into `exports/baselines/**`, the implementation MUST validate the staged
+  baseline package manifest (and any other contract-backed baseline package metadata) against the
+  workspace contract registry (`docs/contracts/workspace_contract_registry.json`).
+- On contract validation failure, the implementation MUST fail closed:
+  - the final published root under `exports/baselines/**` MUST NOT be created or modified, and
+  - the workspace contract validation report MUST be written at
+    `logs/contract_validation/exports/baselines/<baseline_id>/<baseline_version>.contract_validation.json`.
+
 ### Metadata updates
 
 Implementations MAY support updating the following manifest fields in place:
@@ -907,6 +928,14 @@ Updates MUST:
 - recompute `integrity.package_tree_sha256` only if any file included in the *tree-basis selection*
   changes (see [Integrity and signing](#integrity-and-signing)). Pure metadata edits MUST NOT change
   `integrity.package_tree_sha256`.
+
+Contract validation (metadata updates; normative):
+
+- Any updated `baseline_package_manifest.json` MUST validate against the workspace contract registry
+  before the update is applied.
+- On contract validation failure, the implementation MUST fail closed (no mutation to the published
+  root) and MUST emit the workspace contract validation report at
+  `logs/contract_validation/exports/baselines/<baseline_id>/<baseline_version>.contract_validation.json`.
 
 ### Deletion
 

@@ -41,7 +41,7 @@ invariants that cannot be expressed in JSON Schema alone.
         - [Grammar (v1)](#grammar-v1)
         - [Stability rules (normative)](#stability-rules-normative)
         - [Registry invariants (normative)](#registry-invariants-normative)
-      - [Glob semantics (glob_v1) (normative)](#glob-semantics-glob_v1-normative)
+      - [Glob semantics (glob\_v1) (normative)](#glob-semantics-glob_v1-normative)
       - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
       - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
       - [Contract version constant (normative)](#contract-version-constant-normative)
@@ -76,6 +76,7 @@ invariants that cannot be expressed in JSON Schema alone.
         - [Deterministic derivation from `artifacts[].errors[]` (normative)](#deterministic-derivation-from-artifactserrors-normative)
         - [Losslessness requirement (normative)](#losslessness-requirement-normative)
       - [Deterministic artifact path rule (normative)](#deterministic-artifact-path-rule-normative)
+    - [Workspace contract validation report artifact (normative)](#workspace-contract-validation-report-artifact-normative)
     - [Validation scope and timing](#validation-scope-and-timing)
       - [Publish-gate contract validation (required)](#publish-gate-contract-validation-required)
         - [Stage enablement and required contract outputs (v0.1)](#stage-enablement-and-required-contract-outputs-v01)
@@ -85,6 +86,10 @@ invariants that cannot be expressed in JSON Schema alone.
     - [Reference publisher SDK requirement (normative)](#reference-publisher-sdk-requirement-normative)
     - [Canonical publish-gate behavior (normative)](#canonical-publish-gate-behavior-normative)
     - [Canonical serialization rules (normative)](#canonical-serialization-rules-normative)
+  - [Producer tooling: workspace publisher semantics (pa.publisher.workspace.v1)](#producer-tooling-workspace-publisher-semantics-papublisherworkspacev1)
+    - [Reference workspace publisher SDK requirement (normative)](#reference-workspace-publisher-sdk-requirement-normative)
+    - [Canonical workspace publish-gate behavior (normative)](#canonical-workspace-publish-gate-behavior-normative)
+    - [Canonical serialization rules (workspace; normative)](#canonical-serialization-rules-workspace-normative)
   - [Consumer tooling: reference reader semantics (pa.reader.v1)](#consumer-tooling-reference-reader-semantics-pareaderv1)
     - [Reference reader SDK requirement (normative)](#reference-reader-sdk-requirement-normative)
     - [Canonical run bundle discovery (paths and fallbacks)](#canonical-run-bundle-discovery-paths-and-fallbacks)
@@ -102,7 +107,7 @@ invariants that cannot be expressed in JSON Schema alone.
       - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
     - [Measurement layers for conclusions (triage taxonomy)](#measurement-layers-for-conclusions-triage-taxonomy)
     - [Run manifest](#run-manifest)
-    - [Run results summary (run_results.json)](#run-results-summary-run_resultsjson)
+    - [Run results summary (run\_results.json)](#run-results-summary-run_resultsjson)
     - [Ground truth timeline](#ground-truth-timeline)
     - [Stable action identity](#stable-action-identity)
     - [Inputs and reproducible hashing](#inputs-and-reproducible-hashing)
@@ -142,6 +147,7 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Versioning and compatibility policy](#versioning-and-compatibility-policy)
     - [Spec breakup guidance (non-normative)](#spec-breakup-guidance-non-normative)
   - [Extensions and vendor fields](#extensions-and-vendor-fields)
+    - [Operator Interface namespace: plan draft provenance (v0.2+; normative when implemented)](#operator-interface-namespace-plan-draft-provenance-v02-normative-when-implemented)
     - [Runner namespace: environment noise profile (v0.1)](#runner-namespace-environment-noise-profile-v01)
       - [Noise profile snapshot and hashing (normative)](#noise-profile-snapshot-and-hashing-normative)
     - [Runner namespace: execution-definition provenance (v0.1)](#runner-namespace-execution-definition-provenance-v01)
@@ -371,6 +377,17 @@ Lexer rules (normative):
 
 - Input kind: the `pattern` is a UTF-8 text string (`utf8_text`) and MUST be treated as Unicode
   scalar values for the purposes of `?` and character-class matching.
+
+Newline normalization (normative):
+
+- `newline_normalization` MUST be `false` (no normalization).
+
+Limits (normative):
+
+- `max_input_chars` MUST be `4096` (measured as Unicode scalar values in the canonical parse input).
+  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
+    - `error_code="input_too_large"`, and
+    - `location.byte_offset == 0`.
 - `glob_v1` defines no escape syntax.
   - The backslash character (`\`) MUST be rejected (fail closed); it MUST NOT introduce an escape.
 - The NUL code point (`\u0000`) MUST be rejected (fail closed).
@@ -429,6 +446,7 @@ Deterministic parse errors (normative):
 
 The following `error_code` values are defined for `glob_v1`:
 
+- `input_too_large`: input exceeds `max_input_chars`.
 - `invalid_path`: pattern violates run-relative POSIX constraints (leading `/`, trailing `/`, `//`,
   drive prefix, or `..` segment).
 - `contains_nul`: pattern contains a NUL code point.
@@ -1035,6 +1053,10 @@ Minimum error fields (per error):
 - `line_number`: REQUIRED for JSONL validation errors and JSONL parse errors (1-indexed); omitted
   otherwise.
 
+Note (normative): When validating workspace-root artifacts via `docs/contracts/workspace_contract_registry.json`,
+these same error shape, ordering, and capping rules apply, but `artifact_path` values MUST be
+workspace-root-relative and `contract_id` values MUST be drawn from the workspace contract registry.
+
 JSONL parse failures (normative):
 
 - If a JSONL line cannot be parsed as JSON, implementations MUST emit one error with:
@@ -1216,10 +1238,24 @@ Derivation algorithm:
 
    - `reason_domain = "contract_validation_report"`
 
-   - `reason_code` (deterministic):
+   - `reason_code` (deterministic; MUST satisfy the `pa:diagnostic-record:v1` `reason_code` token
+     constraints):
 
      1. If `error.error_code` is present, `reason_code = error.error_code`.
-     1. Else if `error.keyword` is present, `reason_code = "jsonschema_" + error.keyword`.
+     1. Else if `error.keyword` is present:
+        - Let `k = error.keyword` (string).
+        - Let `k_token` be derived deterministically as:
+          1. Scan `k` left-to-right. Before any ASCII uppercase letter `[A-Z]` that is preceded by an
+             ASCII lowercase letter `[a-z]` or digit `[0-9]`, insert a single underscore `_`.
+          1. Convert ASCII letters to lowercase.
+          1. Replace any character not in `[a-z0-9_]` with `_`.
+          1. Collapse any run of `_` into a single `_`.
+          1. Trim leading/trailing `_`.
+          1. If the resulting `k_token` is empty, set `k_token = "unknown"`.
+
+        - If `len(k_token) > 118`, set `k_token = substr(k_token, 0, 118)` (to keep
+          `"jsonschema_" + k_token` within 128 chars).
+        - Set `reason_code = "jsonschema_" + k_token`.
      1. Else if `error.line_number` is present AND `error.schema_path == ""`,
         `reason_code = "jsonl_parse_error"`.
      1. Else `reason_code = "contract_validation_error"`.
@@ -1278,6 +1314,70 @@ surface:
     `runs/<run_id>/logs/scratch/`), and
   - MUST NOT be referenced by the manifest’s contracted artifact list, and
   - MUST NOT participate in hashing/signing/trending inputs.
+
+### Workspace contract validation report artifact (normative)
+
+When `pa.publisher.workspace.v1` fails contract validation for workspace-root, contract-backed outputs,
+it MUST emit a deterministic, contract-backed workspace validation report.
+
+This report is distinct from the run-bundle `contract_validation_report` contract because it is not
+scoped to a `(run_id, stage_id)` pair.
+
+Contract binding (normative):
+
+- Contract ID: `workspace_contract_validation_report`
+- Schema: `docs/contracts/workspace_contract_validation_report.schema.json`
+- Validation mode: `json_document` (workspace contract registry)
+
+When emitted (normative):
+
+- The report MUST be emitted when a workspace publish attempt fails contract validation for any
+  required contract-backed workspace output, including:
+  - required output missing, OR
+  - output present but schema-invalid (including JSONL per-line validation), OR
+  - deterministic artifact path rule violation for any contracted workspace output.
+
+Location (deterministic; normative):
+
+- Given a workspace publish target `target_path` (workspace-root-relative; POSIX; no trailing `/`),
+  the report path MUST be:
+
+  - `logs/contract_validation/<target_path>.contract_validation.json`
+
+- `target_path` is the final publish target path passed to the workspace publisher (file or
+  directory root).
+- The report path is workspace-root-relative.
+
+Examples (normative):
+
+- target `exports/datasets/acme/1.0.0` →
+  `logs/contract_validation/exports/datasets/acme/1.0.0.contract_validation.json`
+- target `exports/baselines/win-proc-create-t1059/1.0.0` →
+  `logs/contract_validation/exports/baselines/win-proc-create-t1059/1.0.0.contract_validation.json`
+- target `state/run_registry.json` →
+  `logs/contract_validation/state/run_registry.json.contract_validation.json`
+- target `artifacts/findings/content.lint.findings.v1.json` →
+  `logs/contract_validation/artifacts/findings/content.lint.findings.v1.json.contract_validation.json`
+
+Report schema requirements (normative):
+
+- Identity fields:
+  - `registry_kind` MUST equal `"workspace"`.
+  - `workspace_registry_version` MUST equal the `registry_version` of the workspace contract
+    registry instance used for validation.
+  - `target_path` MUST equal the workspace-root-relative final publish target (no trailing `/`).
+
+- Error list semantics:
+  - For each invalid artifact, the report MUST include a bounded, deterministically ordered list of
+    errors that obeys "Deterministic error ordering and error caps (normative)".
+  - All paths in the report (including `target_path` and `errors[].artifact_path`) MUST be
+    workspace-root-relative POSIX paths. Absolute paths MUST NOT appear.
+
+Verification hook (normative):
+
+- Contract Spine conformance fixtures MUST include at least one case that derives the report path
+  from `target_path` and asserts byte-identical, deterministically ordered errors (including error
+  truncation semantics).
 
 ### Validation scope and timing
 
@@ -1849,6 +1949,102 @@ on-disk byte representation of contract-backed JSON and JSONL artifacts publishe
 - Stage cores MUST NOT use `write_bytes(...)` to publish contract-backed JSON or JSONL artifacts.
   (They MAY use `write_bytes(...)` for non-contracted artifacts under explicitly non-contracted
   locations such as `logs/scratch/`.)
+
+## Producer tooling: workspace publisher semantics (pa.publisher.workspace.v1)
+
+This section defines the canonical mechanism for producing **contract-backed workspace artifacts**
+(workspace-root-relative artifacts validated via `docs/contracts/workspace_contract_registry.json`).
+It complements the run-bundle publisher (`pa.publisher.v1`) by providing equivalent publish-gate
+semantics for workspace-root outputs (exports, control-plane state, CI artifacts, and workspace logs).
+
+### Reference workspace publisher SDK requirement (normative)
+
+- The repository MUST provide a reference workspace publisher implementation that conforms to this
+  section, named `pa.publisher.workspace.v1`.
+- Any first-party tool that writes contract-backed workspace artifacts MUST publish them via the
+  reference workspace publisher (it MUST NOT write directly to final paths).
+
+Publisher semantics versioning (normative):
+
+- `pa.publisher.workspace.v1` is the initial version of this interface. Any backward-incompatible
+  change to the semantics defined here MUST be introduced under a new version identifier (for
+  example `pa.publisher.workspace.v2`).
+
+### Canonical workspace publish-gate behavior (normative)
+
+Inputs (minimum):
+
+- `workspace_root`: filesystem path to the workspace root.
+- `target_path`: workspace-root-relative final publish target (POSIX; no trailing `/`).
+- `expected_outputs[]`: list of expected output entries (workspace-root-relative), each with:
+  - `path`: workspace-root-relative POSIX path
+  - `contract_id`: `string | null`
+  - `required`: boolean (MUST be explicitly set; MUST NOT rely on defaults)
+- `unexpected_outputs_policy`: `"lenient" | "strict"` (default: `"lenient"`).
+
+Registry resolution and validation (normative):
+
+- The publisher MUST load the workspace contract registry (`registry_kind="workspace"`) and
+  resolve each `expected_outputs[].path`.
+- If `resolve(path)` yields a binding, then:
+  - `expected_outputs[].contract_id` MUST be non-null and MUST equal the binding’s `contract_id`.
+  - the publisher MUST validate the output bytes using the binding’s `validation_mode` and schema.
+- If `resolve(path)` yields `None`, then `expected_outputs[].contract_id` MUST be `null` and the
+  output is treated as a non-contract output.
+
+Requiredness (normative):
+
+- Any `expected_outputs[]` entry with `required=true` MUST be present in the staged/pending output
+  set. Missing required outputs MUST fail closed with no publish.
+
+Unexpected contract-backed outputs (fail closed; normative):
+
+- The publisher MUST enumerate the staged/pending outputs for the publish session.
+- If any staged/pending output path matches a workspace registry binding but is not declared in
+  `expected_outputs[].path`, `finalize()` MUST fail closed and MUST promote nothing, regardless of
+  `unexpected_outputs_policy`.
+- `unexpected_outputs_policy` MAY control handling of **non-contract** unexpected outputs only.
+
+Target-path containment (normative):
+
+- For a directory publish, all `expected_outputs[].path` entries MUST be under the `target_path/`
+  subtree (path-prefix match on segment boundaries).
+- For a file publish, the only allowed `expected_outputs[].path` is exactly `target_path`.
+- For append publish (`logs/ui_audit.jsonl`), `target_path` MUST equal `logs/ui_audit.jsonl`.
+
+Publish mechanics (normative):
+
+- **Export directory publish (`exports/**`)**:
+  - The publisher MUST stage outputs under `<workspace_root>/exports/.staging/**` and MUST publish
+    by atomic directory rename into the final `exports/**` location.
+  - The publisher MUST NOT use per-product staging directories under final export namespaces (for
+    example `exports/datasets/.staging/**`).
+- **Single-file publish (replacement-style JSON/JSONL/files)**:
+  - The publisher MUST publish by write-to-temp (in the same parent directory) + atomic rename,
+    consistent with the workspace control-plane write rules in `115_operator_interface.md`.
+- **Append-only publish (`logs/ui_audit.jsonl`)**:
+  - The publisher MUST publish by append + flush-to-durable-storage semantics (`fsync()` or
+    equivalent).
+  - The publisher MUST NOT use staging+rename for `logs/ui_audit.jsonl` (append is the publish
+    mechanism).
+
+Failure behavior and observability (normative):
+
+- The publisher MUST validate contract-backed outputs against the workspace contract registry
+  before the final publish step (directory rename, atomic replace, or append).
+- On any contract validation failure (presence and/or schema):
+  - final outputs at `target_path` MUST NOT be created or modified (no partial publish), and
+  - the publisher MUST write a workspace contract validation report at the deterministic path
+    defined in "Workspace contract validation report artifact (normative)".
+
+### Canonical serialization rules (workspace; normative)
+
+- Any JSON document written by the workspace publisher (including validation reports) MUST be
+  emitted as canonical JSON bytes (`canonical_json_bytes`) as defined in this document.
+- Any JSONL artifact written via the workspace publisher MUST obey the JSONL invariants defined in
+  this document (one canonical JSON object per line; no blank lines; trailing newline required).
+- For append-only publication to `logs/ui_audit.jsonl`, each appended event MUST be validated
+  against the `audit_event` contract before it is appended.
 
 ## Consumer tooling: reference reader semantics (pa.reader.v1)
 
@@ -2704,6 +2900,12 @@ Plan model provenance (v0.2+; normative when implemented):
   published in the run bundle.
   - Purpose: detect plan compilation drift within a run bundle and provide an audit pointer for
     deterministic `action_id` generation.
+
+- Draft plan snapshot provenance (v0.2+; when plan drafts are used):
+  - `manifest.extensions.operator_interface.plan_draft_path` (string): run-relative path to the
+    pinned plan draft snapshot (`inputs/plan_draft.yaml`).
+  - `manifest.extensions.operator_interface.plan_draft_sha256` (string): semantic YAML digest string
+    for `inputs/plan_draft.yaml` (see `026_contract_spine.md`, `yaml_semantic_sha256_v1`).
 
 Stage outcomes (v0.1 baseline expectations):
 
@@ -3897,10 +4099,15 @@ Key semantics (normative when produced):
 - Each compiled plan MUST embed the parsed Sigma AST (`sigma_ast_v1`) under the top-level key
   `sigma_ast`, regardless of whether the rule is executable.
 - Plans MUST declare `executable: true | false`.
-  - When `executable=true`, the plan MUST include a backend envelope sufficient to interpret the
-    evaluation plan deterministically (at minimum: `backend.id`, `backend.plan_kind`,
-    `backend.plan`; `backend.version` and `backend.settings` are RECOMMENDED when available).
-  - When `executable=false`, the plan MUST include `non_executable_reason`.
+  - The plan MUST include a backend envelope recording backend identity and determinism-relevant
+    settings used during compilation.
+    - `backend.id`, `backend.version`, and `backend.settings` are REQUIRED.
+    - When `executable=true`, the backend envelope MUST also include `backend.plan_kind` and
+      `backend.plan`.
+  - When `executable=false`, the plan MUST include `non_executable_reason` with:
+    - `reason_domain` equal to `bridge_compiled_plan`,
+    - a stable `reason_code`, and
+    - a human-readable `explanation` (stable prefix RECOMMENDED for grouping).
 - The compiled plan schema (`bridge_compiled_plan.schema.json`) MUST require and validate the
   `sigma_ast` object as `sigma_ast_v1` and MUST require `mapping_pack_sha256`.
   - The repository MUST include a JSON Schema for the `sigma_ast_v1` object at
@@ -3910,6 +4117,10 @@ Key semantics (normative when produced):
     authoritative schema for that object (local `$ref`; no network fetch).
 
 Optional compiled provenance envelope (normative when present):
+
+- When the Sigma bridge compiled plan cache is enabled (see `detection.sigma.bridge.compile_cache_dir`),
+  compiled plans MUST include `compiled_provenance` so cache keys and integrity hashes are
+  verifiable offline.
 
 - Compiled plans MAY include a top-level `compiled_provenance` object using the shared shape defined
   in "Compiled provenance envelope (shared shape)".
@@ -4011,6 +4222,15 @@ Required invariants:
      (when present).
    - `criteria.results.action_key` must equal the corresponding ground truth `action_key` (when
      present).
+1. Plan draft provenance coupling (v0.2+; when plan drafts are used):
+   - If `inputs/plan_draft.yaml` is present in the run bundle:
+     - `manifest.extensions.operator_interface` MUST be present.
+     - `manifest.extensions.operator_interface.plan_draft_path` MUST equal `inputs/plan_draft.yaml`.
+     - `manifest.extensions.operator_interface.plan_draft_sha256` MUST equal the semantic YAML
+       digest string of `inputs/plan_draft.yaml`, computed using `yaml_semantic_sha256_v1` (see
+       `026_contract_spine.md`).
+   - If `manifest.extensions.operator_interface` is present:
+     - `inputs/plan_draft.yaml` MUST be present.
 1. Deterministic ordering requirements (for diffability):
    - When writing JSONL outputs, lines are sorted deterministically (see storage spec).
    - When writing Parquet, within-file ordering is deterministic (see storage spec).
@@ -4152,12 +4372,14 @@ Module identity (normative):
 - `module_id`: `checksums_file`
 - `module_version`: `v1`
 - `input_kind`: `bytes`
+- Inventory: this module token MUST appear in `026_contract_spine.md`, "Parser module inventory".
 
 Limits (normative):
 
 - `max_input_bytes`: 16777216 (16 MiB)
   - If the input exceeds `max_input_bytes`, parsing MUST fail closed with
     `error_code="input_too_large"`.
+  - The max-input-bytes check MUST take precedence over all other parsing and validation.
 
 Grammar and acceptance rules (normative):
 
@@ -4224,6 +4446,8 @@ Location semantics (normative):
   - `invalid_utf8`: first byte that cannot be decoded as UTF-8
 - For structural end-of-input errors:
   - `missing_final_newline`: `byte_offset == len(input_bytes)`
+- For enforced limit errors:
+  - `input_too_large`: `byte_offset == 0`
 - For token validation errors:
   - `invalid_digest`: first byte within the digest token that violates `^sha256:[0-9a-f]{64}$`
   - `invalid_line_format`: first byte that violates record framing (missing delimiter, extra
@@ -4375,6 +4599,7 @@ Strict artifacts (manifest, ground truth, detections, summary) are intentionally
   - `extensions.sigma`
   - `extensions.runner`
   - `extensions.orchestrator`
+  - `extensions.operator_interface`
   - `extensions.cleanup_verification_plan`
 - Each namespace value SHOULD be an object; new fields SHOULD be added within a namespace object
   rather than as top-level scalars.
@@ -4390,6 +4615,44 @@ Normalized events:
 
 - Are intentionally permissive to allow full OCSF payloads and source-specific structures.
 - Must still satisfy required provenance and identity fields.
+
+### Operator Interface namespace: plan draft provenance (v0.2+; normative when implemented)
+
+When a run includes a plan draft snapshot (`inputs/plan_draft.yaml`), the orchestrator MUST record
+plan-draft provenance in the run manifest under `manifest.extensions.operator_interface`.
+
+Minimum schema (v0.2):
+
+- `manifest.extensions.operator_interface` (object; required when `inputs/plan_draft.yaml` is
+  present):
+  - `plan_draft_path` (string; required):
+    - MUST be a run-relative POSIX path satisfying the constraints defined in this document under
+      "Glob semantics (glob_v1) (normative)".
+    - v0.2: MUST equal `inputs/plan_draft.yaml`.
+  - `plan_draft_sha256` (string; required):
+    - MUST be a canonical SHA-256 digest string: `sha256:<64 lowercase hex>` (see "Canonical
+      SHA-256 digest strings (normative)").
+    - MUST equal the semantic YAML digest of the snapshotted plan draft:
+      - `plan_draft_sha256 == "sha256:" + yaml_semantic_sha256_v1(<bytes of inputs/plan_draft.yaml>)`
+        where `yaml_semantic_sha256_v1` is defined in `026_contract_spine.md`.
+      - Clarification: the digest is over the decoded YAML value (after `pa.yaml_decode.v1`), not
+        raw YAML bytes.
+
+Observability hooks (normative):
+
+- Written by: orchestrator during plan-draft snapshotting / run association.
+- Validation: validators MUST recompute the semantic YAML digest over `inputs/plan_draft.yaml` and
+  compare byte-for-byte to `manifest.extensions.operator_interface.plan_draft_sha256`.
+
+Representation alignment note (normative):
+
+- Operator Interface draft storage records the plan hash as lowercase hex (no `sha256:` prefix). The
+  run bundle manifest field `manifest.extensions.operator_interface.plan_draft_sha256` MUST use the
+  canonical digest string form. Implementations MUST convert deterministically by prefixing
+  `sha256:`.
+
+TODO (schema drift catch): Update `docs/contracts/manifest.schema.json` to validate the structural
+shape of `manifest.extensions.operator_interface`.
 
 ### Runner namespace: environment noise profile (v0.1)
 

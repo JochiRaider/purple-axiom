@@ -36,13 +36,13 @@ This section is the stage-local view of:
 
 #### Contract-backed outputs
 
-| contract_id            | path/glob                           | Required?                                      |
-| ---------------------- | ----------------------------------- | ---------------------------------------------- |
-| `bridge_compiled_plan` | `bridge/compiled_plans/*.plan.json` | required (when `detection.sigma.enabled=true`) |
-| `bridge_coverage`      | `bridge/coverage.json`              | required (when `detection.sigma.enabled=true`) |
-| `bridge_mapping_pack`  | `bridge/mapping_pack_snapshot.json` | required (when `detection.sigma.enabled=true`) |
-| `bridge_router_table`  | `bridge/router_table.json`          | required (when `detection.sigma.enabled=true`) |
-| `detection_instance`   | `detections/detections.jsonl`       | required (when `detection.sigma.enabled=true`) |
+| contract_id            | path/glob                           | pass_id                                  | Required?                                      |
+| ---------------------- | ----------------------------------- | ---------------------------------------- | ---------------------------------------------- |
+| `bridge_compiled_plan` | `bridge/compiled_plans/*.plan.json` | `detection.bridge.compiled_plans.emit`   | required (when `detection.sigma.enabled=true`) |
+| `bridge_coverage`      | `bridge/coverage.json`              | `detection.bridge.coverage.emit`         | required (when `detection.sigma.enabled=true`) |
+| `bridge_mapping_pack`  | `bridge/mapping_pack_snapshot.json` | `detection.bridge.mapping_pack.snapshot` | required (when `detection.sigma.enabled=true`) |
+| `bridge_router_table`  | `bridge/router_table.json`          | `detection.bridge.router_table.emit`     | required (when `detection.sigma.enabled=true`) |
+| `detection_instance`   | `detections/detections.jsonl`       | `detection.detections.emit`              | required (when `detection.sigma.enabled=true`) |
 
 #### Required inputs
 

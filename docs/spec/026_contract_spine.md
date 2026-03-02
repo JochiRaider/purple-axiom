@@ -43,6 +43,7 @@ This document is authoritative for:
 
   - `ContractRegistry`
   - `PublishGate` and `StagePublishSession`
+  - `WorkspacePublishGate` (`pa.publisher.workspace.v1`)
   - `ContractValidator`
   - `ArtifactReader` (reference reader semantics surface)
 
@@ -59,6 +60,7 @@ This document is authoritative for:
   - how failures surface in:
 
     - `runs/<run_id>/logs/contract_validation/<stage_id>.json`
+    - `logs/contract_validation/<target_path>.contract_validation.json`
     - `runs/<run_id>/logs/pass_manifest.json`
     - `runs/<run_id>/logs/health.json`
     - CI output and exit codes
@@ -201,6 +203,26 @@ The registry MUST contain:
   - `stage_owner` (owning stage ID, or `orchestrator`)
   - `pass_id` (stable producer-pass identifier; required for `registry_version >= 0.2.1`; see
     `025_data_contracts.md`, "Pass identifiers (`pass_id`)")
+
+### Cross-registry contract identity consistency (normative)
+
+When a `contract_id` appears in both registry instances (run-bundle and workspace-root), the
+corresponding `contracts[]` entry MUST be identical across registries:
+
+- `schema_path` MUST match byte-for-byte.
+- `contract_version` MUST match byte-for-byte.
+
+Fail-closed enforcement (normative):
+
+- The Contract Spine gate MUST fail closed if any cross-registry mismatch is present.
+- `ContractRegistry.load(...)` / `ContractRegistry.load_workspace(...)` MUST fail closed if they
+  are asked to load both registries and detect any cross-registry mismatch.
+
+Rationale (non-normative):
+
+- A single `contract_id` is a global identity token. Allowing it to point at different schema
+  versions across registries makes Contract Spine conformance non-deterministic and blocks
+  mechanically reliable publish-gate behavior.
 
 ### Path requirements
 
@@ -633,6 +655,82 @@ Cleanup and hygiene (normative):
 - Once the run is terminal (success/partial/failed), `runs/<run_id>/.staging/` MUST be absent or
   empty.
 
+### `WorkspacePublishGate` (`pa.publisher.workspace.v1`)
+
+Purpose: provide transaction-like publication for **workspace-root artifacts** (artifacts validated
+via `docs/contracts/workspace_contract_registry.json`), including export products under `exports/**`
+and single-file control-plane / CI artifacts under `state/**` and `artifacts/**`.
+
+Required interface (minimum):
+
+```
+WorkspacePublishGate.begin_publish(target_path: str) -> WorkspacePublishSession
+
+WorkspacePublishSession.finalize(
+  expected_outputs: list[ExpectedWorkspaceOutput],
+  unexpected_outputs_policy: str = "lenient"
+) -> PublishResult
+
+WorkspacePublishSession.abort() -> None
+```
+
+Optional convenience writers (non-normative):
+
+- Implementations MAY expose `write_bytes`, `write_json`, and `write_jsonl` helpers analogous to
+  `StagePublishSession`. Implementations MUST NOT require in-memory buffering for large outputs; it
+  is valid to stream bytes directly into the staging root (exports) or into a temp file (single
+  file publish).
+
+`ExpectedWorkspaceOutput` shape (normative):
+
+```
+ExpectedWorkspaceOutput:
+  path: str
+  contract_id: str | null
+  required: bool   # MUST be explicitly set; MUST NOT rely on defaults
+```
+
+ExpectedWorkspaceOutput ↔ workspace registry consistency (normative):
+
+- The publisher MUST resolve `path` using the **workspace-root registry instance**.
+- If `ContractRegistry.resolve(path)` returns a binding, then:
+  - `ExpectedWorkspaceOutput.contract_id` MUST be non-null, and
+  - it MUST equal the binding’s `contract_id`.
+- If `ContractRegistry.resolve(path)` returns `None`, then
+  `ExpectedWorkspaceOutput.contract_id` MUST be `null`.
+- `finalize()` MUST fail closed (no promotion) if these invariants are violated.
+
+Staging and atomic promotion rules (normative):
+
+- If `target_path` is under `exports/`:
+  - The publish session MUST stage under `exports/.staging/**` (see `045_storage_formats.md`,
+    "Workspace-global export staging directories").
+  - Define `stage_path = "exports/.staging/" + target_path[len("exports/"):]`.
+    - Example: `target_path=exports/datasets/X/1.0.0` →
+      `stage_path=exports/.staging/datasets/X/1.0.0`.
+  - `finalize()` MUST publish by atomic directory rename: `stage_path` → `target_path`.
+  - The publish session MUST NOT use per-product staging directories under final namespaces (for
+    example `exports/datasets/.staging/**`).
+- If `target_path == "logs/ui_audit.jsonl"`:
+  - Publication MUST be append-only (`append + fsync()` or equivalent).
+  - The publish session MUST NOT use staging+rename for `logs/ui_audit.jsonl`.
+- Otherwise (single-file publish):
+  - Publication MUST be atomic replace (write-to-temp in same parent directory + rename).
+
+Validation and workspace report emission (normative):
+
+- Contract-backed workspace outputs MUST be validated against the workspace registry before the
+  final publish step (directory rename, atomic replace, or append).
+- On validation failure, `finalize()` MUST:
+  - fail closed with no final-output mutation (no partial publish), and
+  - emit the workspace contract validation report defined in `025_data_contracts.md`,
+    "Workspace contract validation report artifact (normative)".
+
+Unexpected contract-backed outputs (fail closed; normative):
+
+- `finalize()` MUST fail closed if any staged/pending output path matches a workspace registry
+  binding but is not declared in `expected_outputs[]`.
+
 ### `ContractValidator`
 
 Purpose: deterministic schema/contract validation for run-bundle artifacts.
@@ -831,9 +929,10 @@ Canonical bytes (normative):
   therefore, two executions are not required to produce byte-identical report files even when they
   detect the same validation failures.
 - Semantic comparisons (CI fixtures, report diff tooling) MUST ignore `generated_at_utc`.
-- When `diagnostics[]` is present, semantic comparisons MAY treat `diagnostics[]` as the stable
+- When `diagnostics[]` is present, semantic comparisons SHOULD treat `diagnostics[]` as the stable
   comparison surface for validation failures (it is deterministically derivable from the sorted
-  `errors[]` lists).
+  `errors[]` lists and MUST satisfy the `pa:diagnostic-record:v1` ordering, fingerprinting, and
+  de-duplication rules).
 - Integrity artifacts (checksums/signing) MUST cover the report bytes exactly as persisted
   (including `generated_at_utc` when present).
 
@@ -1162,6 +1261,7 @@ Notes:
 
 - The semantic hash MUST be recorded in canonical digest string form: `sha256:<lowercase_hex>` (see
   `025_data_contracts.md`, "Canonical SHA-256 digest strings").
+- Used by plan draft provenance: `manifest.extensions.operator_interface.plan_draft_sha256`.  
 - Raw YAML bytes MAY still be preserved in the run bundle for auditability. The semantic hash is the
   deterministic basis for comparisons/trending that should ignore YAML formatting differences.
 
@@ -1265,6 +1365,11 @@ Max input size basis (normative):
 - `max_input_chars` MUST be measured as the count of Unicode scalar values (code points) in the
   canonical parse input after preprocessing (not UTF-16 code units and not grapheme clusters).
 
+Note (non-normative): Some runtimes represent strings as UTF-16 code units (notably JS/TS). When
+enforcing `max_input_chars`, count Unicode scalar values (code points), not UTF-16 code units. In
+JS/TS, `.length` reports UTF-16 code units; use code point iteration (for example `for (const ch of
+s) { ... }`) or equivalent.
+
 ### Outputs
 
 On success, a parser module MUST return:
@@ -1356,6 +1461,18 @@ The following parser modules are treated as parser modules for v0.1:
   (defined in `040_telemetry_pipeline.md`; vectors in `100_test_strategy_ci.md`). Constraints
   (normative): `input_kind=bytes`, `newline_normalization=true` (CRLF→LF),
   `max_input_bytes=16777216`.
+- `pa.syslog.v1`: syslog line parser (defined in `044_unix_log_ingestion.md`).
+  - Golden vectors: `tests/fixtures/parser_modules/syslog_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
+- `pa.auditd_record_kv.v1`: auditd record key/value parser (defined in `044_unix_log_ingestion.md`).
+  - Golden vectors: `tests/fixtures/parser_modules/auditd_record_kv_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
+- `pa.audit_event_key.v1`: audit correlation-key parser (defined in `044_unix_log_ingestion.md`).
+  - Golden vectors: `tests/fixtures/parser_modules/audit_event_key_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
+- `pa.checksums_file.v1`: `security/checksums.txt` parser (defined in `025_data_contracts.md`).
+  - Golden vectors: `tests/fixtures/parser_modules/checksums_file_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
 
 Template placeholder parser modules additions (v0.1; normative):
 
@@ -1376,6 +1493,24 @@ Template placeholder parser modules additions (v0.1; normative):
 Template module common requirements (normative):
 
 - `input_kind` MUST be `utf8_text`.
+
+Newline normalization (normative):
+
+- `newline_normalization` MUST be `false` (no normalization).
+
+Limits (normative):
+
+- `max_input_chars` MUST be `65536` (measured as Unicode scalar values in the canonical parse input;
+  see "Max input size basis" above).
+- If the input exceeds `max_input_chars`, parsing MUST fail closed with:
+  - `error_code="input_too_large"`, and
+  - `location.byte_offset == 0`.
+
+Determinism requirements (normative):
+
+- Limit enforcement MUST occur before any token scanning.
+- If the input exceeds `max_input_chars`, `error_code="input_too_large"` MUST take precedence over
+  any other syntax errors.
 - Identifier grammars used inside placeholder tokens MUST be ASCII-only and MUST be defined by the
   owning spec for the module.
 - `message_prefix` MUST be exactly `<module_token>: `.
@@ -1385,6 +1520,14 @@ The following existing tokens are legacy aliases mapped into this contract (no r
 - `glob_v1`
 - `sigma_ast_v1`
 
+Inventory completeness (normative):
+
+- The parser module inventory above is intended to be complete for v0.1 for all parser modules
+  whose vector fixtures are declared REQUIRED under `100_test_strategy_ci.md`, "Cross-cutting:
+  parser modules".
+- Content CI MUST fail the `content.lint` gate if any required parser module is missing from this
+  inventory (see `parser_module_inventory_sync` in "Verification and CI conformance").
+  
 Tooling integration (normative):
 
 - Lint tooling and CI harnesses MUST invoke the module implementations governed by this contract
@@ -1652,7 +1795,9 @@ Conformance suite → fixtures mapping (v0.1):
 | Glob matching (`glob_v1`)                         | `tests/fixtures/glob_v1/vectors.json`                                              | `glob_v1_vectors`                                                                                                                                                                            | `content.lint`      |
 | YAML decode profile (`pa.yaml_decode.v1`)         | `tests/fixtures/parser_modules/yaml_decode_v1/vectors.json`                        | `yaml_decode_v1_vectors`                                                                                                                                                                     | `content.lint`      |
 | YAML semantic hashing (`yaml_semantic_sha256_v1`) | `tests/fixtures/yaml_semantic_sha256_v1/vectors.json`                              | `yaml_semantic_sha256_v1`                                                                                                                                                                    | `content.lint`      |
+| Parser module inventory sync                      | Repo-local: `026_contract_spine.md`, `100_test_strategy_ci.md`                     | `parser_module_inventory_sync` (repo-local check)                                                                                                                                            | `content.lint`      |
 | Publisher semantics (`pa.publisher.v1`)           | `tests/fixtures/publisher/v1/`                                                     | `publisher_publish_gate_no_partial_promotion`, `publisher_publish_gate_success_atomic_promotion`, `publisher_crash_mid_promotion_reconciliation`, `publisher_canonical_json_and_jsonl_bytes` | `content.lint`      |
+| Publisher semantics (`pa.publisher.workspace.v1`) | `tests/fixtures/publisher/workspace/v1/`                                           | `workspace_publisher_atomic_dir_publish_no_partial`, `workspace_publisher_atomic_file_publish_no_partial`, `workspace_validation_report_path_rule`                                                 | `content.lint`      |
 
 ### Required conformance tests (minimum set)
 
@@ -1670,6 +1815,11 @@ The Contract Spine gate MUST include tests that cover at minimum:
   - YAML ingress-only invariants (v0.1):
     - any `yaml_document` binding MUST have `stage_owner == "orchestrator"`
     - any `yaml_document` binding MUST bind under `inputs/`
+- Parser module inventory sync:
+  - The parser module inventory in `026_contract_spine.md` ("Parser module inventory") MUST
+    include every `pa.*` parser module token whose vector fixtures are declared REQUIRED under
+    `100_test_strategy_ci.md`, "Cross-cutting: parser modules".
+  - The check MUST ignore legacy alias tokens (`glob_v1`, `sigma_ast_v1`).
 - Expected outputs determinism:
   - expansion is over staged regular files
   - stable sort by `artifact_path` (UTF-8 byte order)

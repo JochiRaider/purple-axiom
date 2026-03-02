@@ -403,13 +403,18 @@ network syslog ingestion).
 - `module_id`: `syslog`
 - `module_version`: `v1`
 - `input_kind`: `utf8_text`
+- Inventory: this module token MUST appear in `026_contract_spine.md`, "Parser module inventory".
 
 **Preprocessing and input envelope (normative):**
 
 - UTF-8 BOM MAY be accepted but MUST be stripped before parsing.
 - Newlines MUST be normalized (`\r\n` -> `\n`, `\r` -> `\n`) before parsing.
-- Max input size: the canonical parse input MUST be `<= 65536` UTF-8 bytes.
+- Max input size: the canonical parse input MUST be `<= 65536` Unicode scalar values
+  (`max_input_chars: 65536`).
+  - Basis: Unicode scalar count in the canonical parse input after preprocessing (BOM stripping and
+    newline normalization).
   - If exceeded, parsing MUST fail closed with `line_too_long`.
+  - The max-input-bytes check MUST take precedence over all other parsing and validation.
 
 The canonical parse input MUST be treated as a sequence of lines separated by `\n`:
 
@@ -476,9 +481,9 @@ RFC3164 year inference algorithm (v1; normative):
 
 1. Parse `month`, `day`, and `time` from the RFC3164 timestamp.
    - Month abbreviations are English and case-insensitive: `Jan`..`Dec`.
-1. Convert `run_end_time_utc` into `assumed_timezone` to obtain `run_end_local`.
-1. Candidate years are `run_end_local.year` and `run_end_local.year - 1`.
-1. For each candidate year, construct a local datetime `candidate_local` with the parsed
+2. Convert `run_end_time_utc` into `assumed_timezone` to obtain `run_end_local`.
+3. Candidate years are `run_end_local.year` and `run_end_local.year - 1`.
+4. For each candidate year, construct a local datetime `candidate_local` with the parsed
    month/day/time:
    - If the local datetime is invalid for that year (for example Feb 29 in a non-leap year), skip
      the candidate.
@@ -487,9 +492,9 @@ RFC3164 year inference algorithm (v1; normative):
    - If the local datetime is ambiguous due to a DST fallback, evaluate both possibilities and
      select the one whose UTC instant is the greatest instant `<= run_end_time_utc`. If both are
      `> run_end_time_utc`, select the smaller UTC instant (deterministic tie-break).
-1. Select the candidate year whose UTC instant is the greatest instant `<= run_end_time_utc`.
+5. Select the candidate year whose UTC instant is the greatest instant `<= run_end_time_utc`.
    - If no candidate qualifies, parsing MUST fail closed with `invalid_timestamp`.
-1. Set `event_time_epoch_ms` from the selected UTC instant.
+6. Set `event_time_epoch_ms` from the selected UTC instant.
 
 **Equivalence requirement (normative):**
 
@@ -555,8 +560,11 @@ Required error codes (v1; normative minimum):
 
 Location rules (normative):
 
-- `location.byte_offset` MUST point at the first byte of the offending token in the canonical parse
-  input (line 0 for syslog syntax errors, directive lines for context errors).
+- For `line_too_long`, `location.byte_offset` MUST be the UTF-8 byte offset of the first byte of the
+  first disallowed Unicode scalar in the canonical parse input.
+- For all other errors, `location.byte_offset` MUST point at the first byte of the offending token
+  in the canonical parse input (line 0 for syslog syntax errors, directive lines for context
+  errors).
 
 ### Identity basis (Tier 2)
 
@@ -741,14 +749,19 @@ a deterministic correlation algorithm.
 - `module_id`: `auditd_record_kv`
 - `module_version`: `v1`
 - `input_kind`: `utf8_text`
+- Inventory: this module token MUST appear in `026_contract_spine.md`, "Parser module inventory".
 
 **Input preprocessing (normative):**
 
 - UTF-8 BOM MAY be accepted but MUST be stripped before parsing.
 - Newlines MUST be normalized (`\r\n` -> `\n`, `\r` -> `\n`) before parsing.
 - A single trailing `\n` (common for file line reads) MUST be ignored.
-- Max input size: the canonical parse input MUST be `<= 65536` UTF-8 bytes.
+- Max input size: the canonical parse input MUST be `<= 65536` Unicode scalar values
+  (`max_input_chars: 65536`).
+  - Basis: Unicode scalar count in the canonical parse input after preprocessing (BOM stripping,
+    newline normalization, and stripping a single trailing `\n` if present).
   - If exceeded, parsing MUST fail closed with `line_too_long`.
+  - The max-input-bytes check MUST take precedence over all other parsing and validation.
 
 **Tokenization and key/value grammar (v1; normative):**
 
@@ -833,8 +846,10 @@ Required error codes (v1; normative minimum):
 
 Location rules (normative):
 
-- `location.byte_offset` MUST point at the first byte of the offending token in the canonical parse
-  input.
+- For `line_too_long`, `location.byte_offset` MUST be the UTF-8 byte offset of the first byte of the
+  first disallowed Unicode scalar in the canonical parse input.
+- For all other errors, `location.byte_offset` MUST point at the first byte of the offending token
+  in the canonical parse input.
 
 #### Formal audit correlation-key parser (pa.audit_event_key.v1)
 
@@ -847,6 +862,21 @@ Location rules (normative):
 - `module_id`: `audit_event_key`
 - `module_version`: `v1`
 - `input_kind`: `utf8_text`
+- Inventory: this module token MUST appear in `026_contract_spine.md`, "Parser module inventory".
+
+**Input preprocessing and limits (v1; normative):**
+
+- UTF-8 BOM MAY be accepted but MUST be stripped before parsing.
+- Newline normalization: `newline_normalization` MUST be `false` (no normalization).
+- The canonical parse input MUST be a single line:
+  - It MUST NOT contain LF (`\n`) or CR (`\r`).
+  - If an LF or CR is present, parsing MUST fail closed with:
+    - `error_code="invalid_format"`, and
+    - `location.byte_offset` pointing to the first LF/CR byte.
+- `max_input_chars` MUST be `256` (measured as Unicode scalar values in the canonical parse input).
+  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
+    - `error_code="line_too_long"`, and
+    - `location.byte_offset == 0`.
 
 **Grammar (v1; normative):**
 
@@ -876,7 +906,8 @@ On success, the module MUST return:
 
 Rules (normative):
 
-- `audit_msg_id` MUST equal the canonical parse input exactly (no normalization).
+- `audit_msg_id` MUST equal the canonical parse input exactly (after preprocessing; no
+  normalization).
 - Numeric fields MUST be parsed using integer arithmetic (no float parsing).
 - If any numeric value overflows unsigned 64-bit integer range, parsing MUST fail closed.
 
@@ -888,6 +919,12 @@ Required error codes (v1; normative minimum):
 - `invalid_utf8`
 - `invalid_format`
 - `invalid_number`
+
+Location rules (normative):
+
+- For `line_too_long`, `location.byte_offset` MUST be `0`.
+- Otherwise, `location.byte_offset` MUST point at the first byte of the offending token in the
+  canonical parse input.
 
 #### Correlation algorithm (audit_correlation_v1)
 

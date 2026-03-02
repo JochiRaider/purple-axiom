@@ -823,15 +823,121 @@ Template placeholders use the Atomic convention:
 
 - Placeholder form: `#{<name>}`
 
-The runner MUST perform placeholder substitution using the resolved input map:
+#### Template placeholder grammar (parser module: pa.template_atomic.v1)
+
+The runner MUST treat Atomic placeholder parsing as a first-class parser module with tokenization
+and error behavior defined here.
+
+Input kind (normative):
+
+- `pa.template_atomic.v1.input_kind` MUST be `utf8_text`.
+
+Delimiter and scanning rules (normative):
+
+- Placeholder start delimiter: the exact two-byte sequence `#{`.
+- Placeholder end delimiter: the exact single byte `}`.
+- Encountering the byte sequence `#{` MUST begin a placeholder token.
+  - Malformed placeholder tokens MUST fail closed (they MUST NOT be treated as literal text).
+- The placeholder token ends at the first subsequent `}`.
+  - No escape syntax is defined.
+
+Identifier grammar (normative):
+
+- Placeholder names MUST be ASCII-only and case-sensitive.
+- `<name> ::= [A-Za-z_][A-Za-z0-9_-]*`
+- Whitespace is forbidden inside the placeholder token.
+
+#### AST contract (pa.template_atomic.v1)
+
+On successful parse, the module MUST produce an AST of the form:
+
+- `expected_ast`: `{"segments":[ ... ]}`
+
+Each `segments[]` entry MUST be exactly one of:
+
+- Literal segment: `{"kind":"literal","text":"..."}`
+- Placeholder segment: `{"kind":"placeholder","name":"..."}`
+
+AST invariants (normative):
+
+- The AST MUST be canonical:
+  - Adjacent literal runs MUST be coalesced into a single literal segment.
+  - Empty literal segments MUST NOT be emitted.
+  - Empty input MUST yield `{"segments":[]}`.
+- Placeholder segment `name` MUST match the `<name>` grammar above.
+
+#### Deterministic parser errors (pa.template_atomic.v1)
+
+On parse failure, `pa.template_atomic.v1` MUST fail closed.
+
+Error vocabulary (normative):
+
+- `unterminated_placeholder`: a `#{` start delimiter was encountered with no closing `}`.
+- `empty_placeholder_name`: a placeholder of the form `#{}` was encountered.
+- `invalid_placeholder_name_start`: the first character of `<name>` is invalid.
+- `invalid_placeholder_name_char`: a non-initial character of `<name>` is invalid.
+
+Error selection and ordering (normative):
+
+- The module MUST return exactly one error (first error wins).
+- The module MUST choose the leftmost failure in the input by `location.byte_offset`.
+
+Error locations (normative):
+
+- For `unterminated_placeholder`, `location.byte_offset` MUST point to the `#` byte that began the
+  placeholder start delimiter.
+- For `empty_placeholder_name`, `location.byte_offset` MUST point to the `}` byte that immediately
+  follows `#{`.
+- For `invalid_placeholder_name_start` and `invalid_placeholder_name_char`, `location.byte_offset`
+  MUST point to the first invalid byte within the `<name>` substring.
+
+Message prefix (normative):
+
+- `message_prefix` MUST be exactly `pa.template_atomic.v1: `.
+
+#### Substitution and unresolved placeholder checks (normative)
+
+The runner MUST perform placeholder substitution using the resolved input map.
 
 - Substitution MUST be exact-match by placeholder name.
 - Placeholder names MUST be treated as case-sensitive.
-- The runner MUST validate that all placeholders used in `executor.command` and
-  `executor.cleanup_command` (and, when present, `dependencies[].prereq_command` and
-  `dependencies[].get_prereq_command`) reference keys present in the resolved input map.
-  - If any placeholder cannot be resolved, the runner MUST fail closed with reason code
-    `unresolved_placeholder`.
+
+Template parsing requirement (normative):
+
+- Before performing substitution in any string field subject to Atomic template expansion, the
+  runner MUST parse the field as `pa.template_atomic.v1`.
+
+The runner MUST validate that all placeholders used in `executor.command` and
+`executor.cleanup_command` (and, when present, `dependencies[].prereq_command` and
+`dependencies[].get_prereq_command`) reference keys present in the resolved input map.
+
+- The set of placeholder names referenced by a string MUST be derived from the
+  `pa.template_atomic.v1` AST (not by ad hoc substring search).
+- If any placeholder cannot be resolved, the runner MUST fail closed with reason code
+  `unresolved_placeholder`.
+
+#### Parser-module failure mapping to action failures (normative)
+
+If `pa.template_atomic.v1` parsing fails for any string participating in Atomic template expansion
+(including `executor.*` command strings, dependency command strings, and input values during
+fixed-point expansion):
+
+- The action MUST fail closed.
+- The action-level `reason_code` MUST be `unresolved_placeholder`.
+
+Deterministic diagnostics (normative):
+
+- The runner MUST record a redaction-safe, deterministic diagnostic payload for the parse failure.
+- The payload MUST include:
+  - `module_token` (MUST equal `pa.template_atomic.v1`)
+  - `error_code`
+  - `message_prefix` (MUST equal `pa.template_atomic.v1: `)
+  - `location.byte_offset`
+- The payload MUST NOT include the full free-form parser error message.
+
+Implementation note (non-normative): if the executor evidence schema is strict about allowed fields,
+extend `docs/contracts/runner_executor_evidence.schema.json` to permit the diagnostic payload as an
+additional evidence-only field.
 
 ### Resolved input fixed point
 
@@ -845,6 +951,19 @@ To produce `resolved_inputs` deterministically, the runner MUST apply a fixed-po
    - `max_resolution_passes` is reached (v0.1 default: 8 passes)
 1. If `max_resolution_passes` is reached and values are still changing, the runner MUST fail closed
    with reason code `input_resolution_cycle_or_growth`.
+
+Deterministic pass semantics (normative):
+
+- Each pass MUST compute a new map `next_map` from a read-only snapshot of the prior pass map
+  (`prev_map`).
+  - Implementations MUST NOT mutate `prev_map` in-place while computing `next_map`.
+  - Within a pass, substitutions for a given key MUST observe only `prev_map` values (not partial
+    results computed earlier in the same pass).
+- Pass iteration order over keys MUST be stable:
+  - Keys MUST be traversed in ascending UTF-8 bytewise lexical order.
+- The convergence predicate MUST be deterministic:
+  - Two maps are considered "unchanged" only when `canonical_json_bytes(map)` is byte-identical for
+    the full map object.
 
 This algorithm MUST be deterministic for the same YAML bytes and the same override object.
 

@@ -713,6 +713,48 @@ Minimum rule requirements:
   - `predicate.constraints[]` ordering, as defined in `035_validation_criteria.md`, "Canonical
     ordering for criteria.jsonl".
 
+Placeholder-aware checks (normative):
+
+- For criteria-pack authoring inputs, the linter MUST treat the criteria ARG template parser module
+  `pa.template_criteria_arg.v1` as the single authority for placeholder tokenization and syntax
+  errors (see `035_validation_criteria.md`, "Placeholder substitution").
+- The linter MUST apply the rules below to `SIG.value` fields in authoring inputs (CSV or YAML).
+  - The linter MAY skip parsing for values that do not contain the substring `{{ARG.`.
+
+Rule: invalid ARG placeholder syntax (error):
+
+- Rule ID: `lint-criteria-pack-invalid-arg-placeholder-syntax`
+- Trigger: a `SIG.value` contains a `{{ARG.` start sequence and fails `pa.template_criteria_arg.v1`
+  parsing.
+- Required finding payload (deterministic):
+  - `rule_id="lint-criteria-pack-invalid-arg-placeholder-syntax"`
+  - `severity="error"`
+  - `message` MUST include the parser module `message_prefix`.
+  - `details` MUST include:
+    - `module_token` (MUST equal `pa.template_criteria_arg.v1`)
+    - `error_code`
+    - `message_prefix` (MUST equal `pa.template_criteria_arg.v1: `)
+    - `location.byte_offset` (0-indexed byte offset into the UTF-8 `SIG.value` string)
+
+Rule: undefined ARG placeholder (error):
+
+- Rule ID: `lint-criteria-pack-undefined-arg-placeholder`
+- Trigger: a parsed `SIG.value` references an `<arg_name>` that is not present in the entry argument
+  environment.
+- Determinism requirements:
+  - If multiple undefined placeholders exist, findings MUST be emitted in stable ascending order by
+    the referenced `<arg_name>` (UTF-8 bytewise lexical order).
+  - Each finding MUST include the referenced `<arg_name>` in either `details.arg_name` or the
+    finding `message`.
+
+Rule: invalid ARG name (RECOMMENDED, error):
+
+- Rule ID: `lint-criteria-pack-invalid-arg-name`
+- Trigger: any `ARG.arg_name` violates the `<arg_name>` grammar defined in
+  `035_validation_criteria.md`, "Template placeholder grammar (parser module:
+  pa.template_criteria_arg.v1)".
+- If implemented, findings MUST include the invalid `arg_name`.
+
 Required rule IDs (normative):
 
 - `lint-criteria-pack-missing-required-files`
@@ -720,6 +762,12 @@ Required rule IDs (normative):
 - `lint-criteria-pack-ambiguous-operator`
 - `lint-criteria-pack-canonical-ordering`
 - `lint-criteria-pack-multiple-authoring-sources`
+- `lint-criteria-pack-invalid-arg-placeholder-syntax`
+- `lint-criteria-pack-undefined-arg-placeholder`
+
+Additional rule IDs (RECOMMENDED):
+
+- `lint-criteria-pack-invalid-arg-name`
 
 ### Target kind `plan-draft`
 

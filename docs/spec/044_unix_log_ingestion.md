@@ -118,6 +118,13 @@ Operators must choose one of the following strategies per host:
    `manifest.telemetry.sources.unix.dedupe_strategy`. For v0.1, the only allowed overlap dedupe
    strategy token is `unix_syslog_fingerprint_v1`, defined as:
 
+   - **Canonical syslog fields (required):** The `app`, `pid`, `facility`, `severity`, `message`,
+     and `event_time_epoch_ms` values used below MUST be the canonical fields emitted by the formal
+     syslog parser module `pa.syslog.v1` (`syslog_ast_v1`) after timestamp normalization (see
+     "Syslog file ingestion / Formal syslog parser module (pa.syslog.v1)"). Implementations MUST NOT
+     use receiver-specific parsing outputs unless they are byte-identical to `pa.syslog.v1` output
+     for the same source line.
+
    - Compute `fingerprint_basis_v1`:
 
      ```json
@@ -133,8 +140,9 @@ Operators must choose one of the following strategies per host:
      }
      ```
 
-   - `event_time_epoch_seconds` MUST be computed as `floor(event_time_epoch_ms / 1000)` using the
-     event timestamp after syslog parsing and time normalization.
+   - `event_time_epoch_seconds` MUST be computed as `floor(event_time_epoch_ms / 1000)` using
+     `syslog_ast_v1.event_time_epoch_ms` emitted by `pa.syslog.v1` (including RFC3164 year inference
+     and timezone assumption).
 
    - Serialize `fingerprint_basis_v1` using RFC 8785 canonical JSON (UTF-8 bytes).
 
@@ -352,8 +360,10 @@ Linux systems rotate logs via `logrotate`, producing files with numeric suffixes
 
 #### Syslog parsing operators
 
-The receiver should include parsing operators to extract structured fields from syslog messages. At
-minimum, extract timestamp, host, app, pid (when present), facility, severity, and message.
+The receiver may use parsing operators to extract structured fields from syslog messages, but the
+normative parsing definition for v0.1 is the formal syslog parser module `pa.syslog.v1` (see below).
+Any operator-chain implementation MUST be behaviorally equivalent to `pa.syslog.v1` for all accepted
+inputs and MUST emit the same `syslog_ast_v1` values.
 
 Example operator chain for RFC 3164:
 
@@ -380,6 +390,173 @@ RFC 3164 timestamp determinism requirements:
   timestamp at or before the run window end time (prevents year-rollover misparses).
 - The chosen timezone + year inference rules MUST be documented in implementation notes and SHOULD
   be recorded in normalization provenance for debuggability.
+
+##### Formal syslog parser module (pa.syslog.v1)
+
+`pa.syslog.v1` is the normative syslog parsing contract for v0.1. It replaces regex-fragile syslog
+parsing across all Unix syslog ingestion paths (journald syslog transport, syslog file tailing, and
+network syslog ingestion).
+
+**Module identity (normative):**
+
+- `module_token`: `pa.syslog.v1`
+- `module_id`: `syslog`
+- `module_version`: `v1`
+- `input_kind`: `utf8_text`
+
+**Preprocessing and input envelope (normative):**
+
+- UTF-8 BOM MAY be accepted but MUST be stripped before parsing.
+- Newlines MUST be normalized (`\r\n` -> `\n`, `\r` -> `\n`) before parsing.
+- Max input size: the canonical parse input MUST be `<= 65536` UTF-8 bytes.
+  - If exceeded, parsing MUST fail closed with `line_too_long`.
+
+The canonical parse input MUST be treated as a sequence of lines separated by `\n`:
+
+- The first line (`line0`) is the syslog line to parse.
+- Subsequent lines (if any) are syslog parse context directives of the form `@<key>=<value>`.
+- A trailing empty final line (caused by an ending newline) MUST be ignored.
+
+**Syslog parse context directives (v1; normative):**
+
+These directives exist solely to make RFC3164 year inference deterministic and testable.
+
+- `@assumed_timezone=<tz>` (REQUIRED for RFC3164-like inputs)
+  - `<tz>` MUST be either:
+    - an IANA time zone identifier (example: `America/New_York`), or
+    - the literal `UTC`.
+- `@run_end_time_utc=<rfc3339>` (REQUIRED for RFC3164-like inputs)
+  - `<rfc3339>` MUST be an RFC 3339 timestamp with a `Z` suffix (UTC).
+
+Directive rules (normative):
+
+- Directive keys are case-sensitive.
+- Duplicate directive keys MUST fail closed.
+- Unknown directive keys MUST fail closed in v1 (`invalid_context_key`).
+- For RFC3164-like inputs, missing a required directive key MUST fail closed with
+  `missing_context_value`.
+
+**Supported syslog formats (v1; normative):**
+
+`pa.syslog.v1` MUST accept at minimum:
+
+- **RFC3164-like** lines:
+
+  - MAY include an initial PRI (`<0..191>`). If PRI is present, `facility` and `severity` MUST be
+    derived from PRI; otherwise both MUST be `null`.
+  - MUST include a timestamp of the form `Mmm dd hh:mm:ss` immediately after any PRI.
+  - MUST include `<hostname> <tag>:` header fields, where:
+    - `<hostname>` is a single non-space token,
+    - `<tag>` is the application/program name, and
+    - an optional PID MAY appear as `<tag>[<pid>]`.
+
+- **RFC5424-like** lines:
+
+  - MUST include PRI.
+  - MUST include a version integer immediately after PRI; version MUST equal `1` in v1.
+  - MUST include a full RFC 3339 timestamp with timezone information (or `Z`).
+  - Hostname and app-name MUST NOT be NILVALUE (`-`) in v1.
+  - Structured data MUST be either `-` or a syntactically valid RFC5424 structured-data sequence.
+    - v1 validation MUST fail closed with `bad_structured_data` on invalid structured data.
+    - v1 does not expose structured data in the AST (future versions may).
+
+If an input line does not match either supported format, parsing MUST fail closed with
+`unknown_format`.
+
+**Timestamp parsing and normalization (normative):**
+
+- For RFC5424-like inputs, `event_time_epoch_ms` MUST be derived from the RFC 3339 timestamp using
+  integer arithmetic (no float parsing).
+- For RFC3164-like inputs, `event_time_epoch_ms` MUST be derived by applying the deterministic year
+  inference algorithm below using:
+  - `@run_end_time_utc` as the reference instant, and
+  - `@assumed_timezone` as the emitting host’s assumed timezone.
+
+RFC3164 year inference algorithm (v1; normative):
+
+1. Parse `month`, `day`, and `time` from the RFC3164 timestamp.
+   - Month abbreviations are English and case-insensitive: `Jan`..`Dec`.
+1. Convert `run_end_time_utc` into `assumed_timezone` to obtain `run_end_local`.
+1. Candidate years are `run_end_local.year` and `run_end_local.year - 1`.
+1. For each candidate year, construct a local datetime `candidate_local` with the parsed
+   month/day/time:
+   - If the local datetime is invalid for that year (for example Feb 29 in a non-leap year), skip
+     the candidate.
+   - If the local datetime is non-existent due to a DST forward jump, parsing MUST fail closed with
+     `invalid_timestamp`.
+   - If the local datetime is ambiguous due to a DST fallback, evaluate both possibilities and
+     select the one whose UTC instant is the greatest instant `<= run_end_time_utc`. If both are
+     `> run_end_time_utc`, select the smaller UTC instant (deterministic tie-break).
+1. Select the candidate year whose UTC instant is the greatest instant `<= run_end_time_utc`.
+   - If no candidate qualifies, parsing MUST fail closed with `invalid_timestamp`.
+1. Set `event_time_epoch_ms` from the selected UTC instant.
+
+**Equivalence requirement (normative):**
+
+For any syslog line accepted by `pa.syslog.v1`, the derived fields used by:
+
+- the Syslog Parquet schema (see "Syslog Parquet schema"), and
+- `unix_syslog_fingerprint_v1` (overlap dedupe),
+
+MUST be byte-identical for semantically identical inputs across:
+
+- syslog file ingestion, and
+- network syslog ingestion.
+
+##### syslog_ast_v1 (minimal AST)
+
+On success, `pa.syslog.v1` MUST return `syslog_ast_v1` with the following shape:
+
+```json
+{
+  "syslog_version": "pa.syslog.v1",
+  "format": "rfc3164",
+  "event_time_epoch_ms": 0,
+  "host": "debian",
+  "app": "sudo",
+  "pid": 123,
+  "facility": "4",
+  "severity": "2",
+  "message": "example message"
+}
+```
+
+Field rules (normative):
+
+- `syslog_version` MUST equal `pa.syslog.v1`.
+- `format` MUST be one of: `rfc3164`, `rfc5424`.
+- `event_time_epoch_ms` MUST be an integer milliseconds-since-epoch UTC timestamp.
+- `host` MUST be the hostname parsed from the syslog header (no case folding).
+- `app` MUST be the application/program name parsed from the syslog header (no case folding).
+- `pid` MUST be an integer when present; otherwise it MUST be `null`.
+- `facility` and `severity` MUST be base-10 strings when PRI is present; otherwise `null`.
+- `message` MUST be the message portion after header parsing (may be empty but MUST be present).
+
+##### Deterministic parse errors (syslog\_\*)
+
+On failure, `pa.syslog.v1` MUST return one or more parser-module errors conforming to
+`026_contract_spine.md` "Parser modules".
+
+Required error codes (v1; normative minimum):
+
+- `line_too_long`
+- `invalid_utf8`
+- `unknown_format`
+- `invalid_pri`
+- `invalid_version`
+- `missing_timestamp`
+- `invalid_timestamp`
+- `invalid_hostname`
+- `invalid_app`
+- `invalid_pid`
+- `bad_structured_data`
+- `invalid_context_key`
+- `missing_context_value`
+
+Location rules (normative):
+
+- `location.byte_offset` MUST point at the first byte of the offending token in the canonical parse
+  input (line 0 for syslog syntax errors, directive lines for context errors).
 
 ### Identity basis (Tier 2)
 
@@ -549,6 +726,241 @@ or `syslog` plugins can route events to the OTel `syslog` receiver or a custom s
 
 This path is implementation-defined and out of scope for detailed v0.1 specification.
 
+### Formal parsing and correlation (normative)
+
+This section replaces regex/key-fragile audit parsing and correlation with formal parser modules and
+a deterministic correlation algorithm.
+
+#### Formal audit record grammar (pa.auditd_record_kv.v1)
+
+`pa.auditd_record_kv.v1` is the normative grammar for a single Linux audit record line.
+
+**Module identity (normative):**
+
+- `module_token`: `pa.auditd_record_kv.v1`
+- `module_id`: `auditd_record_kv`
+- `module_version`: `v1`
+- `input_kind`: `utf8_text`
+
+**Input preprocessing (normative):**
+
+- UTF-8 BOM MAY be accepted but MUST be stripped before parsing.
+- Newlines MUST be normalized (`\r\n` -> `\n`, `\r` -> `\n`) before parsing.
+- A single trailing `\n` (common for file line reads) MUST be ignored.
+- Max input size: the canonical parse input MUST be `<= 65536` UTF-8 bytes.
+  - If exceeded, parsing MUST fail closed with `line_too_long`.
+
+**Tokenization and key/value grammar (v1; normative):**
+
+- An audit record line MUST be parsed as a sequence of tokens separated by one or more ASCII spaces.
+- Each token MUST be of the form `<key>=<value>` where:
+  - `<key>` matches `^[A-Za-z0-9_]+$`.
+  - `<value>` is either:
+    - an unquoted token: a non-empty sequence of non-space characters, or
+    - a quoted token: `"` `<chars>` `"` where:
+      - `\"` represents a literal `"` and `\\` represents a literal `\`,
+      - all other backslash escapes MUST be preserved literally (no interpretation) in v1.
+
+Required fields (v1; normative):
+
+- The record MUST contain `type=<record_type>` and `msg=<msg_value>` tokens.
+- `type` and `msg` MUST each appear exactly once.
+  - If either is missing, parsing MUST fail closed (`missing_required_field`).
+  - If either repeats, parsing MUST fail closed (`duplicate_required_field`).
+
+Repeated keys (v1; normative):
+
+- Keys other than `type` and `msg` MAY repeat.
+- The AST representation MUST preserve repeats deterministically:
+  - The first occurrence is represented as a string value.
+  - On the second occurrence, the value MUST become an array of strings in encounter order.
+
+`msg` value handling (v1; normative):
+
+- `msg` MUST contain a correlation key substring of the form `audit(<sec>.<fraction>:<serial>)`.
+- The correlation key substring MUST be extracted and preserved exactly as `audit_msg_id` in the
+  AST.
+- A trailing colon immediately after the closing `)` (common in `msg=audit(...):`) MUST be ignored
+  for the purposes of `audit_msg_id` extraction.
+
+Hex decoding policy (v1; normative):
+
+- v1 MUST NOT perform automatic hex decoding of any values (including `proctitle=`). Values are
+  preserved as raw strings. Any decoded representation is reserved for a future module version.
+
+**Output AST: audit_record_ast_v1 (v1; normative):**
+
+On success, the module MUST return:
+
+```json
+{
+  "audit_record_version": "pa.auditd_record_kv.v1",
+  "record_type": "SYSCALL",
+  "audit_msg_id": "audit(1700000000.123:456)",
+  "node": "ip-10-0-0-1",
+  "kv": {
+    "arch": "c000003e",
+    "syscall": "59",
+    "exe": "/usr/bin/sudo"
+  }
+}
+```
+
+Field rules (normative):
+
+- `audit_record_version` MUST equal `pa.auditd_record_kv.v1`.
+- `record_type` MUST equal the parsed `type=` value.
+- `audit_msg_id` MUST equal the extracted `audit(<sec>.<fraction>:<serial>)` substring exactly.
+- `node` MUST be:
+  - the parsed `node=` value if present, otherwise `null`.
+- `kv` MUST contain all parsed key/value pairs excluding `type`, `msg`, and `node`.
+  - Values are either strings or arrays of strings per "Repeated keys".
+
+**Deterministic parse errors (auditd_record_kv\_\*) (normative minimum):**
+
+On failure, `pa.auditd_record_kv.v1` MUST return one or more parser-module errors conforming to
+`026_contract_spine.md` "Parser modules".
+
+Required error codes (v1; normative minimum):
+
+- `line_too_long`
+- `invalid_utf8`
+- `invalid_token`
+- `unterminated_quote`
+- `missing_required_field`
+- `duplicate_required_field`
+- `missing_correlation_key`
+
+Location rules (normative):
+
+- `location.byte_offset` MUST point at the first byte of the offending token in the canonical parse
+  input.
+
+#### Formal audit correlation-key parser (pa.audit_event_key.v1)
+
+`pa.audit_event_key.v1` is the normative grammar for parsing the audit correlation key substring
+`audit(<sec>.<fraction>:<serial>)` used as `origin.audit_msg_id`.
+
+**Module identity (normative):**
+
+- `module_token`: `pa.audit_event_key.v1`
+- `module_id`: `audit_event_key`
+- `module_version`: `v1`
+- `input_kind`: `utf8_text`
+
+**Grammar (v1; normative):**
+
+The canonical parse input MUST match:
+
+- `audit(` + `<sec>` + `.` + `<fraction>` + `:` + `<serial>` + `)`
+
+Where:
+
+- `<sec>` is a non-empty sequence of ASCII digits (`0-9`).
+- `<fraction>` is a non-empty sequence of ASCII digits (`0-9`) of length 1 to 9.
+- `<serial>` is a non-empty sequence of ASCII digits (`0-9`).
+
+**Output AST: audit_event_key_ast_v1 (v1; normative):**
+
+On success, the module MUST return:
+
+```json
+{
+  "audit_event_key_version": "pa.audit_event_key.v1",
+  "audit_msg_id": "audit(1700000000.123:456)",
+  "epoch_seconds": 1700000000,
+  "fraction_digits": "123",
+  "serial": 456
+}
+```
+
+Rules (normative):
+
+- `audit_msg_id` MUST equal the canonical parse input exactly (no normalization).
+- Numeric fields MUST be parsed using integer arithmetic (no float parsing).
+- If any numeric value overflows unsigned 64-bit integer range, parsing MUST fail closed.
+
+**Deterministic parse errors (audit_event_key\_\*) (normative minimum):**
+
+Required error codes (v1; normative minimum):
+
+- `line_too_long`
+- `invalid_utf8`
+- `invalid_format`
+- `invalid_number`
+
+#### Correlation algorithm (audit_correlation_v1)
+
+`audit_correlation_v1` defines how multiple audit record lines are grouped into a single audit
+event.
+
+**Inputs (normative):**
+
+- A finite set of raw audit record lines within a run window (for example from `audit.log` or the
+  journald audit transport).
+- Each line MUST be parsed by `pa.auditd_record_kv.v1`. Correlation keys MUST be parsed by
+  `pa.audit_event_key.v1`.
+
+**Correlation key (normative):**
+
+- `correlation_key = origin.audit_msg_id = audit_record_ast_v1.audit_msg_id`
+- `origin.audit_msg_id` MUST preserve the literal `audit(<sec>.<fraction>:<serial>)` substring
+  exactly (no precision normalization).
+
+**Grouping rule (normative):**
+
+- All audit records with the same `correlation_key` MUST be correlated into a single audit event.
+
+**Event time (normative):**
+
+- `event_time_epoch_ms` for the correlated event MUST be derived from `correlation_key` using the
+  parsed `epoch_seconds` and `fraction_digits` from `pa.audit_event_key.v1`:
+  - Let `ms_digits = fraction_digits` right-padded with `0` to at least 3 digits.
+  - Let `ms = int(ms_digits[0:3])` (truncate toward zero).
+  - `event_time_epoch_ms = epoch_seconds * 1000 + ms`
+- This computation MUST NOT use floating point.
+
+**Deterministic `records_json` ordering (normative):**
+
+The correlated event MUST include an ordered `records_json` array. Ordering MUST be deterministic
+and independent of ingestion order:
+
+1. For each `audit_record_ast_v1`, compute `k = canonical_json_bytes(record_ast)` (RFC 8785 / JCS).
+1. Sort records by `k` using bytewise UTF-8 lexical ordering.
+1. Emit `records_json` as the RFC 8785 canonical JSON bytes of the resulting array of
+   `audit_record_ast_v1` objects.
+
+**Primary record type (event_type) (normative):**
+
+- If any record in the event has `record_type="SYSCALL"`, `event_type` MUST be `SYSCALL`.
+- Otherwise, `event_type` MUST be the lexicographically smallest `record_type` present (bytewise
+  UTF-8).
+
+**Failure and error taxonomy (normative):**
+
+`audit_correlation_v1` is fail closed at the event boundary:
+
+- If an audit record fails `pa.auditd_record_kv.v1` parsing, it MUST NOT contribute to any
+  correlated event, and a deterministic correlation error `audit_record_parse_error` MUST be
+  recorded.
+- If an audit record is missing a correlation key, it MUST NOT contribute to any correlated event,
+  and a deterministic correlation error `audit_missing_correlation_key` MUST be recorded.
+- If a correlated group contains inconsistent `node` values (non-null and unequal), the entire group
+  MUST be dropped and `audit_event_inconsistent_node` MUST be recorded.
+
+Implementations MAY apply explicit buffering limits for streaming correlation, but:
+
+- Any buffering limit MUST be deterministic and MUST be documented.
+- If a buffering limit is exceeded, the affected group MUST be dropped with
+  `audit_event_buffer_overflow`.
+
+Required correlation error codes (v1; normative minimum):
+
+- `audit_record_parse_error`
+- `audit_missing_correlation_key`
+- `audit_event_inconsistent_node`
+- `audit_event_buffer_overflow`
+
 ### Identity basis
 
 #### Tier 1 (aggregated audit events)
@@ -566,9 +978,10 @@ When audit records are aggregated into a single logical event before normalizati
 
 Rules:
 
-- `origin.audit_msg_id` must be the literal substring from the raw record, captured exactly.
-- Implementations must not parse the timestamp into floating point.
-- Implementations must not normalize fractional precision.
+- `origin.audit_msg_id` MUST be the literal substring from the raw record, captured exactly, and
+  MUST equal `audit_event_key_ast_v1.audit_msg_id` from `pa.audit_event_key.v1`.
+- Implementations MUST NOT parse the timestamp into floating point.
+- Implementations MUST NOT normalize fractional precision.
 
 #### Tier 2 (per-record without aggregation)
 
@@ -705,7 +1118,8 @@ When converting journald export to Parquet, include at minimum:
 
 ### Syslog Parquet schema
 
-When converting syslog text to Parquet, include at minimum:
+When converting syslog text to Parquet, implementations MUST first parse each syslog line using
+`pa.syslog.v1` and then include at minimum:
 
 | Column        | Type   | Notes                                    |
 | ------------- | ------ | ---------------------------------------- |
@@ -722,7 +1136,17 @@ When converting syslog text to Parquet, include at minimum:
 
 ### Audit Parquet schema
 
-When converting audit.log to Parquet, aggregate by message ID first, then include:
+When converting audit.log to Parquet, implementations MUST aggregate by message ID first using
+`audit_correlation_v1` (see "Formal parsing and correlation"), then include:
+
+Determinism requirements (normative):
+
+- `records_json` MUST be the RFC 8785 canonical JSON serialization of the ordered array of
+  `audit_record_ast_v1` objects emitted by `audit_correlation_v1`.
+- The order of elements in `records_json` MUST follow the deterministic ordering rule in
+  `audit_correlation_v1` (independent of ingestion order).
+- `raw_lines` MUST concatenate the original raw record lines in the same order as `records_json`,
+  separated by `\n`.
 
 | Column         | Type          | Notes                                        |
 | -------------- | ------------- | -------------------------------------------- |
@@ -803,7 +1227,8 @@ For collectors running in containers:
 
 ### Required fixtures
 
-Add fixtures under `tests/fixtures/unix_logs/` (recommended convention):
+Add fixtures under `tests/fixtures/unix_logs/` (integration logs; recommended convention), plus
+parser-module vectors under `tests/fixtures/parser_modules/` (unit-level):
 
 - `journald_export.jsonl`: Exported journal entries including:
 
@@ -822,6 +1247,18 @@ Add fixtures under `tests/fixtures/unix_logs/` (recommended convention):
   - At least 1 complete multi-record audit event (SYSCALL + PATH + CWD + PROCTITLE + EOE)
   - Records with the same `msg=audit(...)` identifier
 
+- `syslog_invalid.log`: Sample syslog content containing a small number of malformed lines for
+  negative-path assertions (invalid PRI, invalid timestamp, and unknown format).
+
+- `audit_incomplete.log`: Sample audit log segment containing records that cannot be correlated
+  (missing or malformed `msg=audit(...)` key) for negative-path assertions.
+
+Add parser-module vector fixtures under `tests/fixtures/parser_modules/`:
+
+- `syslog_v1/vectors.json` (module `pa.syslog.v1`)
+- `audit_event_key_v1/vectors.json` (module `pa.audit_event_key.v1`)
+- `auditd_record_kv_v1/vectors.json` (module `pa.auditd_record_kv.v1`)
+
 ### Required assertions
 
 CI must assert:
@@ -830,22 +1267,46 @@ CI must assert:
   (no reset to the beginning). At-least-once replay is permitted; any duplicate records MUST be
   removed deterministically downstream (typically by `metadata.event_id` equality when the same
   cursor is re-read).
+
 - **Offset persistence**: filelog receiver resumes using persisted offsets after restart (no reset
   to the beginning). At-least-once replay is permitted; any duplicate records MUST be removed
   deterministically downstream (typically by `metadata.event_id` equality when the same cursor is
   re-read).
-- **Audit correlation**: Multi-record audit events with the same message ID produce a single
-  normalized OCSF event (not multiple fragmented events).
+
+- **Syslog parsing (pa.syslog.v1)**: All syslog-derived fields used for `raw_parquet/unix/syslog/**`
+  and `unix_syslog_fingerprint_v1` MUST be derived from the canonical `syslog_ast_v1` output of
+  `pa.syslog.v1`.
+
+- **Parser module vectors**: CI MUST execute parser-module vector suites for:
+
+  - `pa.syslog.v1`
+  - `pa.audit_event_key.v1`
+  - `pa.auditd_record_kv.v1`
+
+  and MUST assert `expected_ast` / `expected_errors` exactly, including deterministic `error_code`,
+  `message_prefix`, and `location` fields.
+
+- **Negative-path determinism**: Ingesting `syslog_invalid.log` and `audit_incomplete.log` MUST NOT
+  silently mutate run outputs. Invalid records MUST be rejected deterministically (validated by the
+  parser-module vectors) and MUST NOT appear as successfully parsed syslog/audit normalized events.
+
+- **Audit correlation (audit_correlation_v1)**: Multi-record audit events with the same message ID
+  MUST be correlated per `audit_correlation_v1` into a single normalized OCSF event (not multiple
+  fragmented events).
+
 - **Identity determinism**: Re-normalizing the same fixture produces byte-identical
   `metadata.event_id` values.
+
 - **Unix source overlap gate**: When Unix sources are enabled, `logs/health.json` MUST include a
   `telemetry.unix.source_overlap` substage outcome. If overlap is detected without operator
   acknowledgment, the substage MUST be failed with `reason_code=unix_source_overlap_unacknowledged`
   and default `fail_mode=fail_closed`. If overlap is detected with operator acknowledgment, the
   substage MUST be failed with `reason_code=unix_source_overlap_active` and
   `fail_mode=warn_and_skip`.
+
 - **Schema snapshots**: Each emitted `raw_parquet/unix/**` dataset directory MUST include
   `_schema.json` per `045_storage_formats.md`.
+
 - **Unix flat-text withholding**: In v0.1, `raw/syslog/**` and `raw/audit/**` MUST be
   placeholder-only by default with `reason_code=unix_text_redaction_unsupported`, and normalized
   events MUST use `raw_ref.kind="dataset_row_v1"` pointing into `raw_parquet/**` (not

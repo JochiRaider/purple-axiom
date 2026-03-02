@@ -207,6 +207,24 @@ Recommended additional keys (non-normative, strongly encouraged):
 - `contracts_bundle_sha256`: deterministic content hash of the distributed contracts bundle
   corresponding to `contracts_version` (see `025_data_contracts.md`)
 
+Independence note (normative):
+
+- `pipeline_version` and `contracts_version` MAY advance independently. Implementations MUST NOT
+  assume equality or lockstep.
+- The default build profile's target `contracts_version` baseline is declared in `000_charter.md`
+  ("Target contract surface and scope profile (normative)").
+
+Example (informative):
+
+```json
+{
+  "versions": {
+    "pipeline_version": "0.1.0",
+    "contracts_version": "0.2.0"
+  }
+}
+```
+
 #### Backward compatibility with `manifest.extensions` (transitional)
 
 If older consumers expect version values in `manifest.extensions`, producers MAY duplicate version

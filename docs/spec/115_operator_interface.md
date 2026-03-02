@@ -27,6 +27,10 @@ related:
 
 This specification is **v0.2+ (normative)** unless explicitly marked as reserved or future work.
 
+Scope note (non-normative): This specification defines optional v0.2+ workspace and control-plane
+behavior and is not required for the default build profile. See `000_charter.md` ("Target contract
+surface and scope profile (normative)") for the authoritative baseline and seam scope map.
+
 This spec defines an Operator Interface that is **web-based**, **local-first**, and
 **contract-aligned** with the orchestrator’s existing verb and run-bundle semantics. The UI is
 intentionally thin: it surfaces and drives the orchestrator’s canonical entry points rather than

@@ -253,9 +253,15 @@ Index entry format (normative):
   - Canonical fixture roots:
     - `tests/fixtures/parser_modules/jsonpath_v1/vectors.json` (vector file)
     - `tests/fixtures/parser_modules/placeholder_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/syslog_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/audit_event_key_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/auditd_record_kv_v1/vectors.json` (vector file)
   - Minimum fixture sets (normative):
     - `jsonpath_v1_vectors` (vectors file present and exercised)
     - `placeholder_v1_vectors` (vectors file present and exercised)
+    - `syslog_v1_vectors` (vectors file present and exercised)
+    - `audit_event_key_v1_vectors` (vectors file present and exercised)
+    - `auditd_record_kv_v1_vectors` (vectors file present and exercised)
 
 - **Cross-cutting: event identity (`event_id.v1`)**
 
@@ -883,6 +889,210 @@ Minimum case set (normative):
   - `sha256` present when `handling=absent`
   - malformed `sha256` value (wrong prefix or wrong hex length, or non-lowercase hex)
 
+#### Syslog line vectors
+
+`syslog_v1_vectors` validate the formal syslog grammar and timestamp normalization contract defined
+by `pa.syslog.v1` in `044_unix_log_ingestion.md`.
+
+- Fixture root:
+  - `tests/fixtures/parser_modules/syslog_v1/vectors.json`
+- Module under test:
+  - `module_token`: `pa.syslog.v1`
+  - `input_kind`: `utf8_text`
+
+Input envelope (normative):
+
+- `input.utf8` MUST be a multi-line string:
+  - Line 0 is the syslog line to parse.
+  - Subsequent lines are parse-context directives of the form `@<key>=<value>` as defined by
+    `pa.syslog.v1` (v1 requires `@assumed_timezone` and `@run_end_time_utc` for RFC3164-like
+    inputs).
+
+Success cases (normative minimum coverage):
+
+- RFC3164-like line with hostname + app + `[pid]` + message.
+- RFC3164-like line without PID.
+- RFC3164-like year rollover case:
+  - `@run_end_time_utc` MUST be in early January, and the syslog timestamp MUST be in late December,
+    exercising the deterministic "closest timestamp at or before run end" inference rule.
+- RFC5424-like line with PRI + version + RFC3339 timestamp + structured data `-`.
+- RFC5424-like line with syntactically valid structured data (one bracketed element) and a message.
+
+Failure cases (normative minimum coverage; MUST fail closed):
+
+- invalid PRI (non-numeric or out of range)
+- invalid timestamp (RFC3164 timestamp malformed; RFC5424 timestamp malformed or NILVALUE)
+- unknown/unsupported format (does not match RFC3164-like or RFC5424-like)
+- RFC5424 invalid version (not `1`)
+- RFC5424 bad structured data (unbalanced brackets or invalid quoting)
+- missing required RFC3164 context directives (`missing_context_value`)
+- unknown context directive key (`invalid_context_key`)
+
+AST contract (normative):
+
+- Success cases MUST assert `expected_ast` exactly as `syslog_ast_v1` (see
+  `044_unix_log_ingestion.md`), including `event_time_epoch_ms` normalization and nullability of
+  `pid`, `facility`, and `severity`.
+
+Errors contract (normative):
+
+- Failure cases MUST assert `expected_errors[]` exactly (stable `error_code`, `message_prefix`, and
+  `location`).
+
+#### Audit correlation-key vectors
+
+`audit_event_key_v1_vectors` validate parsing of the audit correlation key substring
+`audit(<sec>.<fraction>:<serial>)` as `pa.audit_event_key.v1` (see `044_unix_log_ingestion.md`).
+
+- Fixture root:
+  - `tests/fixtures/parser_modules/audit_event_key_v1/vectors.json`
+- Module under test:
+  - `module_token`: `pa.audit_event_key.v1`
+  - `input_kind`: `utf8_text`
+
+Success cases (normative minimum coverage):
+
+- valid key with 1-digit fraction
+- valid key with 3-digit fraction
+- valid key with 9-digit fraction
+- cases that validate literal preservation:
+  - `expected_ast.audit_msg_id` MUST equal the input string exactly (no fractional normalization)
+
+Failure cases (normative minimum coverage; MUST fail closed):
+
+- missing `audit(` prefix or closing `)`
+- missing `.` or `:`
+- empty numeric segments
+- fraction longer than 9 digits
+- numeric overflow (epoch_seconds or serial does not fit in unsigned 64-bit)
+
+#### Audit record KV vectors
+
+`auditd_record_kv_v1_vectors` validate parsing of full audit record lines into `audit_record_ast_v1`
+as `pa.auditd_record_kv.v1` (see `044_unix_log_ingestion.md`).
+
+- Fixture root:
+  - `tests/fixtures/parser_modules/auditd_record_kv_v1/vectors.json`
+- Module under test:
+  - `module_token`: `pa.auditd_record_kv.v1`
+  - `input_kind`: `utf8_text`
+
+Success cases (normative minimum coverage):
+
+- a typical SYSCALL line containing `type=SYSCALL` and `msg=audit(...):`
+- a record line containing `node=<value>` (node is surfaced as `node` in the AST)
+- a record line with quoted values (e.g., `exe="... ..."`) and preserved escapes
+- a record line with repeated non-required keys, asserting array behavior
+
+Failure cases (normative minimum coverage; MUST fail closed):
+
+- missing required `type=...`
+- missing required `msg=...`
+- `type` or `msg` repeated
+- token without `=`
+- unterminated quoted value
+- `msg` present but missing an `audit(<sec>.<fraction>:<serial>)` correlation key substring
+
+Errors contract (normative):
+
+- Failure cases MUST assert `expected_errors[]` exactly (stable `error_code`, `message_prefix`, and
+  `location`).
+
+#### Atomic template placeholder vectors
+
+Fixture set (normative):
+
+- `template_atomic_v1_vectors` (semantic lock)
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/template_atomic_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token` MUST be `pa.template_atomic.v1`.
+- `module_id` MUST be `template_atomic`.
+- `module_version` MUST be `v1`.
+
+Grammar (normative):
+
+- The parser MUST implement the Atomic placeholder grammar defined in
+  `032_atomic_red_team_executor_integration.md`, "Template placeholder grammar (parser module:
+  pa.template_atomic.v1)".
+
+AST contract for `expected_ast` (normative):
+
+- `expected_ast` MUST be a JSON object with:
+  - `segments` (array)
+- Each `segments[]` entry MUST be exactly one of:
+  - `{"kind":"literal","text":"..."}`
+  - `{"kind":"placeholder","name":"..."}`
+
+Minimum case set (normative):
+
+- The vectors file MUST include, at minimum, valid cases for:
+
+  - no placeholders
+  - a single placeholder
+  - multiple placeholders
+  - adjacent placeholders
+  - placeholder at start and placeholder at end
+
+- The vectors file MUST include, at minimum, invalid cases that fail closed for:
+
+  - unterminated placeholder (`#{` with no closing `}`)
+  - empty placeholder name (`#{}`)
+  - invalid placeholder name start (first char not in `[A-Za-z_]`)
+  - invalid placeholder name character (subsequent char not in `[A-Za-z0-9_-]`)
+
+#### Criteria ARG template placeholder vectors
+
+Fixture set (normative):
+
+- `template_criteria_arg_v1_vectors` (semantic lock)
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/template_criteria_arg_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token` MUST be `pa.template_criteria_arg.v1`.
+- `module_id` MUST be `template_criteria_arg`.
+- `module_version` MUST be `v1`.
+
+Grammar (normative):
+
+- The parser MUST implement the criteria ARG placeholder grammar defined in
+  `035_validation_criteria.md`, "Template placeholder grammar (parser module:
+  pa.template_criteria_arg.v1)".
+
+AST contract for `expected_ast` (normative):
+
+- `expected_ast` MUST be a JSON object with:
+  - `segments` (array)
+- Each `segments[]` entry MUST be exactly one of:
+  - `{"kind":"literal","text":"..."}`
+  - `{"kind":"placeholder","name":"..."}`
+
+Minimum case set (normative):
+
+- The vectors file MUST include, at minimum, valid cases for:
+
+  - no placeholders
+  - a single placeholder
+  - multiple placeholders
+  - adjacent placeholders
+  - placeholder at start and placeholder at end
+  - a case that proves only `{{ARG.` triggers parsing (for example `{{FOO.x}}` is literal text)
+
+- The vectors file MUST include, at minimum, invalid cases that fail closed for:
+
+  - unterminated placeholder (`{{ARG.` with no closing `}}`)
+  - empty placeholder name (`{{ARG.}}`)
+  - invalid placeholder name start (first char not in `[A-Za-z_]`)
+  - invalid placeholder name character (subsequent char not in `[A-Za-z0-9_]`)
+
 ### Redaction
 
 - Redaction policy test vectors validate deterministic truncation, placeholder emission, and
@@ -1275,8 +1485,30 @@ Atomic test to resolved inputs to `$ATOMICS_ROOT` canonicalization produces stab
 The fixture set MUST include at least:
 
 - `atomic_determinism_smoke`:
+
   - Input: two identical `engine="atomic"` runs with identical resolved inputs.
   - Expected: stable `action_key` and stable `parameters.resolved_inputs_sha256` across runs.
+
+- `atomic_placeholder_invalid_syntax_fails_closed`:
+
+  - Input: at least one template string participating in Atomic template expansion contains an
+    invalid `#{...}` placeholder token.
+  - Expected: action fails closed with `reason_code=unresolved_placeholder`.
+
+- `atomic_placeholder_unknown_name_fails_closed`:
+
+  - Input: a template string references a placeholder name not present in the resolved input map.
+  - Expected: action fails closed with `reason_code=unresolved_placeholder`.
+
+- `atomic_placeholder_cycle_or_growth_fails_closed`:
+
+  - Input: input defaults form a non-converging cycle or growth under fixed-point expansion.
+  - Expected: action fails closed with `reason_code=input_resolution_cycle_or_growth`.
+
+- `atomic_placeholder_fixed_point_smoke`:
+
+  - Input: an input default references another input and converges within `max_resolution_passes`.
+  - Expected: resolved inputs converge deterministically and execution proceeds.
 
 Execution adapter conformance suite (verification hook):
 
@@ -1706,6 +1938,7 @@ The fixture suite MUST validate the deterministic compiler defined in `035_valid
 Minimum required fixture cases (normative):
 
 - `criteria_authoring_compile_smoke`
+
   - Includes at least one example row for each authoring operator (`equals`, `contains`, `regex`,
     and one numeric compare operator).
   - Includes at least one `ARG` row (argument environment + placeholder substitution).
@@ -1714,6 +1947,27 @@ Minimum required fixture cases (normative):
   - Asserts byte-identical outputs for:
     - compiled `criteria.jsonl` (including canonical ordering), and
     - `authoring_compile_report.json` (canonical JSON), including `stable_signal_id` values.
+
+- `criteria_authoring_invalid_arg_placeholder_syntax`
+
+  - Input: a `SIG.value` contains an invalid placeholder token (example `{{ARG.}}` or a name with an
+    invalid character).
+  - Expected: compilation fails closed and `authoring_compile_report.json.errors[]` includes
+    `code="invalid_arg_placeholder_syntax"`.
+
+- `criteria_authoring_undefined_arg_placeholder`
+
+  - Input: a `SIG.value` references an `<arg_name>` not present in the entry argument environment.
+  - Expected: compilation fails closed and `authoring_compile_report.json.errors[]` includes
+    `code="undefined_arg_placeholder"`.
+
+- `criteria_authoring_placeholder_triggers_downstream_parse_error` (RECOMMENDED)
+
+  - Input: placeholder substitution produces content that fails downstream operator parsing
+    (example: `op=num_gt`, value template resolves to a non-numeric string).
+  - Expected: compilation fails closed with a deterministic downstream parse/coercion error, and the
+    emitted error indicates it occurred after placeholder substitution (see
+    `035_validation_criteria.md`, "Downstream parse errors after substitution").
 
 #### Criteria pack linter
 
@@ -1736,6 +1990,13 @@ Minimum required fixture cases (normative):
       `expected_signals[]` ordering and/or `predicate.constraints[]` ordering).
     - Expected: lint fails closed with rule_id `lint-criteria-pack-canonical-ordering` and includes
       a stable remediation hint (minimum: the expected sort key).
+  - `invalid_arg_placeholder_syntax_rejected`:
+    - A `SIG.value` contains a `{{ARG.` start sequence but is not valid per
+      `pa.template_criteria_arg.v1`.
+    - Expected: lint fails closed with rule_id `lint-criteria-pack-invalid-arg-placeholder-syntax`.
+  - `undefined_arg_placeholder_rejected`:
+    - A `SIG.value` references an `<arg_name>` not present in the entry argument environment.
+    - Expected: lint fails closed with rule_id `lint-criteria-pack-undefined-arg-placeholder`.
 
 ### Reporting and scoring (defense outcomes + attribution)
 
@@ -1813,6 +2074,61 @@ Fixture structure (normative):
 **Summary**: Integration tests validate cross-component behavior using realistic fixtures and
 harnesses. They cover end-to-end scenarios, platform-specific behaviors, and recovery from failure
 conditions.
+
+### unix_logs_smoke
+
+`unix_logs_smoke` is a required CI gate for Unix syslog + audit ingestion. It combines:
+
+- unit-level parser-module vectors (grammar/AST/error determinism), and
+- end-to-end ingestion + normalization assertions over representative Unix log files.
+
+#### Inputs
+
+Fixture root (normative): `tests/fixtures/unix_logs/`
+
+Required fixture files (normative minimum):
+
+- `journald_export.jsonl`
+  - Must include at least one `_TRANSPORT=syslog` entry and one `_TRANSPORT=audit` entry.
+- `syslog_debian.log`
+  - Must include RFC3164-like syslog lines (including at least one with PID).
+- `audit.log`
+  - Must include at least one complete multi-record audit event (SYSCALL + PATH + CWD + PROCTITLE
+    - EOE).
+- `syslog_invalid.log`
+  - Must include a small number of malformed syslog lines for negative-path assertions.
+- `audit_incomplete.log`
+  - Must include a small number of audit lines that cannot be correlated (missing or malformed
+    `msg=audit(...)` correlation key).
+
+#### Required checks
+
+Parser-module vectors (unit-level; normative):
+
+- Execute:
+  - `syslog_v1_vectors`
+  - `audit_event_key_v1_vectors`
+  - `auditd_record_kv_v1_vectors`
+
+End-to-end Unix log ingestion (integration-level; normative):
+
+- Ingest the fixture inputs through the Unix log ingestion pipeline and produce:
+  - derived raw Parquet (`raw_parquet/unix/**`), and
+  - normalized OCSF events (`normalized_parquet/**` or equivalent), per `044_unix_log_ingestion.md`.
+
+Required assertions (integration-level; normative):
+
+- **Syslog parsing equivalence:** Syslog-derived fields in outputs MUST match the canonical
+  `syslog_ast_v1` semantics of `pa.syslog.v1` (including RFC3164 year inference determinism).
+- **Overlap dedupe determinism:** If the fixture contains duplicate syslog records across journald
+  and file ingestion, dedupe MUST use `unix_syslog_fingerprint_v1` and MUST be deterministic across
+  runs.
+- **Audit correlation correctness:** Multi-record audit events MUST be correlated per
+  `audit_correlation_v1` into a single normalized event, and `origin.audit_msg_id` MUST preserve the
+  literal `audit(<sec>.<fraction>:<serial>)` string.
+- **Negative-path safety:** Malformed syslog lines and uncorrelatable audit lines MUST NOT be
+  treated as successfully parsed events. They MUST be rejected deterministically (reason codes are
+  validated by the parser-module vectors) and MUST NOT silently mutate run outputs.
 
 ### Evaluator conformance harness
 
@@ -1954,10 +2270,15 @@ Schema validation of effective configuration validates `inputs/range.yaml` again
 Schema validation of operator control-plane artifacts (v0.2+) validates contract-backed operator
 intent artifacts when present.
 
+Scope gating note (normative): v0.2+ fixtures in this section are REQUIRED only when the selected
+scope profile enables the corresponding seams. For the default build profile, CI MAY skip operator
+control-plane and plan-draft fixtures. See `000_charter.md` ("Target contract surface and scope
+profile (normative)").
+
 - Fixture run bundles that include any `control/*.json` or `inputs/plan_draft.yaml` MUST validate
   against the new contracts via the contract validator (fail closed on mismatch).
 
-The fixture set MUST include at least:
+The fixture set MUST include at least the v0.1 cases below:
 
 - `range_config_gap_taxonomy_invalid_token_rejected` (fail closed)
   - Provide a `inputs/range.yaml` fixture that includes a non-canonical `scoring.gap_taxonomy[]`
@@ -1969,6 +2290,10 @@ The fixture set MUST include at least:
   - Feed `inputs/range.yaml` with `runner.environment_config.noise_profile.enabled=true` but omit
     `profile_sha256` (or `profile_id` / `profile_version`).
   - Expected: config validation fails closed with `reason_code=config_schema_invalid`.
+
+When the operator-interface/control-plane scope profile is enabled (v0.2+; see `000_charter.md`
+("Target contract surface and scope profile (normative)")), the fixture set MUST also include:
+
 - `control_plane_cancel_valid` (v0.2+)
   - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_valid/`
   - Provide a minimal run bundle that includes a valid `control/cancel.json`.

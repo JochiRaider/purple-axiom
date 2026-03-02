@@ -1,0 +1,159 @@
+{
+  "parser_vectors_version": "pa.parser_vectors.v1",
+  "module_token": "pa.template_atomic.v1",
+  "module_id": "template_atomic",
+  "module_version": "v1",
+  "cases": [
+    {
+      "case_id": "no_placeholders",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "hello world" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "hello world" }
+        ]
+      }
+    },
+    {
+      "case_id": "single_placeholder",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "hi #{name}!" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "hi " },
+          { "kind": "placeholder", "name": "name" },
+          { "kind": "literal", "text": "!" }
+        ]
+      }
+    },
+    {
+      "case_id": "multiple_placeholders",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "#{a}-#{b}-#{c}" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "placeholder", "name": "a" },
+          { "kind": "literal", "text": "-" },
+          { "kind": "placeholder", "name": "b" },
+          { "kind": "literal", "text": "-" },
+          { "kind": "placeholder", "name": "c" }
+        ]
+      }
+    },
+    {
+      "case_id": "adjacent_placeholders",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "#{a}#{b}" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "placeholder", "name": "a" },
+          { "kind": "placeholder", "name": "b" }
+        ]
+      }
+    },
+    {
+      "case_id": "placeholder_at_start_and_end",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "#{a} middle #{b}" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "placeholder", "name": "a" },
+          { "kind": "literal", "text": " middle " },
+          { "kind": "placeholder", "name": "b" }
+        ]
+      }
+    },
+    {
+      "case_id": "hyphen_and_underscore_allowed",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "x#{a-b_c1}y" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "x" },
+          { "kind": "placeholder", "name": "a-b_c1" },
+          { "kind": "literal", "text": "y" }
+        ]
+      }
+    },
+    {
+      "case_id": "empty_input",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": []
+      }
+    },
+    {
+      "case_id": "unterminated_placeholder",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "hi #{name" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "unterminated_placeholder",
+          "message_prefix": "pa.template_atomic.v1: ",
+          "location": { "byte_offset": 3 }
+        }
+      ]
+    },
+    {
+      "case_id": "empty_placeholder_name",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "bad #{} end" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "empty_placeholder_name",
+          "message_prefix": "pa.template_atomic.v1: ",
+          "location": { "byte_offset": 6 }
+        }
+      ]
+    },
+    {
+      "case_id": "invalid_placeholder_name_start",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "bad #{1abc}" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "invalid_placeholder_name_start",
+          "message_prefix": "pa.template_atomic.v1: ",
+          "location": { "byte_offset": 6 }
+        }
+      ]
+    },
+    {
+      "case_id": "invalid_placeholder_name_char",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "bad #{ab$c}" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "invalid_placeholder_name_char",
+          "message_prefix": "pa.template_atomic.v1: ",
+          "location": { "byte_offset": 8 }
+        }
+      ]
+    },
+    {
+      "case_id": "whitespace_in_name",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "bad #{ a}" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "invalid_placeholder_name_start",
+          "message_prefix": "pa.template_atomic.v1: ",
+          "location": { "byte_offset": 6 }
+        }
+      ]
+    }
+  ]
+}

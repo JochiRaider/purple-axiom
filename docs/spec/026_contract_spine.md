@@ -1124,10 +1124,14 @@ When parsing fails, a parser module MUST return one or more errors.
 Error shape (normative minimum):
 
 - `error_code`: stable machine-readable token (`lower_snake_case`).
+- `message_prefix`: stable, deterministic prefix string used by CI and lint surfaces.
+  - `message_prefix` MUST be exactly `<module_token>: ` (module token, then `:`, then a single
+    trailing space).
+  - Example: `pa.jsonpath.v1: `
 - `message`: human-readable message.
-  - `message` MUST begin with a stable prefix of the form: `PA_<MODULE>_<CODE>:`
-    - `<MODULE>` is `module_id` uppercased.
-    - `<CODE>` is `error_code` uppercased.
+  - `message` MUST begin with `message_prefix`.
+  - `message` SHOULD be deterministic for equivalent inputs (avoid embedding absolute paths,
+    hostnames, timestamps, or random IDs).
 - `location`:
   - `byte_offset`: REQUIRED, 0-indexed
   - `line`: OPTIONAL, 1-indexed
@@ -1173,6 +1177,29 @@ The following parser modules are treated as parser modules for v0.1 M0:
   policy (defined in ADR-0003; vectors in `100_test_strategy_ci.md`).
 - `pa.placeholder.v1`: placeholder text line format (`PA_PLACEHOLDER_V1 ...`) (defined in
   `090_security_safety.md`; vectors in `100_test_strategy_ci.md`).
+
+Template placeholder parser modules additions (v0.1; normative):
+
+- `pa.template_atomic.v1`:
+  - Purpose: parse UTF-8 template strings containing Atomic placeholders of the form `#{<name>}`.
+  - Grammar + AST contract: `032_atomic_red_team_executor_integration.md`, "Template placeholder
+    grammar (parser module: pa.template_atomic.v1)".
+  - Golden vectors: `tests/fixtures/parser_modules/template_atomic_v1/vectors.json` (see
+    `100_test_strategy_ci.md`, "Parser modules").
+- `pa.template_criteria_arg.v1`:
+  - Purpose: parse UTF-8 template strings containing criteria ARG placeholders of the form
+    `{{ARG.<arg_name>}}`.
+  - Grammar + AST contract: `035_validation_criteria.md`, "Template placeholder grammar (parser
+    module: pa.template_criteria_arg.v1)".
+  - Golden vectors: `tests/fixtures/parser_modules/template_criteria_arg_v1/vectors.json` (see
+    `100_test_strategy_ci.md`, "Parser modules").
+
+Template module common requirements (normative):
+
+- `input_kind` MUST be `utf8_text`.
+- Identifier grammars used inside placeholder tokens MUST be ASCII-only and MUST be defined by the
+  owning spec for the module.
+- `message_prefix` MUST be exactly `<module_token>: `.
 
 The following existing tokens are legacy aliases mapped into this contract (no renaming in v0.1):
 
@@ -1519,6 +1546,22 @@ is explicitly referenced there.
 - Reader semantics version: `pa.reader.v1` (see `025_data_contracts.md`).
 - Any change that can cause two conforming producers (or two conforming consumers) to disagree MUST
   bump the corresponding semantics version and MUST include explicit compatibility notes.
+
+Contracts bundle pin mapping (normative):
+
+- `manifest.versions.contracts_version` MUST identify the contracts bundle used to validate
+  contract-backed artifacts for the run.
+- For a given contracts bundle, `manifest.versions.contracts_version` MUST equal the shared
+  `registry_version` value in both registry instance files:
+  - `docs/contracts/contract_registry.json.registry_version`
+  - `docs/contracts/workspace_contract_registry.json.registry_version`
+- `registry_version` is a bundle-level/versioned surface and is independent of individual schema
+  `contract_version` constants.
+
+Default scope note (non-normative):
+
+- The target `contracts_version` baseline for the default build profile and the v0.2 seam scope map
+  are declared in `000_charter.md` ("Target contract surface and scope profile (normative)").
 
 Contracts bundle distribution (historical validation) MUST follow `025_data_contracts.md`
 ("Contracts bundle distribution and retrieval for historical validation").

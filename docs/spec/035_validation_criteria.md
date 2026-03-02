@@ -179,6 +179,9 @@ Row-kind-specific fields:
 
 - For `ARG` rows:
   - `arg_name` (required string)
+    - MUST be ASCII-only and MUST match the `<arg_name>` grammar defined in "Template placeholder
+      grammar (parser module: pa.template_criteria_arg.v1)".
+    - Matching is case-sensitive.
   - `arg_value` (required string)
 - For `FYI` rows:
   - `message` (required string)
@@ -260,6 +263,9 @@ For each compiled criteria entry, the compiler builds an argument environment:
 
 - Start with an empty map.
 - Apply all `ARG` rows associated with that entry (by join keys and selectors).
+  - Each `arg_name` MUST be validated against the `<arg_name>` grammar defined in "Template
+    placeholder grammar (parser module: pa.template_criteria_arg.v1)".
+  - If any `arg_name` is invalid, compilation MUST fail closed.
 - If the same `arg_name` is set multiple times with different values, compilation MUST fail closed.
 
 #### Placeholder substitution
@@ -270,12 +276,113 @@ In `SIG.value`, the compiler MUST replace argument placeholders of the form:
 
 with the corresponding `arg_value` from the entry argument environment.
 
+##### Template placeholder grammar (parser module: pa.template_criteria_arg.v1)
+
+Input kind (normative):
+
+- `pa.template_criteria_arg.v1.input_kind` MUST be `utf8_text`.
+
+Delimiter and scanning rules (normative):
+
+- A placeholder token begins only at the exact byte sequence `{{ARG.`.
+  - Any other `{{...` sequence MUST be treated as literal text.
+- A placeholder token ends only at the exact byte sequence `}}`.
+- Encountering `{{ARG.` MUST begin a placeholder token.
+  - Malformed placeholder tokens MUST fail closed (they MUST NOT be treated as literal text).
+- No escape syntax is defined.
+
+Identifier grammar (normative):
+
+- `<arg_name>` MUST be ASCII-only and case-sensitive.
+- `<arg_name> ::= [A-Za-z_][A-Za-z0-9_]*`
+- Whitespace is forbidden inside the placeholder token.
+
+Substitution ordering (normative):
+
+- Placeholder substitution MUST occur after the authoring input is decoded into row fields (CSV
+  records or YAML `rows[]` objects).
+- Placeholder substitution MUST occur before any operator-specific parsing/coercion of the `value`
+  field (for example numeric parsing for `num_*`, regex compilation for `regex`, or any future
+  field-level parsing inside `value`).
+
+##### AST contract (pa.template_criteria_arg.v1)
+
+On successful parse, the module MUST produce an AST of the form:
+
+- `expected_ast`: `{"segments":[ ... ]}`
+
+Each `segments[]` entry MUST be exactly one of:
+
+- Literal segment: `{"kind":"literal","text":"..."}`
+- Placeholder segment: `{"kind":"placeholder","name":"..."}`
+
+AST invariants (normative):
+
+- The AST MUST be canonical:
+  - Adjacent literal runs MUST be coalesced into a single literal segment.
+  - Empty literal segments MUST NOT be emitted.
+  - Empty input MUST yield `{"segments":[]}`.
+- Placeholder segment `name` MUST match the `<arg_name>` grammar above.
+
+##### Deterministic parser errors (pa.template_criteria_arg.v1)
+
+On parse failure, `pa.template_criteria_arg.v1` MUST fail closed.
+
+Error vocabulary (normative):
+
+- `unterminated_placeholder`: a `{{ARG.` start delimiter was encountered with no closing `}}`.
+- `empty_placeholder_name`: a placeholder of the form `{{ARG.}}` was encountered.
+- `invalid_placeholder_name_start`: the first character of `<arg_name>` is invalid.
+- `invalid_placeholder_name_char`: a non-initial character of `<arg_name>` is invalid.
+
+Error selection and ordering (normative):
+
+- The module MUST return exactly one error (first error wins).
+- The module MUST choose the leftmost failure in the input by `location.byte_offset`.
+
+Error locations (normative):
+
+- For `unterminated_placeholder`, `location.byte_offset` MUST point to the first `{` byte of the
+  `{{ARG.` start delimiter.
+- For `empty_placeholder_name`, `location.byte_offset` MUST point to the first `}` byte of the
+  closing `}}` suffix that immediately follows `{{ARG.`.
+- For `invalid_placeholder_name_start` and `invalid_placeholder_name_char`, `location.byte_offset`
+  MUST point to the first invalid byte within the `<arg_name>` substring.
+
+Message prefix (normative):
+
+- `message_prefix` MUST be exactly `pa.template_criteria_arg.v1: `.
+
+##### Compiler error mapping (normative)
+
+Placeholder substitution failures MUST be surfaced as deterministic compile report errors.
+
+- Invalid placeholder syntax:
+  - When `pa.template_criteria_arg.v1` parsing fails for a `SIG.value`, compilation MUST fail
+    closed.
+  - The compiler MUST emit an `errors[]` entry with:
+    - `code = "invalid_arg_placeholder_syntax"`
+    - a deterministic `message` that includes, at minimum: `message_prefix`, `error_code`, and
+      `location.byte_offset`.
+- Undefined placeholder:
+  - When a placeholder name is not present in the entry argument environment, compilation MUST fail
+    closed.
+  - The compiler MUST emit an `errors[]` entry with:
+    - `code = "undefined_arg_placeholder"`
+    - a deterministic `message` that includes the referenced `<arg_name>`.
+
+Downstream parse errors after substitution (normative):
+
+- If placeholder substitution produces content that fails downstream operator parsing/coercion (for
+  example numeric parsing for `num_*`), the compiler MUST surface the downstream error as it would
+  without placeholders.
+- When the failing `SIG.value` contained at least one placeholder token, the compiler SHOULD include
+  deterministic provenance in the emitted error indicating the failure occurred after placeholder
+  substitution (RECOMMENDED: `details.phase = "post_placeholder_substitution"`).
+
 Rules:
 
-- Substitution is purely textual and MUST be applied before type coercion (for example numeric
-  parsing for `num_*`).
-- If a placeholder references an `arg_name` that is not defined for the entry, compilation MUST fail
-  closed.
+- Substitution is purely textual.
 - If a value contains no placeholders, it is compiled as-is.
 
 ### FYI rows: non-normative commentary
@@ -438,6 +545,9 @@ report into the run snapshot (if present):
 - `summary`: counts of rows/entries/signals compiled, skipped, and errored
 - `errors[]` and `warnings[]`:
   - each finding MUST include: `code` (id_slug_v1), `message`, and `row_ref`
+  - findings MAY include `details` (object) for structured metadata
+    - `details` MUST be redaction-safe
+    - `details` SHOULD be deterministic for equivalent inputs
 - `normalized[]`: one element per compiled criteria entry, including:
   - `entry_id`, join keys, selectors (normalized)
   - `expected_signals[]`, each including:

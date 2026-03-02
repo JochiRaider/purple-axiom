@@ -1,0 +1,176 @@
+{
+  "parser_vectors_version": "pa.parser_vectors.v1",
+  "module_token": "pa.template_criteria_arg.v1",
+  "module_id": "template_criteria_arg",
+  "module_version": "v1",
+  "cases": [
+    {
+      "case_id": "no_placeholders",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "plain text" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "plain text" }
+        ]
+      }
+    },
+    {
+      "case_id": "other_double_braces_are_literal",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "x{{FOO.bar}}y" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "x{{FOO.bar}}y" }
+        ]
+      }
+    },
+    {
+      "case_id": "argx_prefix_is_literal",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "x{{ARGX.name}}y" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "x{{ARGX.name}}y" }
+        ]
+      }
+    },
+    {
+      "case_id": "lowercase_arg_is_literal",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "x{{arg.name}}y" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "x{{arg.name}}y" }
+        ]
+      }
+    },
+    {
+      "case_id": "single_placeholder",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "x{{ARG.name}}y" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "literal", "text": "x" },
+          { "kind": "placeholder", "name": "name" },
+          { "kind": "literal", "text": "y" }
+        ]
+      }
+    },
+    {
+      "case_id": "multiple_placeholders",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "{{ARG.a}}-{{ARG.b}}" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "placeholder", "name": "a" },
+          { "kind": "literal", "text": "-" },
+          { "kind": "placeholder", "name": "b" }
+        ]
+      }
+    },
+    {
+      "case_id": "adjacent_placeholders",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "{{ARG.a}}{{ARG.b}}" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "placeholder", "name": "a" },
+          { "kind": "placeholder", "name": "b" }
+        ]
+      }
+    },
+    {
+      "case_id": "placeholder_at_start_and_end",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "{{ARG.a}} end" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": [
+          { "kind": "placeholder", "name": "a" },
+          { "kind": "literal", "text": " end" }
+        ]
+      }
+    },
+    {
+      "case_id": "empty_input",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "" },
+      "expect_ok": true,
+      "expected_ast": {
+        "segments": []
+      }
+    },
+    {
+      "case_id": "unterminated_placeholder",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "x{{ARG.name" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "unterminated_placeholder",
+          "message_prefix": "pa.template_criteria_arg.v1: ",
+          "location": { "byte_offset": 1 }
+        }
+      ]
+    },
+    {
+      "case_id": "empty_placeholder_name",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "{{ARG.}}" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "empty_placeholder_name",
+          "message_prefix": "pa.template_criteria_arg.v1: ",
+          "location": { "byte_offset": 6 }
+        }
+      ]
+    },
+    {
+      "case_id": "invalid_placeholder_name_start",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "{{ARG.1abc}}" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "invalid_placeholder_name_start",
+          "message_prefix": "pa.template_criteria_arg.v1: ",
+          "location": { "byte_offset": 6 }
+        }
+      ]
+    },
+    {
+      "case_id": "invalid_placeholder_name_char",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "{{ARG.ab$c}}" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "invalid_placeholder_name_char",
+          "message_prefix": "pa.template_criteria_arg.v1: ",
+          "location": { "byte_offset": 8 }
+        }
+      ]
+    },
+    {
+      "case_id": "whitespace_in_name",
+      "input_kind": "utf8_text",
+      "input": { "utf8": "{{ARG. a}}" },
+      "expect_ok": false,
+      "expected_errors": [
+        {
+          "error_code": "invalid_placeholder_name_start",
+          "message_prefix": "pa.template_criteria_arg.v1: ",
+          "location": { "byte_offset": 6 }
+        }
+      ]
+    }
+  ]
+}

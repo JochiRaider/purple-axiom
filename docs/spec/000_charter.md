@@ -227,6 +227,56 @@ derivation and stage outcome semantics are defined in ADR-0005 and the data cont
 - Export/signing scope MUST treat `logs/` as mixed: deterministic evidence logs are included, and
   volatile diagnostics (for example `logs/run.log`) are excluded by default. See ADR-0009.
 
+### Target contract surface and scope profile (normative)
+
+Purple Axiom defines multiple versioned surfaces that MAY advance independently:
+
+- `manifest.versions.pipeline_version`: pipeline semantics (stage ordering, IO boundaries, and run
+  interpretation).
+- `manifest.versions.contracts_version`: the contracts bundle used for contract-backed artifact
+  validation (the `docs/contracts/` tree, including both registry instances).
+
+Baseline for the default build profile:
+
+- Implementations MUST emit new runs with `manifest.versions.contracts_version = "0.2.0"`.
+
+Independence (normative):
+
+- `pipeline_version` and `contracts_version` are independent version domains. Implementations MUST
+  NOT assume they are equal or advance in lockstep.
+
+v0.2 seam scope for the default build profile:
+
+- Run-bundle control plane (`runs/<run_id>/control/*`): recognized, but inert unless a
+  request/decision artifact is present.
+- Workspace exports (`<workspace_root>/exports/**`): produced only by explicit export/packaging
+  commands; inert during normal pipeline runs (`build`, `simulate`, `replay`).
+- Workspace run registry (`<workspace_root>/state/run_registry.json`): out of scope by default and
+  inert unless an operator-interface/control-plane scope profile is explicitly enabled; tooling MUST
+  NOT require it and MUST NOT create or mutate it.
+- Workspace plan drafts (`<workspace_root>/plans/**`): out of scope by default and inert unless an
+  operator-interface/control-plane scope profile is explicitly enabled; tooling MUST NOT require it
+  and MUST NOT create or mutate it.
+  - The run-bundle plan draft input (`runs/<run_id>/inputs/plan_draft.yaml`) remains a valid,
+    independently-scoped contracted input when plan compilation/execution is enabled (v0.2+).
+
+Enablement (normative):
+
+- Implementations MAY expose additional scope profiles that activate out-of-scope seams.
+- Any non-default scope profile MUST be explicitly enabled (for example, by an explicit CLI
+  subcommand or profile selection); absent explicit opt-in, the default build profile applies.
+
+Observability and verification hooks (normative):
+
+- Producers MUST record the effective `contracts_version` in `manifest.json` for every run.
+- For the default build profile, tooling MUST NOT write persistent artifacts at the workspace root
+  outside:
+  - `runs/` (including `runs/.locks/`),
+  - `<workspace_root>/cache/` when cross-run caching is explicitly enabled, and
+  - `<workspace_root>/exports/**` produced by explicit export/packaging commands.
+- Tooling MUST ignore (no failure, no mutation) out-of-scope workspace-root artifacts for the
+  selected profile.
+
 ### Contract-driven, stage-scoped execution
 
 - Each stage MUST be implementable as "read inputs from run bundle, write outputs to run bundle."

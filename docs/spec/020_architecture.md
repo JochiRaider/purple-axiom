@@ -524,6 +524,8 @@ Notes:
 
 - v0.1 tooling MUST NOT require `state/`, `logs/`, `plans/`, `exports/`, or `cache/` to exist unless
   the invoked feature explicitly uses that directory.
+- For the authoritative default scope profile (including which v0.2 seams are inert by default), see
+  the project charter: [Target contract surface and scope profile][charter-scope].
 - `runs/` is the only directory whose contents are treated as authoritative pipeline outputs.
 - `runs/.locks/` is reserved for lockfiles and is not a run directory; scanners MUST ignore it.
 - `state/`, `exports/`, `cache/`, `logs/`, and `plans/` MUST NOT be treated as run artifact roots
@@ -586,6 +588,9 @@ Normative requirements:
 - Tooling MUST NOT write durable artifacts outside `<workspace_root>/` (for example `~/.cache`,
   `~/.config`, `/var/tmp`) for correctness or resumability.
 
+Scope note: Which reserved workspace seams are written to and/or required is defined by the selected
+scope profile. See the project charter: [Target contract surface and scope profile][charter-scope].
+
 ### Run discovery surfaces
 
 - A run MUST be considered present if and only if `runs/<run_id>/manifest.json` exists and validates
@@ -597,8 +602,9 @@ Normative requirements:
   `runs/<run_id>/logs/contract_validation/orchestrator.json` as the deterministic forensic surface.
 
 - Implementations MAY maintain a derived workspace run registry at
-  `<workspace_root>/state/run_registry.json` for fast discovery, but it MUST be rebuildable by a
-  deterministic scan of `runs/<run_id>/manifest.json` surfaces:
+  `<workspace_root>/state/run_registry.json` for fast discovery when enabled by the selected scope
+  profile (see [charter-scope]); if implemented, it MUST be rebuildable by a deterministic scan of
+  `runs/<run_id>/manifest.json` surfaces:
 
   - The scan MUST ignore non-run directories under `runs/` (for example `runs/.locks/`).
   - The scan order MUST be deterministic: enumerate candidate run directories and sort by `run_id`

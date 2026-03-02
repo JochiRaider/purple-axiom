@@ -37,6 +37,9 @@ Purple Axiom is workspace-rooted: all durable artifacts written by the toolchain
 workspace root directory. See: [architecture](020_architecture.md) → "Workspace layout (v0.1+
 normative)".
 
+Which reserved workspace seams are written to and/or required by default is defined by the project
+charter. See `000_charter.md` ("Target contract surface and scope profile (normative)").
+
 Path resolution rules (normative):
 
 - Keys explicitly described as "relative directory under the run bundle root" are resolved relative

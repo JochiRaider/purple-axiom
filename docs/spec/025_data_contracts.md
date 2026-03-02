@@ -504,6 +504,9 @@ Runs pin `manifest.versions.contracts_version` (and, when applicable,
 Operators, CI jobs, and UIs MUST be able to validate an old run without checking out historical git
 commits.
 
+For the default build profile's target `manifest.versions.contracts_version` baseline, see
+`000_charter.md` ("Target contract surface and scope profile (normative)").
+
 This spec defines a distributable contracts bundle: an immutable snapshot of the project’s contract
 schemas (the `docs/contracts/` tree) for a released `contracts_version`.
 

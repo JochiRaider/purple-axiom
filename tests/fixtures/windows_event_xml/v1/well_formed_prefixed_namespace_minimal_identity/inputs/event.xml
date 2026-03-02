@@ -1,0 +1,10 @@
+<e:Event xmlns:e="http://schemas.microsoft.com/win/2004/08/events/event">
+  <e:System>
+    <e:Provider Name="EventCreate" Guid="{89ABCDEF-0123-4567-89AB-CDEF01234567}"/>
+    <e:EventID>9001</e:EventID>
+    <e:TimeCreated SystemTime="2026-03-01T00:00:01Z"/>
+    <e:EventRecordID>12346</e:EventRecordID>
+    <e:Channel>Application</e:Channel>
+    <e:Computer>TESTHOST</e:Computer>
+  </e:System>
+</e:Event>

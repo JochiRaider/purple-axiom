@@ -974,6 +974,8 @@ Canonical raw payload (required):
 - `event_xml_sha256` (string, required)
   - SHA-256 digest string in `sha256:<lowercase_hex>` form computed over the full (untruncated)
     canonical XML payload bytes (UTF-8; CRLF normalized to LF).
+  - These canonical bytes are also the input to the Windows Event XML parser module
+    `pa.win_event_xml.v1`.
 - `event_xml_truncated` (bool, required)
 - `payload_overflow_ref` (string, nullable; run-relative sidecar path when overflow is written)
 - `payload_overflow_sha256` (string, nullable; `sha256:<lowercase_hex>` digest of the sidecar

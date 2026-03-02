@@ -1,0 +1,1 @@
+{"policy_format":"pa.redaction_policy.v1","policy_id":"fixture-baseline","policy_version":"0.0.0","structured":{"enabled":true,"recurse_json_strings":false,"target_paths":["$.process.cmd_line"]}}

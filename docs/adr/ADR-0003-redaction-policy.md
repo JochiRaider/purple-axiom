@@ -139,6 +139,21 @@ Merging rules (deterministic):
     - Effective list = baseline entries in baseline order, followed by policy entries not already
       present, appended in lexicographic order (UTF-8 byte order).
 
+Redaction policy JSONPath canonicalization (normative):
+
+- `structured.target_paths[]` is an array of strings whose elements participate in the
+  arrays-of-strings set-union merge semantics above.
+
+- Before applying the set-union merge semantics for `structured.target_paths[]`, implementations
+  MUST:
+
+  1. Parse each entry using parser module `pa.jsonpath.v1`.
+  1. Replace the entry value with the module's canonical `rendered` form.
+  1. Apply the arrays-of-strings set-union merge semantics over the canonical rendered forms.
+
+- If any `structured.target_paths[]` entry fails to parse, effective policy resolution MUST fail
+  closed.
+
 ### Regex engine constraint
 
 All regex patterns in the policy MUST be RE2-compatible.
@@ -404,15 +419,185 @@ Target fields for structured redaction:
   (case-insensitive) SHOULD be prioritized for redaction.
 - Fields explicitly listed in `structured.target_paths[]` (JSONPath notation) MUST be redacted.
 
-`structured.target_paths[]` dialect (normative, restricted JSONPath subset):
+`structured.target_paths[]` dialect (normative):
 
-- Root MUST be `$`.
-- Member selection MUST use dot notation with unquoted identifiers (example: `$.process.cmd_line`).
-- Array selection MAY use `[<index>]` (0-based) or `[*]`.
-- Filters, recursive descent (`..`), unions, and script expressions MUST NOT be used.
-- If any entry does not conform to this subset, effective policy resolution MUST fail-closed.
+- Each entry MUST conform to the restricted JSONPath subset defined by parser module
+  `pa.jsonpath.v1` (single source of truth: "Restricted JSONPath subset pa.jsonpath.v1" below).
+- If any entry fails to parse, effective policy resolution MUST fail closed.
 
-Example policy extension:
+#### Restricted JSONPath subset pa.jsonpath.v1
+
+This subsection defines the complete grammar, AST contract, hard limits, and error taxonomy for the
+restricted JSONPath subset used by `structured.target_paths[]`. It is the single source of truth for
+`pa.jsonpath.v1`.
+
+##### Lexical rules
+
+- Whitespace: No whitespace is allowed anywhere in the expression. Any Unicode whitespace code point
+  MUST fail closed.
+- Character set: The expression MUST be ASCII-only.
+- Root: The first character MUST be `$`.
+- Identifier (member name):
+  - MUST match: `[A-Za-z_][A-Za-z0-9_]*`.
+  - Identifiers are case-sensitive.
+- Index literal:
+  - MUST be base-10 unsigned integers.
+  - MUST NOT include signs (`+` / `-`).
+  - MUST NOT contain leading zeros unless the literal is exactly `0`.
+
+##### Grammar
+
+```ebnf
+jsonpath        = "$", { segment } ;
+
+segment         = member | index | wildcard_index ;
+
+member          = ".", identifier ;
+
+index           = "[", index_literal, "]" ;
+
+wildcard_index  = "[", "*", "]" ;
+
+identifier      = ident_start, { ident_continue } ;
+
+ident_start     = "A"…"Z" | "a"…"z" | "_" ;
+
+ident_continue  = ident_start | "0"…"9" ;
+
+index_literal   = "0" | nonzero_digit, { digit } ;
+
+nonzero_digit   = "1"…"9" ;
+
+digit           = "0"…"9" ;
+```
+
+##### Explicitly unsupported constructs
+
+The following JSONPath features MUST NOT be accepted; their presence MUST fail closed:
+
+- recursive descent (`..`)
+- filters (`[?()]`)
+- unions (`,`) and slices (`[start:end]`) within array selectors
+- quoted member selection (`['a']`, `["a"]`)
+- script expressions and any other JSONPath extensions
+
+##### Canonical rendering
+
+- Inputs MUST already be canonical:
+  - begins with `$`
+  - uses only the grammar productions above
+  - no whitespace
+  - index literals satisfy the lexical rules
+- On success, the parser module MUST return `rendered` and it MUST equal the canonical input form
+  byte-for-byte (after any allowed UTF-8 BOM stripping per `026_contract_spine.md`).
+- Idempotence: parsing `rendered` MUST yield an AST that is byte-identical under
+  `canonical_json_bytes`.
+
+##### AST contract
+
+`pa.jsonpath.v1` uses the parser module contract in `026_contract_spine.md`. The AST MUST match the
+JSONPath vectors contract in `100_test_strategy_ci.md` ("JSONPath vectors").
+
+AST shape (normative):
+
+- `ast` MUST be a JSON object with:
+  - `segments` (array)
+
+Segment nodes (normative):
+
+- member: `{"kind":"member","name":"<identifier>"}`
+- index: `{"kind":"index","index":<non_negative_integer>}`
+- wildcard array index: `{"kind":"wildcard_index"}`
+
+Root `$` is implicit: the expression `$` MUST yield `{"segments":[]}`.
+
+##### Limits
+
+The module MUST enforce the following hard limits on the canonical parse input:
+
+- `max_input_chars`: 256 Unicode scalar values.
+  - Because the grammar is ASCII-only, this is also 256 UTF-8 bytes.
+- `max_segments`: 64.
+- `max_identifier_chars`: 64 (per identifier).
+- `max_index_digits`: 10.
+- `max_index_value`: 2_147_483_647.
+
+When any limit is exceeded, parsing MUST fail closed with a deterministic `error_code` from the
+vocabulary below.
+
+##### Error taxonomy and locations
+
+Error shape, message prefixing, multi-error ordering, and byte-offset basis are defined in
+`026_contract_spine.md` ("Parser modules").
+
+`pa.jsonpath.v1` MUST use the following `error_code` vocabulary (normative):
+
+| error_code                      | Meaning                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| `missing_root`                  | Expression does not begin with `$`.                                             |
+| `invalid_identifier`            | Member identifier is not a valid unquoted identifier.                           |
+| `invalid_index_literal`         | Index literal violates lexical rules (sign, leading zeros, non-digits).         |
+| `unsupported_recursive_descent` | Recursive descent (`..`) is present.                                            |
+| `unsupported_filter`            | Filter selector (`[?()]`) is present.                                           |
+| `unsupported_union`             | Union selector (`,`) within an array selector is present.                       |
+| `unsupported_quoted_member`     | Quoted member selection is present (`['a']` or `["a"]`).                        |
+| `unexpected_character`          | An unexpected character was encountered.                                        |
+| `unexpected_end`                | Input ended while more characters were required to complete a valid expression. |
+| `expression_too_long`           | `max_input_chars` was exceeded.                                                 |
+| `too_many_segments`             | `max_segments` was exceeded.                                                    |
+| `identifier_too_long`           | `max_identifier_chars` was exceeded.                                            |
+| `index_too_large`               | `max_index_digits` or `max_index_value` was exceeded.                           |
+
+Location requirements (normative):
+
+- `location.byte_offset` MUST be measured in UTF-8 bytes of the canonical parse input after any BOM
+  stripping. Newline normalization MUST NOT be applied.
+
+- The module MUST report locations deterministically as follows:
+
+  - `missing_root`: `byte_offset=0`.
+  - `unsupported_recursive_descent`: `byte_offset` of the first `.` in the `..` token.
+  - `unsupported_filter`: `byte_offset` of the `?` character.
+  - `unsupported_union`: `byte_offset` of the `,` character.
+  - `unsupported_quoted_member`: `byte_offset` of the opening quote (`'` or `"`).
+  - `invalid_identifier`: `byte_offset` of the first character of the identifier.
+  - `invalid_index_literal`: `byte_offset` of the first character of the index literal (the
+    character immediately after `[`).
+  - `unexpected_character`: `byte_offset` of the unexpected character.
+  - `unexpected_end`: `byte_offset=len(input_bytes)`.
+  - `expression_too_long`: `byte_offset=max_input_chars` (the first disallowed byte).
+  - `too_many_segments`: `byte_offset` of the first character of the segment that would exceed the
+    limit.
+  - `identifier_too_long`: `byte_offset` of the first character beyond `max_identifier_chars`.
+  - `index_too_large`:
+    - if `max_index_digits` is exceeded, `byte_offset` of the first digit beyond the limit.
+    - if `max_index_value` is exceeded, `byte_offset` of the first character of the index literal.
+
+##### Surfacing and fail-closed behavior
+
+- Policy load and effective policy resolution MUST parse every `structured.target_paths[]` entry
+  using `pa.jsonpath.v1`. Any parser error MUST fail closed.
+- Linting MUST surface invalid JSONPath entries via `lint-redaction-policy-invalid-jsonpath` (see
+  `125_linting.md`).
+- Runtime structured redaction SHOULD operate on the parsed AST produced during policy resolution.
+  - If runtime redaction encounters an invalid JSONPath string (unexpected at runtime), it MUST be
+    treated as a redaction failure and MUST fail closed.
+  - Any unexpected evaluation error (implementation bug, resource exhaustion) MUST be treated as a
+    redaction failure and MUST fail closed.
+
+##### Evaluation semantics for `structured.target_paths[]`
+
+Evaluation is deterministic and side-effect free:
+
+- Paths are evaluated left-to-right.
+- Member segment (`.name`): matches only when the current node is a JSON object and contains key
+  `name`.
+- Index segment (`[n]`): matches only when the current node is a JSON array and `n` is within
+  bounds.
+- Wildcard index segment (`[*]`): matches only when the current node is a JSON array; expands to
+  each element in ascending index order.
+- Type mismatches and missing keys/indices MUST yield zero matches (not errors). Example policy
+  extension:
 
 ```json
 {
@@ -804,10 +989,13 @@ CI MUST include fixture-based tests that validate:
 
 Recommended fixture layout:
 
-- `tests/fixtures/redaction/v1/`
+- `tests/fixtures/redaction/v1/<case>/`
 
-  - `cases.jsonl` (input + expected output + notes)
-  - `effective_policy.json` (the policy used for the fixture)
+  - `inputs/`
+    - `cases.jsonl` (input + expected output + notes)
+    - `effective_policy.json` (the policy used for the fixture)
+  - `expected/`
+    - MAY be empty for vector-style cases where `cases.jsonl` embeds all expectations.
 
 Each case SHOULD be shaped as:
 

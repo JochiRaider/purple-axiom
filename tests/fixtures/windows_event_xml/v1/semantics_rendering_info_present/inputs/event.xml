@@ -1,0 +1,13 @@
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System>
+    <Provider Name="EventCreate"/>
+    <EventID>9001</EventID>
+    <TimeCreated SystemTime="2026-03-01T00:00:00Z"/>
+    <EventRecordID>1</EventRecordID>
+    <Channel>Application</Channel>
+    <Computer>TESTHOST</Computer>
+  </System>
+  <RenderingInfo Culture="en-US">
+    <Message>Hi</Message>
+  </RenderingInfo>
+</Event>

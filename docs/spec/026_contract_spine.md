@@ -63,8 +63,8 @@ This document is authoritative for:
 
 - Verification hooks:
 
-  - a Contract Spine conformance gate within Content CI that gates contract conformance
-  - the Contract Spine gate MUST run before other Content CI checks
+  - Contract Spine conformance MUST be enforced in Content CI under the `content.lint` gate.
+  - Ordering (normative): `content.lint` MUST run before any other enforced Content CI gate.
 
 Out of scope:
 
@@ -1142,6 +1142,10 @@ Error location basis (normative):
 
 - `byte_offset` MUST be measured in UTF-8 bytes of the canonical parse input after any
   module-defined preprocessing (BOM stripping and newline normalization, if declared).
+- `line` and `column` MAY be reported to improve human readability.
+  - If present, `line` and `column` MUST be computed over the same canonical parse input.
+  - `line` is 1-indexed and increments on each LF (`\n`) byte.
+  - `column` is 1-indexed and counts Unicode scalar values since the last LF (or start of input).
 
 Deterministic multi-error ordering (normative):
 
@@ -1168,15 +1172,22 @@ Parser modules MUST be fail closed.
 
 If any enforced limit would be exceeded, parsing MUST fail closed with a deterministic `error_code`.
 
-### M0 module inventory
+### Parser module inventory
 
-The following parser modules are treated as parser modules for v0.1 M0:
+The following parser modules are treated as parser modules for v0.1:
 
 - `pa.yaml_decode.v1`: YAML ingress decode to a JSON-shaped value (defined above).
 - `pa.jsonpath.v1`: restricted JSONPath subset used by `structured.target_paths[]` in the redaction
-  policy (defined in ADR-0003; vectors in `100_test_strategy_ci.md`).
+  policy.
+  - Grammar, AST, limits, and error codes: `ADR-0003-redaction-policy.md`.
+  - Golden vectors: `tests/fixtures/parser_modules/jsonpath_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
 - `pa.placeholder.v1`: placeholder text line format (`PA_PLACEHOLDER_V1 ...`) (defined in
   `090_security_safety.md`; vectors in `100_test_strategy_ci.md`).
+- `pa.win_event_xml.v1`: strict Windows Event Log Event XML parser and identity-field extractor
+  (defined in `040_telemetry_pipeline.md`; vectors in `100_test_strategy_ci.md`). Constraints
+  (normative): `input_kind=bytes`, `newline_normalization=true` (CRLF→LF),
+  `max_input_bytes=16777216`.
 
 Template placeholder parser modules additions (v0.1; normative):
 
@@ -1428,7 +1439,7 @@ Contract Spine gate output MUST be deterministic and MUST include:
 
 Exit codes:
 
-- In Content CI, the Contract Spine gate MUST exit:
+- In Content CI, the `content.lint` gate (which executes Contract Spine conformance) MUST exit:
   - `0` on success
   - `20` on failure
 - When Contract Spine conformance is enforced as part of run-bundle validation in Run CI, the
@@ -1439,9 +1450,10 @@ Exit codes:
 
 ### Contract Spine gate (Content CI)
 
-The Contract Spine conformance check is a **gate within Content CI** (not a third CI lane).
+The Contract Spine conformance check is enforced as part of Content CI (not a third CI lane).
 
-Content CI MUST include the Contract Spine gate, and it MUST run before other Content CI checks.
+Content CI MUST enforce Contract Spine conformance under the `content.lint` gate, and `content.lint`
+MUST run before other enforced Content CI gates.
 
 Properties (normative):
 
@@ -1456,8 +1468,23 @@ Properties (normative):
   - reader stable error codes and ordering
   - logs classification rules relevant to deterministic evidence (Tier 0 allowlist)
 
-Recommended gate identifier: `contract_spine`. If a different identifier is used, it MUST be
-documented in CI docs and referenced from here.
+Content CI gate binding (v0.1):
+
+- CI gate ID (authoritative): `content.lint`
+  - The Contract Spine conformance checks defined by this document MUST be executed as part of the
+    `content.lint` gate in Content CI.
+  - The label `contract_spine` MAY be used as an internal suite name (for example, a unit test
+    target), but MUST NOT be used as a CI gate ID that emits findings artifacts.
+
+Conformance suite → fixtures mapping (v0.1):
+
+| Conformance suite                                 | Canonical fixture root(s)                                                          | Minimum fixture set / case IDs                                                                                                                                                               | Executed under gate |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| Contract registry invariants                      | Repo-local: `contracts/contract_registry.json`, `workspace_contract_registry.json` | N/A (repo-local checks)                                                                                                                                                                      | `content.lint`      |
+| Glob matching (`glob_v1`)                         | `tests/fixtures/glob_v1/vectors.json`                                              | `glob_v1_vectors`                                                                                                                                                                            | `content.lint`      |
+| YAML decode profile (`pa.yaml_decode.v1`)         | `tests/fixtures/parser_modules/yaml_decode_v1/vectors.json`                        | `yaml_decode_v1_vectors`                                                                                                                                                                     | `content.lint`      |
+| YAML semantic hashing (`yaml_semantic_sha256_v1`) | `tests/fixtures/yaml_semantic_sha256_v1/vectors.json`                              | `yaml_semantic_sha256_v1`                                                                                                                                                                    | `content.lint`      |
+| Publisher semantics (`pa.publisher.v1`)           | `tests/fixtures/publisher/v1/`                                                     | `publisher_publish_gate_no_partial_promotion`, `publisher_publish_gate_success_atomic_promotion`, `publisher_crash_mid_promotion_reconciliation`, `publisher_canonical_json_and_jsonl_bytes` | `content.lint`      |
 
 ### Required conformance tests (minimum set)
 
@@ -1525,8 +1552,11 @@ The Contract Spine gate MUST include tests that cover at minimum:
     - `ArtifactReader.inventory_json_bytes` returns canonical JSON bytes and is byte-identical
       across conforming consumer implementations for the same run bundle
 
-TODO: Align test identifiers and fixture paths with `100_test_strategy_ci.md` and ensure this gate
-is explicitly referenced there.
+Fixture roots and fixture-case identifiers referenced by Contract Spine conformance MUST use the
+canonical fixture index in `100_test_strategy_ci.md` ("Fixture index").
+
+Content CI wiring and gate ordering for Contract Spine conformance are specified in
+`105_ci_operational_readiness.md` ("Content CI wiring contract (v0.1)").
 
 ## Security, export, and evidence classification
 
@@ -1574,8 +1604,8 @@ Contracts bundle distribution (historical validation) MUST follow `025_data_cont
   restricted canonical YAML emission profile (for example `pa.yaml_emit.v1`) and bump
   publisher/reader semantics as needed. Until then, `yaml_document` remains ingress-only in v0.1
   (orchestrator-owned `inputs/` bindings only).
-- TODO: Define the exact CI gate wiring (job/step name) and ordering inside Content CI in
-  `105_ci_operational_readiness.md` once CI manifests exist.
+- (Resolved v0.1) Content CI wiring and gate ordering are specified in
+  `105_ci_operational_readiness.md` ("Content CI wiring contract (v0.1)").
 
 ## Changelog
 

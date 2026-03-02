@@ -1,0 +1,19 @@
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System>
+    <Provider Name="EventCreate" Guid="{01234567-89AB-CDEF-0123-456789ABCDEF}"/>
+    <EventID Qualifiers="16384">9001</EventID>
+    <Version>0</Version>
+    <Level>4</Level>
+    <Task>0</Task>
+    <Opcode>0</Opcode>
+    <TimeCreated SystemTime="2026-03-01T00:00:00.0000000Z"/>
+    <EventRecordID>12345</EventRecordID>
+    <Execution ProcessID="1234" ThreadID="5678"/>
+    <Channel>Application</Channel>
+    <Computer>TESTHOST</Computer>
+    <Security UserID="S-1-5-18"/>
+  </System>
+  <EventData>
+    <Data Name="Foo">Bar</Data>
+  </EventData>
+</Event>

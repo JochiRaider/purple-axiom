@@ -658,7 +658,10 @@ JSONPath validation (normative):
 
   - `module_token`, `module_id`, `module_version`
   - `error_code`
-  - `byte_offset` and optional `line`/`column` when present
+  - `location.byte_offset` and optional `location.line`/`location.column` when present
+
+Help (non-normative): Allowed form is `$` followed by zero or more `.identifier`, `[index]`, or
+`[*]` segments. See ADR-0003 ("Restricted JSONPath subset pa.jsonpath.v1").
 
 Parser module error mapping (normative):
 

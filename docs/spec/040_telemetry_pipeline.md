@@ -92,8 +92,14 @@ Notes:
   of `telemetry_validation.json.clock_sync`.
 - `tests/fixtures/telemetry/checkpointing/`: checkpoint store integrity + loss/replay conformance
   for the checkpointing state machine (`telemetry-checkpointing-replay`).
-- TODO: specify fixture root for raw Windows event XML corpus used by telemetry collection tests
-  (see `100_test_strategy_ci.md`, "Telemetry collection").
+- `tests/fixtures/telemetry/agent_liveness/`: agent heartbeat/liveness gate fixtures (pass + fail
+  closed).
+- `tests/fixtures/telemetry/baseline_profile/`: baseline profile gate fixtures (pass + fail closed).
+- `tests/fixtures/windows_event_xml/v1/`: raw Windows Event XML corpus used by telemetry collection
+  tests and identity/parsing conformance (see `100_test_strategy_ci.md`).
+
+See the [fixture index](100_test_strategy_ci.md#fixture-index) for the canonical fixture-root
+mapping.
 
 Purple Axiom treats telemetry as an input dataset that must be reproducible and analyzable without
 vendor lock-in. The telemetry stage prioritizes capture fidelity, deterministic fields, resilience
@@ -304,30 +310,51 @@ Normative requirements:
 
 #### Runtime verification hook (required)
 
-Telemetry validation MUST verify raw or unrendered collection at runtime by injecting a canary event
-and asserting:
+Telemetry validation MUST verify raw or unrendered collection at runtime, by injecting a canary
+event and asserting (for both `body` and, if present, `attributes["log.record.original"]`):
 
-- The captured LogRecord `body` is a string.
-- The captured payload begins with `<Event` after trimming leading whitespace.
-- The captured payload MUST NOT contain `<RenderingInfo>` when `suppress_rendering_info: true`
-  (required by this spec).
-- If `attributes["log.record.original"]` is present, it MUST satisfy the same `<Event` prefix and
-  `<RenderingInfo>` absence checks as `body`.
+- The value is a string containing candidate Windows Event XML.
+- After converting the candidate XML to *canonical bytes* (UTF‑8; CRLF→LF), parsing with
+  `pa.win_event_xml.v1` returns `parse_ok`.
+- The extracted identity fields MUST match the injected canary's controlled values:
+  - `ast.system.provider.name == "EventCreate"`
+  - `ast.system.channel == "Application"`
+  - `ast.system.event_id.id == 9001`
+- Basic sanity checks MUST also pass:
+  - `ast.system.computer` is non-empty.
+  - `ast.system.event_record_id` is non-empty.
+  - `ast.system.time_created.system_time` is non-empty and RFC3339-parsable.
 
-Telemetry validation MUST emit a dotted substage outcome:
-
-- `stage="telemetry.windows_eventlog.raw_mode"`.
+This validator emits a dotted substage outcome under `telemetry.windows_eventlog.raw_mode` in
+`telemetry_validation.json` (see also `110_operability.md` for the per-run manifest requirements).
 
 Failure classification for `telemetry.windows_eventlog.raw_mode` (fail closed):
 
 - If the canary is not observed or raw XML is unavailable for the canary payload, the substage MUST
   fail closed with `reason_code=winlog_raw_missing`.
-- If `<RenderingInfo>` is present in the canary payload, the substage MUST fail closed with
-  `reason_code=winlog_rendering_detected`.
+- If `pa.win_event_xml.v1` returns `parse_error` with `error_code=rendering_info_present`, the
+  substage MUST fail closed with `reason_code=winlog_rendering_detected`.
+- If `pa.win_event_xml.v1` returns `parse_error` for any other reason, the substage MUST fail closed
+  with `reason_code=winlog_xml_parse_failed`.
+- If parsing succeeds but the extracted identity fields do not match the expected canary values, the
+  substage MUST fail closed with `reason_code=winlog_canary_mismatch`.
 
 A reference canary is:
 
 - `eventcreate /L APPLICATION /T INFORMATION /ID 9001 /SO EventCreate /D "PurpleAxiom raw-mode canary"`
+
+Canary identification (normative):
+
+- The validator MUST identify the raw-mode canary by searching the raw XML payload (the preferred
+  raw source is `log.record.original`) for a deterministic marker string.
+- The marker string MUST be matched using the following precedence order:
+  1. The synthetic correlation marker value (canonical marker string or digest token) emitted for
+     the run via the marker-event-emission transport (see "Synthetic correlation marker propagation
+     (required when enabled)").
+  1. The literal string `PurpleAxiom raw-mode canary` (the reference canary above).
+- If multiple candidates match, the validator MUST select deterministically by:
+  1. earliest event timestamp within the startup-grace window, then
+  1. stable tie-break on (`asset_id`, `channel`, `path`, `row_locator`).
 
 Network egress enforcement check (required when outbound egress is denied):
 
@@ -1415,6 +1442,68 @@ Recommended additional fields (telemetry baseline profile gate):
       - `observed_count` (int)
       - `passed` (bool)
 
+Telemetry validation evidence requirements (normative; fixture-assertable):
+
+The telemetry stage MUST emit deterministic evidence into
+`runs/<run_id>/logs/telemetry_validation.json` for the gates/substages below when they are enabled.
+These fields are intended to be asserted by telemetry-stage fixture cases (see
+`100_test_strategy_ci.md`, "Pipeline stages" → `telemetry`).
+
+Unless otherwise stated:
+
+- Arrays MUST be emitted in stable order (as specified below).
+- Optional objects MUST be omitted when not applicable (do not emit empty placeholder objects).
+
+Windows Event Log raw-mode canary (`windows_eventlog_raw_mode`):
+
+- `windows_eventlog_raw_mode` MUST be present when any Windows Event Log source is enabled for any
+  asset.
+- `windows_eventlog_raw_mode.performed` MUST be present.
+- `windows_eventlog_raw_mode.observed` MUST be present.
+- `windows_eventlog_raw_mode.canary_observed_at` MUST be present if and only if the canary event was
+  captured (even if rendering metadata was detected). When omitted, the stage outcome MUST use
+  `reason_code=winlog_raw_missing`.
+- When `windows_eventlog_raw_mode.canary_observed_at` is present but the canary payload contains
+  rendering metadata (for example, `<RenderingInfo>`), `windows_eventlog_raw_mode.observed` MUST be
+  `false` and the stage outcome MUST use `reason_code=winlog_rendering_detected`.
+- On success, `windows_eventlog_raw_mode.canary_observed_at` MUST be present and
+  `windows_eventlog_raw_mode.observed` MUST be `true`.
+
+Agent liveness (`agent_liveness`):
+
+- `agent_liveness` MUST be present when `telemetry.otel.enabled=true`.
+- `agent_liveness.assets[]` MUST contain exactly one entry per expected telemetry asset (derived
+  from the lab inventory snapshot), sorted by `asset_id` ascending.
+- If any `agent_liveness.assets[].observed=false`, the stage outcome MUST fail closed with
+  `reason_code=agent_heartbeat_missing`.
+- For any `agent_liveness.assets[].observed=false`, `first_seen` and `last_seen` MUST be omitted.
+
+Baseline profile (`baseline_profile`):
+
+- `baseline_profile` MUST be present when `telemetry.baseline_profile.enabled=true`.
+- `baseline_profile.profile_path` MUST be present.
+- `baseline_profile.profile_sha256` MUST be present if and only if the profile file was successfully
+  loaded and parsed; otherwise it MUST be omitted.
+- If the profile file is missing or unreadable, the stage outcome MUST fail closed with
+  `reason_code=baseline_profile_missing`. In this failure mode, per-asset `matched_profile_id` and
+  `signals` MAY be omitted.
+
+Windows raw XML availability (`windows_eventlog_raw_xml`):
+
+- `windows_eventlog_raw_xml` MUST be present when any Windows Event Log source is enabled.
+- It MUST contain the following counters (u64), and they MUST match the corresponding values in
+  `runs/<run_id>/logs/counters.json`:
+  - `wineventlog_used_log_record_original_total`
+  - `wineventlog_raw_unavailable_total`
+  - `wineventlog_raw_malformed_total`
+- `windows_eventlog_raw_xml.fail_mode` MUST be present and MUST equal the configured raw-XML fail
+  mode (`fail_closed` or `warn_and_skip`).
+- When `windows_eventlog_raw_xml.fail_mode=fail_closed` and (`wineventlog_raw_unavailable_total>0`
+  or `wineventlog_raw_malformed_total>0`), `windows_eventlog_raw_xml.reason_code` MUST be present
+  and MUST equal `raw_xml_unavailable`.
+- Otherwise, `windows_eventlog_raw_xml.reason_code` MUST be omitted.
+- Any optional sample-reference arrays (if emitted) MUST be omitted when empty.
+
 Recommended additional fields (checkpointing diagnostics):
 
 - `assets[].checkpoint_store` (object, OPTIONAL)
@@ -1523,14 +1612,132 @@ string as follows, in priority order:
 1. Else treat the record as `raw_xml_unavailable` (see validation and gating) and increment
    `wineventlog_raw_unavailable_total`.
 
-If `raw_event_xml` is acquired, the pipeline MUST validate that it is well-formed XML using a strict
-XML parser with no heuristic repair. If well-formedness validation fails, treat the record as
-`raw_xml_malformed`, increment `wineventlog_raw_malformed_total`, and proceed according to the
-configured `fail_mode` (see validation and gating).
+If `raw_event_xml` is acquired, the pipeline MUST convert it to canonical bytes (UTF‑8; CRLF→LF) and
+invoke `pa.win_event_xml.v1`. The module is the authoritative gate for Windows Event XML validity
+and identity-field extraction.
+
+- If `pa.win_event_xml.v1` returns `parse_ok`, downstream stages SHOULD reuse the returned AST.
+- If `pa.win_event_xml.v1` returns `parse_error` with `error_code=rendering_info_present`, the
+  record MUST be classified as `raw_xml_unavailable`, and `wineventlog_raw_unavailable_total` MUST
+  be incremented.
+- Otherwise, the record MUST be classified as `raw_xml_malformed`, and
+  `wineventlog_raw_malformed_total` MUST be incremented.
+
+In both failure cases, downstream processing proceeds according to `fail_mode`.
 
 The pipeline MUST NOT attempt heuristic recovery of identity fields (regex scraping, partial XML
 repair) when `raw_xml_unavailable` or `raw_xml_malformed` triggers, because this can introduce
 non-deterministic behavior across environments and library versions.
+
+#### Parser module: `pa.win_event_xml.v1` (Windows Event XML)
+
+This parser module is the authoritative, deterministic parser for Windows Event Log *raw* Event XML
+payloads. It is used by:
+
+- Telemetry validation (including the Windows raw-mode canary; see above).
+- Per-record classification of `raw_xml_unavailable` vs `raw_xml_malformed` during ingestion.
+- Tier-1 identity basis extraction for `windows_eventlog` (see
+  `ADR-0002-event-identity-and-provenance.md`).
+
+##### Module identity (normative)
+
+- `module_token`: `pa.win_event_xml.v1`
+- `module_id`: `win_event_xml`
+- `module_version`: `v1`
+- `input_kind`: `bytes`
+- `newline_normalization`: `true` (`\r\n`→`\n`, `\r`→`\n`)
+- `max_input_bytes`: `16777216` (16 MiB)
+
+##### Canonical bytes (normative)
+
+The module input is the UTF‑8 bytes of `raw_event_xml` after newline normalization (CRLF→LF; CR→LF).
+These canonical bytes are also the byte sequence hashed for `windows_eventlog.event_xml_sha256`.
+
+##### Output AST: `win_event_xml_ast_v1` (normative)
+
+On `parse_ok`, the module MUST return an AST with the following schema (optional keys omitted when
+absent):
+
+```json
+{
+  "system": {
+    "provider": { "name": "EventCreate", "guid": "01234567-89ab-cdef-0123-456789abcdef" },
+    "channel": "Application",
+    "computer": "HOSTNAME",
+    "event_id": { "id": 9001, "qualifiers": 16384 },
+    "event_record_id": "12345",
+    "time_created": { "system_time": "2026-03-01T00:00:00.0000000Z" }
+  }
+}
+```
+
+Field extraction rules:
+
+- Elements and attributes MUST be located by XML **local-name** only (namespace URI and prefix are
+  ignored).
+- Required fields (must be present and non-empty after trimming ASCII whitespace):
+  - `System/Provider/@Name` → `system.provider.name`
+  - `System/Channel` → `system.channel`
+  - `System/Computer` → `system.computer`
+  - `System/EventID` → `system.event_id.id`
+  - `System/EventRecordID` → `system.event_record_id`
+  - `System/TimeCreated/@SystemTime` → `system.time_created.system_time`
+- Optional fields:
+  - `System/Provider/@Guid` → `system.provider.guid` (normalized to lowercase hyphenated form;
+    braces removed)
+  - `System/EventID/@Qualifiers` → `system.event_id.qualifiers`
+  - `System/Execution/@ProcessID` → `system.execution.process_id`
+  - `System/Execution/@ThreadID` → `system.execution.thread_id`
+  - `System/Security/@UserID` → `system.security.user_id`
+  - `System/Version`, `System/Level`, `System/Task`, `System/Opcode` → corresponding integer fields
+
+Type and normalization rules:
+
+- `system.event_record_id` MUST be returned as a base-10 string (u64) to avoid cross-language
+  integer precision drift.
+- All integer fields MUST be parsed as strict base-10 after trimming ASCII whitespace; any other
+  representation is invalid.
+- `system.time_created.system_time` MUST be non-empty and RFC3339-parsable.
+
+##### Safety and resource limits (normative, v1 constants)
+
+The module MUST be strict, deterministic, and safe by construction:
+
+- Reject all DTD / DOCTYPE:
+  - If a `<!DOCTYPE ...>` contains `SYSTEM` or `PUBLIC`, return `xml_external_entity_disallowed`.
+  - Otherwise return `xml_disallowed_doctype`.
+- Entity expansion MUST be disabled; external entity resolution (file/network) MUST be disabled.
+- Rendering detection: if any element with local-name `RenderingInfo` is present anywhere in the
+  document, return `rendering_info_present`.
+- Resource bounds:
+  - `max_depth = 64` (root counts as depth 1) → `xml_depth_exceeded`
+  - `max_tokens = 4096` where a token is a start-element or attribute → `xml_token_limit_exceeded`
+
+##### Error taxonomy (normative)
+
+On failure, the module returns `parse_error` with deterministic `error_code` values:
+
+- `xml_input_too_large` (input exceeds `max_input_bytes`)
+- `xml_invalid_utf8`
+- `xml_not_well_formed`
+- `xml_disallowed_doctype`
+- `xml_external_entity_disallowed`
+- `xml_depth_exceeded`
+- `xml_token_limit_exceeded`
+- `xml_missing_required_field`
+- `xml_invalid_integer`
+- `xml_invalid_guid`
+- `rendering_info_present`
+
+The `message` MUST begin with the stable prefix required by `026_contract_spine.md`:
+`PA_WIN_EVENT_XML_<ERROR_CODE>:` (where `<ERROR_CODE>` is uppercase).
+
+Location rules (v1):
+
+- For `xml_disallowed_doctype`, `xml_external_entity_disallowed`, `rendering_info_present`, and
+  `xml_invalid_utf8`, `location.byte_offset` MUST be the first offending byte offset in the
+  canonical bytes.
+- For all other errors, `location.byte_offset` MUST be `0`.
 
 #### Missing provider manifests and rendering metadata failures
 
@@ -1604,12 +1811,17 @@ Windows Event Log collection is enabled. These counters MUST be emitted into
 - `wineventlog_payload_overflow_total`
 - `wineventlog_sidecar_write_failed_total`
 
+These counters MUST also be reflected in `runs/<run_id>/logs/telemetry_validation.json` under
+`windows_eventlog_raw_xml` (see "Telemetry validation evidence requirements (normative;
+fixture-assertable)") so telemetry-stage fixtures can assert raw XML availability deterministically.
+
 Under `fail_mode: fail_closed`, any non-zero `wineventlog_raw_unavailable_total` or
 `wineventlog_raw_malformed_total` MUST fail the telemetry stage with
 `reason_code=raw_xml_unavailable`. Under `fail_mode: warn_and_skip`, records that trigger
 `raw_xml_unavailable` or `raw_xml_malformed` MUST be skipped (not written to
-`raw_parquet/windows_eventlog`) and MUST still be counted in telemetry validation output; the run
-MUST record a NON-FATAL telemetry warning with `reason_code=raw_xml_unavailable`.
+`raw_parquet/windows_eventlog`) and MUST still be counted in telemetry validation output
+(`windows_eventlog_raw_xml.*`); the run MUST record a NON-FATAL telemetry warning with
+`reason_code=raw_xml_unavailable`.
 
 ## Key decisions
 

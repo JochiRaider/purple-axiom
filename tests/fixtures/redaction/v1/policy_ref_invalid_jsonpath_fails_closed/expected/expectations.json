@@ -1,0 +1,1 @@
+{"expect_ok":false,"expected_parser_error":{"error_code":"unsupported_recursive_descent","instance_path":"/structured/target_paths/0","location":{"byte_offset":1},"message_prefix":"PA_JSONPATH_UNSUPPORTED_RECURSIVE_DESCENT:","module_token":"pa.jsonpath.v1"},"expected_reason_code":"redaction_policy_error"}

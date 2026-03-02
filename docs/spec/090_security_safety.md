@@ -418,8 +418,11 @@ Schema-aware placeholder pattern (normative):
 
 - For text artifacts (`*.txt`):
 
-  - The placeholder MUST be UTF-8 text consisting only of the single-line record defined below
-    (ending with `\n`).
+  - Encoding: UTF-8 with no BOM.
+  - The placeholder text artifact MUST consist of exactly one line terminated by a single LF byte.
+    - Concretely, the file bytes MUST equal: `<placeholder_line> + "\n"` and nothing else, where
+      `<placeholder_line>` is the placeholder text line format defined below.
+  - The file MUST NOT contain CR bytes (`\r`) or NUL bytes (`\u0000`).
 
 - For asciinema cast artifacts (`*.cast`):
 
@@ -465,6 +468,141 @@ Placeholder JSON object (normative, `pa.placeholder.v1`):
 Placeholder text line format (normative, `pa.placeholder.v1`):
 
 `PA_PLACEHOLDER_V1 handling=<withheld|quarantined|absent> reason_code=<lower_snake_case> [sha256=sha256:<64hex>]`
+
+The placeholder line is a compact, schema-agnostic placeholder representation intended for
+plain-text artifacts.
+
+Canonical rendering rules (normative):
+
+- Tokens are separated by exactly one ASCII space (`0x20`).
+  - Tabs are forbidden.
+  - Leading and trailing whitespace is forbidden.
+  - Multiple adjacent spaces are forbidden.
+- Keys are a closed set and MUST appear in the fixed order:
+  1. `handling=<handling>`
+  1. `reason_code=<reason_code>`
+  1. Optional: `sha256=<sha256>`
+  - Unknown keys, duplicate keys, or reordered keys MUST be rejected.
+
+#### Parser module: `pa.placeholder.v1`
+
+This parser module is the single normative interpretation of the placeholder text line format for
+conformance-critical parsing and canonical rendering of `<placeholder_line>`.
+
+Module identity (normative):
+
+- `module_token`: `pa.placeholder.v1`
+- `module_id`: `placeholder`
+- `module_version`: `v1`
+- `input_kind`: `utf8_text`
+
+Limits (normative):
+
+- `max_input_chars`: 1024
+  - If the input exceeds `max_input_chars`, parsing MUST fail closed with
+    `error_code="input_too_large"`.
+
+Grammar and strict acceptance rules (normative):
+
+The parser-module input is the `<placeholder_line>` portion only (it MUST NOT include the trailing
+LF).
+
+- The input MUST be a single line:
+  - It MUST NOT contain LF (`\n`) or CR (`\r`) characters.
+  - It MUST NOT contain a NUL code point (`\u0000`) (`error_code="contains_nul"`).
+- Tokens are separated by exactly one ASCII space (`0x20`).
+  - Tabs are forbidden.
+  - Leading and trailing whitespace is forbidden.
+  - Multiple adjacent spaces are forbidden.
+- The prefix MUST be exactly `PA_PLACEHOLDER_V1`.
+- Keys are a closed set and MUST appear in the fixed order:
+  1. `handling=<handling>`
+  1. `reason_code=<reason_code>`
+  1. Optional: `sha256=<sha256>`
+  - Unknown keys, duplicate keys, or reordered keys MUST be rejected
+    (`error_code="invalid_line_format"`).
+
+Value rules (normative):
+
+- `<handling>` MUST be one of: `withheld`, `quarantined`, `absent`.
+  - Any other value MUST be rejected with `error_code="unknown_handling"`.
+- `<reason_code>` MUST be present and MUST match `^[a-z][a-z0-9_]*$` (`lower_snake_case`).
+  - If missing, parsing MUST fail closed with `error_code="missing_reason_code"`.
+- `<sha256>` (when present) MUST be a canonical digest string matching `^sha256:[0-9a-f]{64}$`.
+  - If malformed, parsing MUST fail closed with `error_code="invalid_sha256"`.
+- If `handling=absent`, `sha256` MUST NOT be present.
+  - If present, parsing MUST fail closed with `error_code="sha256_not_allowed"`.
+
+AST contract (normative):
+
+On successful parse, implementations MUST produce an AST that can be expressed as:
+
+```json
+{
+  "placeholder_version": "pa.placeholder.v1",
+  "handling": "<withheld|quarantined|absent>",
+  "reason_code": "<lower_snake_case>",
+  "sha256": "sha256:<64hex>" // optional
+}
+```
+
+`sha256` MUST be omitted from the AST when the input omits it.
+
+Deterministic parse errors (normative):
+
+- Parsing MUST fail closed on any invalid input.
+- On parse failure, the implementation MUST return exactly one parser-module error: the leftmost
+  failure by `location.byte_offset` (0-indexed into the UTF-8 input), with:
+  - `error_code`: one of the codes below
+  - `message_prefix`: the stable prefix required by the parser module contract
+    - `message_prefix` MUST be exactly `pa.placeholder.v1: `.
+  - `location.byte_offset`: 0-indexed byte offset into the input
+  - `location.line` / `location.column`: OPTIONAL (1-indexed; for this module, line is always `1`)
+
+Location semantics (normative):
+
+- `location.byte_offset` is 0-indexed into the UTF-8 bytes of the parser-module input line.
+- For end-of-input errors:
+  - `missing_reason_code`: `byte_offset == len(input_bytes)`
+- For value errors:
+  - `unknown_handling`: first byte of the invalid `<handling>` value
+  - `invalid_sha256`: first byte within the `<sha256>` value that violates `^sha256:[0-9a-f]{64}$`
+  - `sha256_not_allowed`: first byte of the `sha256=...` token
+- For structural errors:
+  - `input_too_large`: `byte_offset == 0`
+  - `invalid_line_format`: first byte that violates framing (prefix mismatch, whitespace rules,
+    missing/unknown/duplicate keys, key reorder, etc.)
+  - `contains_nul`: first `\u0000` byte
+
+The following `error_code` values are defined for `pa.placeholder.v1`:
+
+- `input_too_large`
+- `contains_nul`
+- `invalid_line_format`
+- `unknown_handling`
+- `missing_reason_code`
+- `sha256_not_allowed`
+- `invalid_sha256`
+
+Canonical serialization (normative):
+
+- The canonical rendered form of a `pa.placeholder.v1` AST is the single-line string:
+
+  - `PA_PLACEHOLDER_V1 handling=<handling> reason_code=<reason_code> [sha256=<sha256>]`
+
+  With:
+
+  - single ASCII spaces between tokens,
+  - fixed token order as defined above,
+  - no leading or trailing whitespace, and
+  - the `sha256=...` token omitted entirely when `sha256` is absent in the AST.
+
+- The canonical text-artifact file bytes are `utf8(rendered_line) + "\n"`.
+
+Verification hooks (normative):
+
+- Parser-module semantic lock: `tests/fixtures/parser_modules/placeholder_v1/vectors.json` (see
+  `100_test_strategy_ci.md`, "Placeholder line vectors").
 
 Hash inclusion rule (normative):
 

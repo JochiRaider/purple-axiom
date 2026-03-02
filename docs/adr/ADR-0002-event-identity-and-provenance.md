@@ -242,6 +242,28 @@ Use when the source provides a stable per-record identifier or cursor.
 > **Note**: `origin.record_id` is unique only within `(origin.host, origin.channel)`; both MUST be
 > included. Do not include event time in Tier 1 (avoid precision drift across collectors).
 
+Extraction rule (normative):
+
+For `windows_eventlog` Tier 1 identity, implementations MUST extract the `origin.*` fields by
+parsing the collector's raw Event XML payload with parser module `pa.win_event_xml.v1` and consuming
+its `win_event_xml_ast_v1` output (see `040_telemetry_pipeline.md`). Implementations MUST NOT scrape
+identity fields via regex or rely on rendered event payloads.
+
+Mapping from `win_event_xml_ast_v1` → `identity_basis` (normative):
+
+- `origin.host` = `ast.system.computer`
+- `origin.channel` = `ast.system.channel`
+- `origin.record_id` = `ast.system.event_record_id` (base-10 string)
+- `origin.provider_name` = `ast.system.provider.name`
+- `origin.provider_guid` = `ast.system.provider.guid` (if present; normalized lowercase hyphenated
+  GUID)
+- `origin.event_id` = base-10 encoding of `ast.system.event_id.id`
+- `origin.event_qualifiers` = base-10 encoding of `ast.system.event_id.qualifiers` (if present)
+- `origin.event_version` = base-10 encoding of `ast.system.version` (if present)
+
+If `pa.win_event_xml.v1` returns `parse_error`, or if any required field is missing/invalid, the
+implementation MUST treat Tier 1 basis extraction as failed and MUST NOT attempt heuristic recovery.
+
 **Windows Sysmon (Microsoft-Windows-Sysmon/Operational)**
 
 - `source_type`: `sysmon`

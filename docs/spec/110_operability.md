@@ -629,22 +629,34 @@ Additional normative checks:
   validator SHOULD emit the same stage with `status=success` and record replay start mode
   `reset_corrupt` in `telemetry_validation.json`.
 - When the raw-mode canary check fails, `reason_code` MUST be one of:
-  - `winlog_raw_missing` (no raw XML captured for the canary event)
-  - `winlog_rendering_detected` (`<RenderingInfo>` present in the captured payload)
-- The validator MUST record where the canary was observed so operators can reproduce the check
-  without guesswork.
-  - `runs/<run_id>/logs/telemetry_validation.json` MUST include a
-    `windows_eventlog_raw_mode.canary_observed_at` object with, at minimum:
-    - `asset_id` (string)
-    - `channel` (string)
-    - `path` (string; run-relative path to the concrete raw artifact or dataset file)
-  - `canary_observed_at.path` MUST use POSIX-style separators (`/`) and MUST be interpreted as
-    relative to `runs/<run_id>/`.
-  - Example (illustrative only): `raw/<asset_id>/windows_eventlog/<channel>/...` or
-    `raw_parquet/windows_eventlog/part-0000.parquet`.
-  - If the canary is observed in a Parquet dataset, the validator SHOULD also include a minimal
-    `row_locator` (for example, `event_record_id` and `provider`) sufficient to re-query the dataset
-    deterministically.
+  - `winlog_raw_missing` (the canary is not observed or raw XML is unavailable for the canary
+    payload)
+  - `winlog_rendering_detected` (`pa.win_event_xml.v1` detected `RenderingInfo` in the captured
+    payload)
+  - `winlog_xml_parse_failed` (`pa.win_event_xml.v1` rejected the captured payload as invalid or
+    unsafe XML)
+  - `winlog_canary_mismatch` (`pa.win_event_xml.v1` parsed successfully, but extracted identity
+    fields did not match the expected canary values)
+- The validator MUST record where the canary was observed.
+  `runs/<run_id>/logs/telemetry_validation.json` MUST include
+  `windows_eventlog_raw_mode.canary_observed_at` with:
+  - `asset_id` (of the agent that observed the canary)
+  - `channel` (e.g., `Application`)
+  - `path` (artifact path relative to `runs/<run_id>/`)
+    - Example: `datasets/raw_parquet/windows_eventlog/partition=.../part-0000.parquet`
+  - Optionally, a `row_locator` appropriate for the referenced artifact (e.g., a Parquet row group +
+    row index).
+- The validator MUST record deterministic parsing evidence for the canary payload under
+  `windows_eventlog_raw_mode`:
+  - `expected_identity`: object with `provider_name`, `channel`, `event_id` (base-10)
+    - Expected canary values are provider_name=`EventCreate`, channel=`Application`, event_id=`9001`
+      (see `040_telemetry_pipeline.md`).
+  - `observed_identity` (when available): object with `provider_name`, `channel`, `event_id`
+    (base-10), `event_record_id` (base-10), `computer`, and `time_created_system_time`
+  - `payload_field`: one of `body`, `log.record.original`, or `both` (which fields were validated)
+  - If parsing failed (`winlog_rendering_detected` or `winlog_xml_parse_failed`), include
+    `parse_error`: object with `module_token` (`pa.win_event_xml.v1`), `error_code`, and
+    `location_byte_offset` (0-indexed into canonical bytes).
 - outbound egress deny posture enforcement (required when effective outbound policy is denied):
   - The validator MUST compute `effective_allow_outbound` as the logical AND of:
     - `scenario.safety.allow_network`(from the pinned scenario definition snapshot under

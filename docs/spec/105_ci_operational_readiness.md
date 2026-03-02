@@ -122,9 +122,10 @@ Content CI validates content-like artifacts and compilation outputs without invo
 
 Content CI MUST validate, at minimum:
 
-1. Contract Spine conformance gate (contract registry invariants, canonical serialization,
-   publisher/reader conformance) (see `026_contract_spine.md`).
-   - Ordering (normative): this gate MUST run before other Content CI checks.
+1. `content.lint` gate: Contract Spine conformance (contract registry invariants, canonical
+   serialization, publisher/reader conformance) plus repo-local lint rules (see
+   `026_contract_spine.md` and `125_linting.md`).
+   - Ordering (normative): `content.lint` MUST run before any other enforced Content CI gate.
 1. Sigma ruleset determinism + uniqueness + required metadata (see `060_detection_sigma.md`).
 1. Mapping pack resolution, router determinism, and mapping pack schema validation (see
    `065_sigma_to_ocsf_bridge.md`).
@@ -141,6 +142,59 @@ Content CI MUST validate, at minimum:
 1. Static semantic checks (P0.2 and P0.3) (see `100_test_strategy_ci.md`, "Static semantic checks").
 1. Rule-level unit tests when fixtures are present (see `100_test_strategy_ci.md`, "Sigma rule unit
    tests").
+
+#### Content CI wiring contract (v0.1)
+
+This section is the **authoritative wiring contract** for Content CI gate execution order, required
+gate IDs, and required findings artifacts. It is tool-agnostic (GitHub Actions, Buildkite, etc.).
+
+Entrypoint (normative):
+
+- Content CI MUST be invokable via the `ci-content` entrypoint (see `100_test_strategy_ci.md`,
+  "Content CI harness fixture suite (normative)").
+
+Required gate order (normative):
+
+1. `content.lint`
+1. `content.sigma.semantic`
+1. `content.fixtures.validate`
+1. `content.bundle.integrity`
+
+Findings artifacts (normative):
+
+- For every REQUIRED gate above, Content CI MUST emit exactly one findings artifact at:
+  - `artifacts/findings/<gate_id>.findings.v1.json` (contract: `ci_gate_findings`)
+- Missing or schema-invalid findings artifacts for any REQUIRED gate MUST fail Content CI (fail
+  closed). (See also: "CI gate findings artifacts (required)".)
+
+Failure semantics (normative):
+
+- `ci-content` MUST attempt to execute all REQUIRED gates in order and MUST emit findings artifacts
+  for each gate before exiting.
+- The overall Content CI exit code MUST be `0` when all REQUIRED gates succeed and `20` when any
+  REQUIRED gate fails.
+
+CI manifest binding (non-normative; recommended):
+
+- Job name: `ci-content`
+- Step names: use the gate ID as the step name (for example, step `content.lint` executes the
+  `content.lint` gate).
+
+#### `content.lint` gate (Contract Spine conformance + repo-local linting)
+
+Gate ID (v0.1): `content.lint`
+
+Purpose (normative):
+
+- Execute all repo-local, deterministic checks that MUST run **before** other Content CI gates,
+  including:
+  - Contract Spine conformance checks (see `026_contract_spine.md`, "Verification and CI
+    conformance").
+  - Lint rule packs and lint report generation (see `125_linting.md`).
+
+Required outputs (workspace-root):
+
+- `artifacts/findings/content.lint.findings.v1.json`
 
 #### `content.fixtures.validate` gate (fixture registry canonicalization)
 
@@ -629,8 +683,10 @@ fingerprint = SHA256_HEX(
 
 To keep the CI surface stable across implementations, the following gate IDs are reserved for v0.1:
 
-- `content.lint` (Content CI linting)
+- `content.lint` (Content CI linting + Contract Spine conformance)
 - `content.sigma.semantic` (Content CI Sigma semantic validators)
+- `content.fixtures.validate` (Content CI fixture registry validation + canonicalization)
+- `content.bundle.integrity` (Content CI offline bundle validation)
 
 ### Publish-gate enforcement
 

@@ -1,0 +1,1 @@
+{"ast":{"system":{"channel":"Application","computer":"TESTHOST","event_id":{"id":9001},"event_record_id":"12346","provider":{"guid":"89abcdef-0123-4567-89ab-cdef01234567","name":"EventCreate"},"time_created":{"system_time":"2026-03-01T00:00:01Z"}}},"ok":true}

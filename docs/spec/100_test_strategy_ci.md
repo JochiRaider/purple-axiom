@@ -95,8 +95,11 @@ This spec defines which test categories MUST be runnable in each lane.
 
 Content CI MUST be runnable without a lab provider and MUST include, at minimum:
 
-- Contract Spine conformance gate (contract registry invariants, canonical serialization,
-  publisher/reader conformance) (see `026_contract_spine.md`).
+- `content.lint` gate: Contract Spine conformance (contract registry invariants, canonical
+  serialization, publisher/reader conformance) plus repo-local lint rules (see
+  `026_contract_spine.md` and `125_linting.md`).
+  - Ordering (normative): `content.lint` MUST run before any other enforced Content CI gate (see
+    `105_ci_operational_readiness.md`, "Content CI wiring contract (v0.1)").
 - Sigma ruleset determinism + uniqueness + required metadata (see `060_detection_sigma.md`).
 - Mapping pack validation + router determinism (see `065_sigma_to_ocsf_bridge.md`).
 - Sigma compilation to compiled plans (`bridge_compiled_plan`) for the selected backend (see
@@ -113,6 +116,18 @@ Content CI MUST be runnable without a lab provider and MUST include, at minimum:
   JSON) (see `086_detection_baseline_library.md`, "Fixture registry and allowlisting (v0.1 CI)").
 
 Content CI MUST fail closed when compilation or validation cannot be completed deterministically.
+
+#### Content CI wiring and ordering (normative)
+
+The authoritative gate ID wiring, ordering, and findings-artifact contract for Content CI is defined
+in `105_ci_operational_readiness.md` ("Content CI wiring contract (v0.1)").
+
+At minimum, `ci-content` MUST execute these REQUIRED gates in the specified order:
+
+1. `content.lint` (includes Contract Spine conformance; see `026_contract_spine.md`)
+1. `content.sigma.semantic`
+1. `content.fixtures.validate`
+1. `content.bundle.integrity`
 
 Verification hook (normative): CI workflow MUST fail a pull request that breaks compilation or
 validation without spinning up a lab provider.
@@ -150,6 +165,17 @@ Content CI harness fixture suite (normative):
   - `content.sigma.semantic`
   - `content.fixtures.validate`
   - `content.bundle.integrity`
+
+- The Content CI harness fixture suite MUST also include at least one fixture case whose workspace
+  exercises the Contract Spine conformance subset that is executed under `content.lint` (see
+  `026_contract_spine.md`, "Verification and CI conformance").
+
+  - At minimum, the case workspace MUST include the canonical fixture roots declared in the fixture
+    index for:
+    - `glob_v1` vectors
+    - parser module vectors for `yaml_decode_v1`
+    - publisher semantics `pa.publisher.v1`
+    - YAML semantic hashing `yaml_semantic_sha256_v1`
 
 ### Run CI gate set (normative)
 
@@ -251,17 +277,41 @@ Index entry format (normative):
 - **Cross-cutting: parser modules**
 
   - Canonical fixture roots:
+
     - `tests/fixtures/parser_modules/jsonpath_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/checksums_file_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/yaml_decode_v1/vectors.json` (vector file)
     - `tests/fixtures/parser_modules/placeholder_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/win_event_xml_v1/vectors.json` (vector file)
     - `tests/fixtures/parser_modules/syslog_v1/vectors.json` (vector file)
     - `tests/fixtures/parser_modules/audit_event_key_v1/vectors.json` (vector file)
     - `tests/fixtures/parser_modules/auditd_record_kv_v1/vectors.json` (vector file)
+
   - Minimum fixture sets (normative):
+
     - `jsonpath_v1_vectors` (vectors file present and exercised)
+    - `checksums_file_v1_vectors` (vectors file present and exercised)
     - `placeholder_v1_vectors` (vectors file present and exercised)
     - `syslog_v1_vectors` (vectors file present and exercised)
     - `audit_event_key_v1_vectors` (vectors file present and exercised)
     - `auditd_record_kv_v1_vectors` (vectors file present and exercised)
+    - `win_event_xml_v1_vectors` (vectors file present and exercised)
+    - `yaml_decode_v1_vectors` (vectors file present and exercised)
+
+- **Cross-cutting: Windows Event XML corpus (`windows_event_xml.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/windows_event_xml/v1/`
+  - Minimum fixture sets (normative):
+    - `windows_event_xml_v1_corpus_smoke` (minimum set of well-formed, malformed, and
+      policy-violating samples)
+
+- **Cross-cutting: YAML semantic hashing (`yaml_semantic_sha256_v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/yaml_semantic_sha256_v1/vectors.json` (vector file)
+  - Minimum fixture sets (normative):
+    - `yaml_semantic_sha256_v1` (vectors file present and exercised)
 
 - **Cross-cutting: event identity (`event_id.v1`)**
 
@@ -281,6 +331,7 @@ Index entry format (normative):
     - `allowlist_smoke`
     - `denylist_smoke`
     - `stable_hashes`
+    - `policy_ref_invalid_jsonpath_fails_closed`
 
 - **Cross-cutting: integration credentials (`pa.integration_credentials.v1`)**
 
@@ -292,6 +343,16 @@ Index entry format (normative):
     - `missing_fails_closed`
     - `invalid_fails_closed`
     - `leak_detected_fails_closed`
+
+- **Cross-cutting: publisher semantics (`pa.publisher.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/publisher/v1/`
+  - Minimum fixture sets (normative):
+    - `publisher_publish_gate_no_partial_promotion`
+    - `publisher_publish_gate_success_atomic_promotion`
+    - `publisher_crash_mid_promotion_reconciliation`
+    - `publisher_canonical_json_and_jsonl_bytes`
 
 - **Cross-cutting: run lock (`pa.run_lock.v1`)**
 
@@ -390,6 +451,9 @@ Index entry format (normative):
     - `tests/fixtures/telemetry/egress_policy_canary/`
     - `tests/fixtures/telemetry/clock_sync/`
     - `tests/fixtures/telemetry/checkpointing/`
+    - `tests/fixtures/telemetry/windows_eventlog_raw_mode/`
+    - `tests/fixtures/telemetry/agent_liveness/`
+    - `tests/fixtures/telemetry/baseline_profile/`
   - Minimum fixture sets (normative):
     - `synthetic_marker_smoke`
     - `unix_logs_smoke`
@@ -402,6 +466,30 @@ Index entry format (normative):
     - `checkpoint_store_corrupt_fail_closed_smoke`
     - `checkpoint_store_corrupt_recreate_fresh_smoke`
     - `checkpoint_loss_replay_smoke`
+    - `winlog_raw_mode_smoke_ok`
+    - `winlog_raw_mode_missing_canary_fails_closed`
+    - `winlog_raw_mode_rendering_detected_fails_closed`
+    - `winlog_raw_xml_unavailable_fail_closed`
+    - `winlog_raw_xml_unavailable_warn_and_skip`
+    - `agent_liveness_smoke_ok`
+    - `agent_liveness_missing_fails_closed`
+    - `baseline_profile_smoke_ok`
+    - `baseline_profile_missing_fails_closed`
+  - Telemetry semantic assertions (normative):
+    - Any telemetry stage fixture case that expects `logs/telemetry_validation.json` MUST include a
+      semantic assertion file `telemetry_validation.assertions.v1.yaml`.
+    - The telemetry fixture runner MUST:
+      - Validate the produced `runs/<run_id>/logs/telemetry_validation.json` against the
+        `telemetry_validation` contract schema.
+      - Apply `telemetry_validation.assertions.v1.yaml` to the produced JSON (in addition to schema
+        validation).
+    - `telemetry_validation.assertions.v1.yaml` format (normative; YAML; pointers apply to the root
+      of `logs/telemetry_validation.json`):
+      - `must_exist`: list of JSON Pointer strings that MUST resolve.
+      - `must_not_exist`: list of JSON Pointer strings that MUST NOT resolve.
+      - `equals`: map of JSON Pointer → JSON value (deep equality).
+      - `contains`: map of JSON Pointer → list of required members (deep equality) for array-valued
+        pointers.
 
 - **Normalization: field mapping unit (`normalization`)**
 
@@ -497,6 +585,7 @@ Index entry format (normative):
     - `tests/fixtures/signing/`
   - Minimum fixture sets (normative):
     - `checksums_smoke`
+    - `checksums_parse_error`
     - `tamper_detected`
 
 ### Content governance and CI harnesses
@@ -575,8 +664,9 @@ At minimum, `tests/fixtures/run_results/` MUST include:
 Canonicalization tests validate RFC 8785 (JCS) vectors plus Purple Axiom hash-basis fixtures,
 requiring byte-for-byte determinism.
 
-Windows Event Log raw XML tests validate identity-field extraction without RenderingInfo, binary
-field detection, and payload limit truncation with SHA-256 computation.
+Windows Event Log raw XML tests validate identity-field extraction via `pa.win_event_xml.v1`
+(rejecting RenderingInfo), binary field detection, and payload limit truncation with SHA-256
+computation.
 
 Linux event identity basis tests use auditd/journald/syslog fixture vectors covering Tier 1 and Tier
 2 fields, plus Tier 3 collision fixtures under `tests/fixtures/event_id/v1/`.
@@ -836,6 +926,14 @@ Minimum case set (normative):
   - negative or non-integer indexes
   - leading `+` or leading zeros in indexes (example `[+1]`, `[01]`)
 
+- The vectors file MUST include, at minimum, invalid cases that fail closed for enforced hard limits
+  declared for `pa.jsonpath.v1` in ADR-0003, including:
+
+  - expression length exceeds `max_input_chars` (`error_code=expression_too_long`)
+  - segment count exceeds `max_segments` (`error_code=too_many_segments`)
+  - identifier length exceeds `max_identifier_chars` (`error_code=identifier_too_long`)
+  - index literal exceeds `max_index_digits` or `max_index_value` (`error_code=index_too_large`)
+
 #### Placeholder line vectors
 
 Fixture set (normative):
@@ -888,6 +986,113 @@ Minimum case set (normative):
   - missing `reason_code`
   - `sha256` present when `handling=absent`
   - malformed `sha256` value (wrong prefix or wrong hex length, or non-lowercase hex)
+
+#### Windows Event XML vectors
+
+Fixture set (normative):
+
+- `win_event_xml_v1_vectors`
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/win_event_xml_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token` MUST be `pa.win_event_xml.v1`.
+- `module_id` MUST be `win_event_xml`.
+- `module_version` MUST be `v1`.
+- `input_kind` MUST be `bytes`.
+- `newline_normalization` MUST be `true`.
+- `max_input_bytes` MUST be `16777216`.
+
+`expected_ast` contract (normative):
+
+- `expected_ast` MUST match `win_event_xml_ast_v1` as defined in `040_telemetry_pipeline.md`,
+  "Parser module: `pa.win_event_xml.v1` (Windows Event XML)".
+
+Minimum case set (normative):
+
+- The vectors file MUST include, at minimum:
+  - A `parse_ok` case covering the default-namespaced Windows Event XML form.
+  - A `parse_ok` case covering a prefixed-namespaced Windows Event XML form (namespace URI and
+    prefix MUST NOT affect extraction; only local-name matching is allowed).
+  - `parse_error` cases covering:
+    - `rendering_info_present`
+    - `xml_not_well_formed`
+    - `xml_disallowed_doctype`
+    - `xml_external_entity_disallowed`
+    - `xml_depth_exceeded`
+    - `xml_token_limit_exceeded`
+    - `xml_missing_required_field`
+    - `xml_invalid_integer`
+    - `xml_invalid_guid`
+    - `xml_invalid_utf8`
+
+#### Checksums file vectors (`pa.checksums_file.v1`)
+
+Module identity (normative):
+
+- `module_token`: `pa.checksums_file.v1`
+- `module_id`: `checksums_file`
+- `module_version`: `v1`
+
+Grammar source (normative):
+
+- The checksums file grammar, AST, and error vocabulary are defined in `025_data_contracts.md` under
+  "Security checksums format (normative)" / "Parser module: `pa.checksums_file.v1`".
+
+Input encoding (normative):
+
+- `input_kind` MUST be `bytes`.
+- Inputs MUST be provided as `input.base64` to preserve exact byte offsets and to allow invalid
+  UTF-8 / NUL fixtures.
+
+AST contract (normative):
+
+- `expected_ast` MUST have the shape:
+
+  ```json
+  {
+    "entries": [
+      { "path": "<string>", "sha256": "sha256:<64hex>" }
+    ]
+  }
+  ```
+
+Rendered form (normative):
+
+- For valid cases, `expected_rendered` SHOULD be present and MUST equal the canonical rendered form
+  produced by the module's serialization rules (byte-for-byte).
+  - For `pa.checksums_file.v1`, `expected_rendered` is the full canonical file content as a UTF-8
+    string and SHOULD include the required trailing LF.
+
+Required coverage (normative):
+
+- Valid cases MUST include:
+
+  - a single-entry file
+  - a multi-entry file with sorted paths
+  - nested paths (multiple segments)
+  - at least one "edge character" path using allowed non-whitespace punctuation (for example `-` and
+    `_`)
+
+- Invalid cases MUST include at least one case for each of the following error codes:
+
+  - `contains_nul`
+  - `contains_cr`
+  - `invalid_utf8`
+  - `missing_final_newline`
+  - `invalid_line_format`
+  - `invalid_digest`
+  - `invalid_path`
+  - `duplicate_path`
+  - `unsorted_paths`
+
+Error location (normative):
+
+- For invalid cases, `expected_errors[0].location.byte_offset` MUST be present and MUST refer to the
+  leftmost parse failure byte offset (0-indexed) as required by `pa.parser_vectors.v1`.
 
 #### Syslog line vectors
 
@@ -2763,6 +2968,8 @@ MUST either:
   validation reports against the reference publisher output.
 
 Fixture set (normative):
+
+- Canonical fixture root: `tests/fixtures/publisher/v1/` (see "Fixture index").
 
 - `publisher_publish_gate_no_partial_promotion` (validation failure does not publish)
 

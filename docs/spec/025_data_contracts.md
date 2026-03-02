@@ -122,6 +122,7 @@ invariants that cannot be expressed in JSON Schema alone.
     - [Signing artifacts and locations](#signing-artifacts-and-locations)
     - [Long-term artifact selection for checksumming](#long-term-artifact-selection-for-checksumming)
     - [Security checksums format (normative)](#security-checksums-format-normative)
+      - [Parser module: `pa.checksums_file.v1`](#parser-module-pachecksums_filev1)
     - [Public key and key id](#public-key-and-key-id)
     - [Security signature format (normative)](#security-signature-format-normative)
     - [Verification semantics](#verification-semantics)
@@ -1912,7 +1913,8 @@ Inventory object (normative):
 - `stage_outcomes` MUST be derived from `manifest.stage_outcomes` (authoritative).
   - Entries MUST be sorted by `stage` ascending (UTF-8 byte order, no locale).
 - `files[]` MUST describe the deterministic long-term file set:
-  - If `security/checksums.txt` exists and is parseable, `files[]` MUST be derived from it.
+  - If `security/checksums.txt` exists and is parseable as `pa.checksums_file.v1`, `files[]` MUST be
+    derived from it.
   - Otherwise, `files[]` MUST be derived by scanning the run bundle root and applying the inclusion
     and exclusion rules defined in this spec (see "Long-term artifact selection for checksumming").
   - Each entry MUST include:
@@ -3709,9 +3711,11 @@ signing artifacts, and related metadata).
 
 ### Long-term artifact selection for checksumming
 
-`security/checksums.txt` MUST include one line per included file, sorted by `path` ascending using
-UTF-8 byte order (no locale), in the format: `sha256:<lowercase_hex><space><path><newline>`. `path`
-MUST be run-relative using POSIX separators (`/`). Newlines MUST be `\n` (LF).
+`security/checksums.txt` MUST conform to the `pa.checksums_file.v1` parser module defined in
+"Security checksums format (normative)". It MUST include one line per included file, sorted by
+`path` ascending using UTF-8 byte order (no locale), in the format
+`sha256:<lowercase_hex><space><path><newline>` (single space). `path` MUST be run-relative using
+POSIX separators (`/`). Newlines MUST be `\n` (LF).
 
 `security/checksums.txt` MUST include every file under `runs/<run_id>/` except:
 
@@ -3766,6 +3770,137 @@ This section defines the `security/checksums.txt` format.
     serialized in the canonical digest string form.
   - `relative_path` is the canonicalized relative path.
 - Ordering: lines MUST be sorted by `relative_path` using lexicographic order over UTF-8 bytes.
+- Final newline: the file MUST end with a trailing LF (`\n`).
+- CR bytes (`\r`) MUST NOT appear anywhere in the file (CRLF is rejected).
+- NUL bytes (`\u0000`) MUST NOT appear anywhere in the file.
+- The field delimiter between digest and path MUST be exactly one ASCII space (`0x20`).
+- Blank lines MUST NOT appear.
+
+#### Parser module: `pa.checksums_file.v1`
+
+This parser module is the single normative interpretation of `security/checksums.txt` for
+conformance-critical tooling (signing verification, offline validators, and `pa.reader.v1` inventory
+derivation). Implementations MUST NOT treat `security/checksums.txt` as a "best effort" text file;
+it MUST be parsed and validated deterministically.
+
+Module identity (normative):
+
+- `module_token`: `pa.checksums_file.v1`
+- `module_id`: `checksums_file`
+- `module_version`: `v1`
+- `input_kind`: `bytes`
+
+Limits (normative):
+
+- `max_input_bytes`: 16777216 (16 MiB)
+  - If the input exceeds `max_input_bytes`, parsing MUST fail closed with
+    `error_code="input_too_large"`.
+
+Grammar and acceptance rules (normative):
+
+- Encoding: UTF-8 bytes with no BOM.
+
+  - If UTF-8 decoding fails, parsing MUST fail closed with `error_code="invalid_utf8"`.
+
+- Newlines: LF (`\n`) only.
+
+  - Any CR byte (`\r`) MUST be rejected (`error_code="contains_cr"`).
+  - The file MUST end with a trailing LF (`error_code="missing_final_newline"`).
+
+- The file MUST contain one or more records; blank lines are forbidden
+  (`error_code="invalid_line_format"`).
+
+- Each record is exactly:
+
+  - `<digest><SP><path><LF>`
+
+  Where:
+
+  - `<digest>` MUST be the canonical SHA-256 digest string form `sha256:<64 lowercase hex>`.
+    - It MUST match `^sha256:[0-9a-f]{64}$` exactly (`error_code="invalid_digest"`).
+  - `<SP>` is exactly one ASCII space byte (`0x20`) (`error_code="invalid_line_format"`).
+  - `<path>` MUST satisfy the run-relative POSIX constraints defined in this document under "Glob
+    semantics (glob_v1)" / "Run-relative POSIX requirement", and MUST additionally:
+    - contain no ASCII space (`0x20`) or tab (`0x09`) bytes (ensures a 2-field, space-delimited
+      line),
+    - contain no NUL byte (`\u0000`) (`error_code="contains_nul"`).
+    - On violation, parsing MUST fail closed with `error_code="invalid_path"`.
+
+AST contract (normative):
+
+On successful parse, implementations MUST produce an AST that can be expressed as:
+
+```json
+{ "entries": [ { "path": "<string>", "sha256": "sha256:<64hex>" }, ... ] }
+```
+
+AST invariants (normative):
+
+- `entries[]` order MUST equal file order.
+- `entries[].path` values MUST be unique (`error_code="duplicate_path"`).
+- File order MUST be strictly sorted by `path` ascending using lexicographic order over UTF-8 bytes
+  (no locale) (`error_code="unsorted_paths"`).
+
+Deterministic parse errors (normative):
+
+- Parsing MUST fail closed on any invalid input.
+- On parse failure, the implementation MUST return exactly one parser-module error: the leftmost
+  failure by `location.byte_offset` (0-indexed into the original input bytes), with:
+  - `error_code`: one of the codes below
+  - `message_prefix`: the stable prefix required by the parser module contract
+  - `location.byte_offset`: 0-indexed byte offset into the input
+  - `location.line` / `location.column`: OPTIONAL (1-indexed; RECOMMENDED when the input is valid
+    UTF-8)
+
+Location semantics (normative):
+
+- `location.byte_offset` is 0-indexed into the original input bytes (before any decoding).
+- For byte-oriented errors, the offset is the offending byte:
+  - `contains_nul`: first `0x00` byte
+  - `contains_cr`: first `0x0d` byte (`\r`)
+  - `invalid_utf8`: first byte that cannot be decoded as UTF-8
+- For structural end-of-input errors:
+  - `missing_final_newline`: `byte_offset == len(input_bytes)`
+- For token validation errors:
+  - `invalid_digest`: first byte within the digest token that violates `^sha256:[0-9a-f]{64}$`
+  - `invalid_line_format`: first byte that violates record framing (missing delimiter, extra
+    whitespace, blank line, etc.)
+  - `invalid_path`: first byte within the path token that violates the path constraints
+- For ordering errors:
+  - `duplicate_path`: the first byte of the duplicate record's path token
+  - `unsorted_paths`: the first byte of the out-of-order record's path token
+
+The following `error_code` values are defined for `pa.checksums_file.v1`:
+
+- `input_too_large`
+- `contains_nul`
+- `contains_cr`
+- `invalid_utf8`
+- `missing_final_newline`
+- `invalid_line_format`
+- `invalid_digest`
+- `invalid_path`
+- `duplicate_path`
+- `unsorted_paths`
+
+Canonical serialization (normative):
+
+- The canonical rendered form of a `pa.checksums_file.v1` AST is a UTF-8 text string produced by:
+
+  1. Validate each entry:
+     - `sha256` MUST be canonical `sha256:<64 lowercase hex>`.
+     - `path` MUST be valid per the grammar rules above.
+  1. Validate ordering constraints:
+     - `entries[]` MUST be strictly sorted by `path` ascending (UTF-8 byte order).
+     - `entries[].path` MUST be unique.
+  1. Emit each entry as: `<sha256> + " " + <path> + "\n"`.
+
+- Producers MUST write `security/checksums.txt` as UTF-8 bytes (no BOM) of this rendered form.
+
+Verification hooks (normative):
+
+- Parser-module semantic lock: `tests/fixtures/parser_modules/checksums_file_v1/vectors.json` (see
+  `100_test_strategy_ci.md`, "Checksums file vectors").
 
 ### Public key and key id
 
@@ -3805,11 +3940,22 @@ This section defines the `security/signature.ed25519` format.
 Given a run bundle that includes `security/checksums.txt`, `security/signature.ed25519`, and
 `security/public_key.ed25519`, verification MUST:
 
-1. Parse and canonicalize `security/checksums.txt` exactly as specified above.
+1. Parse `security/checksums.txt` using the parser module `pa.checksums_file.v1` (see "Security
+   checksums format (normative)") and canonicalize it by rendering the returned AST (see
+   `pa.checksums_file.v1` "Canonical serialization").
 1. Recompute sha256 for each referenced file, serialize as `sha256:<lowercase_hex>`, and compare for
    exact string equality with the digest token from `security/checksums.txt`.
 1. Verify the Ed25519 signature in `security/signature.ed25519` against the bytes of
    `security/checksums.txt` using the public key from `security/public_key.ed25519`.
+
+Reader error-code mapping (normative, `pa.reader.v1`):
+
+- Any `pa.checksums_file.v1` parse failure for `security/checksums.txt` MUST be surfaced as
+  `error_code="checksums_parse_error"` (no new reader error codes). Implementations SHOULD attach
+  the underlying parser-module error (including `error_code` and `location`) under `details` and/or
+  nested `errors` for deterministic debugging.
+- Checksum mismatches MUST be surfaced as `error_code="checksum_mismatch"`.
+- Signature verification failures MUST be surfaced as `error_code="signature_invalid"`.
 
 Verification outcomes:
 

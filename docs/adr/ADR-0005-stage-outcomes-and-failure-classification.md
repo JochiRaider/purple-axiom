@@ -252,7 +252,7 @@ These reason codes MAY be used for any stage.
 
 | Reason code                          | Severity | Description                                                                                                                                                                        |
 | ------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `redaction_policy_error`             | FATAL    | Redaction engine failed or post-check failed; artifacts cannot be safely persisted.                                                                                                |
+| `redaction_policy_error`             | FATAL    | Redaction policy invalid (parse/schema error), redaction engine failed, or post-check failed; artifacts cannot be safely persisted.                                                |
 | `config_schema_invalid`              | FATAL    | A required config artifact is schema-invalid (for example `inputs/range.yaml`, `manifest.json`, `inputs/scenario.yaml` or `inputs/plan_draft.yaml` when plan building is enabled). |
 | `contract_validation_failed`         | FATAL    | Contract-backed artifact fails schema/parse validation (publish-gate or offline validation/reconciliation).                                                                        |
 | `input_missing`                      | FATAL    | Required upstream input artifact missing or unreadable.                                                                                                                            |
@@ -271,8 +271,8 @@ Precedence (normative):
 
 - If the detected secret is a resolved integration credential value, implementations MUST emit
   `reason_code=integration_credentials_leaked` (more specific) rather than `redaction_policy_error`.
-- `redaction_policy_error` remains reserved for redaction engine failures and post-check failures
-  unrelated to integration credentials.
+- `redaction_policy_error` remains reserved for redaction policy invalidity, redaction engine
+  failures, and post-check failures unrelated to integration credentials.
 
 ### Lab provider stage (`lab_provider`)
 
@@ -580,8 +580,19 @@ When enabled, the Windows raw-mode canary MUST be recorded as a substage outcome
 
 - `winlog_raw_missing`
 - `winlog_rendering_detected`
+- `winlog_xml_parse_failed`
+- `winlog_canary_mismatch`
 
 These codes MUST NOT be replaced by an aggregate code in the raw-mode substage outcome.
+
+Evidence expectations (normative):
+
+- The validator MUST record parsing evidence for this substage in `logs/telemetry_validation.json`
+  under `windows_eventlog_raw_mode` (see `110_operability.md`).
+- When `reason_code` is `winlog_rendering_detected` or `winlog_xml_parse_failed`, the evidence MUST
+  include the `pa.win_event_xml.v1` `error_code` and `location_byte_offset`.
+- When `reason_code` is `winlog_canary_mismatch`, the evidence MUST include the expected vs observed
+  identity fields used for comparison.
 
 #### Network egress policy canary (substage: `telemetry.network.egress_policy`)
 

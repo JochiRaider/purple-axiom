@@ -1,0 +1,1 @@
+{"policy_format":"pa.redaction_policy.v1","policy_id":"fixture-policy-ref-invalid-jsonpath","policy_version":"0.0.0","structured":{"enabled":true,"target_paths":["$..a"]}}

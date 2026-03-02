@@ -676,6 +676,10 @@ extraction):
       the full payload to a deterministically addressed sidecar blob when sidecar retention is
       enabled (see `045_storage_formats.md` "Raw payload sizing and sidecars" and “Sidecar blob
       store”).
+    - Parsing and identity extraction MUST use the full *pre-truncation* canonical bytes. In
+      particular, `pa.win_event_xml.v1` MUST be applied before any `event_xml` truncation/sidecar
+      decision, and `event_xml_sha256` MUST be computed over the same canonical bytes (see
+      `040_telemetry_pipeline.md`).
   - `max_field_chars` (optional, default: 262144)
     - Maximum character length for any single promoted string field at staging time (deterministic
       truncation bound).
@@ -1165,6 +1169,11 @@ Common keys:
       evidence from standard long-term locations unless quarantined.
   - `policy_ref` (optional): reference to a redaction policy file (format defined in
     [ADR-0003: Redaction policy](../adr/ADR-0003-redaction-policy.md))
+    - Notes:
+      - `structured.target_paths[]` entries inside the referenced policy MUST conform to the
+        restricted JSONPath subset `pa.jsonpath.v1` (see ADR-0003).
+      - Invalid JSONPath entries MUST fail closed during policy load/effective policy resolution and
+        are surfaced by `pa lint` as `lint-redaction-policy-invalid-jsonpath`.
   - `limits` (optional)
     - `max_token_chars` (optional)
     - `max_summary_chars` (optional)

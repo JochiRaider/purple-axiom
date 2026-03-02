@@ -146,19 +146,19 @@ document.
 
 ### Declared validation depth matrix (v0.1)
 
-| Surface               | Identifier                 | Declared depth | Notes                                                             |
-| --------------------- | -------------------------- | -------------: | ----------------------------------------------------------------- |
-| Lint target kind      | range-config               |              2 | Schema + reference resolution (redaction policy)                  |
-| Lint target kind      | redaction-policy           |              2 | JSONPath parsing via `pa.jsonpath.v1`                             |
-| Lint target kind      | scenario                   |              2 | Schema + semantic checks; references when available               |
-| Lint target kind      | criteria-pack              |              2 | Operator semantics + canonical ordering                           |
-| Lint target kind      | plan-draft                 |              2 | Schema + semantic checks; references when available               |
-| Lint target kind      | sigma-rule (baseline)      |              2 | `sigma_ast_v1` parse + deterministic ref resolution               |
-| Lint target kind      | sigma-rule (backend-aware) |              3 | Capability gate + safety/cost guardrails                          |
-| Lint target kind      | report-html                |              2 | Policy checks (no remote assets)                                  |
-| Lint target kind      | contract-registry          |              2 | Schema + registry binding invariants (pass_id)                    |
+| Surface               | Identifier                  | Declared depth | Notes                                                             |
+| --------------------- | --------------------------- | -------------: | ----------------------------------------------------------------- |
+| Lint target kind      | range-config                |              2 | Schema + reference resolution (redaction policy)                  |
+| Lint target kind      | redaction-policy            |              2 | JSONPath parsing via `pa.jsonpath.v1`                             |
+| Lint target kind      | scenario                    |              2 | Schema + semantic checks; references when available               |
+| Lint target kind      | criteria-pack               |              2 | Operator semantics + canonical ordering                           |
+| Lint target kind      | plan-draft                  |              2 | Schema + semantic checks; references when available               |
+| Lint target kind      | sigma-rule (baseline)       |              2 | `sigma_ast_v1` parse + deterministic ref resolution               |
+| Lint target kind      | sigma-rule (backend-aware)  |              3 | Capability gate + safety/cost guardrails                          |
+| Lint target kind      | report-html                 |              2 | Policy checks (no remote assets)                                  |
+| Lint target kind      | contract-registry           |              2 | Schema + registry binding invariants (pass_id)                    |
 | Lint target kind      | workspace-contract-registry |              2 | Schema + registry binding invariants (pass_id)                    |
-| Sigma backend adapter | native_pcre2               |              3 | Capability gate + pinned versions + semantic validator guardrails |
+| Sigma backend adapter | native_pcre2                |              3 | Capability gate + pinned versions + semantic validator guardrails |
 
 ## Authority and precedence
 
@@ -530,14 +530,14 @@ Parser module inventory synchronization (`parser_module_inventory_sync`) (normat
   - `subject.stable_id = "026_contract_spine.md"`
   - `location.file_path = "026_contract_spine.md"`
 
-- The finding `message` MUST list missing module tokens in ascending UTF-8 byte order (no locale)
-  to ensure deterministic output.
+- The finding `message` MUST list missing module tokens in ascending UTF-8 byte order (no locale) to
+  ensure deterministic output.
 
 - The finding `evidence.details` SHOULD include a redaction-safe structured payload containing:
 
   - `missing_module_tokens[]` (sorted ascending, UTF-8 byte order)
   - `required_module_tokens[]` (sorted ascending, UTF-8 byte order)
-  
+
 #### Deterministic mapping from `lint.json` → `ci_gate_findings` (normative)
 
 Given a `lint.json` report:
@@ -899,8 +899,10 @@ Intended for the run-bundle contract registry:
 Minimum rule requirements:
 
 - Parse as JSON (YAML is not permitted for registries).
+
 - Structural validity checks for the contract registry shape defined in `025_data_contracts.md`,
   "Contract registry" (top-level keys, required arrays, required fields per entry).
+
 - Binding `pass_id` checks (normative):
 
   - Rule ID: `lint-contract-registry-pass-id-required`
@@ -935,10 +937,13 @@ Minimum rule requirements:
   - Rule ID: `lint-contract-registry-pass-manifest-binding-missing`
 
   - The registry MUST include a binding with:
+
     - `artifact_glob="logs/pass_manifest.json"`
     - `contract_id="pass_manifest"`
     - `stage_owner="orchestrator"`
+
   - On violation, emit an `error` finding with:
+
     - `instance_path="/bindings"`
     - `rule_id="lint-contract-registry-pass-manifest-binding-missing"`
     - `severity="error"`
@@ -952,8 +957,10 @@ Intended for the workspace contract registry:
 Minimum rule requirements:
 
 - Parse as JSON (YAML is not permitted for registries).
+
 - Structural validity checks for the workspace contract registry shape defined in
   `025_data_contracts.md`, "Contract registry" (the same entry model is used).
+
 - Binding `pass_id` checks (normative):
 
   - Rule ID: `lint-workspace-contract-registry-pass-id-required`
@@ -1060,11 +1067,10 @@ Implementations MUST provide tests that assert:
 
 Contract registry change discipline (non-normative):
 
-- Any change to `contract_registry.json` or `workspace_contract_registry.json` SHOULD be
-  accompanied by a fixture update (or new fixture) that proves Contract Spine conformance remains
-  green, particularly for publisher semantics suites (`pa.publisher.v1` and
-  `pa.publisher.workspace.v1`).
-  
+- Any change to `contract_registry.json` or `workspace_contract_registry.json` SHOULD be accompanied
+  by a fixture update (or new fixture) that proves Contract Spine conformance remains green,
+  particularly for publisher semantics suites (`pa.publisher.v1` and `pa.publisher.workspace.v1`).
+
 Snapshot testing guidance:
 
 - Maintain a small fixture corpus per target kind.

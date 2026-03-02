@@ -899,7 +899,8 @@ Creation MUST fail if `<baseline_root>` already exists (conflict).
 Publish-gate integration (normative):
 
 - The publish step for baseline packages MUST follow `pa.publisher.workspace.v1` semantics (see
-  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics (pa.publisher.workspace.v1)").
+  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics
+  (pa.publisher.workspace.v1)").
 - Before the final rename into `exports/baselines/**`, the implementation MUST validate the staged
   baseline package manifest (and any other contract-backed baseline package metadata) against the
   workspace contract registry (`docs/contracts/workspace_contract_registry.json`).

@@ -289,7 +289,7 @@ Index entry format (normative):
       be listed in `026_contract_spine.md`, "Parser module inventory".
     - Content CI MUST fail closed if the required vector set and the Contract Spine inventory are
       out of sync (Contract Spine conformance check `parser_module_inventory_sync`).
-      
+
   - Canonical fixture roots:
 
     - `tests/fixtures/parser_modules/jsonpath_v1/vectors.json` (vector file)
@@ -875,11 +875,12 @@ Minimum required fixture cases (normative):
 
 - `contract_registry_pass_id_smoke`
 
-  - Input workspace MUST include `docs/contracts/contract_registry.json` with at least the
-    following violations (can be in a single file):
+  - Input workspace MUST include `docs/contracts/contract_registry.json` with at least the following
+    violations (can be in a single file):
 
     - one binding missing `pass_id` (rule `lint-contract-registry-pass-id-required`),
-    - one binding with an invalid `pass_id` grammar (rule `lint-contract-registry-pass-id-grammar-invalid`),
+    - one binding with an invalid `pass_id` grammar (rule
+      `lint-contract-registry-pass-id-grammar-invalid`),
     - one binding whose `pass_id` root does not equal `stage_owner` (rule
       `lint-contract-registry-pass-id-prefix-mismatch`), and
     - omission of the required `logs/pass_manifest.json` binding (rule
@@ -1266,7 +1267,7 @@ Success cases (normative minimum coverage):
 Failure cases (normative minimum coverage; MUST fail closed):
 
 - canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
-  `location.byte_offset=0`) 
+  `location.byte_offset=0`)
 - invalid PRI (non-numeric or out of range)
 - invalid timestamp (RFC3164 timestamp malformed; RFC5424 timestamp malformed or NILVALUE)
 - unknown/unsupported format (does not match RFC3164-like or RFC5424-like)
@@ -1287,7 +1288,7 @@ Errors contract (normative):
   `location`).
 - For the `line_too_long` case, `expected_errors[0].location.byte_offset` MUST equal the UTF-8 byte
   offset of the first byte of the first disallowed Unicode scalar in the canonical parse input.
-  
+
 #### Audit correlation-key vectors
 
 `audit_event_key_v1_vectors` validate parsing of the audit correlation key substring
@@ -1335,9 +1336,9 @@ Success cases (normative minimum coverage):
 - a record line containing `node=<value>` (node is surfaced as `node` in the AST)
 - a record line with quoted values (e.g., `exe="... ..."`) and preserved escapes
 - a record line with repeated non-required keys, asserting array behavior
-- byte-heavy but char-legal record line: canonical parse input that is `<= 65536` Unicode scalar values
-  but would exceed `65536` UTF-8 bytes if a byte cap were (incorrectly) enforced.
-  
+- byte-heavy but char-legal record line: canonical parse input that is `<= 65536` Unicode scalar
+  values but would exceed `65536` UTF-8 bytes if a byte cap were (incorrectly) enforced.
+
 Failure cases (normative minimum coverage; MUST fail closed):
 
 - canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
@@ -1355,7 +1356,7 @@ Errors contract (normative):
   `location`).
 - For the `line_too_long` case, `expected_errors[0].location.byte_offset` MUST equal the UTF-8 byte
   offset of the first byte of the first disallowed Unicode scalar in the canonical parse input.
-  
+
 #### Atomic template placeholder vectors
 
 Fixture set (normative):
@@ -2679,11 +2680,13 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
 ("Target contract surface and scope profile (normative)")), the fixture set MUST also include:
 
 - `control_plane_cancel_valid` (v0.2+)
+
   - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_valid/`
   - Provide a minimal run bundle that includes a valid `control/cancel.json`.
   - Assert contract validation succeeds for the operator control-plane artifacts present.
 
 - `control_plane_cancel_invalid_rejected` (v0.2+; fail closed)
+
   - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_invalid_rejected/`
   - Provide a run bundle that includes a schema-invalid `control/cancel.json`.
   - Assert contract validation fails closed.
@@ -2691,6 +2694,7 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
     pointer or dotted path).
 
 - `control_plane_resume_request_decision_valid` (v0.2+)
+
   - Fixture root: `tests/fixtures/orchestrator/control_plane/resume_request_decision_valid/`
   - Provide a run bundle that includes:
     - `control/resume_request.json`, and
@@ -2698,6 +2702,7 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
   - Assert all present operator control-plane artifacts validate successfully.
 
 - `control_plane_retry_request_decision_valid` (v0.2+)
+
   - Fixture root: `tests/fixtures/orchestrator/control_plane/retry_request_decision_valid/`
   - Provide a run bundle that includes:
     - `control/retry_request.json`, and
@@ -2705,17 +2710,20 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
   - Assert all present operator control-plane artifacts validate successfully.
 
 - `plan_draft_valid` (v0.2+)
+
   - Fixture root: `tests/fixtures/orchestrator/plan_draft/valid/`
   - Provide a run bundle that includes a valid `inputs/plan_draft.yaml`.
   - Assert contract validation succeeds for the plan draft artifact.
 
 - `plan_draft_invalid_rejected` (v0.2+; fail closed)
+
   - Fixture root: `tests/fixtures/orchestrator/plan_draft/invalid_rejected/`
   - Provide a run bundle that includes an invalid `inputs/plan_draft.yaml` (syntactically invalid OR
     schema-invalid).
   - Assert contract validation fails closed and emits a deterministic error location.
 
 - `plan_draft_provenance_valid` (v0.2+; cross-artifact invariant)
+
   - Fixture root: `tests/fixtures/orchestrator/plan_draft/provenance_valid/`
   - Provide a run bundle that includes:
     - a valid `inputs/plan_draft.yaml`, and
@@ -2725,6 +2733,7 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
     `yaml_semantic_sha256_v1(inputs/plan_draft.yaml)` (digest string form).
 
 - `plan_draft_provenance_missing_extension_fails` (v0.2+; fail closed)
+
   - Fixture root: `tests/fixtures/orchestrator/plan_draft/provenance_missing_extension_fails/`
   - Provide a run bundle that includes `inputs/plan_draft.yaml` but omits
     `manifest.extensions.operator_interface`.
@@ -2732,6 +2741,7 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
     or dotted path) to `manifest.extensions.operator_interface`.
 
 - `plan_draft_provenance_hash_mismatch_fails` (v0.2+; fail closed)
+
   - Fixture root: `tests/fixtures/orchestrator/plan_draft/provenance_hash_mismatch_fails/`
   - Provide a run bundle that includes both fields but sets
     `manifest.extensions.operator_interface.plan_draft_sha256` to an intentionally incorrect value.
@@ -3075,8 +3085,10 @@ When plan drafts are used (v0.2+), the run bundle MUST include both:
 The validator / CI harness MUST enforce the following (fail closed):
 
 - Presence coupling:
-  - If `inputs/plan_draft.yaml` is present, `manifest.extensions.operator_interface` MUST be present.
-  - If `manifest.extensions.operator_interface` is present, `inputs/plan_draft.yaml` MUST be present.
+  - If `inputs/plan_draft.yaml` is present, `manifest.extensions.operator_interface` MUST be
+    present.
+  - If `manifest.extensions.operator_interface` is present, `inputs/plan_draft.yaml` MUST be
+    present.
 - Value coupling:
   - `manifest.extensions.operator_interface.plan_draft_path` MUST equal `inputs/plan_draft.yaml`.
   - `manifest.extensions.operator_interface.plan_draft_sha256` MUST equal
@@ -3285,9 +3297,9 @@ Fixture set (normative):
 
 ### Pass manifest conformance (run-bundle pass attribution)
 
-The pass manifest (`runs/<run_id>/logs/pass_manifest.json`) is the canonical run-bundle surface
-that attaches `pass_id` to contract-backed artifacts, enabling pass-granularity provenance,
-diffing, and caching (see `026_contract_spine.md`, "Pass manifest").
+The pass manifest (`runs/<run_id>/logs/pass_manifest.json`) is the canonical run-bundle surface that
+attaches `pass_id` to contract-backed artifacts, enabling pass-granularity provenance, diffing, and
+caching (see `026_contract_spine.md`, "Pass manifest").
 
 Fixture set (normative):
 

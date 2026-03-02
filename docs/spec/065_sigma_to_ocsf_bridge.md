@@ -1016,9 +1016,10 @@ These artifacts MUST conform to the data contracts specification, including cano
     - `mapping_pack_sha256` (`sha256:<lowercase_hex>`)
     - `backend` (object): backend identity and determinism-relevant settings used by the compiler.
       - MUST include `backend.id`, `backend.version`, and `backend.settings`.
-      - When `executable=true`, MUST also include `backend.plan_kind` and `backend.plan`.    
+      - When `executable=true`, MUST also include `backend.plan_kind` and `backend.plan`.
     - `compiled_provenance` (object, optional): compiled artifact provenance envelope.
-      - When `detection.sigma.bridge.compile_cache_dir` is set, `compiled_provenance` MUST be present.      
+      - When `detection.sigma.bridge.compile_cache_dir` is set, `compiled_provenance` MUST be
+        present.
       - When present, it MUST follow the shared shape defined in `025_data_contracts.md` ("Compiled
         provenance envelope (shared shape)").
       - `compiled_provenance.pass_id` MUST equal the contract registry binding `pass_id` for

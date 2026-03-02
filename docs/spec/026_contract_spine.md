@@ -215,8 +215,8 @@ corresponding `contracts[]` entry MUST be identical across registries:
 Fail-closed enforcement (normative):
 
 - The Contract Spine gate MUST fail closed if any cross-registry mismatch is present.
-- `ContractRegistry.load(...)` / `ContractRegistry.load_workspace(...)` MUST fail closed if they
-  are asked to load both registries and detect any cross-registry mismatch.
+- `ContractRegistry.load(...)` / `ContractRegistry.load_workspace(...)` MUST fail closed if they are
+  asked to load both registries and detect any cross-registry mismatch.
 
 Rationale (non-normative):
 
@@ -678,8 +678,8 @@ Optional convenience writers (non-normative):
 
 - Implementations MAY expose `write_bytes`, `write_json`, and `write_jsonl` helpers analogous to
   `StagePublishSession`. Implementations MUST NOT require in-memory buffering for large outputs; it
-  is valid to stream bytes directly into the staging root (exports) or into a temp file (single
-  file publish).
+  is valid to stream bytes directly into the staging root (exports) or into a temp file (single file
+  publish).
 
 `ExpectedWorkspaceOutput` shape (normative):
 
@@ -696,8 +696,8 @@ ExpectedWorkspaceOutput ↔ workspace registry consistency (normative):
 - If `ContractRegistry.resolve(path)` returns a binding, then:
   - `ExpectedWorkspaceOutput.contract_id` MUST be non-null, and
   - it MUST equal the binding’s `contract_id`.
-- If `ContractRegistry.resolve(path)` returns `None`, then
-  `ExpectedWorkspaceOutput.contract_id` MUST be `null`.
+- If `ContractRegistry.resolve(path)` returns `None`, then `ExpectedWorkspaceOutput.contract_id`
+  MUST be `null`.
 - `finalize()` MUST fail closed (no promotion) if these invariants are violated.
 
 Staging and atomic promotion rules (normative):
@@ -723,8 +723,8 @@ Validation and workspace report emission (normative):
   final publish step (directory rename, atomic replace, or append).
 - On validation failure, `finalize()` MUST:
   - fail closed with no final-output mutation (no partial publish), and
-  - emit the workspace contract validation report defined in `025_data_contracts.md`,
-    "Workspace contract validation report artifact (normative)".
+  - emit the workspace contract validation report defined in `025_data_contracts.md`, "Workspace
+    contract validation report artifact (normative)".
 
 Unexpected contract-backed outputs (fail closed; normative):
 
@@ -1261,7 +1261,7 @@ Notes:
 
 - The semantic hash MUST be recorded in canonical digest string form: `sha256:<lowercase_hex>` (see
   `025_data_contracts.md`, "Canonical SHA-256 digest strings").
-- Used by plan draft provenance: `manifest.extensions.operator_interface.plan_draft_sha256`.  
+- Used by plan draft provenance: `manifest.extensions.operator_interface.plan_draft_sha256`.
 - Raw YAML bytes MAY still be preserved in the run bundle for auditability. The semantic hash is the
   deterministic basis for comparisons/trending that should ignore YAML formatting differences.
 
@@ -1367,8 +1367,8 @@ Max input size basis (normative):
 
 Note (non-normative): Some runtimes represent strings as UTF-16 code units (notably JS/TS). When
 enforcing `max_input_chars`, count Unicode scalar values (code points), not UTF-16 code units. In
-JS/TS, `.length` reports UTF-16 code units; use code point iteration (for example `for (const ch of
-s) { ... }`) or equivalent.
+JS/TS, `.length` reports UTF-16 code units; use code point iteration (for example
+`for (const ch of s) { ... }`) or equivalent.
 
 ### Outputs
 
@@ -1522,12 +1522,12 @@ The following existing tokens are legacy aliases mapped into this contract (no r
 
 Inventory completeness (normative):
 
-- The parser module inventory above is intended to be complete for v0.1 for all parser modules
-  whose vector fixtures are declared REQUIRED under `100_test_strategy_ci.md`, "Cross-cutting:
-  parser modules".
+- The parser module inventory above is intended to be complete for v0.1 for all parser modules whose
+  vector fixtures are declared REQUIRED under `100_test_strategy_ci.md`, "Cross-cutting: parser
+  modules".
 - Content CI MUST fail the `content.lint` gate if any required parser module is missing from this
   inventory (see `parser_module_inventory_sync` in "Verification and CI conformance").
-  
+
 Tooling integration (normative):
 
 - Lint tooling and CI harnesses MUST invoke the module implementations governed by this contract
@@ -1797,7 +1797,7 @@ Conformance suite → fixtures mapping (v0.1):
 | YAML semantic hashing (`yaml_semantic_sha256_v1`) | `tests/fixtures/yaml_semantic_sha256_v1/vectors.json`                              | `yaml_semantic_sha256_v1`                                                                                                                                                                    | `content.lint`      |
 | Parser module inventory sync                      | Repo-local: `026_contract_spine.md`, `100_test_strategy_ci.md`                     | `parser_module_inventory_sync` (repo-local check)                                                                                                                                            | `content.lint`      |
 | Publisher semantics (`pa.publisher.v1`)           | `tests/fixtures/publisher/v1/`                                                     | `publisher_publish_gate_no_partial_promotion`, `publisher_publish_gate_success_atomic_promotion`, `publisher_crash_mid_promotion_reconciliation`, `publisher_canonical_json_and_jsonl_bytes` | `content.lint`      |
-| Publisher semantics (`pa.publisher.workspace.v1`) | `tests/fixtures/publisher/workspace/v1/`                                           | `workspace_publisher_atomic_dir_publish_no_partial`, `workspace_publisher_atomic_file_publish_no_partial`, `workspace_validation_report_path_rule`                                                 | `content.lint`      |
+| Publisher semantics (`pa.publisher.workspace.v1`) | `tests/fixtures/publisher/workspace/v1/`                                           | `workspace_publisher_atomic_dir_publish_no_partial`, `workspace_publisher_atomic_file_publish_no_partial`, `workspace_validation_report_path_rule`                                           | `content.lint`      |
 
 ### Required conformance tests (minimum set)
 
@@ -1816,8 +1816,8 @@ The Contract Spine gate MUST include tests that cover at minimum:
     - any `yaml_document` binding MUST have `stage_owner == "orchestrator"`
     - any `yaml_document` binding MUST bind under `inputs/`
 - Parser module inventory sync:
-  - The parser module inventory in `026_contract_spine.md` ("Parser module inventory") MUST
-    include every `pa.*` parser module token whose vector fixtures are declared REQUIRED under
+  - The parser module inventory in `026_contract_spine.md` ("Parser module inventory") MUST include
+    every `pa.*` parser module token whose vector fixtures are declared REQUIRED under
     `100_test_strategy_ci.md`, "Cross-cutting: parser modules".
   - The check MUST ignore legacy alias tokens (`glob_v1`, `sigma_ast_v1`).
 - Expected outputs determinism:

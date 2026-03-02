@@ -525,12 +525,15 @@ unrelated content at these paths, and v0.1 tooling MUST ignore their presence wh
 
 Notes:
 
-- v0.1 tooling MUST NOT require `state/`, `artifacts/`, `logs/`, `plans/`, `exports/`, or `cache/` to exist unless the invoked feature explicitly uses that directory.
+- v0.1 tooling MUST NOT require `state/`, `artifacts/`, `logs/`, `plans/`, `exports/`, or `cache/`
+  to exist unless the invoked feature explicitly uses that directory.
 - For the authoritative default scope profile (including which v0.2 seams are inert by default), see
   the project charter: [Target contract surface and scope profile][charter-scope].
 - `runs/` is the only directory whose contents are treated as authoritative pipeline outputs.
 - `runs/.locks/` is reserved for lockfiles and is not a run directory; scanners MUST ignore it.
-- `state/`, `artifacts/`, `exports/`, `cache/`, `logs/`, and `plans/` MUST NOT be treated as run artifact roots and MUST NOT be included in run-bundle export packaging unless a spec explicitly says so.
+- `state/`, `artifacts/`, `exports/`, `cache/`, `logs/`, and `plans/` MUST NOT be treated as run
+  artifact roots and MUST NOT be included in run-bundle export packaging unless a spec explicitly
+  says so.
 
 ### Reserved exports namespaces
 
@@ -557,10 +560,10 @@ Reserved export staging root (v0.1+; reserved):
     location (see `045_storage_formats.md`, "Workspace-global export staging directories").
   - Producers SHOULD namespace staging by export kind (for example:
     `<workspace_root>/exports/.staging/datasets/<dataset_id>/<dataset_version>/`).
-  - Producers MUST NOT create per-product staging directories under the final export namespaces
-    (for example `exports/datasets/.staging/**` or `exports/baselines/.staging/**`).
-  - Staging directories MUST be treated as non-authoritative and safe to delete when no export is
-    in progress.
+  - Producers MUST NOT create per-product staging directories under the final export namespaces (for
+    example `exports/datasets/.staging/**` or `exports/baselines/.staging/**`).
+  - Staging directories MUST be treated as non-authoritative and safe to delete when no export is in
+    progress.
 
 Mechanical enforcement guidance (non-normative):
 
@@ -588,10 +591,10 @@ Normative requirements:
   - `<workspace_root>/artifacts/` (optional; for CI and other workspace-local, contract-backed
     artifacts such as findings/fixtures and connector outputs; see
     `docs/contracts/workspace_contract_registry.json`)
-  - `<workspace_root>/state/` and `<workspace_root>/logs/` (reserved control-plane roots; v0.1
-    MAY write the contract-backed control-plane artifacts defined by the workspace registry,
-    including `state/run_registry.json`, `logs/ui_audit.jsonl`, and `logs/contract_validation/**`.
-    Other subpaths remain reserved and SHOULD be left untouched when unused.)
+  - `<workspace_root>/state/` and `<workspace_root>/logs/` (reserved control-plane roots; v0.1 MAY
+    write the contract-backed control-plane artifacts defined by the workspace registry, including
+    `state/run_registry.json`, `logs/ui_audit.jsonl`, and `logs/contract_validation/**`. Other
+    subpaths remain reserved and SHOULD be left untouched when unused.)
 
 - Tooling MUST NOT create or modify other workspace-root siblings as a side effect of a run.
 

@@ -109,15 +109,15 @@ or accepting Operator API calls:
 Note (v0.1): the one-shot CLI MUST treat these directory names as reserved; only `runs/` is required
 to exist in v0.1.
 
-| Path (workspace-root relative) | Purpose                                               | Sensitivity | Default perms |
-| ------------------------------ | ----------------------------------------------------- | ----------- | ------------- |
-| `runs/`                        | Run bundles (pipeline outputs; authoritative)         | mixed       | 0750          |
-| `state/`                       | Secrets + durable control-plane state                 | high        | 0700          |
-| `logs/`                        | Appliance-local logs (including `ui_audit.jsonl`)     | medium      | 0750          |
-| `artifacts/`                   | CI/workspace artifacts (findings/fixtures, connectors)| medium      | 0750          |
-| `plans/`                       | Plan drafts + draft metadata (OI-authored)            | medium      | 0700          |
-| `exports/`                     | Derived exports (archives + `export_manifest.json`)   | high        | 0700          |
-| `cache/`                       | Cross-run caches and derived state (explicitly gated) | medium      | 0700          |
+| Path (workspace-root relative) | Purpose                                                | Sensitivity | Default perms |
+| ------------------------------ | ------------------------------------------------------ | ----------- | ------------- |
+| `runs/`                        | Run bundles (pipeline outputs; authoritative)          | mixed       | 0750          |
+| `state/`                       | Secrets + durable control-plane state                  | high        | 0700          |
+| `logs/`                        | Appliance-local logs (including `ui_audit.jsonl`)      | medium      | 0750          |
+| `artifacts/`                   | CI/workspace artifacts (findings/fixtures, connectors) | medium      | 0750          |
+| `plans/`                       | Plan drafts + draft metadata (OI-authored)             | medium      | 0700          |
+| `exports/`                     | Derived exports (archives + `export_manifest.json`)    | high        | 0700          |
+| `cache/`                       | Cross-run caches and derived state (explicitly gated)  | medium      | 0700          |
 
 Notes:
 
@@ -125,8 +125,8 @@ Notes:
 - `state/` MUST NOT be served by the artifact-serving endpoints.
 - `exports/` MUST NOT be served by the run artifact endpoints; exports are accessed only via
   explicit export download endpoints and policy gates.
-- `artifacts/` MUST NOT be served by the run artifact endpoints; it MAY be served only via
-  explicit findings/CI endpoints with their own policy gates.
+- `artifacts/` MUST NOT be served by the run artifact endpoints; it MAY be served only via explicit
+  findings/CI endpoints with their own policy gates.
 - `exports/datasets/` is a reserved export namespace for dataset releases (see
   `085_golden_datasets.md`) and MUST NOT be served by the run artifact endpoints.
 - `cache/` MUST NOT be served by the artifact-serving endpoints.
@@ -926,12 +926,13 @@ Exports MUST follow the orchestrator `export` verb semantics:
 **Crash-safe staging + publish (normative):**
 
 - Export outputs under `exports/**` MUST be staged under `<workspace_root>/exports/.staging/**` and
-  published by atomic directory rename into the final export location (see
-  `045_storage_formats.md`, "Workspace-global export staging directories").
+  published by atomic directory rename into the final export location (see `045_storage_formats.md`,
+  "Workspace-global export staging directories").
 - Implementations MUST NOT use per-product staging directories under the final export namespaces
   (for example `exports/datasets/.staging/**`).
 - Implementations SHOULD use `pa.publisher.workspace.v1` for this publish step (see
-  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics (pa.publisher.workspace.v1)").
+  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics
+  (pa.publisher.workspace.v1)").
 
 **Contract validation + failure observability (normative):**
 
@@ -985,7 +986,8 @@ when used for a run.
   - `draft.json` (metadata)
 - `draft.json` MUST include at minimum:
   - `draft_id` (UUID)
-  - `plan_sha256` (string; lowercase hex; computed as specified above for the current `plan.yaml`; corresponds to `yaml_semantic_sha256_v1(plan.yaml_bytes)` in `026_contract_spine.md`)
+  - `plan_sha256` (string; lowercase hex; computed as specified above for the current `plan.yaml`;
+    corresponds to `yaml_semantic_sha256_v1(plan.yaml_bytes)` in `026_contract_spine.md`)
   - `created_at_utc` (RFC3339)
   - `updated_at_utc` (RFC3339)
 - Writes to `plan.yaml` and `draft.json` MUST use write-to-temp + atomic rename.
@@ -1696,11 +1698,11 @@ that adopt it:
    The following are workspace-root artifacts (not run-relative). They MUST NOT be silently made
    run-relative without updating the rest of the operator model:
 
-   | Artifact            | Workspace location (normative)                      | `contract_id`         | `schema_path`                                | `validation_mode` |
-   | ------------------- | --------------------------------------------------- | --------------------- | -------------------------------------------- | ----------------- |
-   | Global UI audit log | `logs/ui_audit.jsonl`                               | `audit_event` (reuse) | `docs/contracts/audit_event.schema.json`     | `jsonl_lines`     |
-   | Run registry        | `state/run_registry.json`                           | `run_registry`        | `docs/contracts/run_registry.schema.json`    | `json_document`   |
-   | Export manifest     | `exports/<run_id>/<export_id>/export_manifest.json` | `export_manifest`     | `docs/contracts/export_manifest.schema.json` | `json_document`   |
+   | Artifact                    | Workspace location (normative)                                    | `contract_id`                          | `schema_path`                                                     | `validation_mode` |
+   | --------------------------- | ----------------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------- | ----------------- |
+   | Global UI audit log         | `logs/ui_audit.jsonl`                                             | `audit_event` (reuse)                  | `docs/contracts/audit_event.schema.json`                          | `jsonl_lines`     |
+   | Run registry                | `state/run_registry.json`                                         | `run_registry`                         | `docs/contracts/run_registry.schema.json`                         | `json_document`   |
+   | Export manifest             | `exports/<run_id>/<export_id>/export_manifest.json`               | `export_manifest`                      | `docs/contracts/export_manifest.schema.json`                      | `json_document`   |
    | Workspace validation report | `logs/contract_validation/<target_path>.contract_validation.json` | `workspace_contract_validation_report` | `docs/contracts/workspace_contract_validation_report.schema.json` | `json_document`   |
 
    **Test hooks (CI).**
@@ -1726,23 +1728,23 @@ that adopt it:
 
 1. **Workspace-global artifacts (workspace-root validation; resolved)**
 
-  `logs/ui_audit.jsonl`, `state/run_registry.json`, `artifacts/**`, and `exports/**` outputs are
-  workspace-root artifacts (not run-relative).
+`logs/ui_audit.jsonl`, `state/run_registry.json`, `artifacts/**`, and `exports/**` outputs are
+workspace-root artifacts (not run-relative).
 
-  Resolution (normative):
+Resolution (normative):
 
-  - Contract-backed workspace artifacts MUST be validated against the workspace contract registry
-    (`docs/contracts/workspace_contract_registry.json`, `registry_kind="workspace"`).
-  - Publication MUST follow `pa.publisher.workspace.v1` semantics, including:
-    - directory staging + rename for `exports/**` via `exports/.staging/**`,
-    - atomic replace for single-file artifacts under `state/**` and `artifacts/**`, and
-    - append + `fsync()` for `logs/ui_audit.jsonl`.
-  - On contract validation failure, the implementation MUST fail closed and MUST emit the
-     workspace contract validation report defined in `025_data_contracts.md`.
-  
-  Constraint (normative):
-  
-   - Run-bundle publish-gate behavior (`pa.publisher.v1`) remains unchanged.
+- Contract-backed workspace artifacts MUST be validated against the workspace contract registry
+  (`docs/contracts/workspace_contract_registry.json`, `registry_kind="workspace"`).
+- Publication MUST follow `pa.publisher.workspace.v1` semantics, including:
+  - directory staging + rename for `exports/**` via `exports/.staging/**`,
+  - atomic replace for single-file artifacts under `state/**` and `artifacts/**`, and
+  - append + `fsync()` for `logs/ui_audit.jsonl`.
+- On contract validation failure, the implementation MUST fail closed and MUST emit the workspace
+  contract validation report defined in `025_data_contracts.md`.
+
+Constraint (normative):
+
+- Run-bundle publish-gate behavior (`pa.publisher.v1`) remains unchanged.
 
 1. **Asciinema playback (required; locally bundled assets + fallback)**
 

@@ -210,10 +210,10 @@ Purpose (normative):
   - Contract registry linting (v0.1):
     - `docs/contracts/contract_registry.json` (target kind `contract-registry`), and
     - `docs/contracts/workspace_contract_registry.json` (target kind `workspace-contract-registry`).
-    - This gate MUST fail closed when either registry violates the `pass_id` requirements
-      introduced in `025_data_contracts.md` (grammar + `stage_owner` prefix) or when the run-bundle
-      registry omits the required `logs/pass_manifest.json` binding.
-      
+    - This gate MUST fail closed when either registry violates the `pass_id` requirements introduced
+      in `025_data_contracts.md` (grammar + `stage_owner` prefix) or when the run-bundle registry
+      omits the required `logs/pass_manifest.json` binding.
+
 Required outputs (workspace-root):
 
 - `artifacts/findings/content.lint.findings.v1.json`
@@ -400,6 +400,7 @@ Behavior (normative):
 
    - Each discovered `logs/contract_validation/*.json` report MUST be schema-validated against
      `contract_id="contract_validation_report"` using `docs/contracts/contract_registry.json`.
+
    - If any report is missing required fields or is schema-invalid, the gate MUST emit exactly one
      `fatal` finding per invalid report with:
 
@@ -422,6 +423,7 @@ Behavior (normative):
    - If the stage outcome surface contains a failed stage whose `reason_code` indicates contract
      validation invalid (`contract_validation_failed` or a stage-scoped `*_invalid` code), CI MUST
      expect a corresponding report at `logs/contract_validation/<stage_id>.json`.
+
    - Any missing expected report MUST emit exactly one `error` finding per missing stage id with:
 
      - `severity="error"`
@@ -435,13 +437,14 @@ Behavior (normative):
      - `message="Publish-gate contract validation report missing for failed stage"`
      - `evidence.details` MUST include:
        - `contract_validation_stage_id` (string; equals `<stage_id>`)
-       - `contract_validation_report_path` (run-relative;
-         equals `"logs/contract_validation/" + <stage_id> + ".json"`)
+       - `contract_validation_report_path` (run-relative; equals
+         `"logs/contract_validation/" + <stage_id> + ".json"`)
 
 1. Pass manifest presence and schema validity:
 
    - If `runs/<run_id>/manifest.json` is present (run bundle exists), the gate MUST require
      `runs/<run_id>/logs/pass_manifest.json` to be present.
+
      - On violation, emit an `error` finding with:
        - `reason_code="pass_manifest_missing"`
        - `rule_id="publish_gate.pass_manifest"`
@@ -451,6 +454,7 @@ Behavior (normative):
 
    - When present, `logs/pass_manifest.json` MUST be schema-validated against contract
      `pass_manifest`.
+
      - If schema-invalid, emit a `fatal` finding with:
        - `reason_code="pass_manifest_schema_invalid"`
        - `rule_id="publish_gate.pass_manifest"`
@@ -461,6 +465,7 @@ Behavior (normative):
 1. Pass manifest consistency (normative):
 
    - `pass_manifest.run_id` MUST equal `manifest.run_id`.
+
      - On mismatch, emit an `error` finding with:
        - `reason_code="pass_manifest_run_id_mismatch"`
        - `rule_id="publish_gate.pass_manifest"`
@@ -468,12 +473,13 @@ Behavior (normative):
        - `subject.stable_id="logs/pass_manifest.json"`
 
    - The gate MUST validate that `pass_manifest.entries[]` is a complete and correct attribution
-     index for contract-backed artifacts in the run bundle (see `026_contract_spine.md`,
-     "Pass manifest", "Deterministic generation"):
+     index for contract-backed artifacts in the run bundle (see `026_contract_spine.md`, "Pass
+     manifest", "Deterministic generation"):
 
-     - For every contract-backed artifact present as a regular file in `runs/<run_id>/`
-       (excluding `logs/pass_manifest.json`), `pass_manifest.entries[]` MUST contain exactly one
-       entry with `artifact_path` equal to that run-relative path.
+     - For every contract-backed artifact present as a regular file in `runs/<run_id>/` (excluding
+       `logs/pass_manifest.json`), `pass_manifest.entries[]` MUST contain exactly one entry with
+       `artifact_path` equal to that run-relative path.
+
        - Missing entry MUST emit an `error` finding with:
          - `reason_code="pass_manifest_entry_missing"`
          - `rule_id="publish_gate.pass_manifest"`
@@ -482,6 +488,7 @@ Behavior (normative):
 
      - For every entry in `pass_manifest.entries[]`, the referenced `artifact_path` MUST exist as a
        regular file in the run bundle.
+
        - Orphan entry MUST emit an `error` finding with:
          - `reason_code="pass_manifest_entry_orphaned"`
          - `rule_id="publish_gate.pass_manifest"`
@@ -491,6 +498,7 @@ Behavior (normative):
      - For each entry, the tuple `(contract_id, stage_owner, pass_id, validation_mode when present)`
        MUST match the resolved binding metadata from `docs/contracts/contract_registry.json` using
        `glob_v1` rules.
+
        - On mismatch, emit an `error` finding with:
          - `reason_code="pass_manifest_binding_mismatch"`
          - `rule_id="publish_gate.pass_manifest"`
@@ -500,6 +508,7 @@ Behavior (normative):
          - `evidence.details.observed=<manifest_entry_subset>` (RECOMMENDED)
 
      - `entries[]` MUST be sorted by `artifact_path` ascending.
+
        - On violation, emit an `error` finding with:
          - `reason_code="pass_manifest_ordering_invalid"`
          - `rule_id="publish_gate.pass_manifest"`

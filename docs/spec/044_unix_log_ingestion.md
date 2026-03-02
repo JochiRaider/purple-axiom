@@ -481,9 +481,9 @@ RFC3164 year inference algorithm (v1; normative):
 
 1. Parse `month`, `day`, and `time` from the RFC3164 timestamp.
    - Month abbreviations are English and case-insensitive: `Jan`..`Dec`.
-2. Convert `run_end_time_utc` into `assumed_timezone` to obtain `run_end_local`.
-3. Candidate years are `run_end_local.year` and `run_end_local.year - 1`.
-4. For each candidate year, construct a local datetime `candidate_local` with the parsed
+1. Convert `run_end_time_utc` into `assumed_timezone` to obtain `run_end_local`.
+1. Candidate years are `run_end_local.year` and `run_end_local.year - 1`.
+1. For each candidate year, construct a local datetime `candidate_local` with the parsed
    month/day/time:
    - If the local datetime is invalid for that year (for example Feb 29 in a non-leap year), skip
      the candidate.
@@ -492,9 +492,9 @@ RFC3164 year inference algorithm (v1; normative):
    - If the local datetime is ambiguous due to a DST fallback, evaluate both possibilities and
      select the one whose UTC instant is the greatest instant `<= run_end_time_utc`. If both are
      `> run_end_time_utc`, select the smaller UTC instant (deterministic tie-break).
-5. Select the candidate year whose UTC instant is the greatest instant `<= run_end_time_utc`.
+1. Select the candidate year whose UTC instant is the greatest instant `<= run_end_time_utc`.
    - If no candidate qualifies, parsing MUST fail closed with `invalid_timestamp`.
-6. Set `event_time_epoch_ms` from the selected UTC instant.
+1. Set `event_time_epoch_ms` from the selected UTC instant.
 
 **Equivalence requirement (normative):**
 

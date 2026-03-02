@@ -139,16 +139,16 @@ Workspace publish-gate and contract validation (normative):
 
 - Export packagers (dataset releases, baseline packages, run exports, and other export products)
   MUST publish via the workspace publish-gate semantics `pa.publisher.workspace.v1` (see
-  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics (pa.publisher.workspace.v1)"
-  and `026_contract_spine.md`, "WorkspacePublishGate").
+  `025_data_contracts.md`, "Producer tooling: workspace publisher semantics
+  (pa.publisher.workspace.v1)" and `026_contract_spine.md`, "WorkspacePublishGate").
 - Before the final atomic rename into `exports/**`, export packagers MUST validate any
   **contract-backed export metadata files** present in the staged output (for example
   `export_manifest.json`, dataset manifests/splits, baseline package manifests) against the
   workspace contract registry (`docs/contracts/workspace_contract_registry.json`).
 - On contract validation failure, the final export output at `exports/**` MUST NOT be created or
-  modified, and the packager MUST emit the workspace contract validation report at the
-  deterministic location under `logs/contract_validation/**` as defined in `025_data_contracts.md`
-  ("Workspace contract validation report artifact (normative)").
+  modified, and the packager MUST emit the workspace contract validation report at the deterministic
+  location under `logs/contract_validation/**` as defined in `025_data_contracts.md` ("Workspace
+  contract validation report artifact (normative)").
 
 ### Regression baseline reference and outputs (v0.1; optional when enabled)
 

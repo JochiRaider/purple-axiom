@@ -41,7 +41,7 @@ invariants that cannot be expressed in JSON Schema alone.
         - [Grammar (v1)](#grammar-v1)
         - [Stability rules (normative)](#stability-rules-normative)
         - [Registry invariants (normative)](#registry-invariants-normative)
-      - [Glob semantics (glob\_v1) (normative)](#glob-semantics-glob_v1-normative)
+      - [Glob semantics (glob_v1) (normative)](#glob-semantics-glob_v1-normative)
       - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
       - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
       - [Contract version constant (normative)](#contract-version-constant-normative)
@@ -107,7 +107,7 @@ invariants that cannot be expressed in JSON Schema alone.
       - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
     - [Measurement layers for conclusions (triage taxonomy)](#measurement-layers-for-conclusions-triage-taxonomy)
     - [Run manifest](#run-manifest)
-    - [Run results summary (run\_results.json)](#run-results-summary-run_resultsjson)
+    - [Run results summary (run_results.json)](#run-results-summary-run_resultsjson)
     - [Ground truth timeline](#ground-truth-timeline)
     - [Stable action identity](#stable-action-identity)
     - [Inputs and reproducible hashing](#inputs-and-reproducible-hashing)
@@ -1053,9 +1053,10 @@ Minimum error fields (per error):
 - `line_number`: REQUIRED for JSONL validation errors and JSONL parse errors (1-indexed); omitted
   otherwise.
 
-Note (normative): When validating workspace-root artifacts via `docs/contracts/workspace_contract_registry.json`,
-these same error shape, ordering, and capping rules apply, but `artifact_path` values MUST be
-workspace-root-relative and `contract_id` values MUST be drawn from the workspace contract registry.
+Note (normative): When validating workspace-root artifacts via
+`docs/contracts/workspace_contract_registry.json`, these same error shape, ordering, and capping
+rules apply, but `artifact_path` values MUST be workspace-root-relative and `contract_id` values
+MUST be drawn from the workspace contract registry.
 
 JSONL parse failures (normative):
 
@@ -1244,9 +1245,11 @@ Derivation algorithm:
      1. If `error.error_code` is present, `reason_code = error.error_code`.
      1. Else if `error.keyword` is present:
         - Let `k = error.keyword` (string).
+
         - Let `k_token` be derived deterministically as:
-          1. Scan `k` left-to-right. Before any ASCII uppercase letter `[A-Z]` that is preceded by an
-             ASCII lowercase letter `[a-z]` or digit `[0-9]`, insert a single underscore `_`.
+
+          1. Scan `k` left-to-right. Before any ASCII uppercase letter `[A-Z]` that is preceded by
+             an ASCII lowercase letter `[a-z]` or digit `[0-9]`, insert a single underscore `_`.
           1. Convert ASCII letters to lowercase.
           1. Replace any character not in `[a-z0-9_]` with `_`.
           1. Collapse any run of `_` into a single `_`.
@@ -1255,6 +1258,7 @@ Derivation algorithm:
 
         - If `len(k_token) > 118`, set `k_token = substr(k_token, 0, 118)` (to keep
           `"jsonschema_" + k_token` within 128 chars).
+
         - Set `reason_code = "jsonschema_" + k_token`.
      1. Else if `error.line_number` is present AND `error.schema_path == ""`,
         `reason_code = "jsonl_parse_error"`.
@@ -1317,8 +1321,8 @@ surface:
 
 ### Workspace contract validation report artifact (normative)
 
-When `pa.publisher.workspace.v1` fails contract validation for workspace-root, contract-backed outputs,
-it MUST emit a deterministic, contract-backed workspace validation report.
+When `pa.publisher.workspace.v1` fails contract validation for workspace-root, contract-backed
+outputs, it MUST emit a deterministic, contract-backed workspace validation report.
 
 This report is distinct from the run-bundle `contract_validation_report` contract because it is not
 scoped to a `(run_id, stage_id)` pair.
@@ -1346,6 +1350,7 @@ Location (deterministic; normative):
 
 - `target_path` is the final publish target path passed to the workspace publisher (file or
   directory root).
+
 - The report path is workspace-root-relative.
 
 Examples (normative):
@@ -1362,12 +1367,14 @@ Examples (normative):
 Report schema requirements (normative):
 
 - Identity fields:
+
   - `registry_kind` MUST equal `"workspace"`.
   - `workspace_registry_version` MUST equal the `registry_version` of the workspace contract
     registry instance used for validation.
   - `target_path` MUST equal the workspace-root-relative final publish target (no trailing `/`).
 
 - Error list semantics:
+
   - For each invalid artifact, the report MUST include a bounded, deterministically ordered list of
     errors that obeys "Deterministic error ordering and error caps (normative)".
   - All paths in the report (including `target_path` and `errors[].artifact_path`) MUST be
@@ -1955,7 +1962,8 @@ on-disk byte representation of contract-backed JSON and JSONL artifacts publishe
 This section defines the canonical mechanism for producing **contract-backed workspace artifacts**
 (workspace-root-relative artifacts validated via `docs/contracts/workspace_contract_registry.json`).
 It complements the run-bundle publisher (`pa.publisher.v1`) by providing equivalent publish-gate
-semantics for workspace-root outputs (exports, control-plane state, CI artifacts, and workspace logs).
+semantics for workspace-root outputs (exports, control-plane state, CI artifacts, and workspace
+logs).
 
 ### Reference workspace publisher SDK requirement (normative)
 
@@ -1984,8 +1992,8 @@ Inputs (minimum):
 
 Registry resolution and validation (normative):
 
-- The publisher MUST load the workspace contract registry (`registry_kind="workspace"`) and
-  resolve each `expected_outputs[].path`.
+- The publisher MUST load the workspace contract registry (`registry_kind="workspace"`) and resolve
+  each `expected_outputs[].path`.
 - If `resolve(path)` yields a binding, then:
   - `expected_outputs[].contract_id` MUST be non-null and MUST equal the binding’s `contract_id`.
   - the publisher MUST validate the output bytes using the binding’s `validation_mode` and schema.
@@ -2030,8 +2038,8 @@ Publish mechanics (normative):
 
 Failure behavior and observability (normative):
 
-- The publisher MUST validate contract-backed outputs against the workspace contract registry
-  before the final publish step (directory rename, atomic replace, or append).
+- The publisher MUST validate contract-backed outputs against the workspace contract registry before
+  the final publish step (directory rename, atomic replace, or append).
 - On any contract validation failure (presence and/or schema):
   - final outputs at `target_path` MUST NOT be created or modified (no partial publish), and
   - the publisher MUST write a workspace contract validation report at the deterministic path
@@ -2893,15 +2901,19 @@ Consumer/compatibility note (normative):
 Plan model provenance (v0.2+; normative when implemented):
 
 - `plan.model_version` (string): the plan execution model version used to compile the run plan.
+
   - v0.1: absent (implicit single-action plan).
   - When `plan/expanded_graph.json` is present, this field MUST be present and MUST be a semantic
     version string (example: `0.2.0`).
+
 - `plan.expanded_graph_sha256` (string): SHA-256 of the exact bytes of `plan/expanded_graph.json` as
   published in the run bundle.
+
   - Purpose: detect plan compilation drift within a run bundle and provide an audit pointer for
     deterministic `action_id` generation.
 
 - Draft plan snapshot provenance (v0.2+; when plan drafts are used):
+
   - `manifest.extensions.operator_interface.plan_draft_path` (string): run-relative path to the
     pinned plan draft snapshot (`inputs/plan_draft.yaml`).
   - `manifest.extensions.operator_interface.plan_draft_sha256` (string): semantic YAML digest string
@@ -4118,9 +4130,9 @@ Key semantics (normative when produced):
 
 Optional compiled provenance envelope (normative when present):
 
-- When the Sigma bridge compiled plan cache is enabled (see `detection.sigma.bridge.compile_cache_dir`),
-  compiled plans MUST include `compiled_provenance` so cache keys and integrity hashes are
-  verifiable offline.
+- When the Sigma bridge compiled plan cache is enabled (see
+  `detection.sigma.bridge.compile_cache_dir`), compiled plans MUST include `compiled_provenance` so
+  cache keys and integrity hashes are verifiable offline.
 
 - Compiled plans MAY include a top-level `compiled_provenance` object using the shared shape defined
   in "Compiled provenance envelope (shared shape)".
@@ -4630,8 +4642,8 @@ Minimum schema (v0.2):
       "Glob semantics (glob_v1) (normative)".
     - v0.2: MUST equal `inputs/plan_draft.yaml`.
   - `plan_draft_sha256` (string; required):
-    - MUST be a canonical SHA-256 digest string: `sha256:<64 lowercase hex>` (see "Canonical
-      SHA-256 digest strings (normative)").
+    - MUST be a canonical SHA-256 digest string: `sha256:<64 lowercase hex>` (see "Canonical SHA-256
+      digest strings (normative)").
     - MUST equal the semantic YAML digest of the snapshotted plan draft:
       - `plan_draft_sha256 == "sha256:" + yaml_semantic_sha256_v1(<bytes of inputs/plan_draft.yaml>)`
         where `yaml_semantic_sha256_v1` is defined in `026_contract_spine.md`.

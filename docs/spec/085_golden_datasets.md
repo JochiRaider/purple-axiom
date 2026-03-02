@@ -508,18 +508,18 @@ release producers MUST publish dataset directories using crash-safe staging + at
 Requirements (normative):
 
 1. Dataset release outputs MUST be staged under:.
-2. The final dataset directory MUST be published by atomic rename of the staged directory into:
+1. The final dataset directory MUST be published by atomic rename of the staged directory into:
    - `<workspace_root>/exports/datasets/<dataset_id>/<dataset_version>/`
-3. Producers MUST validate contract-backed dataset release artifacts against the workspace contract
+1. Producers MUST validate contract-backed dataset release artifacts against the workspace contract
    registry before the final rename (minimum required artifacts):
    - `dataset_manifest.json`
    - `splits/split_config.json`
    - `splits/split_assignments.jsonl`
-4. Producers MUST publish via `pa.publisher.workspace.v1` semantics:
+1. Producers MUST publish via `pa.publisher.workspace.v1` semantics:
    - No partial publish on validation failure (no final directory mutation).
    - On contract validation failure, producers MUST emit the workspace contract validation report
      at:
-     - `logs/contract_validation/exports/datasets/<dataset_id>/<dataset_version>.contract_validation.json
+     - \`logs/contract_validation/exports/datasets/\<dataset_id>/\<dataset_version>.contract_validation.json
 
 Staging cleanup (normative):
 

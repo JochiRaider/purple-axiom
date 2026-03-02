@@ -899,7 +899,8 @@ Common keys:
     - When `true`, any fallback use MUST be accounted for via `extensions.bridge.fallback_used=true`
       in detection outputs.
     - `compile_cache_dir` (optional): workspace-root relative path under `<workspace_root>/cache/`
-      for cached compiled plans keyed by (rule hash, mapping pack version, backend version)
+      for cached compiled plans keyed by `compiled_provenance.compilation_unit_sha256`
+      (content-addressed)
       - `compile_cache_dir` MUST NOT be an absolute path and MUST resolve under
         `<workspace_root>/cache/` (see "Workspace root and filesystem paths").
       - If `compile_cache_dir` points to a location reused across runs, it is a cross-run cache and

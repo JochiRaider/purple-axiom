@@ -86,67 +86,78 @@
       "artifact_glob": "logs/ui_audit.jsonl",
       "contract_id": "audit_event",
       "stage_owner": "orchestrator",
-      "validation_mode": "jsonl_lines"
-    },
+      "validation_mode": "jsonl_lines",
+      "pass_id": "orchestrator.workspace_logs.ui_audit.emit"
+     },
     {
       "artifact_glob": "state/run_registry.json",
       "contract_id": "run_registry",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.state.run_registry.emit"
     },
     {
       "artifact_glob": "exports/*/*/export_manifest.json",
       "contract_id": "export_manifest",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.exports.export_manifest.emit"
     },
     {
       "artifact_glob": "exports/datasets/*/*/dataset_manifest.json",
       "contract_id": "dataset_manifest",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.exports.dataset_manifest.emit"
     },
     {
       "artifact_glob": "exports/datasets/*/*/splits/split_config.json",
       "contract_id": "dataset_splits_config",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.exports.dataset_splits_config.emit"
     },
     {
       "artifact_glob": "exports/datasets/*/*/splits/split_assignments.jsonl",
       "contract_id": "dataset_split_assignment",
       "stage_owner": "orchestrator",
-      "validation_mode": "jsonl_lines"
+      "validation_mode": "jsonl_lines",
+      "pass_id": "orchestrator.exports.dataset_split_assignment.emit"
     },
     {
       "artifact_glob": "exports/baselines/*/*/baseline_package_manifest.json",
       "contract_id": "baseline_detection_package_manifest",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.exports.baseline_package_manifest.emit"
     },
     {
       "artifact_glob": "artifacts/findings/*.findings.v1.json",
       "contract_id": "ci_gate_findings",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.ci_gate_findings.emit"
     },
     {
       "artifact_glob": "artifacts/fixtures/fixture_registry.v1.json",
       "contract_id": "fixture_registry",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.fixtures.fixture_registry.emit"
     },
     {
       "artifact_glob": "artifacts/fixtures/baseline_allowlist.v1.json",
       "contract_id": "baseline_allowlist",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.fixtures.baseline_allowlist.emit"
     },
     {
       "artifact_glob": "artifacts/connectors/*.connector_result.v1.json",
       "contract_id": "connector_result",
       "stage_owner": "orchestrator",
-      "validation_mode": "json_document"
+      "validation_mode": "json_document",
+      "pass_id": "orchestrator.connectors.connector_result.emit"
     }
   ],
   "notes": [

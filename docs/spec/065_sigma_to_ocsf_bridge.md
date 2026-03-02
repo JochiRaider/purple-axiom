@@ -1014,6 +1014,12 @@ These artifacts MUST conform to the data contracts specification, including cano
       rule bytes per the data contracts specification; see canonical rule hashing guidance in
       `060_detection_sigma.md`)
     - `mapping_pack_sha256` (`sha256:<lowercase_hex>`)
+    - `compiled_provenance` (object, optional): compiled artifact provenance envelope.
+      - When present, it MUST follow the shared shape defined in `025_data_contracts.md` ("Compiled
+        provenance envelope (shared shape)").
+      - `compiled_provenance.output_basis` MUST equal `artifact_without_compiled_provenance_v1`.
+      - `compiled_provenance.output_payload_sha256` MUST verify against the plan content with
+        `compiled_provenance` removed.
     - `executable` (boolean)
     - `non_executable_reason` when `executable=false`
 

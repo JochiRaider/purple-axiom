@@ -864,6 +864,36 @@ For contract-backed JSON artifacts:
   - no BOM
   - no trailing newline
 
+### Payload hashing basis for embedded compiled provenance (normative)
+
+Some contract-backed JSON artifacts embed a `compiled_provenance` object that contains integrity
+hashes for the surrounding artifact. To avoid self-referential hashes, the hash basis MUST be
+explicit.
+
+Define a basis function:
+
+- `artifact_without_compiled_provenance_v1(obj)`:
+
+  - Input: a JSON object.
+  - Output: the same object with the top-level member `compiled_provenance` removed, if present.
+    - Only the top-level key is removed; nested keys named `compiled_provenance` are not special.
+
+If an artifact root is not a JSON object, this basis is undefined and MUST NOT be used.
+
+Output payload hash (normative):
+
+- When an artifact defines `output_basis = "artifact_without_compiled_provenance_v1"`, producers and
+  validators MUST compute `output_payload_sha256` as:
+
+  1. `payload_obj = artifact_without_compiled_provenance_v1(obj)`
+  1. `payload_bytes = canonical_json_bytes(payload_obj)` (RFC 8785 / JCS)
+  1. `output_payload_sha256 = "sha256:" + sha256_hex(payload_bytes)` (lowercase hex)
+
+Notes (informative):
+
+- This pattern allows an embedded provenance envelope to include an integrity hash over the artifact
+  payload without hashing the envelope itself.
+
 ### JSONL physical format invariants
 
 For contract-backed JSONL artifacts:

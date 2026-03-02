@@ -29,6 +29,18 @@
     "capture_window": {
       "$ref": "#/$defs/capture_window"
     },
+    "windows_eventlog_raw_mode": {
+      "$ref": "#/$defs/windows_eventlog_raw_mode_evidence"
+    },
+    "agent_liveness": {
+      "$ref": "#/$defs/agent_liveness_evidence"
+    },
+    "baseline_profile": {
+      "$ref": "#/$defs/baseline_profile_evidence"
+    },
+    "windows_eventlog_raw_xml": {
+      "$ref": "#/$defs/windows_eventlog_raw_xml_evidence"
+    },
     "assets": {
       "type": "array",
       "description": "Per-asset telemetry validation results. Producers SHOULD sort by asset_id (UTF-8 byte order) for determinism.",
@@ -527,6 +539,294 @@
           "$ref": "#/$defs/clock_sync_unmeasurable_evidence"
         }
       ]
+    },
+    "windows_eventlog_raw_mode_canary_observed_at_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id",
+        "channel",
+        "path"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "description": "Asset identifier (agent/endpoint) that observed the canary."
+        },
+        "channel": {
+          "type": "string",
+          "description": "Windows Event Log channel where the canary was observed (for example, Application, Security, Microsoft-Windows-Sysmon/Operational)."
+        },
+        "path": {
+          "type": "string",
+          "description": "Run-relative path (POSIX separators) to the concrete raw artifact or dataset file where the canary was observed.",
+          "pattern": "^[^\\\\]*$"
+        },
+        "event_id": {
+          "type": "string",
+          "description": "Optional canonical event identifier (for example, metadata.event_id) when resolvable."
+        },
+        "row_locator": {
+          "type": "object",
+          "description": "Optional minimal locator sufficient to re-query a dataset deterministically (for example, Parquet row group + row index).",
+          "additionalProperties": true
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "windows_eventlog_raw_mode_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "performed",
+        "observed"
+      ],
+      "properties": {
+        "performed": {
+          "type": "boolean",
+          "description": "True when the raw-mode canary check was executed."
+        },
+        "observed": {
+          "type": "boolean",
+          "description": "True when the canary was captured and passed the raw-mode policy checks."
+        },
+        "canary_observed_at": {
+          "$ref": "#/$defs/windows_eventlog_raw_mode_canary_observed_at_v1"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "agent_liveness_asset_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id",
+        "observed"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "observed": {
+          "type": "boolean"
+        },
+        "first_seen": {
+          "type": "string",
+          "format": "date-time",
+          "description": "First observed heartbeat timestamp (RFC 3339 UTC)."
+        },
+        "last_seen": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last observed heartbeat timestamp (RFC 3339 UTC)."
+        },
+        "evidence_path": {
+          "type": "string",
+          "description": "Run-relative path (POSIX separators) to a supporting evidence artifact (for example, a pruned metrics capture).",
+          "pattern": "^[^\\\\]*$"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "observed": {
+                "const": false
+              }
+            },
+            "required": [
+              "observed"
+            ]
+          },
+          "then": {
+            "properties": {
+              "first_seen": false,
+              "last_seen": false
+            }
+          }
+        }
+      ]
+    },
+    "agent_liveness_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assets"
+      ],
+      "properties": {
+        "startup_grace_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "required_metric_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assets": {
+          "type": "array",
+          "description": "Per-asset agent liveness results. Producers SHOULD sort by asset_id (UTF-8 byte order) for determinism.",
+          "items": {
+            "$ref": "#/$defs/agent_liveness_asset_v1"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "baseline_profile_signal_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal_id",
+        "source_type",
+        "min_count",
+        "observed_count",
+        "passed"
+      ],
+      "properties": {
+        "signal_id": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "windows_eventlog",
+            "osquery"
+          ]
+        },
+        "match": {
+          "type": "object",
+          "description": "Echo of the profile match predicate (implementation-defined shape).",
+          "additionalProperties": true
+        },
+        "min_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observed_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "baseline_profile_asset_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "matched_profile_id": {
+          "type": "string",
+          "description": "Profile id selected for the asset (when a match exists)."
+        },
+        "signals": {
+          "type": "array",
+          "description": "Per-signal baseline profile evaluations. Producers SHOULD sort by signal_id (UTF-8 byte order) for determinism.",
+          "items": {
+            "$ref": "#/$defs/baseline_profile_signal_v1"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "baseline_profile_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_path",
+        "assets"
+      ],
+      "properties": {
+        "profile_path": {
+          "type": "string",
+          "description": "Run-relative path (POSIX separators) to the baseline profile snapshot file.",
+          "pattern": "^[^\\\\]*$"
+        },
+        "profile_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "assets": {
+          "type": "array",
+          "description": "Per-asset baseline profile results. Producers SHOULD sort by asset_id (UTF-8 byte order) for determinism.",
+          "items": {
+            "$ref": "#/$defs/baseline_profile_asset_v1"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "windows_eventlog_raw_xml_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wineventlog_used_log_record_original_total",
+        "wineventlog_raw_unavailable_total",
+        "wineventlog_raw_malformed_total",
+        "fail_mode"
+      ],
+      "properties": {
+        "wineventlog_used_log_record_original_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wineventlog_raw_unavailable_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wineventlog_raw_malformed_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fail_mode": {
+          "type": "string",
+          "enum": [
+            "fail_closed",
+            "warn_and_skip"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "enum": [
+            "raw_xml_unavailable"
+          ]
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
     },
     "canary_observed_at": {
       "type": "object",

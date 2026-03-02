@@ -37,6 +37,10 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Contract registry](#contract-registry)
     - [Authoritative contract registry index (normative)](#authoritative-contract-registry-index-normative)
       - [Minimal registry shape (normative)](#minimal-registry-shape-normative)
+      - [Pass identifiers (`pass_id`) (normative)](#pass-identifiers-pass_id-normative)
+        - [Grammar (v1)](#grammar-v1)
+        - [Stability rules (normative)](#stability-rules-normative)
+        - [Registry invariants (normative)](#registry-invariants-normative)
       - [Glob semantics (glob_v1) (normative)](#glob-semantics-glob_v1-normative)
       - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
       - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
@@ -84,6 +88,7 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Artifact contracts](#artifact-contracts)
     - [Artifact contract block template (copy/paste; non-normative)](#artifact-contract-block-template-copypaste-non-normative)
     - [Evidence references (shared shape)](#evidence-references-shared-shape)
+    - [Compiled provenance envelope (shared shape)](#compiled-provenance-envelope-shared-shape)
     - [Run counters (operability) (normative)](#run-counters-operability-normative)
     - [Regression baseline reference inputs (normative)](#regression-baseline-reference-inputs-normative)
       - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
@@ -259,6 +264,41 @@ The registry instance MUST include, at minimum:
     output discovery)
     - Allowed values (v0.1): `lab_provider`, `runner`, `telemetry`, `normalization`, `validation`,
       `detection`, `scoring`, `reporting`, `signing`, `orchestrator`
+  - `pass_id` (string; required for `registry_version >= 0.2.1`): stable identifier for the logical
+    "producer pass" that emits artifacts matching this binding (see "Pass identifiers (`pass_id`)"
+    below).
+
+#### Pass identifiers (`pass_id`) (normative)
+
+`pass_id` is a stable, globally unique identifier for the logical producer pass that emitted an
+artifact. `pass_id` is declared centrally in contract registry bindings and is designed for
+provenance attribution, cache keys, and diffing at a "producer pass" granularity.
+
+##### Grammar (v1)
+
+Define:
+
+- `pass_id := <root> ("." <segment>)+`
+- `<root>` MUST equal the binding’s `stage_owner` value (including the reserved owner token
+  `orchestrator`).
+- `<segment>` MUST match the regex `[a-z][a-z0-9_]*` (ASCII lowercase; snake_case segments).
+
+##### Stability rules (normative)
+
+- A `pass_id` MUST be treated as a stable token representing the semantics of a producer pass.
+  Implementations MUST NOT silently reuse an existing `pass_id` for materially different semantics.
+- If producer pass semantics change materially, implementations MUST introduce a new `pass_id`.
+- Renames and aliases are reserved for a future version. Until specified, `pass_id` values MUST NOT
+  be renamed in place.
+
+##### Registry invariants (normative)
+
+- For `registry_version >= 0.2.1`, every `bindings[]` entry MUST include `pass_id`.
+- Consumers and producers that enforce Contract Spine conformance MUST treat a missing or invalid
+  `pass_id` as an invalid registry configuration and MUST fail closed.
+
+Note (non-normative): A future update introduces a deterministic run-bundle "pass manifest" artifact
+that maps each contract-backed `artifact_path` present in a run bundle to its resolved `pass_id`.
 
 #### Glob semantics (glob_v1) (normative)
 
@@ -2053,6 +2093,111 @@ Selector constraints (normative when present):
   - `jsonl_line:<N>`
     - `<N>` MUST be a base-10, 1-indexed positive integer selecting the Nth line from a JSONL file.
 
+### Compiled provenance envelope (shared shape)
+
+This section defines the canonical `compiled_provenance` object shape used across deterministic
+"compiled artifacts" (for example, Sigma compiled plans).
+
+A **compiled artifact** is any output that is intended to be deterministic given pinned inputs and
+pinned toolchain versions, and therefore eligible for content-addressed caching.
+
+Embedding (normative):
+
+- Artifacts that support this envelope MUST embed it as a top-level JSON object member named
+  `compiled_provenance`.
+- The envelope MUST be deterministic and MUST NOT include volatile values such as timestamps,
+  hostnames, absolute paths, random seeds, or environment-derived identifiers.
+
+Schema (normative):
+
+- The envelope instance MUST validate against:
+  - `docs/contracts/compiled_artifact_provenance.schema.json`
+
+Required fields (normative):
+
+- `contract_version` (string; const: `0.1.0`)
+- `schema_version` (string; const: `pa:compiled_artifact_provenance:v1`)
+- `pass_id` (string; producing pass identifier; MUST be stable and versioned)
+- `inputs[]` (array; stable order; see Ordering below)
+- `toolchain[]` (array; stable order; see Ordering below)
+- `compilation_unit_sha256` (string; canonical digest string: `sha256:<lowercase_hex>`)
+- `output_basis` (string; enum)
+  - v1 allowed value: `artifact_without_compiled_provenance_v1`
+- `output_payload_sha256` (string; canonical digest string: `sha256:<lowercase_hex>`)
+
+Optional fields (normative when present):
+
+- `options` (object): deterministic pass options that affect output bytes.
+  - Producers MUST omit any option that does not affect output.
+  - Options MUST NOT include volatile values.
+
+Inputs shape (normative):
+
+- Each `inputs[]` entry MUST include:
+  - `role` (string; stable identifier for the input's semantic role)
+  - `digest_sha256` (string; canonical digest string)
+- An input entry MAY also include stable identity fields (examples):
+  - `id` (string)
+  - `version` (string)
+  - `contract_id` (string)
+  - `path` (string; MUST be relative; MUST NOT be absolute; MUST NOT contain `..` segments)
+
+Toolchain shape (normative):
+
+- Each `toolchain[]` entry MUST include:
+  - `tool_id` (string)
+  - `tool_version` (string)
+- A toolchain entry MAY include additional deterministic pins (examples):
+  - `digest_sha256` (string; canonical digest string)
+  - `capabilities_sha256` (string; canonical digest string)
+
+Ordering (normative):
+
+- `inputs[]` MUST be sorted by the tuple (UTF-8 byte order; missing values treated as empty string):
+  1. `role`
+  1. `id`
+  1. `version`
+  1. `digest_sha256`
+- `toolchain[]` MUST be sorted by the tuple (UTF-8 byte order; missing values treated as empty
+  string):
+  1. `tool_id`
+  1. `tool_version`
+  1. `digest_sha256`
+
+Compilation-unit key derivation (normative):
+
+`compilation_unit_sha256` is the universal cache key for a compiled artifact.
+
+Producers and validators MUST compute `compilation_unit_sha256` as SHA-256 over canonical JSON bytes
+(RFC 8785 / JCS) of the following basis object:
+
+- `basis = {"pass_id": <pass_id>, "inputs": <inputs_norm>, "toolchain": <toolchain_norm>, "options": <options_norm>}`
+
+Where:
+
+- `inputs_norm` is the `inputs[]` array after applying the Ordering rules above.
+- `toolchain_norm` is the `toolchain[]` array after applying the Ordering rules above.
+- `options_norm` is:
+  - the `options` object when present, OR
+  - the empty object `{}` when `options` is omitted.
+
+The resulting digest MUST be recorded in canonical digest string form:
+
+- `compilation_unit_sha256 = "sha256:" + <lowercase_hex>`
+
+Output integrity hash (normative):
+
+- `output_payload_sha256` MUST be computed using the basis defined by `output_basis`.
+- For `output_basis = "artifact_without_compiled_provenance_v1"`, the payload hash MUST be computed
+  as specified by the Contract Spine (`026_contract_spine.md`).
+
+Cache provenance linkage (normative):
+
+- When a cross-run cache stores/retrieves a compiled artifact that embeds `compiled_provenance`, the
+  cache lookup key MUST equal `compiled_provenance.compilation_unit_sha256`.
+- Cache usage MUST be recorded in `logs/cache_provenance.json` with `entries[].key` equal to that
+  same digest string.
+
 ### Run counters (operability) (normative)
 
 Purpose:
@@ -3202,6 +3347,13 @@ Key derivation guidance (non-normative; recommended):
 - If a cross-run cache is backed by a shared store (for example a SQLite DB), the same `<hex>` value
   can be used as the store lookup key to simplify provenance-to-store correlation.
 
+Envelope-derived cache keys (recommended):
+
+- If a cached value is a compiled artifact that embeds `compiled_provenance`, implementations SHOULD
+  set `entries[].key` to `compiled_provenance.compilation_unit_sha256`.
+  - This avoids per-component ad hoc cache key basis shapes and allows offline correlation between
+    artifacts and cache provenance entries.
+
 Deterministic ordering (normative):
 
 - `entries[]` MUST be sorted by `(component, cache_name, key)` ascending (UTF-8 byte order for
@@ -3573,6 +3725,31 @@ Key semantics (normative when produced):
   - `docs/contracts/bridge_compiled_plan.schema.json` MUST define `sigma_ast` as a required
     top-level property and MUST reference `docs/contracts/sigma_ast_v1.schema.json` as the
     authoritative schema for that object (local `$ref`; no network fetch).
+
+Optional compiled provenance envelope (normative when present):
+
+- Compiled plans MAY include a top-level `compiled_provenance` object using the shared shape defined
+  in "Compiled provenance envelope (shared shape)".
+
+- When `compiled_provenance` is present:
+
+  - `compiled_provenance.output_basis` MUST equal `artifact_without_compiled_provenance_v1`.
+
+  - `compiled_provenance.output_payload_sha256` MUST equal the SHA-256 digest (canonical digest
+    string form) of the plan artifact with the top-level `compiled_provenance` member removed, using
+    RFC 8785 canonical JSON bytes.
+
+  - `compiled_provenance.inputs[]` MUST include, at minimum:
+
+    - one input pin whose `digest_sha256` equals the plan's `rule_sha256`, and
+    - one input pin whose `digest_sha256` equals the plan's `mapping_pack_sha256`.
+
+Offline validation guidance (normative when `compiled_provenance` is present):
+
+- Offline validators MUST recompute and verify:
+  - `compiled_provenance.output_payload_sha256`, and
+  - `compiled_provenance.compilation_unit_sha256`.
+- In strict validation modes, any mismatch MUST fail closed.
 
 ### Bridge coverage
 

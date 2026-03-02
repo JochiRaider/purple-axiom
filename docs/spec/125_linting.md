@@ -495,6 +495,17 @@ gate findings artifact for the `content.lint` gate:
 This artifact is **additive**. The `lint.json` report remains the primary lint report contract for
 both human and machine consumption; the gate findings artifact is the canonical CI surface.
 
+The `content.lint` findings artifact is also an aggregation surface:
+
+- The deterministic mapping below MUST be applied to produce the lint-derived portion of
+  `findings[]` from `lint.json` (and MUST NOT be altered by other checks).
+- When `lint.json.summary.status == "tool_error"`, producers MUST NOT append any additional
+  findings, because the mapping below requires the artifact to contain exactly one `fatal`
+  tool-error finding.
+- Otherwise, the `content.lint` artifact MAY include additional `ci_gate_findings` entries produced
+  by other local-only conformance checks executed under the `content.lint` gate (for example,
+  Contract Spine conformance checks).
+
 #### Deterministic mapping from `lint.json` → `ci_gate_findings` (normative)
 
 Given a `lint.json` report:

@@ -313,6 +313,15 @@ Index entry format (normative):
   - Minimum fixture sets (normative):
     - `yaml_semantic_sha256_v1` (vectors file present and exercised)
 
+- **Cross-cutting: compiled artifact provenance envelope (`compiled_artifact_provenance.v1`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/compiled_provenance/v1/bridge_compiled_plan/`
+  - Minimum fixture sets (normative):
+    - `valid_payload_and_key`
+    - `invalid_output_payload_sha256`
+    - `invalid_compilation_unit_sha256`
+
 - **Cross-cutting: event identity (`event_id.v1`)**
 
   - Canonical fixture roots:
@@ -2372,16 +2381,40 @@ Goals:
 - The harness MUST compute and record the following per backend + fixture version:
 
   - `compiled_plan_hash`:
-    - SHA256 of canonical JSON (JCS) for each `bridge/compiled_plans/<rule_id>.plan.json`
+
+    - SHA256 of canonical JSON (JCS) for each plan payload using the Contract Spine payload basis
+      `artifact_without_compiled_provenance_v1` (remove top-level `compiled_provenance` before
+      hashing)
+
   - `detections_hash`:
+
     - SHA256 of canonical JSON (JCS) for the ordered contents of `detections/detections.jsonl`
+
   - `bridge_ir_hash` (backend-neutral; required when `backend.plan_kind="pa_eval_v1"`):
+
     - For each executable compiled plan, SHA256 of canonical JSON (JCS) for `backend.plan` only.
     - The harness MUST also record an aggregate hash computed by sorting `(rule_id, bridge_ir_hash)`
       by `rule_id` and hashing the resulting canonical JSON array.
+
   - `semantic_detections_hash` (backend-neutral):
+
     - SHA256 of canonical JSON (JCS) for the ordered contents of a backend-neutral projection of
       `detections/detections.jsonl` (see "Cross-backend conformance").
+
+Compiled provenance validation (normative):
+
+- For each compiled plan that contains a `compiled_provenance` object, the harness MUST:
+
+  - verify `compiled_provenance.output_basis == "artifact_without_compiled_provenance_v1"`.
+
+  - recompute `compiled_provenance.output_payload_sha256` by hashing the plan artifact with the
+    top-level `compiled_provenance` member removed (RFC 8785 canonical JSON bytes + SHA-256), and
+    assert exact match.
+
+  - recompute `compiled_provenance.compilation_unit_sha256` from the declared basis fields
+    (`pass_id`, `inputs[]`, `toolchain[]`, `options`), and assert exact match.
+
+- On any mismatch, the harness MUST fail closed with category `plan_hash_mismatch`.
 
 #### Cross-backend conformance (verification hook)
 

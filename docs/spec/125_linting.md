@@ -735,10 +735,17 @@ Minimum rule requirements:
 - Semantic checks including:
 
   - identifiers and versions conform to project naming conventions,
+
   - plan selection is coherent with scenario type,
+
   - technique IDs match the expected format,
+
   - action identifiers are unique where required,
+
   - `principal_alias` is non-secret and stable.
+
+  - scenario inputs MUST NOT include range configuration keys (for example `ui`, `auth`,
+    `otel_gateway`); such keys MUST be rejected as schema-invalid.
 
 Reference checks SHOULD be included when resolution rules are available:
 
@@ -1178,6 +1185,10 @@ VS Code example mapping YAML schemas by file glob:
   }
 }
 ```
+
+Note: When the Operator Interface configuration surface is in use (v0.2+), `inputs/range.yaml` may
+also include the top-level `ui`, `auth`, and `otel_gateway` keys (validated by the `range_config`
+schema).
 
 ## References
 

@@ -1604,12 +1604,17 @@ Conformance test matrix (normative minimum):
 
 ## Configuration surface (v0.2)
 
-This spec introduces a UI namespace. These keys MUST be added to the configuration reference in the
-same implementation change set (TODO for this draft).
+This spec introduces top-level Operator Interface configuration keys.
+
+Source of truth (normative):
+
+- These keys live in `inputs/range.yaml` (contract: `range_config`).
+- `120_config_reference.md` is authoritative for defaults / types / validation rules; this document
+  defines Operator Interface semantics and behavioral requirements.
 
 ```yaml
 ui:
-  enabled: true
+  enabled: true                # opt-in; default: false
 
   network:
     profile: lan_reverse_proxy   # v0.2 target
@@ -1645,7 +1650,7 @@ auth:
     method: null                 # reserved: totp, webauthn
 
 otel_gateway:
-  enabled: true
+  enabled: true                # opt-in; default: false
   ports:
     grpc: 4317
     http: 4318
@@ -1766,9 +1771,11 @@ Constraint (normative):
    - If cancellation/resume/retry introduce new stage-level reason codes, ADR-0005 MUST be updated
      accordingly (per ADR-0007 requirements).
 
-1. **Config reference**
+1. **Range config schema constraints**
 
-   - Add `ui.*`, `auth.*` (UI scope), and `otel_gateway.*` keys and schema constraints.
+   - Ensure `docs/contracts/range_config.schema.json` accepts and validates the top-level `ui`,
+     `auth`, and `otel_gateway` keys documented in `120_config_reference.md` (unknown-key rejection
+     makes this fail closed until the schema is updated).
 
 ## References
 

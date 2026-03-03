@@ -2701,6 +2701,19 @@ The fixture set MUST include at least the v0.1 cases below:
 When the operator-interface/control-plane scope profile is enabled (v0.2+; see `000_charter.md`
 ("Target contract surface and scope profile (normative)")), the fixture set MUST also include:
 
+- `range_config_operator_interface_valid` (v0.2+)
+
+  - Provide an `inputs/range.yaml` fixture that includes `ui`, `auth`, and `otel_gateway` blocks.
+  - Assert schema validation succeeds.
+
+- `range_config_operator_interface_invalid_rejected` (v0.2+; fail closed)
+
+  - Provide an `inputs/range.yaml` fixture that includes an invalid Operator Interface field (for
+    example `ui.network.port: 70000` or `auth.provider: "oidc"` when reserved enum values are
+    rejected).
+  - Assert schema validation fails closed with `reason_code=config_schema_invalid`.
+  - Assert deterministic error location output.
+
 - `control_plane_cancel_valid` (v0.2+)
 
   - Fixture root: `tests/fixtures/orchestrator/control_plane/cancel_valid/`

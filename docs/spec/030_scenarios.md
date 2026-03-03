@@ -76,6 +76,13 @@ Notes:
   - `inputs/scenario.yaml` (scenario selection + plan selection)
   - pack-like assets referenced by `inputs/scenario.yaml` (Atomic tests, adapters, etc.)
 
+  Scenario boundary rule (normative):
+
+  - `inputs/scenario.yaml` MUST contain only scenario-model keys and MUST NOT be treated as a range
+    configuration overlay. If `inputs/scenario.yaml` contains any key semantically owned by
+    `inputs/range.yaml` (for example `ui`, `auth`, `otel_gateway`), validation MUST fail closed with
+    `reason_code=config_schema_invalid`.
+
 ### Config keys used
 
 - `runner.*` (see `120_config_reference.md`)

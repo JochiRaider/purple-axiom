@@ -16,20 +16,31 @@ Primary config file name used in examples: `inputs/range.yaml`.
 
 ## Configuration files and precedence
 
-Recommended sources (lowest to highest precedence):
+Purple Axiom distinguishes between **range configuration** and **scenario inputs**:
+
+- `inputs/range.yaml` (contract-backed) configures the lab, runner, pipeline stages, and (when
+  enabled) optional workspace services.
+- `inputs/scenario.yaml` (non-contract in v0.1) selects and defines the scenario to execute (see
+  `030_scenarios.md`). It is not a range-config overlay mechanism.
+
+Recommended range-configuration sources (lowest to highest precedence):
 
 1. Built-in defaults (code)
-1. `inputs/range.yaml` (range/lab and pipeline defaults)
-1. `inputs/scenario.yaml` (optional, scenario-specific overrides)
+1. `inputs/range.yaml` (range/lab and pipeline configuration)
 1. CLI flags (optional, small overrides only)
 1. Environment variables (optional, for paths and secrets references)
 
-Precedence rule: later sources override earlier sources at the leaf key level.
+Precedence rule (range config): later sources override earlier sources at the leaf key level.
 
-Secrets rule:
+Scenario rule (normative):
 
-- Do not place credentials, tokens, or private keys directly in `inputs/range.yaml`.
-- Use references (file paths, OS keychain identifiers, or environment variable names).
+- `inputs/scenario.yaml` MUST NOT be merged into the range configuration and MUST NOT override any
+  `inputs/range.yaml` keys.
+- `inputs/scenario.yaml` MUST contain only keys defined by the scenario model. Any key that is
+  semantically owned by the range configuration (`inputs/range.yaml`) or by Operator Interface
+  control artifacts (`control/`) MUST be rejected.
+- If `inputs/scenario.yaml` contains any forbidden key, validation MUST fail closed with
+  `reason_code=config_schema_invalid`.
 
 ## Workspace root and filesystem paths
 
@@ -492,10 +503,114 @@ Implementation guidance (non-normative):
   `entries[].notes` (for example `backend=sqlite; store_format=v1`), subject to the redaction rules
   in `090_security_safety.md`.
 
+### Operator interface (ui)
+
+Reserved for the v0.2+ Operator Interface (web UI + Operator API) defined in
+`115_operator_interface.md`.
+
+Common keys:
+
+- `enabled` (optional, default: false): opt-in gate for starting the Operator Interface service.
+  - v0.1: If set to `true` in a build/profile that does not implement the Operator Interface, config
+    validation SHOULD either fail closed with `reason_code=source_not_implemented` or emit a
+    deterministic warning and treat it as disabled.
+- `network` (optional)
+  - `profile` (optional, default: `lan_reverse_proxy`): `lan_reverse_proxy` (closed set; reserved
+    for v0.2+ behavior).
+  - `port` (optional, default: 443): integer 1–65535.
+  - `allowlist` (optional): list of CIDRs and/or explicit IPs permitted to reach the UI.
+  - `default_deny` (optional, default: true): when true, requests outside `allowlist` MUST be
+    rejected.
+- `tls` (optional)
+  - `mode` (optional, default: `self_signed_ca`): `self_signed_ca` (closed set; reserved for v0.2+).
+  - `rotate_leaf_on_start` (optional, default: true)
+  - `cert_path`, `key_path`, `ca_path` (reserved; default: null)
+- `security` (optional)
+  - `allow_quarantine_access` (optional, default: false): posture relaxation gate (see notes below).
+  - `allowed_extensions` (optional, default list): enforced extension allowlist for artifact
+    serving.
+    - Default (v0.2 baseline): `.json`, `.jsonl`, `.parquet`, `.txt`, `.log`, `.html`, `.md`,
+      `.csv`, `.cast`, `.yaml`, `.yml`
+- `sessions` (optional)
+  - `idle_timeout_seconds` (optional, default: 1200): idle session expiry (20 minutes).
+- `limits` (optional)
+  - `max_concurrent_runs` (optional, default: 1): maximum number of concurrently active orchestrator
+    verb processes started via the Operator API.
+
+Interaction notes (normative):
+
+- When `ui.limits.max_concurrent_runs` is reached, verb-start requests MUST be rejected without
+  spawning a new process and MUST emit an audit event with `reason_code=concurrency_limit`.
+- Quarantine access requires BOTH `ui.security.allow_quarantine_access=true` and a per-session
+  runtime toggle (default OFF); accesses MUST be write-ahead audited to `logs/ui_audit.jsonl`.
+- The UI MUST enforce extension-based allowlisting for artifact serving; the default allowlist MUST
+  match the list above.
+
+### Operator authentication (auth)
+
+Reserved for Operator Interface authentication configuration (v0.2+).
+
+Common keys:
+
+- `provider` (optional, default: `local`): `local` (closed set; v0.1/v0.2 baseline).
+  - Reserved (rejected): `ldap`, `oidc`.
+    - Setting a reserved value MUST be rejected by schema validation (fail closed with
+      `reason_code=config_schema_invalid`).
+- `mfa` (optional)
+  - `enabled` (optional, default: false): reserved.
+  - `method` (optional, default: null): nullable enum; MUST be null when `enabled=false`.
+    - Reserved (rejected): `totp`, `webauthn`.
+      - Setting a reserved value MUST be rejected by schema validation (fail closed with
+        `reason_code=config_schema_invalid`).
+
+Secret-handling note (normative):
+
+- Any future auth provider secrets (OIDC client secret, LDAP bind password, etc.) MUST be expressed
+  via secret reference conventions (`*_ref`) rather than embedded plaintext values.
+
+### OTLP gateway (otel_gateway)
+
+Reserved for the optional OTLP gateway tier (v0.2+).
+
+This block is distinct from `telemetry.otel`, which references an OpenTelemetry Collector config
+file for in-run collection.
+
+Common keys:
+
+- `enabled` (optional, default: false): opt-in gate for starting the OTLP gateway service.
+  - v0.1: If set to `true` in a build/profile that does not implement the OTLP gateway, config
+    validation SHOULD either fail closed with `reason_code=source_not_implemented` or emit a
+    deterministic warning and treat it as disabled.
+- `ports` (optional)
+  - `grpc` (optional, default: 4317): integer 1–65535.
+  - `http` (optional, default: 4318): integer 1–65535.
+- `mtls` (optional)
+  - `required` (optional, default: true): OTLP ingress mTLS requirement.
+  - `ca_path`, `server_cert_path`, `server_key_path` (optional, default: null): reserved; v0.2 MAY
+    generate these into workspace protected state by default.
+
+Interaction notes (normative):
+
+- The gateway MUST listen on 4317/4318 (configurable) and MUST require mTLS by default: no valid
+  client certificate, no ingestion.
+
+Enablement and workspace artifacts (non-normative):
+
+- Operator Interface audit events are written to the workspace-global log `logs/ui_audit.jsonl`
+  (contract: `audit_event`).
+- The workspace-global run listing registry lives at `state/run_registry.json` (contract:
+  `run_registry`).
+
 ### Control plane (optional, control_plane)
 
 Reserved for a future optional RPC-based endpoint management layer (for example, agent configuration
 injection).
+
+Terminology note (normative):
+
+- `control_plane` is distinct from the Operator Interface control-plane API (Operator API). Operator
+  Interface endpoint and auth configuration lives under the top-level `ui`, `auth`, and
+  `otel_gateway` keys.
 
 Common keys:
 
@@ -1539,14 +1654,17 @@ Recommended practice:
 Minimum validation (v0.1, normative):
 
 - YAML MUST parse successfully using a safe YAML 1.2 loader.
-- Duplicate YAML mapping keys MUST be rejected (fail closed) for all configuration inputs (including
-  `inputs/range.yaml` and `inputs/scenario.yaml`).
-- The effective configuration (after applying precedence and overrides) MUST validate against
-  `docs/contracts/range_config.schema.json` (JSON Schema draft 2020-12).
+- Duplicate YAML mapping keys MUST be rejected (fail closed) for all YAML inputs that participate in
+  run execution (including `inputs/range.yaml` and `inputs/scenario.yaml`).
+- The effective **range configuration** (built-in defaults + `inputs/range.yaml` + CLI flags +
+  environment variables) MUST validate against `docs/contracts/range_config.schema.json` (JSON
+  Schema draft 2020-12).
+- `inputs/scenario.yaml` MUST validate against the scenario schema for the supported scenario model
+  version (see `030_scenarios.md`).
 - Unknown keys MUST be rejected by schema validation at every object boundary. The only exception is
   `extensions`, which is reserved for forward-compatible, implementation-defined keys.
-- On schema validation failure, the pipeline MUST fail closed before executing any stage and MUST
-  report `reason_code=config_schema_invalid` (see
+- On schema validation failure (range config or scenario), the pipeline MUST fail closed before
+  executing any stage and MUST report `reason_code=config_schema_invalid` (see
   [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)).
 
 Deterministic error reporting (v0.1):

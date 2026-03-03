@@ -1541,7 +1541,7 @@ raw Parquet writing and any optional sidecar extraction:
      - `payload_overflow_sha256` (string, OPTIONAL; REQUIRED when `event_xml_truncated=true`; MUST
        equal `event_xml_sha256`)
      - `payload_overflow_ref` (string, OPTIONAL; REQUIRED when `event_xml_truncated=true` and
-       `sidecar.enabled=true`; run-relative POSIX-style path)
+       `sidecar.enabled=true`; run-relative POSIX-style path; MUST conform to `pa.run_relpath.v1`)
    - If `event_xml` exceeds `max_event_xml_bytes`, the pipeline MUST:
      - set `event_xml_truncated=true`,
      - set `payload_overflow_bytes` to the full pre-truncation canonical byte length (UTF-8; CRLF
@@ -1758,8 +1758,10 @@ MUST be derived deterministically from `(event_id_dir, field_path)`:
 - The `field_path` token for the full overflow payload MUST be `event_xml`.
 - `field_path_hash` MUST be SHA-256 of the UTF-8 bytes of `field_path`, encoded as lowercase hex.
 - The sidecar filename MUST be `${field_path_hash}.xml`.
+- Let `sidecar_dir_norm` be `sidecar.dir` with any trailing `/` removed.
 - `payload_overflow_ref` MUST be the POSIX-style run-relative path
-  `${sidecar.dir}/${event_id_dir}/${field_path_hash}.xml` (even on Windows).
+  `${sidecar_dir_norm}/${event_id_dir}/${field_path_hash}.xml` (even on Windows) and MUST conform to
+  `pa.run_relpath.v1`.
 - `event_id_dir` MUST be derived from `metadata.event_id` per `045_storage_formats.md`.
 
 If writing the sidecar object fails, the pipeline MUST:

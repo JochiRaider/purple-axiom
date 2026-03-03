@@ -152,6 +152,7 @@ document.
 | Lint target kind      | redaction-policy            |              2 | JSONPath parsing via `pa.jsonpath.v1`                             |
 | Lint target kind      | scenario                    |              2 | Schema + semantic checks; references when available               |
 | Lint target kind      | criteria-pack               |              2 | Operator semantics + canonical ordering                           |
+| Lint target kind      | atomic-template             |              2 | Placeholder syntax + declared placeholder names                   |
 | Lint target kind      | plan-draft                  |              2 | Schema + semantic checks; references when available               |
 | Lint target kind      | sigma-rule (baseline)       |              2 | `sigma_ast_v1` parse + deterministic ref resolution               |
 | Lint target kind      | sigma-rule (backend-aware)  |              3 | Capability gate + safety/cost guardrails                          |
@@ -672,6 +673,40 @@ Minimum rule requirements:
       - `rule_id="lint-range-config-redaction-policy-ref-invalid"`
       - `severity="error"`
 
+Secret reference string validation (normative):
+
+- Rule ID: `lint-range-config-secret-ref-invalid`
+
+- For every object key in the effective range config whose name ends with `_ref`, the linter MUST:
+
+  - require that the value is a string, and
+  - parse that string using the parser module `pa.secret_ref.v1`.
+
+- Any parse failure (or non-string `_ref` value) MUST emit an `error` finding with:
+
+  - `rule_id="lint-range-config-secret-ref-invalid"`
+  - `severity="error"`
+  - `instance_path` set to the JSON Pointer path of the offending value
+
+- The finding `details` SHOULD include:
+
+  - `module_token`, `module_id`, `module_version`
+  - `error_code`
+  - `location.byte_offset` (and optional `location.line`/`location.column` when present)
+
+- The finding `message` MUST include the parser module's stable message prefix (see
+  `026_contract_spine.md`, "Parser modules").
+
+- Rule ID: `lint-range-config-secret-ref-provider-mismatch`
+
+- When `security.secrets.provider` is present and non-empty, the linter SHOULD enforce that every
+  parsed secret ref provider equals the configured provider.
+
+  - Any mismatch MUST emit an `error` finding with:
+    - `rule_id="lint-range-config-secret-ref-provider-mismatch"`
+    - `severity="error"`
+    - `instance_path` set to the JSON Pointer path of the offending value
+
 ### Target kind `redaction-policy`
 
 Intended for redaction policy files referenced by `security.redaction.policy_ref` (see ADR-0003:
@@ -751,6 +786,19 @@ Reference checks SHOULD be included when resolution rules are available:
 
 - existence checks for referenced plans, rule packs, mappings, or supporting assets.
 
+Atomic plan technique YAML reference check (normative):
+
+- Rule ID: `lint-scenario-atomic-yaml-not-found`
+
+  - Trigger: scenario declares `plan.type: "atomic"` and `plan.technique_id` is present, but the
+    canonical technique YAML path `atomics/<technique_id>/<technique_id>.yaml` does not exist.
+  - Emit an `error` finding with:
+    - `file` = the scenario file path
+    - `instance_path="/plan/technique_id"`
+    - `rule_id="lint-scenario-atomic-yaml-not-found"`
+    - `severity="error"`
+    - `message` = `Atomic technique YAML not found at atomics/<technique_id>/<technique_id>.yaml`
+
 ### Target kind `criteria-pack`
 
 Intended for criteria pack authoring directories (repository packs under `criteria/packs/**` and run
@@ -829,6 +877,144 @@ Required rule IDs (normative):
 Additional rule IDs (RECOMMENDED):
 
 - `lint-criteria-pack-invalid-arg-name`
+
+### Target kind `atomic-template`
+
+Intended for vendored Atomic Red Team technique YAML sources under an `atomics/` workspace subtree.
+
+Discovery (deterministic):
+
+- If `atomics/` does not exist: discover **zero** `atomic-template` targets. (Do not produce a tool
+  error.)
+- If `atomics/` exists: discover exactly one `atomic-template` target with
+  `targets[].path="atomics"`.
+
+Technique directory enumeration (deterministic):
+
+- Enumerate immediate child directories under `atomics/` as candidate `<technique_id>` directories.
+- Deterministic iteration order: sort candidate directory names ascending by UTF-8 bytewise lexical
+  ordering (no locale collation).
+
+Canonical technique YAML path requirement (normative):
+
+For each candidate directory `atomics/<technique_id>/`, the required technique YAML path is:
+
+- `atomics/<technique_id>/<technique_id>.yaml`
+
+Missing technique YAML MUST fail closed as a lint finding (not a tool error):
+
+- Rule ID: `lint-atomic-template-technique-yaml-missing`
+- Severity: `error`
+- `file`: the expected missing path (for example `atomics/T1059.001/T1059.001.yaml`)
+- `instance_path`: `""`
+- `message`: `Missing technique YAML at atomics/<technique_id>/<technique_id>.yaml` (deterministic)
+
+Technique YAML parsing (normative):
+
+- For each technique YAML file that exists at the canonical path above, the linter MUST decode the
+  YAML bytes using `pa.yaml_decode.v1`.
+- YAML decode failures MUST be represented as a finding per "Parse and tool errors" (RECOMMENDED
+  `rule_id="lint-core-parse-error"`).
+
+Atomic test identity: `engine_test_id` (lint and runner aligned) (normative):
+
+- `engine_test_id` equals the Atomic test's `auto_generated_guid` string in the YAML document.
+- The linter MUST treat a missing or empty `auto_generated_guid` as an authoring error.
+
+Rule: missing engine_test_id (error) (normative):
+
+- Rule ID: `lint-atomic-template-missing-engine-test-id`
+- Trigger: within `/atomic_tests/<i>`, the `auto_generated_guid` field is missing or empty.
+- Required finding payload (deterministic):
+  - `rule_id="lint-atomic-template-missing-engine-test-id"`
+  - `severity="error"`
+  - `instance_path="/atomic_tests/<i>/auto_generated_guid"`
+
+Atomic template instance_path conventions (normative):
+
+- All findings for `atomic-template` MUST use `instance_path` as a JSON Pointer into the decoded
+  Atomic YAML document (the JSON-shaped value produced by `pa.yaml_decode.v1`).
+
+- Canonical pointer roots:
+
+  - Atomic test object: `/atomic_tests/<test_index>`
+  - Test GUID: `/atomic_tests/<test_index>/auto_generated_guid`
+  - Executor command:
+    - scalar: `/atomic_tests/<test_index>/executor/command`
+    - list element: `/atomic_tests/<test_index>/executor/command/<cmd_index>`
+  - Cleanup command:
+    - scalar: `/atomic_tests/<test_index>/executor/cleanup_command`
+    - list element: `/atomic_tests/<test_index>/executor/cleanup_command/<cmd_index>`
+  - Dependency command fields:
+    - `/atomic_tests/<test_index>/dependencies/<dep_index>/prereq_command` (or `.../<cmd_index>`)
+    - `/atomic_tests/<test_index>/dependencies/<dep_index>/get_prereq_command` (or
+      `.../<cmd_index>`)
+  - Input default:
+    - `/atomic_tests/<test_index>/input_arguments/<arg_name>/default`
+
+Placeholder-aware checks (normative):
+
+- The linter MUST treat the Atomic template parser module `pa.template_atomic.v1` as the single
+  authority for placeholder tokenization and syntax errors (see
+  `032_atomic_red_team_executor_integration.md`, "Template placeholder grammar (parser module:
+  pa.template_atomic.v1)").
+- The linter MUST apply the rules below to strings participating in Atomic template expansion:
+  - `executor.command`
+  - `executor.cleanup_command`
+  - `dependencies[].prereq_command`
+  - `dependencies[].get_prereq_command`
+  - `input_arguments.<k>.default`
+- The linter MAY skip parsing for values that do not contain the substring `#{`.
+
+Rule: invalid Atomic placeholder syntax (error):
+
+- Rule ID: `lint-atomic-template-invalid-input-placeholder-syntax`
+- Trigger: a template-bearing string fails `pa.template_atomic.v1` parsing.
+- Required finding payload (deterministic):
+  - `rule_id="lint-atomic-template-invalid-input-placeholder-syntax"`
+  - `severity="error"`
+  - `message` MUST include the parser module `message_prefix`.
+  - `details` MUST include:
+    - `module_token` (MUST equal `pa.template_atomic.v1`)
+    - `error_code`
+    - `message_prefix` (MUST equal `pa.template_atomic.v1: `)
+    - `location.byte_offset` (0-indexed byte offset into the UTF-8 string)
+- If a parser module returns multiple errors for a single string, the linter MUST deterministically
+  select the first error in the module-provided `errors[]` order.
+
+Rule: undefined input placeholder (error):
+
+- Rule ID: `lint-atomic-template-undefined-input-placeholder`
+- Trigger: a parsed placeholder `<name>` appears in a template-bearing string, but `<name>` is not
+  present in the Atomic test's `input_arguments` keys.
+- Declared environment (normative):
+  - `declared_keys = keys(input_arguments)` for that Atomic test.
+  - No built-in allowlist is permitted in v0.1.
+- Determinism requirements:
+  - If a single string contains multiple undefined placeholders, emit one finding per undefined
+    name, sorted ascending by `<name>` (UTF-8 bytewise lexical order).
+- Each finding SHOULD include the missing `<name>` in either `details.placeholder_name` or the
+  finding `message`.
+
+Scope and exclusions (normative):
+
+- v0.1 `atomic-template` linting MUST NOT attempt to execute fixed-point expansion and MUST NOT
+  attempt to detect `input_resolution_cycle_or_growth` conditions. These are runtime semantics of
+  the runner fixed-point algorithm.
+
+YAML decode subset note (normative):
+
+- `atomic-template` YAML inputs are decoded using `pa.yaml_decode.v1`.
+- `pa.yaml_decode.v1` rejects anchors/aliases and merge keys (`<<`).
+- Therefore, vendored Atomic YAML intended for linting MUST be normalized into this safe subset (for
+  example by preprocessing upstream YAML to expand anchors before committing under `atomics/`).
+
+Required rule IDs (normative):
+
+- `lint-atomic-template-technique-yaml-missing`
+- `lint-atomic-template-missing-engine-test-id`
+- `lint-atomic-template-invalid-input-placeholder-syntax`
+- `lint-atomic-template-undefined-input-placeholder`
 
 ### Target kind `plan-draft`
 
@@ -1088,6 +1274,12 @@ Implementations MUST provide tests that assert:
   - multi-document YAML,
   - custom tags,
   - non-JSON-native scalar types.
+- Atomic template linting fixtures cover:
+  - invalid Atomic placeholder syntax (`pa.template_atomic.v1` error mapping),
+  - undefined input placeholders (including in `input_arguments.<k>.default`),
+  - missing/empty `auto_generated_guid` (engine_test_id),
+  - missing technique YAML at the canonical path when `atomics/<technique_id>/` exists, and
+  - scenario atomic technique YAML reference failures (canonical path missing).
 - Criteria pack linting fixtures cover:
   - ambiguous operator usage,
   - canonical ordering violations, and

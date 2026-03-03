@@ -1962,16 +1962,19 @@ Each publish op is an object:
 
 Path safety (fail closed):
 
-For every `artifact_path` in `publish_ops[]`, the host MUST enforce Contract Spine path requirements
-(run-relative POSIX paths). At minimum, the host MUST reject (fail closed) any `artifact_path` that:
+For every `artifact_path` in `publish_ops[]`, the host MUST validate the string by parsing it with
+the parser module `pa.run_relpath.v1` (run-relative artifact file paths; see
+`026_contract_spine.md`).
 
-- contains a backslash character (U+005C) (separator MUST be `/`),
-- starts with `/`,
-- contains a drive prefix (for example `C:`),
-- contains a NUL byte,
-- contains any `..` segment,
-- contains empty segments (`//`),
-- ends with `/`.
+- On any parse failure, the host MUST fail closed and MUST NOT apply the publish op.
+- Implementations MUST treat `pa.run_relpath.v1` as authoritative (no bespoke path parsing in the
+  host or adapter).
+
+Observability (normative):
+
+- When a publish op is rejected due to invalid `artifact_path`, the host MUST surface a
+  deterministic error that includes `module_token="pa.run_relpath.v1"` and the module `error_code`.
+- The host MUST NOT echo the full `artifact_path` string when forming human-facing error messages.
 
 Output-root guardrail (fail closed):
 

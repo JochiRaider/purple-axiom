@@ -529,6 +529,11 @@ If the file does not exist, the runner MUST fail closed for the action with reas
 The runner MUST parse Atomic YAML using a pinned implementation (as part of the reference executor).
 Parsing MUST be deterministic for equivalent input bytes.
 
+Note (non-normative): When Atomic technique YAML is vendored into a Purple Axiom workspace for
+authoring-time linting, it is RECOMMENDED that the vendored YAML conform to the `pa.yaml_decode.v1`
+safe YAML subset (no anchors/aliases, no merge keys, no multi-document YAML). If upstream YAML uses
+anchors/aliases, preprocess it (expand anchors) before committing under `atomics/`.
+
 The parser MUST extract, at minimum, for each Atomic test:
 
 - `technique_id` (from the technique selection context)

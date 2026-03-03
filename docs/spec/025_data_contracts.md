@@ -41,7 +41,7 @@ invariants that cannot be expressed in JSON Schema alone.
         - [Grammar (v1)](#grammar-v1)
         - [Stability rules (normative)](#stability-rules-normative)
         - [Registry invariants (normative)](#registry-invariants-normative)
-      - [Glob semantics (glob_v1) (normative)](#glob-semantics-glob_v1-normative)
+      - [Glob semantics (glob\_v1) (normative)](#glob-semantics-glob_v1-normative)
       - [Stage ownership metadata (normative)](#stage-ownership-metadata-normative)
       - [Validation mode metadata (normative)](#validation-mode-metadata-normative)
       - [Contract version constant (normative)](#contract-version-constant-normative)
@@ -101,13 +101,14 @@ invariants that cannot be expressed in JSON Schema alone.
   - [Artifact contracts](#artifact-contracts)
     - [Artifact contract block template (copy/paste; non-normative)](#artifact-contract-block-template-copypaste-non-normative)
     - [Evidence references (shared shape)](#evidence-references-shared-shape)
+      - [Parser module: `pa.evidence_selector.v1`](#parser-module-paevidence_selectorv1)
     - [Compiled provenance envelope (shared shape)](#compiled-provenance-envelope-shared-shape)
     - [Run counters (operability) (normative)](#run-counters-operability-normative)
     - [Regression baseline reference inputs (normative)](#regression-baseline-reference-inputs-normative)
       - [Deterministic baseline resolution and failure mapping (normative)](#deterministic-baseline-resolution-and-failure-mapping-normative)
     - [Measurement layers for conclusions (triage taxonomy)](#measurement-layers-for-conclusions-triage-taxonomy)
     - [Run manifest](#run-manifest)
-    - [Run results summary (run_results.json)](#run-results-summary-run_resultsjson)
+    - [Run results summary (run\_results.json)](#run-results-summary-run_resultsjson)
     - [Ground truth timeline](#ground-truth-timeline)
     - [Stable action identity](#stable-action-identity)
     - [Inputs and reproducible hashing](#inputs-and-reproducible-hashing)
@@ -208,6 +209,8 @@ with this document referenced as needed.
 - Run bundle: The folder `runs/<run_id>/` containing all artifacts for one execution.
 - Run-relative path: A POSIX-style path interpreted as relative to the run bundle root
   (`runs/<run_id>/`). Run-relative paths MUST NOT include the `runs/<run_id>/` prefix.
+  - Normative parser module for run-relative artifact file paths: `pa.run_relpath.v1` (see
+    `026_contract_spine.md`).
 - Field-path notation (manifest; normative): When referring to fields inside the run manifest
   content, documents in this repository MUST use `manifest.<field_path>` (for example,
   `manifest.status`, `manifest.versions.ocsf_version`). The `.json` extension MUST NOT appear in a
@@ -1969,8 +1972,22 @@ logs).
 
 - The repository MUST provide a reference workspace publisher implementation that conforms to this
   section, named `pa.publisher.workspace.v1`.
-- Any first-party tool that writes contract-backed workspace artifacts MUST publish them via the
-  reference workspace publisher (it MUST NOT write directly to final paths).
+
+- Any producer that writes contract-backed workspace artifacts MUST implement the
+  `pa.publisher.workspace.v1` semantics defined in this section.
+
+- First-party producer tooling that writes contract-backed workspace artifacts MUST NOT write
+  directly to final paths. It MUST either:
+
+  - use the reference workspace publisher implementation directly, OR
+  - demonstrate byte-for-byte behavioral conformance to `pa.publisher.workspace.v1` via the Contract
+    Spine conformance fixtures executed under `content.lint` (see `026_contract_spine.md`,
+    “Publisher semantics (`pa.publisher.workspace.v1`)”).
+    - Fixture root: `tests/fixtures/publisher/workspace/v1/`
+    - Minimum case IDs:
+      - `workspace_publisher_atomic_dir_publish_no_partial`
+      - `workspace_publisher_atomic_file_publish_no_partial`
+      - `workspace_validation_report_path_rule`
 
 Publisher semantics versioning (normative):
 
@@ -2120,13 +2137,12 @@ Run id derivation and consistency (normative):
 
 Path normalization (normative):
 
-- All artifact paths returned by the reader MUST be run-relative POSIX paths.
-- The reader MUST reject any path that:
-  - is absolute (starts with `/` or contains a drive prefix),
-  - contains a backslash (`\\`),
-  - contains a NUL byte,
-  - contains any `..` segment after normalization.
-- On violation, the reader MUST return `error_code="artifact_path_invalid"`.
+- All artifact paths returned by the reader MUST be valid `pa.run_relpath.v1` strings (run-relative
+  POSIX artifact file paths; see `026_contract_spine.md`).
+- When the reader is given an artifact path string from an input (e.g. evidence refs or API
+  parameters), the reader MUST validate it by parsing with `pa.run_relpath.v1`.
+  - On any parse failure, the reader MUST return `error_code="artifact_path_invalid"`.
+  - Consumers MUST treat `pa.run_relpath.v1` as authoritative (no bespoke path parsing).
 
 Contract-backed artifacts (normative):
 
@@ -2261,11 +2277,13 @@ Terminology note (normative):
   telemetry signals for an executed action are absent (see `070_scoring_metrics.md`).
 - Implementations MUST NOT map `artifact_missing` to the `missing_telemetry` gap category.
 
-Selector prefix sanity (normative):
+Selector validation (normative):
 
-- Selector prefixes are defined in the evidence ref selector grammar below.
-- If `selector` is present and its prefix is not one of the allowed prefixes, the reader MUST return
-  `error_code="evidence_selector_invalid"`.
+- The evidence ref selector grammar is defined in this document, and the single normative parser is
+  the parser module `pa.evidence_selector.v1`.
+- If `selector` is present, the reader MUST parse it using `pa.evidence_selector.v1`.
+- On any parse failure (unknown prefix or invalid payload for an allowed prefix), the reader MUST
+  return `error_code="evidence_selector_invalid"`.
 
 ### Stable reader error codes (pa.reader.v1)
 
@@ -2307,7 +2325,7 @@ Required error codes (v1):
 | `evidence_withheld`                    | warning  | Evidence is withheld (placeholder or explicit handling)                      |
 | `evidence_quarantined`                 | warning  | Evidence is quarantined and quarantine access is off                         |
 | `evidence_absent`                      | error    | Evidence ref declares `absent` handling                                      |
-| `evidence_selector_invalid`            | error    | Evidence selector prefix is invalid                                          |
+| `evidence_selector_invalid`            | error    | Evidence selector is invalid (unknown prefix or invalid payload)             |
 | `version_pin_conflict`                 | error    | Two authoritative version pin locations disagree                             |
 | `contracts_version_incompatible`       | error    | Consumer does not support `manifest.versions.contracts_version`              |
 | `schema_registry_version_incompatible` | error    | Consumer does not support `manifest.versions.schema_registry_version`        |
@@ -2451,6 +2469,8 @@ Artifact path requirements (normative):
 
 - `artifact_path` MUST be run-relative (no leading `/` and no `runs/<run_id>/` prefix), must not
   contain `..` segments, and must be normalized to use `/` separators.
+  - The single normative parser for `artifact_path` is `pa.run_relpath.v1` (see
+    `026_contract_spine.md`).
 - `artifact_path` MUST refer to a deterministic path defined by the storage formats spec.
 - Within any `evidence_refs` array, entries MUST be sorted deterministically using UTF-8 byte order
   (no locale) by the tuple:
@@ -2475,6 +2495,103 @@ Selector constraints (normative when present):
       used as a synonym for the empty pointer.
   - `jsonl_line:<N>`
     - `<N>` MUST be a base-10, 1-indexed positive integer selecting the Nth line from a JSONL file.
+
+#### Parser module: `pa.evidence_selector.v1`
+
+This parser module is the single normative interpretation of the evidence selector mini-language
+used in `evidence_refs[].selector`.
+
+Module identity (normative):
+
+- `module_token`: `pa.evidence_selector.v1`
+- `module_id`: `evidence_selector`
+- `module_version`: `v1`
+- `input_kind`: `utf8_text`
+- `newline_normalization`: `false`
+
+Limits (normative):
+
+- `max_input_chars`: 256
+  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
+    - `error_code="input_too_large"`, and
+    - `location.byte_offset == 0`.
+
+Grammar and strict acceptance rules (normative):
+
+- The input MUST be ASCII.
+  - If any byte is non-ASCII, parsing MUST fail closed with `error_code="non_ascii"`.
+- The input MUST NOT contain LF (`\n`) or CR (`\r`).
+  - If present, parsing MUST fail closed with `error_code="contains_newline"`.
+- The input MUST NOT contain a NUL code point (`\u0000`).
+  - If present, parsing MUST fail closed with `error_code="contains_nul"`.
+
+Selector forms (closed set; normative):
+
+1. `json_pointer:<pointer>`
+
+   - Empty pointer is allowed: `json_pointer:`.
+   - If the pointer is non-empty, it MUST start with `/`.
+   - Parsing MUST follow RFC 6901 unescaping per reference token:
+     - `~1` => `/`
+     - `~0` => `~`
+     - Any other `~` escape is invalid.
+
+1. `jsonl_line:<N>`
+
+   - `<N>` MUST be base-10 digits representing a positive integer (1-indexed).
+   - Leading zeros are forbidden.
+   - `<N>` MUST be in range `1..2147483647`.
+
+AST contract (normative):
+
+On success, the parser MUST return an AST (JSON-native) matching exactly one of:
+
+JSON Pointer:
+
+```json
+{ "kind": "json_pointer", "tokens": ["<token0>", "<token1>", "..."] }
+```
+
+JSONL line:
+
+```json
+{ "kind": "jsonl_line", "line": 123 }
+```
+
+Canonical rendering (normative):
+
+- For `json_pointer`:
+  - Render as `json_pointer:` + pointer string, where:
+    - empty `tokens[]` renders as the empty string (so `json_pointer:`), and
+    - otherwise render `"/" + tokens.map(escape).join("/")`.
+  - Escape rules (RFC 6901): `~` => `~0`, `/` => `~1`.
+- For `jsonl_line`:
+  - Render as `jsonl_line:` + base-10 digits with no leading zeros.
+
+Deterministic parse errors (normative):
+
+- Parsing MUST fail closed on any invalid input.
+- On parse failure, the implementation MUST return exactly one parser-module error: the leftmost
+  failure by `location.byte_offset`.
+- `message_prefix` MUST be exactly `pa.evidence_selector.v1: `.
+
+The following `error_code` values are defined for `pa.evidence_selector.v1`:
+
+- `input_too_large`
+- `non_ascii`
+- `contains_nul`
+- `contains_newline`
+- `unknown_selector_prefix`
+- `json_pointer_missing_leading_slash`
+- `json_pointer_invalid_escape`
+- `invalid_jsonl_line`
+- `jsonl_line_leading_zeros`
+- `jsonl_line_out_of_range`
+
+Verification hooks (normative):
+
+- Parser-module semantic lock: `tests/fixtures/parser_modules/evidence_selector_v1/vectors.json`
+  (see `100_test_strategy_ci.md`, "Parser modules").
 
 ### Compiled provenance envelope (shared shape)
 
@@ -4633,6 +4750,12 @@ Normalized events:
 When a run includes a plan draft snapshot (`inputs/plan_draft.yaml`), the orchestrator MUST record
 plan-draft provenance in the run manifest under `manifest.extensions.operator_interface`.
 
+Single source of truth (normative): This section is the authoritative field contract for
+`manifest.extensions.operator_interface.plan_draft_sha256` and
+`manifest.extensions.operator_interface.plan_draft_path`. Other specifications MAY reference this
+section, but MUST NOT restate these fields’ schema constraints, requiredness conditions, or hash
+basis in a divergent way.
+
 Minimum schema (v0.2):
 
 - `manifest.extensions.operator_interface` (object; required when `inputs/plan_draft.yaml` is
@@ -4662,9 +4785,6 @@ Representation alignment note (normative):
   run bundle manifest field `manifest.extensions.operator_interface.plan_draft_sha256` MUST use the
   canonical digest string form. Implementations MUST convert deterministically by prefixing
   `sha256:`.
-
-TODO (schema drift catch): Update `docs/contracts/manifest.schema.json` to validate the structural
-shape of `manifest.extensions.operator_interface`.
 
 ### Runner namespace: environment noise profile (v0.1)
 

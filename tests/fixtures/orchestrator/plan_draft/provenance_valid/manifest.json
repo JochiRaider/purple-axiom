@@ -1,0 +1,30 @@
+{
+  "contract_version": "0.1.0",
+  "extensions": {
+    "operator_interface": {
+      "plan_draft_path": "inputs/plan_draft.yaml",
+      "plan_draft_sha256": "sha256:0b395c907c9a168dfceed238982ce69eef4a84c74166f1edef5cbc8ea7670db6"
+    }
+  },
+  "run_id": "11111111-1111-4111-8111-111111111111",
+  "scenario": {
+    "posture": {
+      "mode": "baseline"
+    },
+    "scenario_id": "scn-fixture-001",
+    "scenario_version": "0.1.0"
+  },
+  "stage_outcomes": [
+    {
+      "fail_mode": "fail_closed",
+      "stage": "lab_provider",
+      "status": "success"
+    },
+    {
+      "fail_mode": "fail_closed",
+      "stage": "runner",
+      "status": "success"
+    }
+  ],
+  "status": "success"
+}

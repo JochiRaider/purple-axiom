@@ -300,6 +300,9 @@ Index entry format (normative):
     - `tests/fixtures/parser_modules/syslog_v1/vectors.json` (vector file)
     - `tests/fixtures/parser_modules/audit_event_key_v1/vectors.json` (vector file)
     - `tests/fixtures/parser_modules/auditd_record_kv_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/secret_ref_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/run_relpath_v1/vectors.json` (vector file)
+    - `tests/fixtures/parser_modules/evidence_selector_v1/vectors.json` (vector file)
 
   - Minimum fixture sets (normative):
 
@@ -311,6 +314,9 @@ Index entry format (normative):
     - `auditd_record_kv_v1_vectors` (vectors file present and exercised)
     - `win_event_xml_v1_vectors` (vectors file present and exercised)
     - `yaml_decode_v1_vectors` (vectors file present and exercised)
+    - `secret_ref_v1_vectors` (vectors file present and exercised)
+    - `run_relpath_v1_vectors` (vectors file present and exercised)
+    - `evidence_selector_v1_vectors` (vectors file present and exercised)
 
 - **Cross-cutting: Windows Event XML corpus (`windows_event_xml.v1`)**
 
@@ -391,6 +397,19 @@ Index entry format (normative):
   - Minimum fixture sets (normative):
     - `contract_registry_pass_id_smoke`
     - `workspace_contract_registry_pass_id_smoke`
+
+- **Cross-cutting: Atomic template linting (`atomic-template`)**
+
+  - Canonical fixture roots:
+    - `tests/fixtures/lint/atomic_template/v1/`
+  - Minimum fixture sets (normative):
+    - `atomic_template_invalid_placeholder_syntax`
+    - `atomic_template_undefined_placeholder_in_command`
+    - `atomic_template_undefined_placeholder_in_default`
+    - `atomic_template_missing_engine_test_id`
+    - `atomic_template_technique_yaml_missing`
+    - `scenario_atomic_yaml_not_found`
+    - `atomic_template_yaml_anchors_rejected`
 
 - **Cross-cutting: workspace publisher semantics (`pa.publisher.workspace.v1`)**
 
@@ -908,6 +927,68 @@ Golden output policy (normative):
 - The fixture harness MUST assert canonical JSON bytes for `lint.json` and MUST compare bytes
   directly (no parse-and-reemit), consistent with `125_linting.md`.
 
+### Atomic template linting (`atomic-template`)
+
+CI MUST validate the `atomic-template` lint target kind introduced in `125_linting.md`.
+
+Fixture root (normative): `tests/fixtures/lint/atomic_template/v1/`
+
+Minimum required fixture cases (normative):
+
+- `atomic_template_invalid_placeholder_syntax`
+
+  - Input workspace MUST include an Atomic technique YAML file whose `executor.command` contains an
+    invalid placeholder token (for example `#{1BAD}`).
+  - Expected: lint fails closed with a `lint-atomic-template-invalid-input-placeholder-syntax` error
+    at the correct `instance_path`, and the finding `details` MUST include `error_code` and
+    `location.byte_offset` matching `pa.template_atomic.v1` deterministic error selection.
+
+- `atomic_template_undefined_placeholder_in_command`
+
+  - Input workspace MUST include an Atomic technique YAML file whose `executor.command` references
+    an undeclared placeholder name (for example `#{MISSING}`) and whose `input_arguments` does not
+    declare that name.
+  - Expected: lint fails closed with `lint-atomic-template-undefined-input-placeholder`.
+
+- `atomic_template_undefined_placeholder_in_default`
+
+  - Input workspace MUST include an Atomic technique YAML file whose `input_arguments.<k>.default`
+    references an undeclared placeholder name (for example `#{B}`) that is not a key of the test's
+    `input_arguments`.
+  - Expected: lint fails closed with `lint-atomic-template-undefined-input-placeholder` at
+    `/atomic_tests/<i>/input_arguments/<k>/default`.
+
+- `atomic_template_missing_engine_test_id`
+
+  - Input workspace MUST include an Atomic technique YAML file with an `atomic_tests[]` entry whose
+    `auto_generated_guid` is missing or empty.
+  - Expected: lint fails closed with `lint-atomic-template-missing-engine-test-id`.
+
+- `atomic_template_technique_yaml_missing`
+
+  - Input workspace MUST include an `atomics/<technique_id>/` directory, but omit the required
+    `atomics/<technique_id>/<technique_id>.yaml` file.
+  - Expected: lint fails closed with `lint-atomic-template-technique-yaml-missing` whose `file` is
+    the expected missing path.
+
+- `scenario_atomic_yaml_not_found`
+
+  - Input workspace MUST include a scenario YAML with `plan.type="atomic"` and `plan.technique_id`
+    set to a technique whose canonical Atomic YAML file does not exist in the workspace.
+  - Expected: lint fails closed with `lint-scenario-atomic-yaml-not-found` and MUST still emit
+    `lint.json` (this is a normal lint finding, not a tool error).
+
+- `atomic_template_yaml_anchors_rejected`
+
+  - Input workspace MUST include an Atomic technique YAML file that uses a YAML anchor or alias.
+  - Expected: YAML decode fails closed and surfaces as `lint-core-parse-error` (demonstrates the
+    enforced safe YAML subset for linting).
+
+Golden output policy (normative):
+
+- The fixture harness MUST assert canonical JSON bytes for `lint.json` and MUST compare bytes
+  directly (no parse-and-reemit), consistent with `125_linting.md`.
+
 ### Parser modules
 
 Parser modules are cross-cutting parsers for mini-languages (for example YAML ingress decode,
@@ -1232,6 +1313,154 @@ Error location (normative):
 - For invalid cases, `expected_errors[0].location.byte_offset` MUST be present and MUST refer to the
   leftmost parse failure byte offset (0-indexed) as required by `pa.parser_vectors.v1`.
 - For the `input_too_large` case, `expected_errors[0].location.byte_offset` MUST be `0`.
+
+#### Secret reference string vectors (`pa.secret_ref.v1`)
+
+Fixture set (normative):
+
+- `secret_ref_v1_vectors` (semantic lock)
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/secret_ref_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token`: `pa.secret_ref.v1`
+- `module_id`: `secret_ref`
+- `module_version`: `v1`
+- `input_kind` MUST be `utf8_text`.
+
+AST contract (normative):
+
+- `expected_ast` MUST have the shape:
+
+  ```json
+  { "provider": "env|file|keychain|custom", "selector": "<string>" }
+  ```
+
+Rendered form (normative when present):
+
+- For valid cases, `expected_rendered` SHOULD be present and MUST equal the canonical
+  `<provider>:<selector>` form produced by the module.
+
+Required coverage (normative):
+
+- Valid cases MUST include at minimum:
+  - `env:CALDERA_TOKEN`
+  - `file:secrets/token.txt`
+  - `keychain:pa/token`
+  - `custom:caldera_token`
+- Invalid cases MUST include at minimum:
+  - missing colon (`missing_colon`)
+  - empty selector (`empty_selector`)
+  - unknown provider (`unknown_provider`)
+  - invalid env var name (`invalid_env_var_name`)
+  - contains newline (`contains_newline`)
+  - contains NUL (`contains_nul`)
+
+#### Run-relative artifact path vectors (`pa.run_relpath.v1`)
+
+Fixture set (normative):
+
+- `run_relpath_v1_vectors` (semantic lock)
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/run_relpath_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token`: `pa.run_relpath.v1`
+- `module_id`: `run_relpath`
+- `module_version`: `v1`
+- `input_kind` MUST be `utf8_text`.
+
+AST contract (normative):
+
+- `expected_ast` MUST have the shape:
+
+  ```json
+  { "segments": ["<seg1>", "<seg2>", "..."] }
+  ```
+
+Rendered form (normative when present):
+
+- For valid cases, `expected_rendered` SHOULD be present and MUST equal `segments.join("/")`.
+
+Required coverage (normative):
+
+- Valid cases MUST include at minimum:
+  - `manifest.json`
+  - `logs/telemetry_validation.json`
+  - `raw/windows/security_log.parquet`
+- Invalid cases MUST include at minimum:
+  - empty string (`empty_path`)
+  - leading slash (`leading_slash`)
+  - drive prefix (`has_drive_prefix`)
+  - empty segment (`contains_empty_segment`)
+  - dotdot segment (`contains_dotdot_segment`)
+  - trailing slash (`trailing_slash`)
+  - backslash (`contains_backslash`)
+  - run-root prefix `runs/<uuid>/...` (`has_runs_prefix`)
+
+#### Evidence selector vectors (`pa.evidence_selector.v1`)
+
+Fixture set (normative):
+
+- `evidence_selector_v1_vectors` (semantic lock)
+
+Vector file (normative):
+
+- `tests/fixtures/parser_modules/evidence_selector_v1/vectors.json`
+
+Module identity (normative):
+
+- `module_token`: `pa.evidence_selector.v1`
+- `module_id`: `evidence_selector`
+- `module_version`: `v1`
+- `input_kind` MUST be `utf8_text`.
+
+AST contract (normative):
+
+- For `kind=json_pointer` cases:
+
+  - `expected_ast` MUST have the shape:
+
+    ```json
+    { "kind": "json_pointer", "tokens": ["<token0>", "<token1>", "..."] }
+    ```
+
+- For `kind=jsonl_line` cases:
+
+  - `expected_ast` MUST have the shape:
+
+    ```json
+    { "kind": "jsonl_line", "line": 123 }
+    ```
+
+Rendered form (normative when present):
+
+- For valid cases, `expected_rendered` SHOULD be present and MUST equal the canonical rendered
+  selector string produced by the module.
+
+Required coverage (normative):
+
+- Valid cases MUST include at minimum:
+  - `json_pointer:` (empty pointer)
+  - `json_pointer:/` (empty-key token)
+  - `json_pointer:/versions/pipeline_version`
+  - `json_pointer:/a~1b` (token containing `/` via escape)
+  - `json_pointer:/m~0n` (token containing `~` via escape)
+  - `jsonl_line:1`
+  - `jsonl_line:42`
+- Invalid cases MUST include at minimum:
+  - unknown prefix (`unknown_selector_prefix`)
+  - non-ASCII input (`non_ascii`)
+  - missing leading slash for non-empty JSON pointer (`json_pointer_missing_leading_slash`)
+  - invalid JSON pointer escape (`json_pointer_invalid_escape`)
+  - `jsonl_line:0` (`invalid_jsonl_line`)
+  - leading zeros (`jsonl_line_leading_zeros`)
 
 #### Syslog line vectors
 
@@ -2774,6 +3003,13 @@ When the operator-interface/control-plane scope profile is enabled (v0.2+; see `
     `manifest.extensions.operator_interface`.
   - Assert the cross-artifact invariant fails closed and emits a deterministic pointer (JSON Pointer
     or dotted path) to `manifest.extensions.operator_interface`.
+
+- `plan_draft_provenance_absent_valid` (v0.2+; cross-artifact invariant)
+
+  - Fixture root: `tests/fixtures/orchestrator/plan_draft/provenance_absent_valid/`
+  - Provide a run bundle that omits `inputs/plan_draft.yaml` and omits
+    `manifest.extensions.operator_interface`.
+  - Assert contract validation succeeds (the provenance coupling is iff, so absence is valid).
 
 - `plan_draft_provenance_hash_mismatch_fails` (v0.2+; fail closed)
 

@@ -243,6 +243,110 @@ Constraints:
 - Paths MUST NOT contain empty segments (`//` is forbidden).
 - Paths MUST NOT end with `/`.
 
+Run-relative artifact file paths (normative):
+
+- Many artifact schemas carry run-relative file path strings (for example `artifact_path`,
+  `sidecar_ref`, `payload_overflow_ref`).
+- The single normative parser for run-relative artifact file path strings is the parser module
+  `pa.run_relpath.v1` (defined below).
+- Any run-relative artifact file path string MUST conform to `pa.run_relpath.v1`, including the
+  additional rule that the string MUST NOT include the `runs/<run_id>/` prefix.
+
+#### Parser module: `pa.run_relpath.v1`
+
+This parser module is the single normative interpretation of run-relative artifact file paths used
+across schemas and publish/read surfaces.
+
+Module identity (normative):
+
+- `module_token`: `pa.run_relpath.v1`
+- `module_id`: `run_relpath`
+- `module_version`: `v1`
+- `input_kind`: `utf8_text`
+- `newline_normalization`: `false`
+
+Limits (normative):
+
+- `max_input_chars`: 4096
+  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
+    - `error_code="input_too_large"`, and
+    - `location.byte_offset == 0`.
+
+Grammar and strict acceptance rules (normative):
+
+- The input MUST NOT be the empty string.
+  - If empty, parsing MUST fail closed with `error_code="empty_path"`.
+- The input MUST NOT contain LF (`\n`) or CR (`\r`).
+  - If present, parsing MUST fail closed with `error_code="contains_newline"`.
+- The input MUST NOT contain a NUL code point (`\u0000`).
+  - If present, parsing MUST fail closed with `error_code="contains_nul"`.
+- The input MUST NOT contain a backslash character (`\\`).
+  - If present, parsing MUST fail closed with `error_code="contains_backslash"`.
+- The input MUST NOT start with `/`.
+  - If present, parsing MUST fail closed with `error_code="leading_slash"`.
+- The input MUST NOT end with `/`.
+  - If present, parsing MUST fail closed with `error_code="trailing_slash"`.
+- The input MUST NOT contain empty segments (`//`).
+  - If present, parsing MUST fail closed with `error_code="contains_empty_segment"`.
+- The input MUST NOT contain any `..` segment.
+  - If present, parsing MUST fail closed with `error_code="contains_dotdot_segment"`.
+- The input MUST NOT contain a drive prefix at the beginning (for example `C:`).
+  - If present, parsing MUST fail closed with `error_code="has_drive_prefix"`.
+
+Run-root prefix rejection (normative):
+
+- The input MUST NOT begin with `runs/<run_id>/`.
+  - Implementations MUST detect this by recognizing the prefix `runs/` followed by a canonical UUID
+    string (36 ASCII chars with hyphens) and a subsequent `/`.
+  - If present, parsing MUST fail closed with `error_code="has_runs_prefix"`.
+
+AST contract (normative):
+
+On success, the parser MUST return an AST (JSON-native):
+
+```json
+{
+  "segments": ["<seg1>", "<seg2>", "..."]
+}
+```
+
+Canonical rendering (normative):
+
+- The canonical rendered form MUST be `segments.join("/")`.
+
+Deterministic parse errors (normative):
+
+- Parsing MUST fail closed on any invalid input.
+- On parse failure, the implementation MUST return exactly one parser-module error: the leftmost
+  failure by `location.byte_offset`.
+- `message_prefix` MUST be exactly `pa.run_relpath.v1: `.
+
+Location semantics (normative):
+
+- `has_runs_prefix`: `location.byte_offset == 0`.
+- `contains_dotdot_segment`: byte offset of the first `.` in the offending `..` segment.
+- `contains_empty_segment`: byte offset of the second `/` in the first `//` run.
+- `trailing_slash`: byte offset of the final `/`.
+
+The following `error_code` values are defined for `pa.run_relpath.v1`:
+
+- `input_too_large`
+- `empty_path`
+- `contains_nul`
+- `contains_newline`
+- `contains_backslash`
+- `leading_slash`
+- `trailing_slash`
+- `contains_empty_segment`
+- `contains_dotdot_segment`
+- `has_drive_prefix`
+- `has_runs_prefix`
+
+Verification hooks (normative):
+
+- Parser-module semantic lock: `tests/fixtures/parser_modules/run_relpath_v1/vectors.json` (see
+  `100_test_strategy_ci.md`, "Parser modules").
+
 ### Glob semantics
 
 - All components that interpret `bindings[].artifact_glob` MUST implement `glob_v1` semantics
@@ -1479,6 +1583,19 @@ The following parser modules are treated as parser modules for v0.1:
     `100_test_strategy_ci.md`).
 - `pa.checksums_file.v1`: `security/checksums.txt` parser (defined in `025_data_contracts.md`).
   - Golden vectors: `tests/fixtures/parser_modules/checksums_file_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
+- `pa.secret_ref.v1`: secret reference string parser used for config keys ending in `_ref`.
+  - Grammar + AST contract: `120_config_reference.md`, "Parser module: `pa.secret_ref.v1`".
+  - Golden vectors: `tests/fixtures/parser_modules/secret_ref_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
+- `pa.run_relpath.v1`: run-relative POSIX artifact file path parser (file paths only; not directory
+  roots).
+  - Grammar + AST contract: `026_contract_spine.md`, "Parser module: `pa.run_relpath.v1`".
+  - Golden vectors: `tests/fixtures/parser_modules/run_relpath_v1/vectors.json` (see
+    `100_test_strategy_ci.md`).
+- `pa.evidence_selector.v1`: evidence selector mini-language parser used in `evidence_refs[]`.
+  - Grammar + AST contract: `025_data_contracts.md`, "Parser module: `pa.evidence_selector.v1`".
+  - Golden vectors: `tests/fixtures/parser_modules/evidence_selector_v1/vectors.json` (see
     `100_test_strategy_ci.md`).
 
 Template placeholder parser modules additions (v0.1; normative):

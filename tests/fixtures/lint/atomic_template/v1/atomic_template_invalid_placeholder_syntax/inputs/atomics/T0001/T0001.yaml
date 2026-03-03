@@ -1,0 +1,8 @@
+attack_technique: T0001
+display_name: "Technique T0001"
+atomic_tests:
+  - name: "Bad placeholder syntax"
+    auto_generated_guid: "11111111-1111-1111-1111-111111111111"
+    executor:
+      name: "sh"
+      command: "echo #{1BAD}"

@@ -1,0 +1,13 @@
+attack_technique: T0003
+display_name: "Technique T0003"
+atomic_tests:
+  - name: "Undefined placeholder in default"
+    auto_generated_guid: "33333333-3333-3333-3333-333333333333"
+    input_arguments:
+      A:
+        description: "A"
+        type: "string"
+        default: "#{B}"
+    executor:
+      name: "sh"
+      command: "echo hi"

@@ -1,0 +1,16 @@
+scenario_id: "scn-fixture-atomic-yaml-not-found"
+scenario_version: "0.1.0"
+name: "Fixture: missing Atomic YAML"
+description: "Scenario references an Atomic technique YAML that is not present in the workspace"
+safety:
+  allow_network: false
+targets:
+  - selector:
+      roles: ["endpoint"]
+      os: ["windows"]
+plan:
+  type: "atomic"
+  technique_id: "T0006"
+  engine_test_id: "66666666-6666-6666-6666-666666666666"
+  idempotence: "unknown"
+  cleanup: true

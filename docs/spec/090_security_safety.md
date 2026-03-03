@@ -236,6 +236,9 @@ Normative requirements:
 
 - Config keys ending in `_ref` MUST use a secret reference string as defined in
   [configuration reference](120_config_reference.md) under "Secret reference strings".
+- Secret reference strings MUST parse successfully via the parser module `pa.secret_ref.v1`.
+  - Unknown/invalid syntax MUST fail closed.
+  - Diagnostics MUST NOT echo the full reference string; errors MAY include the provider token.
 - Implementations MUST resolve secrets at runtime and MUST NOT write resolved secret values into run
   bundles, logs, or reports.
 - If `security.secrets.provider: custom` is used, implementations MUST enforce the custom provider

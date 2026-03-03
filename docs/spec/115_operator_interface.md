@@ -830,6 +830,15 @@ Denied:
 - `unredacted/` (quarantined; see below; default name — implementations MUST also quarantine
   `security.redaction.unredacted_dir`)
 
+Request path validation (normative):
+
+- Any user-supplied artifact-path string MUST be validated by parsing with `pa.run_relpath.v1`
+  before allowlist evaluation.
+- If `pa.run_relpath.v1` parsing fails, the API MUST deny the request with
+  `reason_code="artifact_path_traversal"`.
+- If parsing succeeds but the path is not allowed by policy/allowlist, the API MUST deny the request
+  with `reason_code="artifact_path_denied"`.
+
 Directory listing requirements (normative):
 
 - Directory listings MUST be deterministic.
@@ -930,9 +939,11 @@ Exports MUST follow the orchestrator `export` verb semantics:
   "Workspace-global export staging directories").
 - Implementations MUST NOT use per-product staging directories under the final export namespaces
   (for example `exports/datasets/.staging/**`).
-- Implementations SHOULD use `pa.publisher.workspace.v1` for this publish step (see
+- Publication MUST conform to `pa.publisher.workspace.v1` semantics for this publish step (see
   `025_data_contracts.md`, "Producer tooling: workspace publisher semantics
-  (pa.publisher.workspace.v1)").
+  (pa.publisher.workspace.v1)"). Implementations SHOULD use the repository-provided reference
+  workspace publisher implementation unless they demonstrate byte-for-byte conformance via the
+  Contract Spine fixture suite for `pa.publisher.workspace.v1` (executed under `content.lint`).
 
 **Contract validation + failure observability (normative):**
 
@@ -1694,10 +1705,15 @@ that adopt it:
 
    **Manifest extension fields (schema evolution).**
 
-   - Extend the existing `manifest` contract (`docs/contracts/manifest.schema.json`) to include:
+   - The existing `manifest` contract (`docs/contracts/manifest.schema.json`) validates the
+     structural shape of `manifest.extensions.operator_interface`, including:
      - `manifest.extensions.operator_interface.plan_draft_sha256`
      - `manifest.extensions.operator_interface.plan_draft_path`
-
+   - Schema source of truth (normative): the field definitions, requiredness conditions, and hash
+     basis are defined in `spec/025_data_contracts.md` under
+     "Operator Interface namespace: plan draft provenance (v0.2+)". This document is a consumer and
+     MUST NOT restate those constraints in a divergent way.
+     
    **Workspace-global artifacts (workspace-root validation required).**
 
    The following are workspace-root artifacts (not run-relative). They MUST NOT be silently made
@@ -1714,8 +1730,9 @@ that adopt it:
 
    - CI MUST include fixtures that validate the run-bundle artifacts above using the normal
      publish-gate `ContractValidator`.
-   - CI MUST also validate the workspace-global artifacts above using the chosen strategy in item 3
-     (workspace-root bindings or a separate workspace validator invocation).
+   - CI MUST validate the workspace-global artifacts above using the workspace contract registry
+     (`docs/contracts/workspace_contract_registry.json`) and the Contract Spine conformance fixtures
+     for `pa.publisher.workspace.v1` (executed under the `content.lint` gate).
 
 1. **Schema source of truth (payload definitions are already in this spec)**
 
@@ -1727,8 +1744,11 @@ that adopt it:
      `### Control artifacts (normative)`
    - `retry_request.json` / `retry_decision.json`: corresponding subsections under
      `### Control artifacts (normative)`
-   - plan draft snapshot + hashing: `## Plan building (v0.2 normative)` → `### Draft plans` and
-     `### Run association and immutability`
+   - plan draft snapshot + hashing:
+     - Operator workflow + semantics: `## Plan building (v0.2 normative)` → `### Draft plans` and
+       `### Run association and immutability`
+     - Manifest extension field contract (names, invariants, requiredness, hash basis):
+       `spec/025_data_contracts.md` → "Operator Interface namespace: plan draft provenance (v0.2+)"
    - export manifest: `### Export behavior (normative)` → **Export manifest (normative)**
 
 1. **Workspace-global artifacts (workspace-root validation; resolved)**

@@ -1,0 +1,9 @@
+plan_graph:
+  contract_version: "plan_graph_v1"
+  plan_model_version: "0.2.0"
+  scenario_id: "scn-fixture-001"
+  scenario_version: "0.1.0"
+  scenario_posture:
+    mode: "baseline"
+  plan_type: "atomic"
+  nodes: []

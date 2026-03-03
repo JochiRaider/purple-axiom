@@ -1,0 +1,8 @@
+attack_technique: T0007
+display_name: &n "Anchors not allowed"
+atomic_tests:
+  - name: *n
+    auto_generated_guid: "77777777-7777-7777-7777-777777777777"
+    executor:
+      name: "sh"
+      command: "echo hi"

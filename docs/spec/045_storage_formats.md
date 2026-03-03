@@ -69,6 +69,8 @@ Path notation (normative):
 - Any field that stores an artifact path (for example, `evidence_refs[].artifact_path`,
   `sidecar_ref`, `payload_overflow_ref`) MUST store a run-relative POSIX path (relative to the run
   bundle root) and MUST NOT include the `runs/<run_id>/` prefix.
+  - The single normative parser for run-relative artifact file paths is the parser module
+    `pa.run_relpath.v1` (see `026_contract_spine.md`).
   - Example run-relative paths: `manifest.json`, `inputs/baseline_run_ref.json`,
     `raw/evidence/blobs/wineventlog/<event_id_dir>/<field_path_hash>.xml`.
 
@@ -648,6 +650,12 @@ Reference fields (normative):
   - dataset-specific reference fields with identical semantics (for example `payload_overflow_ref` /
     `payload_overflow_sha256` in the raw Windows Event Log dataset).
 
+Reference path validation (normative):
+
+- When present, any reference-path field (`sidecar_ref`, `payload_overflow_ref`, or equivalent
+  dataset-specific reference-path field) MUST conform to the parser module `pa.run_relpath.v1`.
+  - Producers SHOULD emit the canonical rendered form.
+
 If redaction is disabled (`security.redaction.enabled=false`), sidecar payload retention MUST follow
 the same withhold/quarantine rules as other evidence-tier artifacts.
 
@@ -992,7 +1000,8 @@ Canonical raw payload (required):
   - These canonical bytes are also the input to the Windows Event XML parser module
     `pa.win_event_xml.v1`.
 - `event_xml_truncated` (bool, required)
-- `payload_overflow_ref` (string, nullable; run-relative sidecar path when overflow is written)
+- `payload_overflow_ref` (string, nullable; run-relative sidecar path when overflow is written; MUST
+  conform to `pa.run_relpath.v1`)
 - `payload_overflow_sha256` (string, nullable; `sha256:<lowercase_hex>` digest of the sidecar
   payload bytes)
 - `payload_overflow_bytes` (int64, nullable; byte length of the sidecar payload bytes when overflow

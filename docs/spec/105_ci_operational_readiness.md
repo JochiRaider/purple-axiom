@@ -170,12 +170,22 @@ Findings artifacts (normative):
 Workspace artifact publication rules (normative):
 
 - Any contract-backed workspace artifact written under `artifacts/**` (including
-  `artifacts/findings/**` and `artifacts/fixtures/**`) MUST be published using crash-safe atomic
-  file replace semantics (write-to-temp in the same parent directory + atomic rename).
+  `artifacts/findings/**` and `artifacts/fixtures/**`) MUST be published in conformance with
+  `pa.publisher.workspace.v1` semantics.
+
+- For single-file artifacts under `artifacts/**`, publication MUST use crash-safe atomic file
+  replace semantics (write-to-temp in the same parent directory + atomic rename).
+
 - Producers MUST validate contract-backed workspace artifacts against the workspace contract
   registry (`docs/contracts/workspace_contract_registry.json`) before the final rename.
-- Producers SHOULD use `pa.publisher.workspace.v1` to implement these semantics consistently (see
-  `025_data_contracts.md`).
+
+- Producers SHOULD use the repository-provided reference workspace publisher implementation unless
+  they demonstrate byte-for-byte conformance via the Contract Spine fixture suite for
+  `pa.publisher.workspace.v1` (executed under `content.lint`; see `026_contract_spine.md`).
+
+- If a REQUIRED gate cannot publish its required findings artifact due to a publisher failure (I/O
+  error, atomic promotion failure, or contract validation failure), that gate MUST fail (exit
+  non-zero), and Content CI MUST fail closed.
 
 Optional failure observability (normative; conditional):
 

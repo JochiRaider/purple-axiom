@@ -1,0 +1,8 @@
+attack_technique: T0004
+display_name: "Technique T0004"
+atomic_tests:
+  - name: "Missing engine_test_id"
+    auto_generated_guid: ""
+    executor:
+      name: "sh"
+      command: "echo hi"

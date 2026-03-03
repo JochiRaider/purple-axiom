@@ -46,6 +46,12 @@ This specification does **not** define:
 - The Atomic Red Team integration details (see `032_atomic_red_team_executor_integration.md`).
 - The multi-action plan graph compiler (reserved for v0.2+, see `031_plan_execution_model.md`).
 
+ECS note (informative): runner implementations MAY use an entity-component-system (ECS)
+orchestration model as a runner-internal technique to implement when the adapter is called and why
+it is not called deterministically and testably. This does not change the execution adapter
+boundary, published artifact contracts, or lifecycle semantics (those are owned by the scenario
+model and data contracts and enforced by the runner action lifecycle state machine).
+
 ## Definitions
 
 - **Execution adapter**: a concrete implementation selected by `runner.type` by the orchestrator
@@ -77,6 +83,21 @@ describe the raw transport carrier surface.
 | Ground-truth record      | `extensions.synthetic_correlation_marker` / `_digest`                       | `ground_truth.jsonl` (runner output)    |
 | Normalized OCSF envelope | `metadata.extensions.purple_axiom.synthetic_correlation_marker` / `_digest` | normalized event store                  |
 | Raw transport carrier    | event body / Windows EventData / filelog line                               | transport-specific; no fixed field path |
+
+### Runner-internal ECS terms (informative)
+
+These terms are runner-internal and non-protocol. They exist only to describe one acceptable runner
+core orchestration technique.
+
+- **World**: the run-scoped container for runner-internal orchestration state.
+- **Entity**: an opaque identifier within a world representing a unit of work/state.
+- **Component**: a typed data record attached to an entity.
+- **System**: a deterministic function that reads and/or writes components for entities selected by
+  a query.
+- **Query**: a selection of entities based on component presence (and optional predicates).
+
+v0.1 action entity key (informative): action entities MAY be keyed by `action_id` within a
+run-scoped world. `action_id` is run-scoped correlation, not cross-run stable identity.
 
 ### Executor variant normalization
 
@@ -146,6 +167,86 @@ Publish-gate compliance (normative):
 - Execution adapters MUST NOT write contract-backed artifacts directly to their final run-bundle
   paths. They MUST publish contract-backed artifacts only via the runner stage publish gate session
   (stage writes are staged, validated, and then atomically promoted)
+
+### Runner orchestration model (ECS; runner-internal)
+
+This section is runner-internal. It defines one acceptable orchestration model that MAY be used to
+implement runner control flow while keeping the execution adapter boundary stable and testable.
+
+#### Conditional determinism invariants (normative; conditional on ECS usage)
+
+If the runner uses an ECS model for orchestration, it MUST satisfy the following invariants:
+
+- **Fixed system order**: systems execute in a declared, deterministic order (static list).
+- **Stable entity iteration**: action entities are processed in a stable order. v0.1 rule: ascending
+  UTF-8 byte order of `action_id`.
+- **No map-order dependence**: no observable behavior (published artifacts, counters, or
+  `ground_truth.jsonl` ordering) depends on hash-map iteration order.
+- **Single-writer rule per tick**: if multiple systems may write the same component type, the write
+  order MUST be explicit and deterministic.
+
+Observability and verification (informative): determinism is externally observable through stable
+`ground_truth.jsonl` output, stable artifact hashes (for example
+`parameters.resolved_inputs_sha256`), and stable counters; verify using the existing determinism
+fixtures and runner conformance suites.
+
+#### Adapter invocation guard (normative; seam-level)
+
+To keep the adapter seam narrow and mechanically testable:
+
+- The execution adapter MUST be invoked only from a single, explicitly designated system
+  (conceptually: `InvokeAdapterExecuteSystem`).
+- That system MUST enforce the runner responsibilities at the adapter seam:
+  - publish-gate-only writes for adapter evidence,
+  - deterministic preconditions for invocation, and
+  - lifecycle compatibility with the runner action lifecycle state machine defined elsewhere.
+
+Preconditions (normative; externally checkable):
+
+- `resolved_inputs_redacted.json` has been materialized (real or deterministic placeholder) and its
+  `resolved_inputs_sha256` is known before `execute` is attempted.
+- When requirements evaluation is performed, it is recorded and, if
+  `requirements.evaluation != satisfied`, `execute` MUST NOT be attempted.
+- The adapter is provided a publish sink rooted at `runner/actions/<action_id>/` that writes only
+  through the runner stage publish gate session.
+
+#### Minimal component catalog (normative; runner-internal)
+
+This catalog is runner-internal and is intended only as a mapping aid when ECS is used. Components
+are not protocol objects and are not published directly.
+
+- `ActionIdentity`: `run_id`, `action_id`, `action_key`, `engine`, `technique_id`, `engine_test_id`,
+  `idempotence`, `target_asset_id`.
+- `ResolvedTargetSnapshot`: `target_asset_id` plus any resolved target metadata required for ground
+  truth (`resolved_target`).
+- `ResolvedInputsRef`: run-relative ref `runner/actions/<action_id>/resolved_inputs_redacted.json`
+  plus `resolved_inputs_sha256`.
+- `RequirementsEvaluationRef`: ref to `runner/actions/<action_id>/requirements_evaluation.json` when
+  evaluation is performed, plus an `evaluation` summary.
+- `CorrelationMarker`: canonical marker + digest marker, plus selected carrier/transport strategy
+  when enabled.
+- `PublishSink`: wrapper around the runner stage publish gate session scoped to the action root.
+- `SideEffectLedgerAppender`: append-and-flush handle for
+  `runner/actions/<action_id>/side_effect_ledger.json`.
+- `AdapterBinding`: `adapter_id`, `capabilities_sha256`, normalized executor variant (when
+  applicable).
+- `AdapterExecutionResult`: phase outcome + reason codes for `execute`, plus evidence refs.
+- `StructuredExecutionRecordRef`: for Atomic, the structured execution record at
+  `runner/actions/<action_id>/attire.json`.
+
+Refinement (informative): for Atomic execution, ground truth evidence pointers are derived from the
+structured execution record and runner evidence artifacts, not from any ECS journal.
+
+#### Reference system schedule (informative)
+
+This is one acceptable v0.1 schedule when ECS is used. It is not the normative lifecycle definition.
+
+- Resolve target snapshot.
+- Resolve inputs and materialize `resolved_inputs_redacted.json` (real or placeholder).
+- Requirements evaluation (read-only probes) and emission of `requirements_evaluation.json`.
+- Prerequisites check/get and prerequisite transcript artifacts when dependencies are present.
+- Invoke adapter `execute` and publish adapter evidence under `runner/actions/<action_id>/`.
+- Structured execution record capture to `attire.json` (Atomic).
 
 ## Capability declaration
 
@@ -234,7 +335,7 @@ correlation.
     - `canonical`: transport MUST carry the canonical marker value (ground truth:
       `extensions.synthetic_correlation_marker`; normalized OCSF:
       `metadata.extensions.purple_axiom.synthetic_correlation_marker`).
-    - `token`: transport MUST carry the marker token value (ground truth:
+    - `digest`: transport MUST carry the marker token value (ground truth:
       `extensions.synthetic_correlation_marker_digest`; normalized OCSF:
       `metadata.extensions.purple_axiom.synthetic_correlation_marker_digest`).
     - `either`: transport MAY carry either form.
@@ -246,11 +347,11 @@ correlation.
 
 #### Value form selection (normative)
 
-- The runner MUST compute and record both marker forms (canonical + token) as defined in
+- The runner MUST compute and record both marker forms (canonical + digest) as defined in
   `025_data_contracts.md`.
 - For any transport where `value_form` includes `canonical`, the adapter MUST ensure the canonical
   marker satisfies the transport’s declared constraints (when present). For any transport where
-  `value_form` includes `digest`, the adapter MUST ensure the token satisfies the transport’s
+  `value_form` includes `digest`, the adapter MUST ensure the digest satisfies the transport’s
   declared constraints (when present).
 - Implementations MUST NOT perform heuristic correlation to compensate for missing required
   transport surfaces.
@@ -302,24 +403,24 @@ If enabled (`runner.atomic.synthetic_correlation_marker.enabled=true`):
 
 - The runner MUST compute and record **both** of the following per action:
   - `extensions.synthetic_correlation_marker` (canonical marker string; see `025_data_contracts.md`)
-  - `extensions.synthetic_correlation_marker_digest` (deterministic derived token; see
+  - `extensions.synthetic_correlation_marker_digest` (deterministic derived digest; see
     `025_data_contracts.md`)
 - Marker-bearing telemetry emission is adapter-specific and MUST follow the adapter’s declared
   correlation carrier matrix:
   - For each `required=true` transport, the adapter MUST emit marker-bearing telemetry that carries
-    either the canonical marker, the token, or both as specified by that transport’s `value_form`.
+    either the canonical marker, the digest, or both as specified by that transport’s `value_form`.
 - The runner MUST also record the marker emission attempt in
   `runner/actions/<action_id>/side_effect_ledger.json` (contract: `side_effect_ledger`) before the
   emission attempt is made (see `032_atomic_red_team_executor_integration.md`).
 
-The marker canonical format and token derivation are defined in `025_data_contracts.md`
+The marker canonical format and digest derivation are defined in `025_data_contracts.md`
 (`extensions.synthetic_correlation_marker*`).
 
 ### v0.2+ carrier options (non-normative)
 
 Future execution adapters MAY introduce additional carrier types, for example:
 
-- `cloud_resource_tag`: tag cloud resources with a run/action token that surfaces in audit logs
+- `cloud_resource_tag`: tag cloud resources with a run/action digest that surfaces in audit logs
 - `framework_operation_id`: propagate a framework-native operation id (for example a Caldera
   operation id) into ground truth and evaluator join logic
 - `trace_id`: propagate an OpenTelemetry trace/span id into telemetry (requires end-to-end trace
@@ -430,7 +531,8 @@ Where:
 - `action_context` includes only deterministic inputs:
   - run identifiers (`run_id`, `action_id`, `action_key`)
   - resolved target snapshot (from `lab_inventory_snapshot.json` selection)
-  - resolved inputs artifact reference (`resolved_inputs_redacted.json`, when present)
+  - resolved inputs artifact reference (`resolved_inputs_redacted.json`; always present, but may be
+    a deterministic placeholder)
   - effective runner config (with secrets withheld/redacted)
   - effective policy snapshot
   - a publish-gate artifact sink for staging contract-backed artifacts for publication under
@@ -440,6 +542,24 @@ Where:
 - `execution_result` includes:
   - stable action phase outcomes and reason codes
   - references to contract-backed evidence artifacts published under `runner/actions/<action_id>/`
+
+### Action context projection mapping (informative)
+
+This block describes one ECS-friendly mapping from conceptual `action_context` fields to
+runner-internal component sources.
+
+- `action_context.identity` → `ActionIdentity`
+- `action_context.resolved_target` → `ResolvedTargetSnapshot`
+- `action_context.resolved_inputs_ref` → `ResolvedInputsRef`
+- `action_context.requirements_evaluation_ref` → `RequirementsEvaluationRef` (when present)
+- `action_context.correlation_marker` → `CorrelationMarker` (when enabled)
+- `action_context.publish_sink` → `PublishSink`
+- `action_context.side_effect_ledger` → `SideEffectLedgerAppender`
+- `action_context.policy_snapshot` → runner-provided policy/config snapshot (runner-scoped; not
+  adapter-controlled)
+
+Normative clarification: `action_context` MUST be treated by adapters as immutable input. Adapters
+MUST NOT mutate `action_context` as a signaling channel.
 
 ## v0.1 execution adapters
 
@@ -554,6 +674,10 @@ Minimum conformance checks (normative):
      outcomes").
    - Fixture directory names MAY use coarse failure-class labels, but asserted `reason_code` values
      MUST match the owning integration specification.
+
+Note (informative): runner lifecycle and requirements gating behaviors that indirectly validate
+"adapter not invoked when gated" are covered by runner fixture groups under `tests/fixtures/runner/`
+(see `100_test_strategy_ci.md`).
 
 ### Fixture layout (required)
 

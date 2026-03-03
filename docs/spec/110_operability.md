@@ -547,6 +547,29 @@ When the runner enforces lifecycle transition guards and rerun-safety rules, it 
      blocked.
    - `runner_unsafe_rerun_blocked_total` (u64): count of unsafe reruns attempted and blocked.
 
+#### Optional execution counters derived from ground truth (RECOMMENDED)
+
+To provide queryable runner execution semantics without introducing new artifacts, the runner SHOULD
+emit the following counters (into `runs/<run_id>/logs/counters.json` and optionally a metrics
+backend):
+
+- `runner_actions_total` (u64): number of action records emitted to `ground_truth.jsonl`.
+- `runner_execute_attempts_total` (u64): number of `execute` phase records with
+  `phase_outcome in {success, failed}` across all actions (counts retries in v0.2+).
+- `runner_execute_skipped_total` (u64): number of `execute` phase records with
+  `phase_outcome=skipped`.
+- `runner_execute_failed_total` (u64): number of `execute` phase records with
+  `phase_outcome=failed`.
+
+Verification hook (informative): CI fixtures MAY assert these counters match counts derived from
+`ground_truth.jsonl` for deterministic fixture runs.
+
+#### Volatile orchestration traces (RECOMMENDED)
+
+If an implementation emits a detailed orchestration trace (for example system-by-system ECS ticks),
+it SHOULD be treated as volatile diagnostics. Volatile diagnostics MUST NOT be used as contracted
+truth and MUST be excluded from determinism comparisons.
+
 ## Telemetry validation (gating)
 
 A telemetry stage is only considered "validated" for an asset when a validation run produces the

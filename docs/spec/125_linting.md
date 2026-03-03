@@ -932,6 +932,24 @@ Minimum rule requirements:
       - `details.expected_root=<bindings[i].stage_owner>` (RECOMMENDED)
       - `details.observed_root=<pass_id_root>` (RECOMMENDED)
 
+- Binding `artifact_glob` checks (normative):
+
+  - Rule ID: `lint-contract-registry-artifact-glob-invalid`
+
+    - The linter MUST validate each `bindings[i].artifact_glob` by invoking the canonical glob
+      parser module `pa.glob.v1` (glob_v1 semantics).
+    - If parsing fails, the linter MUST emit an `error` finding with:
+      - `instance_path` set to `/bindings/<i>/artifact_glob`
+      - `rule_id` set to `lint-contract-registry-artifact-glob-invalid`
+      - `severity` set to `error`
+    - The finding `details` MUST include the parser module error surface:
+      - `module_token` (`pa.glob.v1`)
+      - `message_prefix` (`pa.glob.v1: `)
+      - `error_code`
+      - `location` (including `byte_offset`)
+    - If the parser returns multiple errors, the linter MUST select the first error in the
+      parser-provided `errors[]` order.
+
 - Required pass manifest binding check (normative):
 
   - Rule ID: `lint-contract-registry-pass-manifest-binding-missing`
@@ -989,6 +1007,24 @@ Minimum rule requirements:
       - `severity="error"`
       - `details.expected_root=<bindings[i].stage_owner>` (RECOMMENDED)
       - `details.observed_root=<pass_id_root>` (RECOMMENDED)
+
+- Binding `artifact_glob` checks (normative):
+
+  - Rule ID: `lint-workspace-contract-registry-artifact-glob-invalid`
+
+    - The linter MUST validate each `bindings[i].artifact_glob` by invoking the canonical glob
+      parser module `pa.glob.v1` (glob_v1 semantics).
+    - If parsing fails, the linter MUST emit an `error` finding with:
+      - `instance_path` set to `/bindings/<i>/artifact_glob`
+      - `rule_id` set to `lint-workspace-contract-registry-artifact-glob-invalid`
+      - `severity` set to `error`
+    - The finding `details` MUST include the parser module error surface:
+      - `module_token` (`pa.glob.v1`)
+      - `message_prefix` (`pa.glob.v1: `)
+      - `error_code`
+      - `location` (including `byte_offset`)
+    - If the parser returns multiple errors, the linter MUST select the first error in the
+      parser-provided `errors[]` order.
 
 ## Schema publishing and editor integration
 

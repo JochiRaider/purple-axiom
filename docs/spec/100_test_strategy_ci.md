@@ -1045,7 +1045,6 @@ Minimum case set (normative):
 
 - The vectors file MUST include, at minimum, invalid cases that fail closed for:
 
-  - input exceeds `max_input_chars` (`error_code=input_too_large`; `location.byte_offset=0`)
   - missing root `$` (example `.a`)
   - recursive descent (`..`)
   - filters (`?()`)
@@ -1057,7 +1056,8 @@ Minimum case set (normative):
 - The vectors file MUST include, at minimum, invalid cases that fail closed for enforced hard limits
   declared for `pa.jsonpath.v1` in ADR-0003, including:
 
-  - expression length exceeds `max_input_chars` (`error_code=expression_too_long`)
+  - expression length exceeds `max_input_chars` (`error_code=expression_too_long`;
+    `location.byte_offset` MUST equal `max_input_chars`)
   - segment count exceeds `max_segments` (`error_code=too_many_segments`)
   - identifier length exceeds `max_identifier_chars` (`error_code=identifier_too_long`)
   - index literal exceeds `max_index_digits` or `max_index_value` (`error_code=index_too_large`)
@@ -1130,9 +1130,9 @@ Module identity (normative):
 - `module_token` MUST be `pa.win_event_xml.v1`.
 - `module_id` MUST be `win_event_xml`.
 - `module_version` MUST be `v1`.
-- `input_kind` MUST be `bytes`.
-- `newline_normalization` MUST be `true`.
-- `max_input_bytes` MUST be `16777216`.
+- Input envelope constraints (including `input_kind`, newline normalization, and max input size)
+  MUST match the Contract Spine parser module inventory entry for `pa.win_event_xml.v1` (single
+  source of truth: `026_contract_spine.md`, "Parser module inventory").
 
 `expected_ast` contract (normative):
 
@@ -1161,7 +1161,7 @@ Minimum case set (normative):
 Notes (normative):
 
 - The vectors file MUST include at least one `xml_input_too_large` case. The case SHOULD use
-  `input.file` (see "Vector file schema") to avoid embedding a >16 MiB base64 payload in
+  `input.file` (see "Vector file schema") to avoid embedding an oversized base64 payload in
   `vectors.json`.
 
 #### Checksums file vectors (`pa.checksums_file.v1`)
@@ -1261,13 +1261,13 @@ Success cases (normative minimum coverage):
     exercising the deterministic "closest timestamp at or before run end" inference rule.
 - RFC5424-like line with PRI + version + RFC3339 timestamp + structured data `-`.
 - RFC5424-like line with syntactically valid structured data (one bracketed element) and a message.
-- byte-heavy but char-legal line: canonical parse input that is `<= 65536` Unicode scalar values but
-  would exceed `65536` UTF-8 bytes if a byte cap were (incorrectly) enforced.
+- byte-heavy but char-legal line: canonical parse input whose Unicode scalar length is
+  `<= max_input_chars` but would exceed `max_input_chars` UTF-8 bytes if a byte cap were
+  (incorrectly) enforced.
 
 Failure cases (normative minimum coverage; MUST fail closed):
 
-- canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
-  `location.byte_offset=0`)
+- canonical parse input exceeds `max_input_chars` (`error_code=line_too_long`)
 - invalid PRI (non-numeric or out of range)
 - invalid timestamp (RFC3164 timestamp malformed; RFC5424 timestamp malformed or NILVALUE)
 - unknown/unsupported format (does not match RFC3164-like or RFC5424-like)
@@ -1310,14 +1310,12 @@ Success cases (normative minimum coverage):
 
 Failure cases (normative minimum coverage; MUST fail closed):
 
-- canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
-  `location.byte_offset=0`)
+- input exceeds `max_input_chars` (`error_code=line_too_long`; `location.byte_offset=0`)
 - missing `audit(` prefix or closing `)`
 - missing `.` or `:`
 - empty numeric segments
 - fraction longer than 9 digits
 - numeric overflow (epoch_seconds or serial does not fit in unsigned 64-bit)
-- input exceeds `max_input_chars` (`line_too_long`)
 
 #### Audit record KV vectors
 
@@ -1336,13 +1334,13 @@ Success cases (normative minimum coverage):
 - a record line containing `node=<value>` (node is surfaced as `node` in the AST)
 - a record line with quoted values (e.g., `exe="... ..."`) and preserved escapes
 - a record line with repeated non-required keys, asserting array behavior
-- byte-heavy but char-legal record line: canonical parse input that is `<= 65536` Unicode scalar
-  values but would exceed `65536` UTF-8 bytes if a byte cap were (incorrectly) enforced.
+- byte-heavy but char-legal record line: canonical parse input whose Unicode scalar length is
+  `<= max_input_chars` but would exceed `max_input_chars` UTF-8 bytes if a byte cap were
+  (incorrectly) enforced.
 
 Failure cases (normative minimum coverage; MUST fail closed):
 
-- canonical parse input exceeds the module max-input-bytes limit (`error_code=line_too_long`;
-  `location.byte_offset=0`)
+- canonical parse input exceeds `max_input_chars` (`error_code=line_too_long`)
 - missing required `type=...`
 - missing required `msg=...`
 - `type` or `msg` repeated
@@ -1900,24 +1898,31 @@ evaluation and deterministic skip semantics when declared requirements are unmet
 The fixture set MUST include at least:
 
 - `unmet_admin_privilege`:
+
   - Input: scenario declares `plan.requirements.privilege=admin`.
   - Probe snapshot: target privilege probe indicates the runner context is not admin.
   - Expected: action is skipped with deterministic `reason_domain="ground_truth"` and
     `reason_code=insufficient_privileges` and
     `runner/actions/<action_id>/requirements_evaluation.json` is emitted.
+
 - `wrong_os`:
+
   - Input: scenario declares `plan.requirements.platform.os=["windows"]`.
   - Probe snapshot: target OS family probe indicates `linux`.
   - Expected: action is skipped with deterministic `reason_domain="ground_truth"` and
     `reason_code=unsupported_platform` and `runner/actions/<action_id>/requirements_evaluation.json`
     is emitted.
+
 - `missing_tool`:
+
   - Input: scenario declares `plan.requirements.tools=["powershell"]`.
   - Probe snapshot: tool/capability probe indicates `powershell` is unavailable.
   - Expected: action is skipped with deterministic `reason_domain="ground_truth"` and
     `reason_code=missing_tool` and `runner/actions/<action_id>/requirements_evaluation.json` is
     emitted.
+
 - `multiple_requirements_mixed_order`:
+
   - Input: scenario declares multiple requirements in a non-sorted declaration order (example:
     privilege=admin, platform.os=["windows"], tools=["powershell"]).
   - Probe snapshot: multiple requirements evaluate to unmet (example: OS family indicates `linux`,
@@ -1933,6 +1938,23 @@ The fixture set MUST include at least:
       - `privilege` -> `insufficient_privileges`
       - `tool` -> `missing_tool` (Example: if the first unmet result has `kind=platform`, then
         `reason_code` MUST be `unsupported_platform`.)
+
+- `requirement_unknown_warn_and_skip`:
+
+  - Input: scenario declares at least one requirement that cannot be evaluated deterministically
+    (probe snapshot yields `unknown`) and `runner.atomic.requirements.fail_mode=warn_and_skip`.
+  - Expected:
+    - `runner/actions/<action_id>/requirements_evaluation.json` is emitted and contains at least one
+      `requirements.results[]` row with `status=unknown`.
+    - The action is skipped with deterministic `prepare.phase_outcome=skipped`,
+      `prepare.reason_domain="ground_truth"`, and `prepare.reason_code=requirement_unknown`.
+
+For requirements gating fixtures where `execute` is not attempted, the test harness MUST also assert
+absence of adapter-owned execution evidence, at minimum:
+
+- `runner/actions/<action_id>/executor.json`
+- `runner/actions/<action_id>/stdout.txt`
+- `runner/actions/<action_id>/stderr.txt`
 
 For each fixture, the runner requirements implementation MUST:
 

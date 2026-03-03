@@ -414,7 +414,7 @@ network syslog ingestion).
   - Basis: Unicode scalar count in the canonical parse input after preprocessing (BOM stripping and
     newline normalization).
   - If exceeded, parsing MUST fail closed with `line_too_long`.
-  - The max-input-bytes check MUST take precedence over all other parsing and validation.
+  - The max-input-size check MUST take precedence over all other parsing and validation.
 
 The canonical parse input MUST be treated as a sequence of lines separated by `\n`:
 
@@ -761,7 +761,7 @@ a deterministic correlation algorithm.
   - Basis: Unicode scalar count in the canonical parse input after preprocessing (BOM stripping,
     newline normalization, and stripping a single trailing `\n` if present).
   - If exceeded, parsing MUST fail closed with `line_too_long`.
-  - The max-input-bytes check MUST take precedence over all other parsing and validation.
+  - The max-input-size check MUST take precedence over all other parsing and validation.
 
 **Tokenization and key/value grammar (v1; normative):**
 

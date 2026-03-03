@@ -1447,6 +1447,13 @@ If any enforced limit would be exceeded, parsing MUST fail closed with a determi
 
 ### Parser module inventory
 
+Single source of truth for module input envelopes (normative):
+
+- If an inventory entry specifies input-envelope constraints for a module (for example `input_kind`,
+  newline normalization, max input size), those constraints are authoritative.
+  - Owning specs and fixture specs MUST reference this inventory entry and MUST NOT restate the same
+    constraint values elsewhere.
+
 The following parser modules are treated as parser modules for v0.1:
 
 - `pa.yaml_decode.v1`: YAML ingress decode to a JSON-shaped value (defined above).

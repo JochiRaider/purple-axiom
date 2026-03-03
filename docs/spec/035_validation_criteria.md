@@ -278,18 +278,11 @@ with the corresponding `arg_value` from the entry argument environment.
 
 ##### Template placeholder grammar (parser module: pa.template_criteria_arg.v1)
 
-Input kind (normative):
+Template module common requirements (normative):
 
-- `pa.template_criteria_arg.v1.input_kind` MUST be `utf8_text`.
-
-Newline normalization and limits (normative):
-
-- `newline_normalization` MUST be `false` (no normalization).
-- `max_input_chars` MUST be `65536` (see `026_contract_spine.md`, "Template module common
-  requirements").
-  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
-    - `error_code="input_too_large"`, and
-    - `location.byte_offset == 0`.
+- This module MUST satisfy the Contract Spine "Template module common requirements" under
+  `026_contract_spine.md`, "Parser modules" (input kind, newline normalization, max input size, and
+  the `input_too_large` limit error mapping).
 
 Delimiter and scanning rules (normative):
 

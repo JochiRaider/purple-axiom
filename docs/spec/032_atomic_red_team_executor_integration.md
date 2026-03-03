@@ -266,7 +266,7 @@ When synthetic correlation marker emission is enabled (normative requirements):
 - `<action_id>` MUST match `ground_truth.action_id`.
 - The runner MUST populate ground truth:
   - `ground_truth.extensions.synthetic_correlation_marker = marker_canonical`
-  - `ground_truth.extensions.synthetic_correlation_marker_token = marker_digest`
+  - `ground_truth.extensions.synthetic_correlation_marker_digest = marker_digest`
 - The runner MUST attempt to emit at least one marker-bearing telemetry event per action at the
   start of `execute` (immediately before primary command invocation).
   - The emitted event MUST carry the marker in a way that survives end-to-end ingestion and
@@ -828,18 +828,11 @@ Template placeholders use the Atomic convention:
 The runner MUST treat Atomic placeholder parsing as a first-class parser module with tokenization
 and error behavior defined here.
 
-Input kind (normative):
+Template module common requirements (normative):
 
-- `pa.template_atomic.v1.input_kind` MUST be `utf8_text`.
-
-Newline normalization and limits (normative):
-
-- `newline_normalization` MUST be `false` (no normalization).
-- `max_input_chars` MUST be `65536` (see `026_contract_spine.md`, "Template module common
-  requirements").
-  - If the input exceeds `max_input_chars`, parsing MUST fail closed with:
-    - `error_code="input_too_large"`, and
-    - `location.byte_offset == 0`.
+- This module MUST satisfy the Contract Spine "Template module common requirements" under
+  `026_contract_spine.md`, "Parser modules" (input kind, newline normalization, max input size, and
+  the `input_too_large` limit error mapping).
 
 Delimiter and scanning rules (normative):
 
@@ -1206,8 +1199,7 @@ Config policy:
 - `runner.atomic.requirements.fail_mode`:
   - `fail_closed` (default): unknown requirement checks MUST be treated as unsatisfied for gating.
   - `warn_and_skip`: unknown requirement checks MUST remain `unknown` in evidence, but the action
-    MUST still be skipped with `reason_domain="requirements_evaluation"` and
-    `reason_code=requirement_unknown`.
+    MUST still be skipped with `reason_domain="ground_truth"` and `reason_code=requirement_unknown`.
 
 Evidence requirements (v0.1):
 
@@ -1253,8 +1245,7 @@ Reason code mapping (minimum; deterministic):
 
 - Determine the action-level `prepare.reason_code` by selecting the first requirement result (after
   deterministic ordering) whose `status != satisfied`:
-  - If `status=unknown`, use `reason_domain="requirements_evaluation"` and
-    `reason_code=requirement_unknown`.
+  - If `status=unknown`, use `reason_domain="ground_truth"` and `reason_code=requirement_unknown`.
   - Else map `kind` to a reason code:
     - `platform` -> `unsupported_platform`
     - `privilege` -> `insufficient_privileges`

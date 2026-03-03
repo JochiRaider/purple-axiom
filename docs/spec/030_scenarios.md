@@ -678,6 +678,10 @@ Fields (per line):
   - `synthetic_correlation_marker_digest` (string; present when enabled and `execute` was attempted)
   - (other keys reserved)
 
+Ordering (normative): `lifecycle.phases[]` is an authoritative, append-only journal and MUST follow
+the chronological ordering rules in `025_data_contracts.md` and the runner action lifecycle state
+machine defined below.
+
 ### Principal selection (non-secret) (normative)
 
 Scenarios MAY specify a human-meaningful principal selector:
@@ -891,6 +895,10 @@ deterministic `action_id` of the form `pa_aid_v1_<32hex>` as defined in the data
 - **Scope**: action (single `(run_id, action_id)` instance).
 - **Machine ID**: `runner-action-lifecycle` (id_slug_v1)
 - **Version**: `0.1.0`
+
+Implementation note (informative): the runner MAY implement internal orchestration using an
+entity-component-system (ECS) model (or any other internal architecture). The observable contract
+remains the emitted ground truth phase journal (`lifecycle.phases[]`) and its evidence pointers.
 
 ### Lifecycle authority references
 

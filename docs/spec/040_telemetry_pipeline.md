@@ -1631,9 +1631,9 @@ payloads. It is used by:
 - `module_token`: `pa.win_event_xml.v1`
 - `module_id`: `win_event_xml`
 - `module_version`: `v1`
-- `input_kind`: `bytes`
-- `newline_normalization`: `true` (`\r\n`→`\n`, `\r`→`\n`)
-- `max_input_bytes`: `16777216` (16 MiB)
+- Input envelope constraints (`input_kind`, `newline_normalization`, `max_input_bytes`) are defined
+  by the Contract Spine parser module inventory (see `026_contract_spine.md`, "Parser module
+  inventory").
 
 ##### Canonical bytes (normative)
 

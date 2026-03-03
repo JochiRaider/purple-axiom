@@ -1710,10 +1710,10 @@ that adopt it:
      - `manifest.extensions.operator_interface.plan_draft_sha256`
      - `manifest.extensions.operator_interface.plan_draft_path`
    - Schema source of truth (normative): the field definitions, requiredness conditions, and hash
-     basis are defined in `spec/025_data_contracts.md` under
-     "Operator Interface namespace: plan draft provenance (v0.2+)". This document is a consumer and
-     MUST NOT restate those constraints in a divergent way.
-     
+     basis are defined in `spec/025_data_contracts.md` under "Operator Interface namespace: plan
+     draft provenance (v0.2+)". This document is a consumer and MUST NOT restate those constraints
+     in a divergent way.
+
    **Workspace-global artifacts (workspace-root validation required).**
 
    The following are workspace-root artifacts (not run-relative). They MUST NOT be silently made

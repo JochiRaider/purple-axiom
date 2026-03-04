@@ -12,16 +12,18 @@ This document defines the configuration surface for Purple Axiom. Configuration 
 - deterministic (config inputs are hashed and recorded in `manifest.json`)
 - safe (secrets are referenced, not embedded)
 
-Primary config file name used in examples: `inputs/range.yaml`.
+Primary config file names used in examples: `inputs/range.yaml` and `inputs/workspace.yaml`.
 
 ## Configuration files and precedence
 
-Purple Axiom distinguishes between **range configuration** and **scenario inputs**:
+Purple Axiom distinguishes between **range configuration**, **workspace configuration**, and
+**scenario inputs**:
 
-- `inputs/range.yaml` (contract-backed) configures the lab, runner, pipeline stages, and (when
-  enabled) optional workspace services.
+- `inputs/range.yaml` (contract-backed) configures the lab, runner, and pipeline stages.
+- `inputs/workspace.yaml` (contract-backed, v0.2+) configures the Operator Interface, OTLP gateway,
+  and appliance-level secrets provider.
 - `inputs/scenario.yaml` (non-contract in v0.1) selects and defines the scenario to execute (see
-  `030_scenarios.md`). It is not a range-config overlay mechanism.
+  `030_scenarios.md`). It is not an overlay mechanism for either config owner.
 
 Recommended range-configuration sources (lowest to highest precedence):
 
@@ -30,15 +32,24 @@ Recommended range-configuration sources (lowest to highest precedence):
 1. CLI flags (optional, small overrides only)
 1. Environment variables (optional, for paths and secrets references)
 
+Recommended workspace-configuration sources (lowest to highest precedence):
+
+1. Built-in defaults (code)
+1. `inputs/workspace.yaml`
+1. CLI flags (optional, small overrides only)
+1. Environment variables (optional, for paths and secrets references)
+
 Precedence rule (range config): later sources override earlier sources at the leaf key level.
+
+Precedence rule (workspace config): later sources override earlier sources at the leaf key level.
 
 Scenario rule (normative):
 
-- `inputs/scenario.yaml` MUST NOT be merged into the range configuration and MUST NOT override any
-  `inputs/range.yaml` keys.
+- `inputs/scenario.yaml` MUST NOT be merged into the range configuration or workspace configuration
+  and MUST NOT override any `inputs/range.yaml` or `inputs/workspace.yaml` keys.
 - `inputs/scenario.yaml` MUST contain only keys defined by the scenario model. Any key that is
-  semantically owned by the range configuration (`inputs/range.yaml`) or by Operator Interface
-  control artifacts (`control/`) MUST be rejected.
+  semantically owned by `inputs/range.yaml` (`range_config`) or `inputs/workspace.yaml`
+  (`workspace_config`) MUST be rejected.
 - If `inputs/scenario.yaml` contains any forbidden key, validation MUST fail closed with
   `reason_code=config_schema_invalid`.
 
@@ -91,6 +102,12 @@ Workspace boundary rules (normative):
   `<workspace_root>/logs/contract_validation/**` (see `025_data_contracts.md`).
 
 ## Top-level keys
+
+Range-config key space note (normative):
+
+- `ui.*`, `auth.*`, and `otel_gateway.*` are not valid keys for `inputs/range.yaml` and MUST be
+  rejected by schema validation (fail closed with `reason_code=config_schema_invalid`).
+- These keys are owned by `workspace_config` and MUST be configured in `inputs/workspace.yaml`.
 
 ### Lab (lab)
 
@@ -546,368 +563,6 @@ Notes:
   runner `prepare` lifecycle phase, and must be enabled + logged.
 - Control-plane functionality is out of scope for v0.1. The v0.1 pipeline MUST NOT require remote
   management credentials and MUST NOT depend on control-plane actions for correctness.
-
-### Operator interface (ui)
-
-Reserved for the v0.2+ Operator Interface (web UI + Operator API) defined in
-`115_operator_interface.md`.
-
-This section is the canonical, key-by-key documentation for `ui.*`. Key names and nesting MUST match
-`115_operator_interface.md` exactly.
-
-#### Keys
-
-- `ui.enabled`
-
-  - Type: bool
-  - Default: false
-  - Constraints:
-    - None (boolean toggle).
-  - Security posture:
-    - Disabled by default (opt-in).
-  - Interaction rules:
-    - When `true`, the appliance MAY start the Operator Interface components (reverse proxy + OI
-      service) for this workspace.
-    - When `false`, the Operator Interface MUST NOT bind/listen on any UI ports.
-
-- `ui.network.profile`
-
-  - Type: string
-  - Default: `lan_reverse_proxy`
-  - Constraints:
-    - Enum (closed set): `lan_reverse_proxy`
-    - Any other token MUST be rejected by config validation (fail closed with
-      `reason_code=config_schema_invalid`).
-  - Security posture:
-    - `lan_reverse_proxy` enforces a reverse-proxy boundary with default-deny allowlisting and TLS
-      termination.
-  - Interaction rules:
-    - In `lan_reverse_proxy`, the reverse proxy MUST be the only process binding the external UI
-      port and MUST forward to the Operator Interface service over a local-only channel (loopback or
-      Unix domain socket).
-    - The Operator Interface service MUST NOT listen on non-loopback interfaces.
-
-- `ui.network.port`
-
-  - Type: int
-  - Default: 443
-  - Constraints:
-    - 1–65535 (inclusive).
-  - Security posture:
-    - Reserved for HTTPS UI ingress (reverse proxy termination).
-  - Interaction rules:
-    - Only the reverse proxy binds this port; the Operator Interface service binds local-only.
-
-- `ui.network.allowlist[]`
-
-  - Type: list[string]
-  - Default: []
-  - Constraints:
-    - Elements MUST be strings.
-    - Elements MUST be valid CIDR ranges (IPv4/IPv6) OR explicit IP addresses.
-  - Security posture:
-    - Evaluated at reverse proxy boundary; combined with `ui.network.default_deny`.
-    - `localhost` is implicitly allowed regardless of allowlist contents.
-  - Interaction rules:
-    - The reverse proxy MUST evaluate allowlist membership using the deterministic rules in
-      `115_operator_interface.md` ("Allowlist semantics").
-    - The Operator Interface service MUST NOT trust forwarded IP headers (`X-Forwarded-For`, etc.)
-      from arbitrary peers.
-
-- `ui.network.default_deny`
-
-  - Type: bool
-  - Default: true
-  - Constraints:
-    - None (boolean toggle).
-  - Security posture:
-    - Default deny is REQUIRED for the v0.2 `lan_reverse_proxy` profile.
-  - Interaction rules:
-    - When `true`, requests outside the allowlist MUST be denied (HTTP 403) by the reverse proxy.
-
-- `ui.tls.mode`
-
-  - Type: string
-  - Default: `self_signed_ca`
-  - Constraints:
-    - Enum (closed set): `self_signed_ca`
-    - Any other token MUST be rejected by config validation (fail closed with
-      `reason_code=config_schema_invalid`).
-  - Security posture:
-    - TLS is REQUIRED for UI ingress. Termination occurs at the reverse proxy boundary.
-  - Interaction rules:
-    - In `self_signed_ca`, the appliance MUST generate and persist a local CA in workspace protected
-      state and MUST rotate the leaf certificate per `ui.tls.rotate_leaf_on_start` (see
-      `115_operator_interface.md`, "UI TLS (reverse proxy termination)").
-
-- `ui.tls.rotate_leaf_on_start`
-
-  - Type: bool
-  - Default: true
-  - Constraints:
-    - None (boolean toggle).
-  - Security posture:
-    - Leaf rotation reduces key reuse across appliance sessions.
-  - Interaction rules:
-    - When `true`, a new leaf certificate MUST be generated on each appliance start.
-
-- `ui.tls.cert_path` (reserved)
-
-  - Type: null
-  - Default: null
-  - Constraints:
-    - MUST be null in v0.2.
-    - Any non-null value MUST be rejected by config validation (fail closed with
-      `reason_code=config_schema_invalid`).
-  - Security posture: n/a (reserved).
-  - Interaction rules: none (reserved).
-
-- `ui.tls.key_path` (reserved)
-
-  - Type: null
-  - Default: null
-  - Constraints:
-    - MUST be null in v0.2.
-    - Any non-null value MUST be rejected by config validation (fail closed with
-      `reason_code=config_schema_invalid`).
-  - Security posture: n/a (reserved).
-  - Interaction rules: none (reserved).
-
-- `ui.tls.ca_path` (reserved)
-
-  - Type: null
-  - Default: null
-  - Constraints:
-    - MUST be null in v0.2.
-    - Any non-null value MUST be rejected by config validation (fail closed with
-      `reason_code=config_schema_invalid`).
-  - Security posture: n/a (reserved).
-  - Interaction rules: none (reserved).
-
-- `ui.security.allow_quarantine_access`
-
-  - Type: bool
-  - Default: false
-  - Constraints:
-    - None (boolean toggle).
-  - Security posture:
-    - Default deny: quarantined artifacts are not accessible.
-  - Interaction rules:
-    - Quarantine access requires BOTH:
-      - `ui.security.allow_quarantine_access=true`, and
-      - a per-session runtime toggle (default OFF).
-    - Every access to a quarantined path MUST emit a write-ahead audit event to
-      `logs/ui_audit.jsonl`.
-
-- `ui.security.allowed_extensions[]`
-
-  - Type: list[string]
-  - Default:
-    - `[".json", ".jsonl", ".parquet", ".txt", ".log", ".html", ".md", ".csv", ".cast", ".yaml", ".yml"]`
-  - Constraints:
-    - Elements MUST be strings.
-    - Elements SHOULD begin with `.`.
-    - Implementations MUST enforce extension allowlisting for all artifact-serving endpoints.
-  - Security posture:
-    - Restricts artifact serving to a narrow set of non-executable formats.
-  - Interaction rules:
-    - Requests for artifacts with a disallowed extension MUST be rejected (HTTP 403 or 404; do not
-      disclose existence) and MUST emit a denied audit event.
-
-- `ui.sessions.idle_timeout_seconds`
-
-  - Type: int
-  - Default: 1200
-  - Constraints:
-    - Integer ≥ 1.
-  - Security posture:
-    - Limits lifetime of authenticated sessions when idle.
-  - Interaction rules:
-    - Idle sessions MUST be expired after this many seconds of inactivity.
-
-- `ui.limits.max_concurrent_runs`
-
-  - Type: int
-  - Default: 1
-  - Constraints:
-    - Integer ≥ 1.
-  - Security posture:
-    - Bounds resource usage and reduces risk of accidental parallel runs.
-  - Interaction rules:
-    - When the limit is reached, verb-start requests MUST be rejected without spawning a new process
-      and MUST emit an audit event with `reason_code=concurrency_limit`.
-
-#### Audit logging (workspace-global vs run-local) (normative)
-
-Workspace-global UI audit stream:
-
-- Path: `logs/ui_audit.jsonl` (workspace-root; not run-relative).
-- Contract: `audit_event` (`docs/contracts/audit_event.schema.json`).
-- Control mapping:
-  - UI audit emission is tied to Operator Interface activity. v0.2: UI audit logging is always-on
-    when `ui.enabled=true` (no config gate to disable).
-
-Run-local control-plane audit stream:
-
-- Path: `runs/<run_id>/control/audit.jsonl` (run-relative).
-- Contract: `audit_event` (`docs/contracts/audit_event.schema.json`).
-- Control mapping:
-  - Controlled by `control_plane.audit.enabled` (see `control_plane` above).
-  - This control does not affect the workspace-global UI audit stream.
-
-#### Path semantics for UI TLS fields (normative)
-
-For the `ui.tls.*_path` keys:
-
-- Absolute paths MAY be used.
-- Relative paths MUST be resolved relative to `<workspace_root>/` per "Workspace root and filesystem
-  paths" above.
-- v0.2: these keys are reserved and MUST remain null (see per-key constraints).
-
-### Operator authentication (auth)
-
-Reserved for Operator Interface authentication configuration (v0.2+).
-
-#### Keys
-
-- `auth.provider`
-
-  - Type: string
-  - Default: `local`
-  - Constraints:
-    - Enum (closed set): `local`
-    - Any other token (including reserved `ldap` and `oidc`) MUST be rejected by schema validation
-      (fail closed with `reason_code=config_schema_invalid`).
-  - Security posture:
-    - v0.2 baseline is local-only auth (no external identity provider by default).
-  - Interaction rules:
-    - Provider token controls how the Operator Interface authenticates Operator API/UI sessions.
-
-- `auth.mfa.enabled` (reserved)
-
-  - Type: bool
-  - Default: false
-  - Constraints:
-    - MUST be `false` in v0.2.
-    - If set to `true`, config validation MUST fail closed with `reason_code=config_schema_invalid`.
-  - Security posture:
-    - Reserved for future MFA support; currently not implemented.
-  - Interaction rules: none (reserved).
-
-- `auth.mfa.method` (reserved)
-
-  - Type: null
-  - Default: null
-  - Constraints:
-    - MUST be null in v0.2.
-    - Any non-null value (including reserved `totp` and `webauthn`) MUST be rejected by schema
-      validation (fail closed with `reason_code=config_schema_invalid`).
-  - Security posture: n/a (reserved).
-  - Interaction rules: none (reserved).
-
-Secret-handling note (normative):
-
-- Any future auth provider secrets (OIDC client secret, LDAP bind password, etc.) MUST be expressed
-  via secret reference conventions (`*_ref`) rather than embedded plaintext values.
-
-### OTLP gateway (otel_gateway)
-
-Reserved for the optional OTLP gateway tier (v0.2+).
-
-This block is distinct from `telemetry.otel`, which references an OpenTelemetry Collector config
-file for in-run collection.
-
-#### Keys
-
-- `otel_gateway.enabled`
-
-  - Type: bool
-  - Default: false
-  - Constraints:
-    - None (boolean toggle).
-  - Security posture:
-    - Disabled by default (opt-in).
-  - Interaction rules:
-    - When `true`, the appliance MAY start an OTLP gateway/collector service bound to the configured
-      ports.
-
-- `otel_gateway.ports.grpc`
-
-  - Type: int
-  - Default: 4317
-  - Constraints:
-    - 1–65535 (inclusive).
-  - Security posture:
-    - mTLS is required by default; do not expose plain OTLP by default.
-  - Interaction rules:
-    - When enabled, the gateway listens for OTLP/gRPC on this port.
-
-- `otel_gateway.ports.http`
-
-  - Type: int
-  - Default: 4318
-  - Constraints:
-    - 1–65535 (inclusive).
-  - Security posture:
-    - mTLS is required by default; do not expose plain OTLP by default.
-  - Interaction rules:
-    - When enabled, the gateway listens for OTLP/HTTP on this port.
-
-- `otel_gateway.mtls.required`
-
-  - Type: bool
-  - Default: true
-  - Constraints:
-    - None (boolean toggle).
-  - Security posture:
-    - Default deny: no valid client certificate, no ingestion.
-  - Interaction rules:
-    - When `true`, the gateway MUST reject all unauthenticated OTLP clients.
-
-- `otel_gateway.mtls.ca_path`
-
-  - Type: string | null
-  - Default: null
-  - Constraints:
-    - If any of `ca_path`, `server_cert_path`, or `server_key_path` is non-null, then all three MUST
-      be non-null (reject partial configuration; fail closed with
-      `reason_code=config_schema_invalid`).
-  - Security posture:
-    - Specifies the trust store used to validate OTLP client certificates when operator-provided
-      material is used.
-  - Interaction rules:
-    - If all three mTLS paths are null, the implementation MAY use workspace-managed generated mTLS
-      material under the protected state directory (see `115_operator_interface.md`).
-
-- `otel_gateway.mtls.server_cert_path`
-
-  - Type: string | null
-  - Default: null
-  - Constraints:
-    - See `otel_gateway.mtls.ca_path` (all-or-nothing rule).
-  - Security posture:
-    - Server certificate presented by the gateway.
-  - Interaction rules: see above.
-
-- `otel_gateway.mtls.server_key_path`
-
-  - Type: string | null
-  - Default: null
-  - Constraints:
-    - See `otel_gateway.mtls.ca_path` (all-or-nothing rule).
-  - Security posture:
-    - Private key for the gateway server certificate; MUST be handled as secret material.
-  - Interaction rules: see above.
-
-#### Path semantics for OTLP mTLS fields (normative)
-
-For the `otel_gateway.mtls.*_path` keys:
-
-- Absolute paths MAY be used.
-- Relative paths MUST be resolved relative to `<workspace_root>/` per "Workspace root and filesystem
-  paths" above.
-- Implementations SHOULD treat these paths as secret-bearing inputs and MUST avoid echoing path
-  values into logs or exported artifacts unless explicitly permitted by redaction policy.
 
 ### Telemetry (telemetry)
 
@@ -1561,7 +1216,16 @@ Controls security boundaries and hardening (see also `090_security_safety.md`).
 
 Common keys:
 
+Ownership note (normative):
+
+- `security.secrets.*` (provider selection and custom provider execution surface) is owned by
+  `workspace_config` and MUST be configured in `inputs/workspace.yaml`.
+
+- Run-config `_ref` values use the same `pa.secret_ref.v1` parser; provider enforcement is governed
+  by `workspace_config.security.secrets.provider`.
+
 - `redaction` (optional)
+
   - `enabled` (default: true)
     - When `true`, the pipeline applies the effective redaction policy and promotes only
       redacted-safe artifacts into standard long-term locations.
@@ -1609,7 +1273,9 @@ Common keys:
         1. appending exactly one trailing `/`.
       - Canonicalization MUST NOT perform Unicode normalization and MUST treat the value as raw
         UTF-8 bytes for determinism.
+
 - `secrets`
+
   - `provider` (optional): `env | file | keychain | custom` (default: `env`)
   - `refs` (optional): map of named secret refs
     - Each value MUST be a secret reference string (see below).
@@ -1617,7 +1283,9 @@ Common keys:
     - `executable` (required): absolute path to the custom secret provider CLI
     - `timeout_seconds` (optional, default: 5): per lookup execution timeout
     - `max_stdout_bytes` (optional, default: 65536): maximum stdout bytes accepted
+
 - `integration_credentials` (optional)
+
   - Dedicated configuration block for **external integration credentials** (API tokens, client
     secrets, private keys) used by adapters and supporting tools.
   - The `integration_credentials` block is the canonical place to declare which integrations have
@@ -1641,7 +1309,9 @@ Common keys:
     - If any enabled integration requires credentials, the owning stage MUST preflight credential
       resolution/validation and fail closed on missing/invalid credentials (see
       [ADR-0005](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)).
+
 - `network`
+
   - `allow_outbound` (default: false)
   - `allowlist` (optional): list of CIDRs/domains when outbound is enabled
   - Outbound gating (normative):
@@ -1661,7 +1331,9 @@ Common keys:
         fail closed if the canary is missing or incomplete.
       - When `false`, implementations MAY treat the egress canary as best-effort and record a
         `skipped` outcome with deterministic reasons.
+
 - `adapters` (optional)
+
   - Controls whether non-builtin (packaged / third-party) adapters are permitted and how they are
     verified (see `020_architecture.md` "Adapter provenance recording (v0.1)").
   - `allow_third_party` (optional, default: false)
@@ -1673,7 +1345,9 @@ Common keys:
   - `trusted_key_ids` (optional): list of allowed `key_id` values for adapter signature verification
     - REQUIRED when `require_signatures: true` and third-party adapters are allowed.
     - `key_id` is defined as `sha256(public_key_bytes)` encoded as 64 lowercase hex characters.
+
 - `signing` (optional)
+
   - `enabled` (default: false)
   - `key_ref` (required when enabled): reference to signing private key material (never inline)
     - v0.1 posture:
@@ -1864,6 +1538,379 @@ Operability guidance (non-normative):
 - Implementations MAY cache resolved secrets in memory for the duration of a run, but MUST NOT
   persist them.
 
+## Workspace configuration
+
+### Operator interface (ui)
+
+Owner: `workspace_config` (`inputs/workspace.yaml`).
+
+Reserved for the v0.2+ Operator Interface (web UI + Operator API) defined in
+`115_operator_interface.md`.
+
+This section is the canonical, key-by-key documentation for `ui.*`. Key names and nesting MUST match
+`115_operator_interface.md` exactly.
+
+#### Keys
+
+- `ui.enabled`
+
+  - Type: bool
+  - Default: false
+  - Constraints:
+    - None (boolean toggle).
+  - Security posture:
+    - Disabled by default (opt-in).
+  - Interaction rules:
+    - When `true`, the appliance MAY start the Operator Interface components (reverse proxy + OI
+      service) for this workspace.
+    - When `false`, the Operator Interface MUST NOT bind/listen on any UI ports.
+
+- `ui.network.profile`
+
+  - Type: string
+  - Default: `lan_reverse_proxy`
+  - Constraints:
+    - Enum (closed set): `lan_reverse_proxy`
+    - Any other token MUST be rejected by config validation (fail closed with
+      `reason_code=config_schema_invalid`).
+  - Security posture:
+    - `lan_reverse_proxy` enforces a reverse-proxy boundary with default-deny allowlisting and TLS
+      termination.
+  - Interaction rules:
+    - In `lan_reverse_proxy`, the reverse proxy MUST be the only process binding the external UI
+      port and MUST forward to the Operator Interface service over a local-only channel (loopback or
+      Unix domain socket).
+    - The Operator Interface service MUST NOT listen on non-loopback interfaces.
+
+- `ui.network.port`
+
+  - Type: int
+  - Default: 443
+  - Constraints:
+    - 1–65535 (inclusive).
+  - Security posture:
+    - Reserved for HTTPS UI ingress (reverse proxy termination).
+  - Interaction rules:
+    - Only the reverse proxy binds this port; the Operator Interface service binds local-only.
+
+- `ui.network.allowlist[]`
+
+  - Type: list[string]
+  - Default: []
+  - Constraints:
+    - Elements MUST be strings.
+    - Elements MUST be valid CIDR ranges (IPv4/IPv6) OR explicit IP addresses.
+  - Security posture:
+    - Evaluated at reverse proxy boundary; combined with `ui.network.default_deny`.
+    - `localhost` is implicitly allowed regardless of allowlist contents.
+  - Interaction rules:
+    - The reverse proxy MUST evaluate allowlist membership using the deterministic rules in
+      `115_operator_interface.md` ("Allowlist semantics").
+    - The Operator Interface service MUST NOT trust forwarded IP headers (`X-Forwarded-For`, etc.)
+      from arbitrary peers.
+
+- `ui.network.default_deny`
+
+  - Type: bool
+  - Default: true
+  - Constraints:
+    - None (boolean toggle).
+  - Security posture:
+    - Default deny is REQUIRED for the v0.2 `lan_reverse_proxy` profile.
+  - Interaction rules:
+    - When `true`, requests outside the allowlist MUST be denied (HTTP 403) by the reverse proxy.
+
+- `ui.tls.mode`
+
+  - Type: string
+  - Default: `self_signed_ca`
+  - Constraints:
+    - Enum (closed set): `self_signed_ca`
+    - Any other token MUST be rejected by config validation (fail closed with
+      `reason_code=config_schema_invalid`).
+  - Security posture:
+    - TLS is REQUIRED for UI ingress. Termination occurs at the reverse proxy boundary.
+  - Interaction rules:
+    - In `self_signed_ca`, the appliance MUST generate and persist a local CA in workspace protected
+      state and MUST rotate the leaf certificate per `ui.tls.rotate_leaf_on_start` (see
+      `115_operator_interface.md`, "UI TLS (reverse proxy termination)").
+
+- `ui.tls.rotate_leaf_on_start`
+
+  - Type: bool
+  - Default: true
+  - Constraints:
+    - None (boolean toggle).
+  - Security posture:
+    - Leaf rotation reduces key reuse across appliance sessions.
+  - Interaction rules:
+    - When `true`, a new leaf certificate MUST be generated on each appliance start.
+
+- `ui.tls.cert_path` (reserved)
+
+  - Type: null
+  - Default: null
+  - Constraints:
+    - MUST be null in v0.2.
+    - Any non-null value MUST be rejected by config validation (fail closed with
+      `reason_code=config_schema_invalid`).
+  - Security posture: n/a (reserved).
+  - Interaction rules: none (reserved).
+
+- `ui.tls.key_path` (reserved)
+
+  - Type: null
+  - Default: null
+  - Constraints:
+    - MUST be null in v0.2.
+    - Any non-null value MUST be rejected by config validation (fail closed with
+      `reason_code=config_schema_invalid`).
+  - Security posture: n/a (reserved).
+  - Interaction rules: none (reserved).
+
+- `ui.tls.ca_path` (reserved)
+
+  - Type: null
+  - Default: null
+  - Constraints:
+    - MUST be null in v0.2.
+    - Any non-null value MUST be rejected by config validation (fail closed with
+      `reason_code=config_schema_invalid`).
+  - Security posture: n/a (reserved).
+  - Interaction rules: none (reserved).
+
+- `ui.security.allow_quarantine_access`
+
+  - Type: bool
+  - Default: false
+  - Constraints:
+    - None (boolean toggle).
+  - Security posture:
+    - Default deny: quarantined artifacts are not accessible.
+  - Interaction rules:
+    - Quarantine access requires BOTH:
+      - `ui.security.allow_quarantine_access=true`, and
+      - a per-session runtime toggle (default OFF).
+    - Every access to a quarantined path MUST emit a write-ahead audit event to
+      `logs/ui_audit.jsonl`.
+
+- `ui.security.allowed_extensions[]`
+
+  - Type: list[string]
+  - Default:
+    - `[".json", ".jsonl", ".parquet", ".txt", ".log", ".html", ".md", ".csv", ".cast", ".yaml", ".yml"]`
+  - Constraints:
+    - Elements MUST be strings.
+    - Elements SHOULD begin with `.`.
+    - Implementations MUST enforce extension allowlisting for all artifact-serving endpoints.
+  - Security posture:
+    - Restricts artifact serving to a narrow set of non-executable formats.
+  - Interaction rules:
+    - Requests for artifacts with a disallowed extension MUST be rejected (HTTP 403 or 404; do not
+      disclose existence) and MUST emit a denied audit event.
+
+- `ui.sessions.idle_timeout_seconds`
+
+  - Type: int
+  - Default: 1200
+  - Constraints:
+    - Integer ≥ 1.
+  - Security posture:
+    - Limits lifetime of authenticated sessions when idle.
+  - Interaction rules:
+    - Idle sessions MUST be expired after this many seconds of inactivity.
+
+- `ui.limits.max_concurrent_runs`
+
+  - Type: int
+  - Default: 1
+  - Constraints:
+    - Integer ≥ 1.
+  - Security posture:
+    - Bounds resource usage and reduces risk of accidental parallel runs.
+  - Interaction rules:
+    - When the limit is reached, verb-start requests MUST be rejected without spawning a new process
+      and MUST emit an audit event with `reason_code=concurrency_limit`.
+
+#### Audit logging (workspace-global vs run-local) (normative)
+
+Workspace-global UI audit stream:
+
+- Path: `logs/ui_audit.jsonl` (workspace-root; not run-relative).
+- Contract: `audit_event` (`docs/contracts/audit_event.schema.json`).
+- Control mapping:
+  - UI audit emission is tied to Operator Interface activity. v0.2: UI audit logging is always-on
+    when `ui.enabled=true` (no config gate to disable).
+
+Run-local control-plane audit stream:
+
+- Path: `runs/<run_id>/control/audit.jsonl` (run-relative).
+- Contract: `audit_event` (`docs/contracts/audit_event.schema.json`).
+- Control mapping:
+  - Controlled by `control_plane.audit.enabled` (see `control_plane` above).
+  - This control does not affect the workspace-global UI audit stream.
+
+#### Path semantics for UI TLS fields (normative)
+
+For the `ui.tls.*_path` keys:
+
+- Absolute paths MAY be used.
+- Relative paths MUST be resolved relative to `<workspace_root>/` per "Workspace root and filesystem
+  paths" above.
+- v0.2: these keys are reserved and MUST remain null (see per-key constraints).
+
+### Operator authentication (auth)
+
+Owner: `workspace_config` (`inputs/workspace.yaml`).
+
+Reserved for Operator Interface authentication configuration (v0.2+).
+
+#### Keys
+
+- `auth.provider`
+
+  - Type: string
+  - Default: `local`
+  - Constraints:
+    - Enum (closed set): `local`
+    - Any other token (including reserved `ldap` and `oidc`) MUST be rejected by schema validation
+      (fail closed with `reason_code=config_schema_invalid`).
+  - Security posture:
+    - v0.2 baseline is local-only auth (no external identity provider by default).
+  - Interaction rules:
+    - Provider token controls how the Operator Interface authenticates Operator API/UI sessions.
+
+- `auth.mfa.enabled` (reserved)
+
+  - Type: bool
+  - Default: false
+  - Constraints:
+    - MUST be `false` in v0.2.
+    - If set to `true`, config validation MUST fail closed with `reason_code=config_schema_invalid`.
+  - Security posture:
+    - Reserved for future MFA support; currently not implemented.
+  - Interaction rules: none (reserved).
+
+- `auth.mfa.method` (reserved)
+
+  - Type: null
+  - Default: null
+  - Constraints:
+    - MUST be null in v0.2.
+    - Any non-null value (including reserved `totp` and `webauthn`) MUST be rejected by schema
+      validation (fail closed with `reason_code=config_schema_invalid`).
+  - Security posture: n/a (reserved).
+  - Interaction rules: none (reserved).
+
+Secret-handling note (normative):
+
+- Any future auth provider secrets (OIDC client secret, LDAP bind password, etc.) MUST be expressed
+  via secret reference conventions (`*_ref`) rather than embedded plaintext values.
+
+### OTLP gateway (otel_gateway)
+
+Owner: `workspace_config` (`inputs/workspace.yaml`).
+
+Reserved for the optional OTLP gateway tier (v0.2+).
+
+This block is distinct from `telemetry.otel`, which references an OpenTelemetry Collector config
+file for in-run collection.
+
+#### Keys
+
+- `otel_gateway.enabled`
+
+  - Type: bool
+  - Default: false
+  - Constraints:
+    - None (boolean toggle).
+  - Security posture:
+    - Disabled by default (opt-in).
+  - Interaction rules:
+    - When `true`, the appliance MAY start an OTLP gateway/collector service bound to the configured
+      ports.
+
+- `otel_gateway.ports.grpc`
+
+  - Type: int
+  - Default: 4317
+  - Constraints:
+    - 1–65535 (inclusive).
+  - Security posture:
+    - mTLS is required by default; do not expose plain OTLP by default.
+  - Interaction rules:
+    - When enabled, the gateway listens for OTLP/gRPC on this port.
+
+- `otel_gateway.ports.http`
+
+  - Type: int
+  - Default: 4318
+  - Constraints:
+    - 1–65535 (inclusive).
+  - Security posture:
+    - mTLS is required by default; do not expose plain OTLP by default.
+  - Interaction rules:
+    - When enabled, the gateway listens for OTLP/HTTP on this port.
+
+- `otel_gateway.mtls.required`
+
+  - Type: bool
+  - Default: true
+  - Constraints:
+    - None (boolean toggle).
+  - Security posture:
+    - Default deny: no valid client certificate, no ingestion.
+  - Interaction rules:
+    - When `true`, the gateway MUST reject all unauthenticated OTLP clients.
+
+- `otel_gateway.mtls.ca_path`
+
+  - Type: string | null
+  - Default: null
+  - Constraints:
+    - v0.2: reserved and MUST remain null. Any non-null value MUST be rejected by schema validation
+      (fail closed with `reason_code=config_schema_invalid`).
+  - Security posture:
+    - Reserved for future operator-supplied trust store material.
+  - Interaction rules:
+    - The implementation MAY use workspace-managed generated mTLS material under the protected state
+      directory (see `115_operator_interface.md`).
+
+- `otel_gateway.mtls.server_cert_path`
+
+  - Type: string | null
+  - Default: null
+  - Constraints:
+    - v0.2: reserved and MUST remain null. Any non-null value MUST be rejected by schema validation
+      (fail closed with `reason_code=config_schema_invalid`).
+  - Security posture:
+    - Reserved for future operator-supplied gateway server certificate material.
+  - Interaction rules: see above.
+
+- `otel_gateway.mtls.server_key_path`
+
+  - Type: string | null
+  - Default: null
+  - Constraints:
+    - v0.2: reserved and MUST remain null. Any non-null value MUST be rejected by schema validation
+      (fail closed with `reason_code=config_schema_invalid`).
+  - Security posture:
+    - Reserved for future operator-supplied private key material; MUST be handled as secret
+      material.
+  - Interaction rules: see above.
+
+#### Path semantics for OTLP gateway mTLS fields (normative)
+
+For the `otel_gateway.mtls.*_path` keys:
+
+- Absolute paths MAY be used.
+- Relative paths MUST be resolved relative to `<workspace_root>/` per "Workspace root and filesystem
+  paths" above.
+- v0.2: these keys are reserved and MUST remain null (schema rejects any non-null value).
+- When non-null values are supported in a future version, implementations SHOULD treat these paths
+  as secret-bearing inputs and MUST avoid echoing path values into logs or exported artifacts unless
+  explicitly permitted by redaction policy.
+
 ## Example inputs/range.yaml
 
 ```yaml
@@ -2024,16 +2071,20 @@ Minimum validation (v0.1, normative):
 
 - YAML MUST parse successfully using a safe YAML 1.2 loader.
 - Duplicate YAML mapping keys MUST be rejected (fail closed) for all YAML inputs that participate in
-  run execution (including `inputs/range.yaml` and `inputs/scenario.yaml`).
+  run execution (including `inputs/range.yaml`, `inputs/workspace.yaml`, and
+  `inputs/scenario.yaml`).
 - The effective **range configuration** (built-in defaults + `inputs/range.yaml` + CLI flags +
   environment variables) MUST validate against `docs/contracts/range_config.schema.json` (JSON
+  Schema draft 2020-12).
+- The effective **workspace configuration** (built-in defaults + `inputs/workspace.yaml` + CLI flags
+  \+ environment variables) MUST validate against `docs/contracts/workspace_config.schema.json` (JSON
   Schema draft 2020-12).
 - `inputs/scenario.yaml` MUST validate against the scenario schema for the supported scenario model
   version (see `030_scenarios.md`).
 - Unknown keys MUST be rejected by schema validation at every object boundary. The only exception is
   `extensions`, which is reserved for forward-compatible, implementation-defined keys.
-- On schema validation failure (range config or scenario), the pipeline MUST fail closed before
-  executing any stage and MUST report `reason_code=config_schema_invalid` (see
+- On schema validation failure (range config, workspace config, or scenario), the pipeline MUST fail
+  closed before executing any stage and MUST report `reason_code=config_schema_invalid` (see
   [ADR-0005: Stage outcomes and failure classification](../adr/ADR-0005-stage-outcomes-and-failure-classification.md)).
 
 Deterministic error reporting (v0.1):
@@ -2050,6 +2101,8 @@ CI requirements (v0.1):
 
 - CI MUST validate all committed example configs and the configuration example embedded in this
   document against `docs/contracts/range_config.schema.json`.
+- CI MUST validate committed `inputs/workspace.yaml` examples against
+  `docs/contracts/workspace_config.schema.json` (v0.2+).
 
 ## References
 

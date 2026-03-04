@@ -87,6 +87,14 @@
       "purpose": "Workspace publish-gate contract validation report (logs/contract_validation/<target_path>.contract_validation.json).",
       "artifact_kind": "other",
       "format": "json"
+    },
+    {
+      "contract_id": "workspace_config",
+      "schema_path": "docs/contracts/workspace_config.schema.json",
+      "contract_version": "0.2.0",
+      "purpose": "Workspace/appliance configuration (inputs/workspace.yaml): Operator Interface, OTLP gateway, and appliance-level secrets provider.",
+      "artifact_kind": "other",
+      "format": "yaml"    
     }
   ],
   "bindings": [
@@ -173,6 +181,13 @@
       "stage_owner": "orchestrator",
       "validation_mode": "json_document",
       "pass_id": "orchestrator.connectors.connector_result.emit"
+    },
+    {
+      "artifact_glob": "inputs/workspace.yaml",
+      "contract_id": "workspace_config",
+      "stage_owner": "orchestrator",
+      "validation_mode": "yaml_document",
+      "pass_id": "orchestrator.inputs.workspace.snapshot"    
     }
   ],
   "notes": [

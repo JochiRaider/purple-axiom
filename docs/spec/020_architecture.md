@@ -157,9 +157,13 @@ Verb definitions (v0.1):
     - The orchestrator MUST materialize the effective inputs used for the run into the run bundle
       as:
       - `inputs/range.yaml` (range configuration snapshot)
+      - `inputs/workspace.yaml` (v0.2+; workspace configuration snapshot, when present)
       - `inputs/scenario.yaml` (scenario definition snapshot)
       - `inputs/plan_draft.yaml` (v0.2+; plan draft snapshot when plan compilation/execution is
         enabled)
+    - Workspace configuration is read from the workspace root at runtime.
+    - When pinned, `inputs/workspace.yaml` is treated as read-only by all stages and is not merged
+      into or overlaid on `inputs/range.yaml`.
     - Ingress YAML snapshotting (normative, v0.1):
       - For any input snapshot that is contract-backed with `validation_mode="yaml_document"` (for
         example `inputs/range.yaml` and `inputs/plan_draft.yaml` when present), the orchestrator

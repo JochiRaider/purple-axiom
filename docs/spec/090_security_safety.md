@@ -232,6 +232,10 @@ MUST be explicitly enabled and logged, and rule content MUST be pinned and hashe
 
 Purple Axiom configuration MUST reference secrets rather than embedding them.
 
+`security.secrets.*` is configured in `inputs/workspace.yaml` as part of `workspace_config`.
+Run-level secret references in `inputs/range.yaml` continue to use the same `pa.secret_ref.v1`
+parser; provider enforcement is governed by `workspace_config.security.secrets.provider`.
+
 Normative requirements:
 
 - Config keys ending in `_ref` MUST use a secret reference string as defined in

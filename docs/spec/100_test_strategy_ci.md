@@ -2903,6 +2903,9 @@ schema.
 Schema validation of effective configuration validates `inputs/range.yaml` against
 `docs/contracts/range_config.schema.json`.
 
+Schema validation of effective workspace configuration (v0.2+) validates `inputs/workspace.yaml`
+against `docs/contracts/workspace_config.schema.json`.
+
 Schema validation of operator control-plane artifacts (v0.2+) validates contract-backed operator
 intent artifacts when present.
 
@@ -2930,18 +2933,35 @@ The fixture set MUST include at least the v0.1 cases below:
 When the operator-interface/control-plane scope profile is enabled (v0.2+; see `000_charter.md`
 ("Target contract surface and scope profile (normative)")), the fixture set MUST also include:
 
-- `range_config_operator_interface_valid` (v0.2+)
+- `workspace_config_operator_interface_valid` (v0.2+)
 
-  - Provide an `inputs/range.yaml` fixture that includes `ui`, `auth`, and `otel_gateway` blocks.
-  - Assert schema validation succeeds.
+  - Provide an `inputs/workspace.yaml` fixture that includes `ui`, `auth`, and `otel_gateway`
+    blocks.
+  - Assert workspace-config schema validation succeeds.
 
-- `range_config_operator_interface_invalid_rejected` (v0.2+; fail closed)
+- `workspace_config_operator_interface_invalid_rejected` (v0.2+; fail closed)
 
-  - Provide an `inputs/range.yaml` fixture that includes an invalid Operator Interface field (for
-    example `ui.network.port: 70000` or `auth.provider: "oidc"` when reserved enum values are
-    rejected).
+  - Provide an `inputs/workspace.yaml` fixture that includes an invalid Operator Interface field
+    (for example `ui.network.port: 70000`).
   - Assert schema validation fails closed with `reason_code=config_schema_invalid`.
   - Assert deterministic error location output.
+
+- `range_config_oi_keys_rejected` (v0.2+; fail closed)
+
+  - Provide an `inputs/range.yaml` fixture that includes any of:
+
+    - `ui.network.*`
+    - `ui.tls.*`
+    - `otel_gateway.*` (or top-level `ui`/`auth`/`otel_gateway`)
+
+  - Assert schema validation fails closed with `reason_code=config_schema_invalid`.
+
+  - Assert deterministic error location output.
+
+Dependency note (normative): The v0.2+ fixtures above assume
+`docs/contracts/workspace_config.schema.json` exists and is wired into the configuration validation
+tooling. Until that schema is introduced, implementations MUST NOT enable these fixtures as blocking
+CI gates.
 
 - `control_plane_cancel_valid` (v0.2+)
 

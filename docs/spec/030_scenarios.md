@@ -79,9 +79,10 @@ Notes:
   Scenario boundary rule (normative):
 
   - `inputs/scenario.yaml` MUST contain only scenario-model keys and MUST NOT be treated as a range
-    configuration overlay. If `inputs/scenario.yaml` contains any key semantically owned by
-    `inputs/range.yaml` (for example `ui`, `auth`, `otel_gateway`), validation MUST fail closed with
-    `reason_code=config_schema_invalid`.
+    configuration or workspace configuration overlay. If `inputs/scenario.yaml` contains any key
+    semantically owned by `inputs/range.yaml` (`range_config`) or `inputs/workspace.yaml`
+    (`workspace_config`) (for example workspace-config keys `ui`, `auth`, `otel_gateway`),
+    validation MUST fail closed with `reason_code=config_schema_invalid`.
 
 ### Config keys used
 

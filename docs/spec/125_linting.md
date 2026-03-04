@@ -646,7 +646,8 @@ following target kinds are RECOMMENDED as the initial baseline:
 ### Target kind `range-config`
 
 Intended for `inputs/range.yaml` and any config YAML that contributes to the effective run
-configuration.
+configuration (lab/run settings only). Workspace configuration YAML (for example
+`inputs/workspace.yaml`) is linted as target kind `workspace-config`.
 
 Minimum rule requirements:
 
@@ -699,13 +700,42 @@ Secret reference string validation (normative):
 
 - Rule ID: `lint-range-config-secret-ref-provider-mismatch`
 
-- When `security.secrets.provider` is present and non-empty, the linter SHOULD enforce that every
-  parsed secret ref provider equals the configured provider.
+- Provider selection is owned by `workspace_config` and is configured in `inputs/workspace.yaml`.
 
-  - Any mismatch MUST emit an `error` finding with:
-    - `rule_id="lint-range-config-secret-ref-provider-mismatch"`
-    - `severity="error"`
-    - `instance_path` set to the JSON Pointer path of the offending value
+- When linting `inputs/range.yaml`, the linter MUST attempt to load `inputs/workspace.yaml` and
+  extract `security.secrets.provider`.
+
+  - If `inputs/workspace.yaml` is present and can be parsed enough to extract a non-empty provider
+    value, the linter MUST enforce that every parsed secret ref provider equals the configured
+    provider.
+
+    - Any mismatch MUST emit an `error` finding with:
+      - `rule_id="lint-range-config-secret-ref-provider-mismatch"`
+      - `severity="error"`
+      - `instance_path` set to the JSON Pointer path of the offending value
+
+  - If `inputs/workspace.yaml` is absent or cannot be parsed for provider extraction, the linter
+    MUST:
+
+    - skip provider mismatch enforcement, and
+    - emit an `info` finding with:
+      - `rule_id="lint-range-config-secret-ref-provider-mismatch"`
+      - `severity="info"`
+      - `instance_path=""`
+      - `message` =
+        `Provider mismatch check skipped: unable to load inputs/workspace.yaml for provider extraction.`
+
+### Target kind `workspace-config`
+
+Intended for `inputs/workspace.yaml` and other appliance/workspace configuration YAML.
+
+Minimum rule requirements:
+
+- Safe YAML parsing per `pa.yaml_decode.v1`.
+- Schema validation against `docs/contracts/workspace_config.schema.json`.
+- Prohibit direct secret material; enforce secrets-by-reference conventions.
+- For every object key whose name ends with `_ref`, the linter MUST parse the value using the parser
+  module `pa.secret_ref.v1` (reject non-string values and parse failures as findings).
 
 ### Target kind `redaction-policy`
 
@@ -779,8 +809,9 @@ Minimum rule requirements:
 
   - `principal_alias` is non-secret and stable.
 
-  - scenario inputs MUST NOT include range configuration keys (for example `ui`, `auth`,
-    `otel_gateway`); such keys MUST be rejected as schema-invalid.
+  - scenario inputs MUST NOT include keys semantically owned by range configuration (for example
+    `runner.*`, `telemetry.*`) or workspace configuration (for example `ui.*`, `auth.*`,
+    `otel_gateway.*`); such keys MUST be rejected as schema-invalid.
 
 Reference checks SHOULD be included when resolution rules are available:
 
@@ -1372,15 +1403,15 @@ VS Code example mapping YAML schemas by file glob:
 {
   "yaml.schemas": {
     "./docs/contracts/range_config.schema.json": "inputs/range.yaml",
+    "./docs/contracts/workspace_config.schema.json": "inputs/workspace.yaml",
     "./docs/contracts/plan_draft.schema.json": "inputs/plan_draft.yaml",
     "./docs/contracts/scenario.schema.json": "inputs/scenario.yaml"
   }
 }
 ```
 
-Note: When the Operator Interface configuration surface is in use (v0.2+), `inputs/range.yaml` may
-also include the top-level `ui`, `auth`, and `otel_gateway` keys (validated by the `range_config`
-schema).
+Note: Operator Interface configuration lives in `inputs/workspace.yaml` (validated by the
+`workspace_config` schema).
 
 ## References
 

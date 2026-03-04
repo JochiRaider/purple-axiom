@@ -1619,9 +1619,11 @@ This spec introduces top-level Operator Interface configuration keys.
 
 Source of truth (normative):
 
-- These keys live in `inputs/range.yaml` (contract: `range_config`).
+- These keys live in `inputs/workspace.yaml` (contract: `workspace_config`).
 - `120_config_reference.md` is authoritative for defaults / types / validation rules; this document
   defines Operator Interface semantics and behavioral requirements.
+
+Example: `inputs/workspace.yaml`:
 
 ```yaml
 ui:
@@ -1791,11 +1793,11 @@ Constraint (normative):
    - If cancellation/resume/retry introduce new stage-level reason codes, ADR-0005 MUST be updated
      accordingly (per ADR-0007 requirements).
 
-1. **Range config schema constraints**
+1. **Workspace config schema constraints**
 
-   - Ensure `docs/contracts/range_config.schema.json` accepts and validates the top-level `ui`,
-     `auth`, and `otel_gateway` keys documented in `120_config_reference.md` (unknown-key rejection
-     makes this fail closed until the schema is updated).
+   - Ensure `docs/contracts/workspace_config.schema.json` accepts and validates the top-level `ui`,
+     `auth`, and `otel_gateway` keys documented in `120_config_reference.md`.
+   - `docs/contracts/range_config.schema.json` MUST reject these keys (unknown-key fail closed).
 
 ## References
 
@@ -1803,6 +1805,7 @@ Constraint (normative):
 
 | Date       | Change                                                                                                                                                                                                                                                                                                      |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-03-03 | Exclude volatile diagnostics under `runs/<run_id>/logs/` from default exports; align with ADR-0009.                                                                                                                                                                                                         |
 | 2026-01-24 | Exclude volatile diagnostics under `runs/<run_id>/logs/` from default exports; align with ADR-0009.                                                                                                                                                                                                         |
 | 2026-01-22 | Added explicit workspace layout, introduced a minimal Operator API section, fixed artifact extension allowlist to include `.log` and YAML, expanded artifact allowlist to include `plan/` and `control/`, and made resume/retry request/decision lifecycle fully observable with durable request artifacts. |
 | 2026-01-21 | Initial draft defining web Operator Interface, LAN reverse-proxy profile, local auth, audit logging, artifact serving constraints, and explicit cancellation/resume/retry state machines.                                                                                                                   |
